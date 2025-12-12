@@ -1,0 +1,3 @@
+,First Name,Last name,E-mail,2FA,Recovery codes,GEO,Date,Last 4 Digits Card,Bank,Comment,PSP 1,Broker 1,PSP 2,Broker 2,Step 1,Step  2,Step  3,Step  4,Step  5
+,John,Doe,john.doe@example.com,abc1 def2 ghi3,1234 5678 9012,US,1/15/2025,1234,Chase Bank,Test comment,PSP Test 1,Broker Test 1,PSP Test 2,Broker Test 2,Email sent,Follow up,Review posted,Dispute filed,Refund processed
+,Jane,Smith,jane.smith@example.com,xyz1 uvw2 rst3,9876 5432 1098,CA,1/16/2025,5678,TD Bank,Another test,PSP A,Broker A,PSP B,Broker B,Initial contact,Second email,Posted review,Disputed,Completed

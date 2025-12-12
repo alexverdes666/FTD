@@ -1,0 +1,4 @@
+requests==2.31.0
+pymongo==4.6.1
+playwright==1.53.0
+pandas==2.0.3

@@ -1,0 +1,513 @@
+const { validationResult } = require("express-validator");
+const jwt = require("jsonwebtoken");
+const User = require("../models/User");
+const axios = require("axios");
+const generateToken = (id) => {
+  return jwt.sign({ id }, process.env.JWT_SECRET, {
+    expiresIn: process.env.JWT_EXPIRE || "30d",
+  });
+};
+exports.register = async (req, res, next) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: "Validation error",
+        errors: errors.array(),
+      });
+    }
+    const { fullName, email, password } = req.body;
+    const userExists = await User.findOne({ email });
+    if (userExists) {
+      return res.status(400).json({
+        success: false,
+        message: "User with this email already exists",
+      });
+    }
+    const user = await User.create({
+      fullName,
+      email,
+      password,
+    });
+    res.status(201).json({
+      success: true,
+      message: "Registration successful. Your account is pending approval.",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+exports.login = async (req, res, next) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: "Validation error",
+        errors: errors.array(),
+      });
+    }
+    const { email, password } = req.body;
+    const user = await User.findOne({ email }).select("+password");
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid credentials",
+      });
+    }
+    if (user.status !== "approved" || !user.isActive) {
+      let message = "Account is not permitted to log in.";
+      if (user.status === "pending") {
+        message = "Your account is pending approval.";
+      } else if (user.status === "rejected") {
+        message = "Your account registration was rejected.";
+      } else if (!user.isActive) {
+        message = "Your account has been deactivated.";
+      }
+      return res.status(403).json({ success: false, message });
+    }
+    const isMatch = await user.comparePassword(password);
+    if (!isMatch) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid credentials",
+      });
+    }
+
+    // Check if 2FA is enabled for admin users
+    if (user.role === "admin" && user.twoFactorEnabled) {
+      // Generate a temporary token that's only valid for 2FA verification
+      const tempToken = jwt.sign(
+        { id: user._id, temp2FA: true },
+        process.env.JWT_SECRET,
+        { expiresIn: "10m" } // Short expiration for temp token
+      );
+
+      return res.status(200).json({
+        success: true,
+        message: "2FA verification required",
+        data: {
+          requires2FA: true,
+          tempToken: tempToken,
+          userId: user._id,
+        },
+      });
+    }
+
+    const token = generateToken(user._id);
+    let agentPerformanceData = null;
+    if (user.role === "agent" && user.fullName) {
+      try {
+        const agentResponse = await axios.get(
+          `https://agent-report-mfl3.onrender.com/api/mongodb/agents/${encodeURIComponent(
+            user.fullName
+          )}`
+        );
+        if (agentResponse.data.success && agentResponse.data.data.length > 0) {
+          agentPerformanceData = agentResponse.data.data[0];
+        }
+      } catch (agentError) {
+        console.log(
+          "Could not fetch agent performance data:",
+          agentError.message
+        );
+      }
+    }
+    res.status(200).json({
+      success: true,
+      message: "Login successful",
+      data: {
+        token,
+        user,
+        agentPerformanceData: agentPerformanceData,
+        requires2FA: false,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+exports.getMe = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+    res.status(200).json({
+      success: true,
+      data: user,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+exports.updateProfile = async (req, res, next) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: "Validation error",
+        errors: errors.array(),
+      });
+    }
+    const { fullName, email } = req.body;
+    const fieldsToUpdate = {};
+    if (fullName) fieldsToUpdate.fullName = fullName;
+    if (email) fieldsToUpdate.email = email;
+    const user = await User.findByIdAndUpdate(req.user.id, fieldsToUpdate, {
+      new: true,
+      runValidators: true,
+    });
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+    res.status(200).json({
+      success: true,
+      message: "Profile updated successfully",
+      data: user,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+exports.changePassword = async (req, res, next) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: "Validation error",
+        errors: errors.array(),
+      });
+    }
+    const { currentPassword, newPassword } = req.body;
+    const user = await User.findById(req.user.id).select("+password");
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+    const isMatch = await user.comparePassword(currentPassword);
+    if (!isMatch) {
+      return res.status(400).json({
+        success: false,
+        message: "Current password is incorrect",
+      });
+    }
+    user.password = newPassword;
+    await user.save();
+    res.status(200).json({
+      success: true,
+      message: "Password changed successfully",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Get related accounts for the same person (for account switching)
+exports.getRelatedAccounts = async (req, res, next) => {
+  try {
+    const currentUser = await User.findById(req.user.id).populate({
+      path: "linkedAccounts",
+      select: "fullName email role permissions isActive status",
+      match: { isActive: true, status: "approved" },
+    });
+
+    if (!currentUser) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    console.log(
+      "Current user linked accounts:",
+      currentUser.linkedAccounts?.length || 0
+    );
+
+    // If no linked accounts are configured, return only current user
+    if (
+      !currentUser.linkedAccounts ||
+      currentUser.linkedAccounts.length === 0
+    ) {
+      return res.status(200).json({
+        success: true,
+        data: [
+          {
+            id: currentUser._id,
+            fullName: currentUser.fullName,
+            email: currentUser.email,
+            role: currentUser.role,
+            permissions: currentUser.permissions,
+            isCurrentAccount: true,
+          },
+        ],
+        message: "No linked accounts configured",
+      });
+    }
+
+    // Map all linked accounts (which includes the current user due to our linking logic)
+    const allAccounts = currentUser.linkedAccounts
+      .filter((account) => account) // Remove any null/undefined accounts
+      .map((user) => ({
+        id: user._id,
+        fullName: user.fullName,
+        email: user.email,
+        role: user.role,
+        permissions: user.permissions,
+        isCurrentAccount: user._id.toString() === currentUser._id.toString(),
+      }));
+
+    // Ensure current user is in the list if not already there
+    const currentUserInList = allAccounts.find((acc) => acc.isCurrentAccount);
+    if (!currentUserInList) {
+      allAccounts.unshift({
+        id: currentUser._id,
+        fullName: currentUser.fullName,
+        email: currentUser.email,
+        role: currentUser.role,
+        permissions: currentUser.permissions,
+        isCurrentAccount: true,
+      });
+    }
+
+    console.log("Returning accounts:", allAccounts.length);
+
+    res.status(200).json({
+      success: true,
+      data: allAccounts,
+      message: "Related accounts fetched successfully",
+    });
+  } catch (error) {
+    console.error("Error in getRelatedAccounts:", error);
+    next(error);
+  }
+};
+
+// Switch to another account
+// Complete login after 2FA verification
+exports.verify2FAAndLogin = async (req, res, next) => {
+  try {
+    const { userId, token, useBackupCode } = req.body;
+
+    if (!userId || !token) {
+      return res.status(400).json({
+        success: false,
+        message: "User ID and verification token are required",
+      });
+    }
+
+    const speakeasy = require("speakeasy");
+    const { decrypt } = require("../utils/encryption");
+
+    const user = await User.findById(userId).select(
+      "+twoFactorSecret +twoFactorBackupCodes"
+    );
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    if (!user.twoFactorEnabled) {
+      return res.status(400).json({
+        success: false,
+        message: "2FA is not enabled for this account",
+      });
+    }
+
+    let verified = false;
+
+    if (useBackupCode) {
+      // Verify backup code
+      const bcrypt = require("bcryptjs");
+      let matchedCode = null;
+
+      for (const hashedCode of user.twoFactorBackupCodes) {
+        const isMatch = await bcrypt.compare(token, hashedCode);
+        if (isMatch) {
+          matchedCode = hashedCode;
+          verified = true;
+          break;
+        }
+      }
+
+      if (matchedCode) {
+        // Remove used backup code using findByIdAndUpdate
+        const updatedCodes = user.twoFactorBackupCodes.filter(
+          (code) => code !== matchedCode
+        );
+        await User.findByIdAndUpdate(
+          userId,
+          { twoFactorBackupCodes: updatedCodes },
+          { new: true }
+        );
+      }
+    } else {
+      // Verify TOTP token
+      try {
+        const decryptedSecret = decrypt(user.twoFactorSecret);
+        verified = speakeasy.totp.verify({
+          secret: decryptedSecret,
+          encoding: "base32",
+          token: token,
+          window: 2,
+        });
+      } catch (decryptError) {
+        console.error("Error decrypting 2FA secret:", decryptError.message);
+
+        // If decryption fails, the encryption key changed
+        // Disable 2FA for this user so they can log in and re-enable it
+        await User.findByIdAndUpdate(
+          userId,
+          {
+            twoFactorEnabled: false,
+            twoFactorSecret: null,
+            twoFactorBackupCodes: [],
+          },
+          { new: true }
+        );
+
+        return res.status(400).json({
+          success: false,
+          message:
+            "2FA encryption key mismatch. 2FA has been disabled for your account. Please log in again and re-enable 2FA.",
+          twoFactorReset: true,
+        });
+      }
+    }
+
+    if (!verified) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid verification code",
+      });
+    }
+
+    // 2FA verified, generate full access token
+    const accessToken = generateToken(user._id);
+
+    let agentPerformanceData = null;
+    if (user.role === "agent" && user.fullName) {
+      try {
+        const agentResponse = await axios.get(
+          `https://agent-report-mfl3.onrender.com/api/mongodb/agents/${encodeURIComponent(
+            user.fullName
+          )}`
+        );
+        if (agentResponse.data.success && agentResponse.data.data.length > 0) {
+          agentPerformanceData = agentResponse.data.data[0];
+        }
+      } catch (agentError) {
+        console.log(
+          "Could not fetch agent performance data:",
+          agentError.message
+        );
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Login successful",
+      data: {
+        token: accessToken,
+        user: user.toJSON(),
+        agentPerformanceData: agentPerformanceData,
+      },
+    });
+  } catch (error) {
+    console.error("Error in verify2FAAndLogin:", error);
+    next(error);
+  }
+};
+
+exports.switchAccount = async (req, res, next) => {
+  try {
+    const { accountId } = req.body;
+    const currentUser = await User.findById(req.user.id);
+
+    if (!currentUser) {
+      return res.status(404).json({
+        success: false,
+        message: "Current user not found",
+      });
+    }
+
+    const targetUser = await User.findById(accountId);
+    if (!targetUser) {
+      return res.status(404).json({
+        success: false,
+        message: "Target account not found",
+      });
+    }
+
+    // Verify that the target account is in the current user's linked accounts
+    const currentUserWithLinked = await User.findById(req.user.id);
+    const isLinkedAccount =
+      currentUserWithLinked.linkedAccounts &&
+      currentUserWithLinked.linkedAccounts.some(
+        (linkedId) => linkedId.toString() === accountId
+      );
+
+    if (!isLinkedAccount) {
+      return res.status(403).json({
+        success: false,
+        message:
+          "You can only switch to linked accounts configured by an administrator",
+      });
+    }
+
+    if (!targetUser.isActive || targetUser.status !== "approved") {
+      return res.status(403).json({
+        success: false,
+        message: "Target account is not active or approved",
+      });
+    }
+
+    // Generate new token for the target account
+    const token = generateToken(targetUser._id);
+
+    let agentPerformanceData = null;
+    if (targetUser.role === "agent" && targetUser.fullName) {
+      try {
+        const agentResponse = await axios.get(
+          `https://agent-report-mfl3.onrender.com/api/mongodb/agents/${encodeURIComponent(
+            targetUser.fullName
+          )}`
+        );
+        if (agentResponse.data.success && agentResponse.data.data.length > 0) {
+          agentPerformanceData = agentResponse.data.data[0];
+        }
+      } catch (agentError) {
+        console.log(
+          "Could not fetch agent performance data:",
+          agentError.message
+        );
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Account switched successfully",
+      data: {
+        token,
+        user: targetUser,
+        agentPerformanceData: agentPerformanceData,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};

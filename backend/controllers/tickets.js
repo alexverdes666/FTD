@@ -1,0 +1,606 @@
+const Ticket = require('../models/Ticket');
+const User = require('../models/User');
+const TicketImage = require('../models/TicketImage');
+const { createTicketNotification } = require('./notifications');
+const mongoose = require('mongoose');
+const path = require('path');
+const fs = require('fs').promises;
+
+// @desc    Get all tickets with filtering and pagination
+// @route   GET /api/tickets
+// @access  Private
+exports.getTickets = async (req, res) => {
+  try {
+    const {
+      page = 1,
+      limit = 20,
+      status,
+      category,
+      priority,
+      assignedTo,
+      createdBy,
+      search,
+      sortBy = 'createdAt',
+      sortOrder = 'desc',
+      tags,
+      dueDate
+    } = req.query;
+
+    // Build filter object
+    const filter = {};
+    
+    // Role-based filtering - only admins can see all tickets
+    if (req.user.role !== 'admin') {
+      // Non-admins can only see their own tickets
+      filter.createdBy = req.user._id;
+    }
+
+    // Apply filters
+    if (status) filter.status = status;
+    if (category) filter.category = category;
+    if (priority) filter.priority = priority;
+    // Only admins can filter by createdBy (since they see all tickets)
+    if (createdBy && req.user.role === 'admin') {
+      filter.createdBy = createdBy;
+    }
+    if (tags) filter.tags = { $in: tags.split(',') };
+    
+    // Due date filtering
+    if (dueDate) {
+      const date = new Date(dueDate);
+      filter.dueDate = { $lte: date };
+    }
+
+    // Text search
+    if (search) {
+      filter.$text = { $search: search };
+    }
+
+    // Sort options
+    const sortOptions = {};
+    sortOptions[sortBy] = sortOrder === 'desc' ? -1 : 1;
+
+    // Calculate skip value
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    // Execute query with population
+    const tickets = await Ticket.find(filter)
+      .populate('createdBy', 'fullName email role')
+      .populate('assignedTo', 'fullName email role')
+      .populate('comments.user', 'fullName email role')
+      .populate('resolution.resolvedBy', 'fullName email')
+      .sort(sortOptions)
+      .skip(skip)
+      .limit(parseInt(limit));
+
+    // Get total count
+    const total = await Ticket.countDocuments(filter);
+
+    // Calculate pagination info
+    const totalPages = Math.ceil(total / parseInt(limit));
+
+    res.status(200).json({
+      success: true,
+      data: tickets,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: totalPages
+      }
+    });
+
+  } catch (error) {
+    console.error('Get tickets error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching tickets'
+    });
+  }
+};
+
+// @desc    Get single ticket by ID
+// @route   GET /api/tickets/:id
+// @access  Private
+exports.getTicket = async (req, res) => {
+  try {
+    const ticket = await Ticket.findById(req.params.id)
+      .populate('createdBy', 'fullName email role')
+      .populate('assignedTo', 'fullName email role')
+      .populate('comments.user', 'fullName email role')
+      .populate('resolution.resolvedBy', 'fullName email')
+      .populate('lastActivityBy', 'fullName email');
+
+    if (!ticket) {
+      return res.status(404).json({
+        success: false,
+        message: 'Ticket not found'
+      });
+    }
+
+    // Check access permissions - only admins can see all tickets
+    if (req.user.role !== 'admin') {
+      if (ticket.createdBy._id.toString() !== req.user._id.toString()) {
+        return res.status(403).json({
+          success: false,
+          message: 'You can only access your own tickets'
+        });
+      }
+    }
+
+    // Filter internal comments for non-admin users
+    if (req.user.role !== 'admin') {
+      ticket.comments = ticket.comments.filter(comment => !comment.isInternal);
+    }
+
+    res.status(200).json({
+      success: true,
+      data: ticket
+    });
+
+  } catch (error) {
+    console.error('Get ticket error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching ticket'
+    });
+  }
+};
+
+// @desc    Create new ticket
+// @route   POST /api/tickets
+// @access  Private
+exports.createTicket = async (req, res) => {
+  try {
+    const { title, description, category, priority = 'medium', tags, dueDate, imageIds } = req.body;
+
+    // Validate required fields
+    if (!title || !description || !category) {
+      return res.status(400).json({
+        success: false,
+        message: 'Title, description, and category are required'
+      });
+    }
+
+    // Create ticket
+    const ticket = await Ticket.create({
+      title,
+      description,
+      category,
+      priority,
+      createdBy: req.user._id,
+      tags: tags ? tags.split(',').map(tag => tag.trim()) : [],
+      dueDate: dueDate ? new Date(dueDate) : null,
+      lastActivityBy: req.user._id
+    });
+
+    // If images were provided, link them to the ticket
+    if (imageIds && Array.isArray(imageIds) && imageIds.length > 0) {
+      try {
+        await TicketImage.updateMany(
+          { 
+            _id: { $in: imageIds },
+            uploadedBy: req.user._id,
+            ticketId: null
+          },
+          { 
+            $set: { ticketId: ticket._id }
+          }
+        );
+      } catch (imageError) {
+        console.error('Failed to link images to ticket:', imageError);
+      }
+    }
+
+    // Populate the created ticket
+    const populatedTicket = await Ticket.findById(ticket._id)
+      .populate('createdBy', 'fullName email role')
+      .populate('lastActivityBy', 'fullName email');
+
+    // Notify all admins about the new ticket
+    try {
+      const admins = await User.find({ role: 'admin', isActive: true });
+      for (const admin of admins) {
+        if (admin._id.toString() !== req.user._id.toString()) { // Don't notify the creator
+          await createTicketNotification(
+            'ticket_created',
+            populatedTicket,
+            admin._id,
+            req.user._id,
+            req.io
+          );
+        }
+      }
+    } catch (notificationError) {
+      console.error('Failed to create ticket notifications:', notificationError);
+    }
+
+    res.status(201).json({
+      success: true,
+      data: populatedTicket,
+      message: 'Ticket created successfully'
+    });
+
+  } catch (error) {
+    console.error('Create ticket error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while creating ticket'
+    });
+  }
+};
+
+// @desc    Update ticket
+// @route   PUT /api/tickets/:id
+// @access  Private
+exports.updateTicket = async (req, res) => {
+  try {
+    const ticket = await Ticket.findById(req.params.id);
+
+    if (!ticket) {
+      return res.status(404).json({
+        success: false,
+        message: 'Ticket not found'
+      });
+    }
+
+    // Check permissions - only ticket owner or admin can update
+    const isOwner = ticket.createdBy.toString() === req.user._id.toString();
+    const isAdmin = req.user.role === 'admin';
+
+    if (!isOwner && !isAdmin) {
+      return res.status(403).json({
+        success: false,
+        message: 'You can only update your own tickets'
+      });
+    }
+
+    // Define fields that can be updated by different roles
+    const allowedFields = ['title', 'description', 'tags'];
+    
+    if (isAdmin) {
+      allowedFields.push('status', 'priority', 'dueDate', 'category');
+    }
+
+    // Build update object
+    const updateData = {};
+    Object.keys(req.body).forEach(key => {
+      if (allowedFields.includes(key)) {
+        if (key === 'tags' && req.body[key]) {
+          updateData[key] = req.body[key].split(',').map(tag => tag.trim());
+        } else if (key === 'dueDate' && req.body[key]) {
+          updateData[key] = new Date(req.body[key]);
+        } else {
+          updateData[key] = req.body[key];
+        }
+      }
+    });
+
+    // Update last activity
+    updateData.lastActivityAt = new Date();
+    updateData.lastActivityBy = req.user._id;
+
+    // Update ticket
+    const updatedTicket = await Ticket.findByIdAndUpdate(
+      req.params.id,
+      updateData,
+      { new: true, runValidators: true }
+    ).populate('createdBy', 'fullName email role')
+     .populate('assignedTo', 'fullName email role')
+     .populate('lastActivityBy', 'fullName email');
+
+    res.status(200).json({
+      success: true,
+      data: updatedTicket,
+      message: 'Ticket updated successfully'
+    });
+
+  } catch (error) {
+    console.error('Update ticket error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while updating ticket'
+    });
+  }
+};
+
+// @desc    Delete ticket
+// @route   DELETE /api/tickets/:id
+// @access  Private (Admin only)
+exports.deleteTicket = async (req, res) => {
+  try {
+    const ticket = await Ticket.findById(req.params.id);
+
+    if (!ticket) {
+      return res.status(404).json({
+        success: false,
+        message: 'Ticket not found'
+      });
+    }
+
+    // Only admins can delete tickets
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Admin access required to delete tickets'
+      });
+    }
+
+    await Ticket.findByIdAndDelete(req.params.id);
+
+    res.status(200).json({
+      success: true,
+      message: 'Ticket deleted successfully'
+    });
+
+  } catch (error) {
+    console.error('Delete ticket error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while deleting ticket'
+    });
+  }
+};
+
+// @desc    Add comment to ticket
+// @route   POST /api/tickets/:id/comments
+// @access  Private
+exports.addComment = async (req, res) => {
+  try {
+    const { message, isInternal = false, imageIds } = req.body;
+
+    if (!message || !message.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Comment message is required'
+      });
+    }
+
+    const ticket = await Ticket.findById(req.params.id);
+
+    if (!ticket) {
+      return res.status(404).json({
+        success: false,
+        message: 'Ticket not found'
+      });
+    }
+
+    // Check permissions - only ticket owner or admin can comment
+    const isOwner = ticket.createdBy.toString() === req.user._id.toString();
+    const isAdmin = req.user.role === 'admin';
+
+    if (!isOwner && !isAdmin) {
+      return res.status(403).json({
+        success: false,
+        message: 'You can only comment on your own tickets'
+      });
+    }
+
+    // Only admins can create internal comments
+    const commentIsInternal = isInternal && isAdmin;
+
+    // Add comment using instance method
+    await ticket.addComment(req.user._id, message.trim(), commentIsInternal);
+
+    // Get the index of the newly added comment
+    const commentIndex = ticket.comments.length - 1;
+
+    // If images were provided, link them to the comment
+    if (imageIds && Array.isArray(imageIds) && imageIds.length > 0) {
+      try {
+        await TicketImage.updateMany(
+          { 
+            _id: { $in: imageIds },
+            uploadedBy: req.user._id,
+            ticketId: req.params.id,
+            commentIndex: null
+          },
+          { 
+            $set: { commentIndex: commentIndex }
+          }
+        );
+      } catch (imageError) {
+        console.error('Failed to link images to comment:', imageError);
+      }
+    }
+
+    // Get updated ticket with populated data
+    const updatedTicket = await Ticket.findById(req.params.id)
+      .populate('createdBy', 'fullName email role')
+      .populate('assignedTo', 'fullName email role')
+      .populate('comments.user', 'fullName email role')
+      .populate('lastActivityBy', 'fullName email');
+
+    // Filter internal comments for non-admin users
+    if (req.user.role !== 'admin') {
+      updatedTicket.comments = updatedTicket.comments.filter(comment => !comment.isInternal);
+    }
+
+    // Notify relevant users about the comment (unless it's internal)
+    if (!commentIsInternal) {
+      try {
+        if (isAdmin) {
+          // Admin commented - notify the ticket creator
+          if (updatedTicket.createdBy._id.toString() !== req.user._id.toString()) {
+            await createTicketNotification(
+              'ticket_commented',
+              updatedTicket,
+              updatedTicket.createdBy._id,
+              req.user._id,
+              req.io
+            );
+          }
+        } else {
+          // User commented - notify all admins
+          const admins = await User.find({ role: 'admin', isActive: true });
+          for (const admin of admins) {
+            await createTicketNotification(
+              'ticket_commented',
+              updatedTicket,
+              admin._id,
+              req.user._id,
+              req.io
+            );
+          }
+        }
+      } catch (notificationError) {
+        console.error('Failed to create comment notifications:', notificationError);
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      data: updatedTicket,
+      message: 'Comment added successfully'
+    });
+
+  } catch (error) {
+    console.error('Add comment error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while adding comment'
+    });
+  }
+};
+
+// Note: Assignment functionality removed - only admins handle all tickets
+
+// @desc    Resolve ticket
+// @route   PUT /api/tickets/:id/resolve
+// @access  Private (Admin only)
+exports.resolveTicket = async (req, res) => {
+  try {
+    const { resolutionNote } = req.body;
+
+    const ticket = await Ticket.findById(req.params.id);
+
+    if (!ticket) {
+      return res.status(404).json({
+        success: false,
+        message: 'Ticket not found'
+      });
+    }
+
+    // Check permissions - only admins can resolve tickets
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Only admin can resolve tickets'
+      });
+    }
+
+    // Use instance method to resolve
+    await ticket.resolve(req.user._id, resolutionNote);
+
+    // Get updated ticket
+    const updatedTicket = await Ticket.findById(req.params.id)
+      .populate('createdBy', 'fullName email role')
+      .populate('assignedTo', 'fullName email role')
+      .populate('resolution.resolvedBy', 'fullName email')
+      .populate('lastActivityBy', 'fullName email');
+
+    // Notify the ticket creator that their ticket has been resolved
+    try {
+      if (updatedTicket.createdBy._id.toString() !== req.user._id.toString()) {
+        await createTicketNotification(
+          'ticket_resolved',
+          updatedTicket,
+          updatedTicket.createdBy._id,
+          req.user._id,
+          req.io
+        );
+      }
+    } catch (notificationError) {
+      console.error('Failed to create resolution notification:', notificationError);
+    }
+
+    res.status(200).json({
+      success: true,
+      data: updatedTicket,
+      message: 'Ticket resolved successfully'
+    });
+
+  } catch (error) {
+    console.error('Resolve ticket error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while resolving ticket'
+    });
+  }
+};
+
+
+// @desc    Get ticket statistics
+// @route   GET /api/tickets/stats
+// @access  Private (Admin only)
+exports.getTicketStats = async (req, res) => {
+  try {
+    // Check permissions - only admins can see stats
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Admin access required'
+      });
+    }
+
+    const stats = await Ticket.getTicketStats();
+
+    // Get additional metrics
+    const totalTickets = await Ticket.countDocuments();
+    const openTickets = await Ticket.countDocuments({ status: 'open' });
+    const overDueTickets = await Ticket.countDocuments({
+      dueDate: { $lt: new Date() },
+      status: { $nin: ['resolved', 'closed'] }
+    });
+
+    // Average resolution time for resolved tickets
+    const resolvedTickets = await Ticket.aggregate([
+      {
+        $match: { 
+          status: 'resolved',
+          'resolution.resolvedAt': { $exists: true }
+        }
+      },
+      {
+        $project: {
+          resolutionTime: {
+            $subtract: ['$resolution.resolvedAt', '$createdAt']
+          }
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          avgResolutionTime: { $avg: '$resolutionTime' },
+          count: { $sum: 1 }
+        }
+      }
+    ]);
+
+    const avgResolutionTime = resolvedTickets.length > 0 
+      ? Math.round(resolvedTickets[0].avgResolutionTime / (1000 * 60 * 60)) // Convert to hours
+      : 0;
+
+    res.status(200).json({
+      success: true,
+      data: {
+        ...stats,
+        summary: {
+          total: totalTickets,
+          open: openTickets,
+          overdue: overDueTickets,
+          avgResolutionTimeHours: avgResolutionTime
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('Get ticket stats error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching ticket statistics'
+    });
+  }
+};
+
+// Note: Assignees functionality removed - only admins handle all tickets
