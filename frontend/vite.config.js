@@ -6,6 +6,9 @@ export default defineConfig({
   plugins: [react()],
   define: {
     "process.env": process.env,
+    __API_URL__: JSON.stringify(
+      process.env.VITE_API_URL || "https://ftd-backend.onrender.com/api"
+    ),
   },
   build: {
     outDir: "dist",
@@ -59,10 +62,5 @@ export default defineConfig({
   preview: {
     host: true,
     port: 3000,
-  },
-  define: {
-    __API_URL__: JSON.stringify(
-      process.env.VITE_API_URL || "https://ftd-backend.onrender.com/api"
-    ),
   },
 });
