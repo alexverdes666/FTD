@@ -2,6 +2,7 @@ const { validationResult } = require("express-validator");
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 const axios = require("axios");
+const { getClientIP, isAdminIPAllowed } = require("../middleware/auth");
 const generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET, {
     expiresIn: process.env.JWT_EXPIRE || "30d",
@@ -73,6 +74,20 @@ exports.login = async (req, res, next) => {
         success: false,
         message: "Invalid credentials",
       });
+    }
+
+    // Admin IP restriction - block login from unauthorized IPs
+    if (user.role === "admin") {
+      const clientIP = getClientIP(req);
+      if (!isAdminIPAllowed(clientIP)) {
+        console.warn(
+          `⚠️  Admin login blocked for IP: ${clientIP} (user: ${user.email})`
+        );
+        return res.status(403).json({
+          success: false,
+          message: "Admin access is restricted to authorized locations only",
+        });
+      }
     }
 
     // Check if 2FA is enabled for admin users
@@ -328,6 +343,20 @@ exports.verify2FAAndLogin = async (req, res, next) => {
       });
     }
 
+    // Admin IP restriction - block 2FA verification from unauthorized IPs
+    if (user.role === "admin") {
+      const clientIP = getClientIP(req);
+      if (!isAdminIPAllowed(clientIP)) {
+        console.warn(
+          `⚠️  Admin 2FA verification blocked for IP: ${clientIP} (user: ${user.email})`
+        );
+        return res.status(403).json({
+          success: false,
+          message: "Admin access is restricted to authorized locations only",
+        });
+      }
+    }
+
     let verified = false;
 
     if (useBackupCode) {
@@ -474,6 +503,20 @@ exports.switchAccount = async (req, res, next) => {
         success: false,
         message: "Target account is not active or approved",
       });
+    }
+
+    // Admin IP restriction - block switching to admin account from unauthorized IPs
+    if (targetUser.role === "admin") {
+      const clientIP = getClientIP(req);
+      if (!isAdminIPAllowed(clientIP)) {
+        console.warn(
+          `⚠️  Switch to admin account blocked for IP: ${clientIP} (target: ${targetUser.email})`
+        );
+        return res.status(403).json({
+          success: false,
+          message: "Admin access is restricted to authorized locations only",
+        });
+      }
     }
 
     // Generate new token for the target account

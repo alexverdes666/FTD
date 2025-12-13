@@ -63,6 +63,9 @@ connectDB();
 
 const app = express();
 
+// Trust proxy for correct IP detection behind reverse proxy (Render, etc.)
+app.set("trust proxy", true);
+
 const db = mongoose.connection;
 db.on("error", console.error.bind(console, "MongoDB connection error:"));
 db.once("open", () => {
