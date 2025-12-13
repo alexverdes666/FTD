@@ -1,7 +1,7 @@
-const SimCard = require('../models/SimCard');
-const GatewayDevice = require('../models/GatewayDevice');
-const { validationResult } = require('express-validator');
-const GoIPGatewayService = require('../services/goipGatewayService');
+const SimCard = require("../models/SimCard");
+const GatewayDevice = require("../models/GatewayDevice");
+const { validationResult } = require("express-validator");
+const GoIPGatewayService = require("../services/goipGatewayService");
 
 // Default gateway service instance (for backward compatibility and static methods)
 const defaultGatewayService = GoIPGatewayService.default;
@@ -19,11 +19,11 @@ async function getGatewayServiceForSimCard(simCard) {
 
   const gateway = await GatewayDevice.findById(simCard.gateway.gatewayId);
   if (!gateway) {
-    throw new Error('Gateway device not found');
+    throw new Error("Gateway device not found");
   }
 
   if (!gateway.isActive) {
-    throw new Error('Gateway device is not active');
+    throw new Error("Gateway device is not active");
   }
 
   return GoIPGatewayService.createInstance({
@@ -32,7 +32,7 @@ async function getGatewayServiceForSimCard(simCard) {
     username: gateway.username,
     password: gateway.password,
     name: gateway.name,
-    _id: gateway._id
+    _id: gateway._id,
   });
 }
 
@@ -46,20 +46,24 @@ exports.getSimCards = async (req, res, next) => {
     // Build filter object
     const filter = {};
     if (req.query.status) filter.status = req.query.status;
-    if (req.query.geo) filter.geo = new RegExp(req.query.geo, 'i');
-    if (req.query.operator) filter.operator = new RegExp(req.query.operator, 'i');
-    if (req.query.simNumber) filter.simNumber = new RegExp(req.query.simNumber, 'i');
-    
+    if (req.query.geo) filter.geo = new RegExp(req.query.geo, "i");
+    if (req.query.operator)
+      filter.operator = new RegExp(req.query.operator, "i");
+    if (req.query.simNumber)
+      filter.simNumber = new RegExp(req.query.simNumber, "i");
+
     // Date range filter
     if (req.query.dateFrom || req.query.dateTo) {
       filter.dateCharged = {};
-      if (req.query.dateFrom) filter.dateCharged.$gte = new Date(req.query.dateFrom);
-      if (req.query.dateTo) filter.dateCharged.$lte = new Date(req.query.dateTo);
+      if (req.query.dateFrom)
+        filter.dateCharged.$gte = new Date(req.query.dateFrom);
+      if (req.query.dateTo)
+        filter.dateCharged.$lte = new Date(req.query.dateTo);
     }
 
     const simCards = await SimCard.find(filter)
-      .populate('createdBy', 'fullName email')
-      .populate('lastModifiedBy', 'fullName email')
+      .populate("createdBy", "fullName email")
+      .populate("lastModifiedBy", "fullName email")
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit);
@@ -73,8 +77,8 @@ exports.getSimCards = async (req, res, next) => {
         current: page,
         pages: Math.ceil(total / limit),
         total,
-        limit
-      }
+        limit,
+      },
     });
   } catch (error) {
     next(error);
@@ -85,19 +89,19 @@ exports.getSimCards = async (req, res, next) => {
 exports.getSimCardById = async (req, res, next) => {
   try {
     const simCard = await SimCard.findById(req.params.id)
-      .populate('createdBy', 'fullName email')
-      .populate('lastModifiedBy', 'fullName email');
+      .populate("createdBy", "fullName email")
+      .populate("lastModifiedBy", "fullName email");
 
     if (!simCard) {
       return res.status(404).json({
         success: false,
-        message: 'SIM card not found'
+        message: "SIM card not found",
       });
     }
 
     res.status(200).json({
       success: true,
-      data: simCard
+      data: simCard,
     });
   } catch (error) {
     next(error);
@@ -111,19 +115,28 @@ exports.createSimCard = async (req, res, next) => {
     if (!errors.isEmpty()) {
       return res.status(400).json({
         success: false,
-        message: 'Validation error',
-        errors: errors.array()
+        message: "Validation error",
+        errors: errors.array(),
       });
     }
 
-    const { geo, operator, dateCharged, simNumber, notes, status, topUpLink, credentials } = req.body;
+    const {
+      geo,
+      operator,
+      dateCharged,
+      simNumber,
+      notes,
+      status,
+      topUpLink,
+      credentials,
+    } = req.body;
 
     // Check if SIM number already exists
     const existingSimCard = await SimCard.findOne({ simNumber });
     if (existingSimCard) {
       return res.status(400).json({
         success: false,
-        message: 'SIM card with this number already exists'
+        message: "SIM card with this number already exists",
       });
     }
 
@@ -135,19 +148,19 @@ exports.createSimCard = async (req, res, next) => {
       notes,
       topUpLink,
       credentials,
-      status: status || 'inactive',
+      status: status || "inactive",
       createdBy: req.user._id,
-      lastModifiedBy: req.user._id
+      lastModifiedBy: req.user._id,
     };
 
     const simCard = await SimCard.create(simCardData);
-    await simCard.populate('createdBy', 'fullName email');
-    await simCard.populate('lastModifiedBy', 'fullName email');
+    await simCard.populate("createdBy", "fullName email");
+    await simCard.populate("lastModifiedBy", "fullName email");
 
     res.status(201).json({
       success: true,
-      message: 'SIM card created successfully',
-      data: simCard
+      message: "SIM card created successfully",
+      data: simCard,
     });
   } catch (error) {
     next(error);
@@ -161,18 +174,26 @@ exports.updateSimCard = async (req, res, next) => {
     if (!errors.isEmpty()) {
       return res.status(400).json({
         success: false,
-        message: 'Validation error',
-        errors: errors.array()
+        message: "Validation error",
+        errors: errors.array(),
       });
     }
 
-    const { geo, operator, dateCharged, simNumber, notes, topUpLink, credentials } = req.body;
+    const {
+      geo,
+      operator,
+      dateCharged,
+      simNumber,
+      notes,
+      topUpLink,
+      credentials,
+    } = req.body;
 
     const simCard = await SimCard.findById(req.params.id);
     if (!simCard) {
       return res.status(404).json({
         success: false,
-        message: 'SIM card not found'
+        message: "SIM card not found",
       });
     }
 
@@ -182,34 +203,31 @@ exports.updateSimCard = async (req, res, next) => {
       if (existingSimCard) {
         return res.status(400).json({
           success: false,
-          message: 'SIM card with this number already exists'
+          message: "SIM card with this number already exists",
         });
       }
     }
 
-    const updateData = {
-      lastModifiedBy: req.user._id
-    };
+    if (geo !== undefined) simCard.geo = geo;
+    if (operator !== undefined) simCard.operator = operator;
+    if (dateCharged !== undefined) simCard.dateCharged = dateCharged;
+    if (simNumber !== undefined) simCard.simNumber = simNumber;
+    if (notes !== undefined) simCard.notes = notes;
+    if (topUpLink !== undefined) simCard.topUpLink = topUpLink;
+    if (credentials !== undefined) simCard.credentials = credentials;
 
-    if (geo !== undefined) updateData.geo = geo;
-    if (operator !== undefined) updateData.operator = operator;
-    if (dateCharged !== undefined) updateData.dateCharged = dateCharged;
-    if (simNumber !== undefined) updateData.simNumber = simNumber;
-    if (notes !== undefined) updateData.notes = notes;
-    if (topUpLink !== undefined) updateData.topUpLink = topUpLink;
-    if (credentials !== undefined) updateData.credentials = credentials;
+    simCard.lastModifiedBy = req.user._id;
 
-    const updatedSimCard = await SimCard.findByIdAndUpdate(
-      req.params.id,
-      updateData,
-      { new: true, runValidators: true }
-    ).populate('createdBy', 'fullName email')
-     .populate('lastModifiedBy', 'fullName email');
+    await simCard.save();
+
+    const updatedSimCard = await SimCard.findById(simCard._id)
+      .populate("createdBy", "fullName email")
+      .populate("lastModifiedBy", "fullName email");
 
     res.status(200).json({
       success: true,
-      message: 'SIM card updated successfully',
-      data: updatedSimCard
+      message: "SIM card updated successfully",
+      data: updatedSimCard,
     });
   } catch (error) {
     next(error);
@@ -221,10 +239,10 @@ exports.updateSimCardStatus = async (req, res, next) => {
   try {
     const { status } = req.body;
 
-    if (!['active', 'inactive'].includes(status)) {
+    if (!["active", "inactive"].includes(status)) {
       return res.status(400).json({
         success: false,
-        message: 'Status must be either "active" or "inactive"'
+        message: 'Status must be either "active" or "inactive"',
       });
     }
 
@@ -232,7 +250,7 @@ exports.updateSimCardStatus = async (req, res, next) => {
     if (!simCard) {
       return res.status(404).json({
         success: false,
-        message: 'SIM card not found'
+        message: "SIM card not found",
       });
     }
 
@@ -240,16 +258,17 @@ exports.updateSimCardStatus = async (req, res, next) => {
       req.params.id,
       {
         status,
-        lastModifiedBy: req.user._id
+        lastModifiedBy: req.user._id,
       },
       { new: true, runValidators: true }
-    ).populate('createdBy', 'fullName email')
-     .populate('lastModifiedBy', 'fullName email');
+    )
+      .populate("createdBy", "fullName email")
+      .populate("lastModifiedBy", "fullName email");
 
     res.status(200).json({
       success: true,
       message: `SIM card status updated to ${status}`,
-      data: updatedSimCard
+      data: updatedSimCard,
     });
   } catch (error) {
     next(error);
@@ -263,7 +282,7 @@ exports.deleteSimCard = async (req, res, next) => {
     if (!simCard) {
       return res.status(404).json({
         success: false,
-        message: 'SIM card not found'
+        message: "SIM card not found",
       });
     }
 
@@ -271,7 +290,7 @@ exports.deleteSimCard = async (req, res, next) => {
 
     res.status(200).json({
       success: true,
-      message: 'SIM card deleted successfully'
+      message: "SIM card deleted successfully",
     });
   } catch (error) {
     next(error);
@@ -287,45 +306,45 @@ exports.getSimCardStats = async (req, res, next) => {
           _id: null,
           total: { $sum: 1 },
           active: {
-            $sum: { $cond: [{ $eq: ['$status', 'active'] }, 1, 0] }
+            $sum: { $cond: [{ $eq: ["$status", "active"] }, 1, 0] },
           },
           inactive: {
-            $sum: { $cond: [{ $eq: ['$status', 'inactive'] }, 1, 0] }
-          }
-        }
-      }
+            $sum: { $cond: [{ $eq: ["$status", "inactive"] }, 1, 0] },
+          },
+        },
+      },
     ]);
 
     const geoStats = await SimCard.aggregate([
       {
         $group: {
-          _id: '$geo',
+          _id: "$geo",
           count: { $sum: 1 },
           active: {
-            $sum: { $cond: [{ $eq: ['$status', 'active'] }, 1, 0] }
+            $sum: { $cond: [{ $eq: ["$status", "active"] }, 1, 0] },
           },
           inactive: {
-            $sum: { $cond: [{ $eq: ['$status', 'inactive'] }, 1, 0] }
-          }
-        }
+            $sum: { $cond: [{ $eq: ["$status", "inactive"] }, 1, 0] },
+          },
+        },
       },
-      { $sort: { count: -1 } }
+      { $sort: { count: -1 } },
     ]);
 
     const operatorStats = await SimCard.aggregate([
       {
         $group: {
-          _id: '$operator',
+          _id: "$operator",
           count: { $sum: 1 },
           active: {
-            $sum: { $cond: [{ $eq: ['$status', 'active'] }, 1, 0] }
+            $sum: { $cond: [{ $eq: ["$status", "active"] }, 1, 0] },
           },
           inactive: {
-            $sum: { $cond: [{ $eq: ['$status', 'inactive'] }, 1, 0] }
-          }
-        }
+            $sum: { $cond: [{ $eq: ["$status", "inactive"] }, 1, 0] },
+          },
+        },
       },
-      { $sort: { count: -1 } }
+      { $sort: { count: -1 } },
     ]);
 
     res.status(200).json({
@@ -333,8 +352,8 @@ exports.getSimCardStats = async (req, res, next) => {
       data: {
         overview: stats[0] || { total: 0, active: 0, inactive: 0 },
         byGeo: geoStats,
-        byOperator: operatorStats
-      }
+        byOperator: operatorStats,
+      },
     });
   } catch (error) {
     next(error);
@@ -352,10 +371,14 @@ exports.getSimCardStats = async (req, res, next) => {
 exports.configureGatewayNotifications = async (req, res, next) => {
   try {
     const { callbackUrl, period, allSims } = req.body;
-    
+
     // Use server URL if not provided
-    const serverUrl = callbackUrl || `${process.env.SERVER_URL || 'http://localhost:5000'}/api/simcards/gateway/webhook/status`;
-    
+    const serverUrl =
+      callbackUrl ||
+      `${
+        process.env.SERVER_URL || "http://localhost:5000"
+      }/api/simcards/gateway/webhook/status`;
+
     const result = await defaultGatewayService.configureStatusNotification(
       serverUrl,
       period || 60,
@@ -364,8 +387,8 @@ exports.configureGatewayNotifications = async (req, res, next) => {
 
     res.status(200).json({
       success: true,
-      message: 'Gateway notifications configured successfully',
-      data: result
+      message: "Gateway notifications configured successfully",
+      data: result,
     });
   } catch (error) {
     next(error);
@@ -379,14 +402,16 @@ exports.receiveDeviceStatus = async (req, res, next) => {
   try {
     const statusData = req.body;
 
-    if (statusData.type === 'dev-status') {
+    if (statusData.type === "dev-status") {
       // Process all port statuses
       const updatePromises = statusData.status.map(async (portStatus) => {
         const parsedStatus = defaultGatewayService.parsePortStatus(portStatus);
-        
+
         // Find SIM card by gateway port
-        const simCard = await SimCard.findOne({ 'gateway.port': parsedStatus.port });
-        
+        const simCard = await SimCard.findOne({
+          "gateway.port": parsedStatus.port,
+        });
+
         if (simCard && simCard.gateway.enabled) {
           // Update SIM card with latest status
           simCard.gateway.deviceStatus = parsedStatus.deviceStatus;
@@ -397,7 +422,7 @@ exports.receiveDeviceStatus = async (req, res, next) => {
           simCard.gateway.imsi = parsedStatus.imsi || simCard.gateway.imsi;
           simCard.gateway.iccid = parsedStatus.iccid || simCard.gateway.iccid;
           simCard.gateway.lastStatusUpdate = new Date();
-          
+
           // Update operator field if available
           if (parsedStatus.operator) {
             const operatorMatch = parsedStatus.operator.match(/(\d+)\s+(.+)/);
@@ -408,10 +433,17 @@ exports.receiveDeviceStatus = async (req, res, next) => {
           }
 
           // Auto-update status based on device status
-          if (['registered', 'idle'].includes(parsedStatus.deviceStatus)) {
-            simCard.status = 'active';
-          } else if (['no_sim', 'register_failed', 'locked_device', 'locked_operator'].includes(parsedStatus.deviceStatus)) {
-            simCard.status = 'inactive';
+          if (["registered", "idle"].includes(parsedStatus.deviceStatus)) {
+            simCard.status = "active";
+          } else if (
+            [
+              "no_sim",
+              "register_failed",
+              "locked_device",
+              "locked_operator",
+            ].includes(parsedStatus.deviceStatus)
+          ) {
+            simCard.status = "inactive";
           }
 
           await simCard.save();
@@ -420,13 +452,15 @@ exports.receiveDeviceStatus = async (req, res, next) => {
 
       await Promise.all(updatePromises);
 
-      res.status(200).json({ success: true, message: 'Status updated' });
-    } else if (statusData.type === 'port-status') {
+      res.status(200).json({ success: true, message: "Status updated" });
+    } else if (statusData.type === "port-status") {
       // Process single port status update
       const parsedStatus = goipGatewayService.parsePortStatus(statusData);
-      
-      const simCard = await SimCard.findOne({ 'gateway.port': parsedStatus.port });
-      
+
+      const simCard = await SimCard.findOne({
+        "gateway.port": parsedStatus.port,
+      });
+
       if (simCard && simCard.gateway.enabled) {
         simCard.gateway.deviceStatus = parsedStatus.deviceStatus;
         simCard.gateway.statusCode = parsedStatus.statusCode;
@@ -445,21 +479,28 @@ exports.receiveDeviceStatus = async (req, res, next) => {
           }
         }
 
-        if (['registered', 'idle'].includes(parsedStatus.deviceStatus)) {
-          simCard.status = 'active';
-        } else if (['no_sim', 'register_failed', 'locked_device', 'locked_operator'].includes(parsedStatus.deviceStatus)) {
-          simCard.status = 'inactive';
+        if (["registered", "idle"].includes(parsedStatus.deviceStatus)) {
+          simCard.status = "active";
+        } else if (
+          [
+            "no_sim",
+            "register_failed",
+            "locked_device",
+            "locked_operator",
+          ].includes(parsedStatus.deviceStatus)
+        ) {
+          simCard.status = "inactive";
         }
 
         await simCard.save();
       }
 
-      res.status(200).json({ success: true, message: 'Status updated' });
+      res.status(200).json({ success: true, message: "Status updated" });
     } else {
-      res.status(200).json({ success: true, message: 'Unknown status type' });
+      res.status(200).json({ success: true, message: "Unknown status type" });
     }
   } catch (error) {
-    console.error('Error processing status update:', error);
+    console.error("Error processing status update:", error);
     next(error);
   }
 };
@@ -471,14 +512,15 @@ exports.receiveSMS = async (req, res, next) => {
   try {
     const smsData = req.body;
 
-    if (smsData.type === 'recv-sms') {
+    if (smsData.type === "recv-sms") {
       // Process received SMS
       const updatePromises = smsData.sms.map(async (smsArray) => {
-        const [deliveryReport, port, timestamp, sender, recipient, content] = smsArray;
-        
+        const [deliveryReport, port, timestamp, sender, recipient, content] =
+          smsArray;
+
         // Find SIM card by port
-        const simCard = await SimCard.findOne({ 'gateway.port': port });
-        
+        const simCard = await SimCard.findOne({ "gateway.port": port });
+
         if (simCard && simCard.gateway.enabled) {
           // Update received SMS count
           simCard.smsStats.received += 1;
@@ -491,12 +533,12 @@ exports.receiveSMS = async (req, res, next) => {
 
       await Promise.all(updatePromises);
 
-      res.status(200).json({ success: true, message: 'SMS received' });
+      res.status(200).json({ success: true, message: "SMS received" });
     } else {
-      res.status(200).json({ success: true, message: 'Unknown SMS type' });
+      res.status(200).json({ success: true, message: "Unknown SMS type" });
     }
   } catch (error) {
-    console.error('Error processing received SMS:', error);
+    console.error("Error processing received SMS:", error);
     next(error);
   }
 };
@@ -507,18 +549,18 @@ exports.receiveSMS = async (req, res, next) => {
 exports.lockPort = async (req, res, next) => {
   try {
     const simCard = await SimCard.findById(req.params.id);
-    
+
     if (!simCard) {
       return res.status(404).json({
         success: false,
-        message: 'SIM card not found'
+        message: "SIM card not found",
       });
     }
 
     if (!simCard.gateway.enabled || !simCard.gateway.port) {
       return res.status(400).json({
         success: false,
-        message: 'SIM card is not configured for gateway operations'
+        message: "SIM card is not configured for gateway operations",
       });
     }
 
@@ -527,14 +569,14 @@ exports.lockPort = async (req, res, next) => {
 
     // Update local status
     simCard.gateway.isLocked = true;
-    simCard.gateway.deviceStatus = 'locked_device';
+    simCard.gateway.deviceStatus = "locked_device";
     simCard.lastModifiedBy = req.user._id;
     await simCard.save();
 
     res.status(200).json({
       success: true,
-      message: 'Port locked successfully',
-      data: result
+      message: "Port locked successfully",
+      data: result,
     });
   } catch (error) {
     next(error);
@@ -547,18 +589,18 @@ exports.lockPort = async (req, res, next) => {
 exports.unlockPort = async (req, res, next) => {
   try {
     const simCard = await SimCard.findById(req.params.id);
-    
+
     if (!simCard) {
       return res.status(404).json({
         success: false,
-        message: 'SIM card not found'
+        message: "SIM card not found",
       });
     }
 
     if (!simCard.gateway.enabled || !simCard.gateway.port) {
       return res.status(400).json({
         success: false,
-        message: 'SIM card is not configured for gateway operations'
+        message: "SIM card is not configured for gateway operations",
       });
     }
 
@@ -572,8 +614,8 @@ exports.unlockPort = async (req, res, next) => {
 
     res.status(200).json({
       success: true,
-      message: 'Port unlocked successfully',
-      data: result
+      message: "Port unlocked successfully",
+      data: result,
     });
   } catch (error) {
     next(error);
@@ -587,18 +629,18 @@ exports.switchSlot = async (req, res, next) => {
   try {
     const { targetSlot } = req.body;
     const simCard = await SimCard.findById(req.params.id);
-    
+
     if (!simCard) {
       return res.status(404).json({
         success: false,
-        message: 'SIM card not found'
+        message: "SIM card not found",
       });
     }
 
     if (!simCard.gateway.enabled || !simCard.gateway.port) {
       return res.status(400).json({
         success: false,
-        message: 'SIM card is not configured for gateway operations'
+        message: "SIM card is not configured for gateway operations",
       });
     }
 
@@ -607,7 +649,7 @@ exports.switchSlot = async (req, res, next) => {
     if (!portMatch) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid port format'
+        message: "Invalid port format",
       });
     }
 
@@ -626,8 +668,8 @@ exports.switchSlot = async (req, res, next) => {
 
     res.status(200).json({
       success: true,
-      message: 'SIM slot switched successfully',
-      data: result
+      message: "SIM slot switched successfully",
+      data: result,
     });
   } catch (error) {
     next(error);
@@ -640,18 +682,18 @@ exports.switchSlot = async (req, res, next) => {
 exports.resetPort = async (req, res, next) => {
   try {
     const simCard = await SimCard.findById(req.params.id);
-    
+
     if (!simCard) {
       return res.status(404).json({
         success: false,
-        message: 'SIM card not found'
+        message: "SIM card not found",
       });
     }
 
     if (!simCard.gateway.enabled || !simCard.gateway.port) {
       return res.status(400).json({
         success: false,
-        message: 'SIM card is not configured for gateway operations'
+        message: "SIM card is not configured for gateway operations",
       });
     }
 
@@ -660,8 +702,8 @@ exports.resetPort = async (req, res, next) => {
 
     res.status(200).json({
       success: true,
-      message: 'Port reset successfully',
-      data: result
+      message: "Port reset successfully",
+      data: result,
     });
   } catch (error) {
     next(error);
@@ -675,48 +717,50 @@ exports.sendSMS = async (req, res, next) => {
   try {
     const { to, message, options } = req.body;
     const simCard = await SimCard.findById(req.params.id);
-    
+
     if (!simCard) {
       return res.status(404).json({
         success: false,
-        message: 'SIM card not found'
+        message: "SIM card not found",
       });
     }
 
     if (!simCard.gateway.enabled || !simCard.gateway.port) {
       return res.status(400).json({
         success: false,
-        message: 'SIM card is not configured for gateway operations'
+        message: "SIM card is not configured for gateway operations",
       });
     }
 
     const taskId = Date.now();
     const smsData = {
-      tasks: [{
-        tid: taskId,
-        from: simCard.gateway.port,
-        to: Array.isArray(to) ? to.join(',') : to,
-        sms: message,
-        ...options
-      }],
-      options: options || {}
+      tasks: [
+        {
+          tid: taskId,
+          from: simCard.gateway.port,
+          to: Array.isArray(to) ? to.join(",") : to,
+          sms: message,
+          ...options,
+        },
+      ],
+      options: options || {},
     };
 
     const gatewayService = await getGatewayServiceForSimCard(simCard);
     const result = await gatewayService.sendSMS(smsData);
 
     // Update SMS statistics
-    const recipients = Array.isArray(to) ? to.length : to.split(',').length;
+    const recipients = Array.isArray(to) ? to.length : to.split(",").length;
     simCard.smsStats.sent += recipients;
     await simCard.save();
 
     res.status(200).json({
       success: true,
-      message: 'SMS sent successfully',
+      message: "SMS sent successfully",
       data: {
         taskId,
-        result
-      }
+        result,
+      },
     });
   } catch (error) {
     next(error);
@@ -729,16 +773,16 @@ exports.sendSMS = async (req, res, next) => {
 exports.getGatewaySMSStats = async (req, res, next) => {
   try {
     const { ports, slots, type } = req.query;
-    
+
     const result = await defaultGatewayService.querySMSStatistics({
       ports,
       slots,
-      type: type ? parseInt(type) : 0
+      type: type ? parseInt(type) : 0,
     });
 
     res.status(200).json({
       success: true,
-      data: result.data
+      data: result.data,
     });
   } catch (error) {
     next(error);
@@ -751,16 +795,16 @@ exports.getGatewaySMSStats = async (req, res, next) => {
 exports.getGatewayCallStats = async (req, res, next) => {
   try {
     const { ports, slots, type } = req.query;
-    
+
     const result = await defaultGatewayService.queryCallStatistics({
       ports,
       slots,
-      type: type ? parseInt(type) : 0
+      type: type ? parseInt(type) : 0,
     });
 
     res.status(200).json({
       success: true,
-      data: result.data
+      data: result.data,
     });
   } catch (error) {
     next(error);
@@ -774,11 +818,11 @@ exports.enableGatewayIntegration = async (req, res, next) => {
   try {
     const { port, slot, gatewayId } = req.body;
     const simCard = await SimCard.findById(req.params.id);
-    
+
     if (!simCard) {
       return res.status(404).json({
         success: false,
-        message: 'SIM card not found'
+        message: "SIM card not found",
       });
     }
 
@@ -788,13 +832,13 @@ exports.enableGatewayIntegration = async (req, res, next) => {
       if (!gateway) {
         return res.status(404).json({
           success: false,
-          message: 'Gateway device not found'
+          message: "Gateway device not found",
         });
       }
       if (!gateway.isActive) {
         return res.status(400).json({
           success: false,
-          message: 'Gateway device is not active'
+          message: "Gateway device is not active",
         });
       }
     }
@@ -808,14 +852,14 @@ exports.enableGatewayIntegration = async (req, res, next) => {
 
     // Populate gateway info for response
     const populatedSimCard = await SimCard.findById(simCard._id)
-      .populate('gateway.gatewayId', 'name host port')
-      .populate('createdBy', 'fullName email')
-      .populate('lastModifiedBy', 'fullName email');
+      .populate("gateway.gatewayId", "name host port")
+      .populate("createdBy", "fullName email")
+      .populate("lastModifiedBy", "fullName email");
 
     res.status(200).json({
       success: true,
-      message: 'Gateway integration enabled',
-      data: populatedSimCard
+      message: "Gateway integration enabled",
+      data: populatedSimCard,
     });
   } catch (error) {
     next(error);
@@ -828,11 +872,11 @@ exports.enableGatewayIntegration = async (req, res, next) => {
 exports.disableGatewayIntegration = async (req, res, next) => {
   try {
     const simCard = await SimCard.findById(req.params.id);
-    
+
     if (!simCard) {
       return res.status(404).json({
         success: false,
-        message: 'SIM card not found'
+        message: "SIM card not found",
       });
     }
 
@@ -842,8 +886,8 @@ exports.disableGatewayIntegration = async (req, res, next) => {
 
     res.status(200).json({
       success: true,
-      message: 'Gateway integration disabled',
-      data: simCard
+      message: "Gateway integration disabled",
+      data: simCard,
     });
   } catch (error) {
     next(error);
@@ -856,12 +900,13 @@ exports.disableGatewayIntegration = async (req, res, next) => {
  */
 exports.getLiveGatewayStatus = async (req, res, next) => {
   try {
-    const axios = require('axios');
-    
-    const gatewayHost = process.env.GOIP_GATEWAY_HOST || '188.126.10.151';
-    const gatewayPort = process.env.GOIP_GATEWAY_PORT || '4064';
-    const gatewayUsername = process.env.GOIP_GATEWAY_USERNAME || 'root';
-    const gatewayPassword = process.env.GOIP_GATEWAY_PASSWORD || 'Greedisgood10!';
+    const axios = require("axios");
+
+    const gatewayHost = process.env.GOIP_GATEWAY_HOST || "188.126.10.151";
+    const gatewayPort = process.env.GOIP_GATEWAY_PORT || "4064";
+    const gatewayUsername = process.env.GOIP_GATEWAY_USERNAME || "root";
+    const gatewayPassword =
+      process.env.GOIP_GATEWAY_PASSWORD || "Greedisgood10!";
 
     // Query gateway for current status of all ports
     const response = await axios.get(
@@ -869,32 +914,32 @@ exports.getLiveGatewayStatus = async (req, res, next) => {
       {
         params: {
           username: gatewayUsername,
-          password: gatewayPassword
+          password: gatewayPassword,
         },
-        timeout: 10000
+        timeout: 10000,
       }
     );
 
     // The gateway returns HTML or JSON depending on configuration
     // We need to parse the response and return port statuses
-    
+
     res.status(200).json({
       success: true,
-      message: 'Live gateway status retrieved',
+      message: "Live gateway status retrieved",
       data: {
         gatewayHost,
         gatewayPort,
         timestamp: new Date(),
-        rawResponse: response.data
-      }
+        rawResponse: response.data,
+      },
     });
   } catch (error) {
-    console.error('Error querying gateway:', error.message);
+    console.error("Error querying gateway:", error.message);
     res.status(500).json({
       success: false,
-      message: 'Failed to query gateway',
+      message: "Failed to query gateway",
       error: error.message,
-      details: 'Make sure gateway is accessible and credentials are correct'
+      details: "Make sure gateway is accessible and credentials are correct",
     });
   }
 };
@@ -906,52 +951,70 @@ exports.getLiveGatewayStatus = async (req, res, next) => {
  */
 exports.checkSimCardCooldownAndNotify = async (io = null) => {
   try {
-    const User = require('../models/User');
-    const Notification = require('../models/Notification');
-    
+    const User = require("../models/User");
+    const Notification = require("../models/Notification");
+
     const currentDate = new Date();
     // Use UTC to calculate 20 days ago to avoid timezone issues
     const twentyDaysAgo = new Date();
     twentyDaysAgo.setUTCDate(currentDate.getUTCDate() - 20);
-    
+
     // Find all SIM cards where dateCharged is 20+ days old (10 or fewer days remaining in 30-day cooldown)
     const simCards = await SimCard.find({
-      dateCharged: { $lte: twentyDaysAgo }
+      dateCharged: { $lte: twentyDaysAgo },
     }).sort({ dateCharged: 1 }); // Sort by oldest first
-    
+
     if (simCards.length === 0) {
-      console.log('[SIM Card Cooldown Check] No SIM cards need attention');
+      console.log("[SIM Card Cooldown Check] No SIM cards need attention");
       return { success: true, count: 0 };
     }
-    
-    console.log(`[SIM Card Cooldown Check] Found ${simCards.length} SIM card(s) needing attention`);
-    
+
+    console.log(
+      `[SIM Card Cooldown Check] Found ${simCards.length} SIM card(s) needing attention`
+    );
+
     // Get all inventory managers
-    const inventoryManagers = await User.find({ 
-      role: 'inventory_manager',
-      isActive: true 
+    const inventoryManagers = await User.find({
+      role: "inventory_manager",
+      isActive: true,
     });
-    
+
     if (inventoryManagers.length === 0) {
-      console.log('[SIM Card Cooldown Check] No active inventory managers found');
-      return { success: true, count: 0, message: 'No inventory managers to notify' };
+      console.log(
+        "[SIM Card Cooldown Check] No active inventory managers found"
+      );
+      return {
+        success: true,
+        count: 0,
+        message: "No inventory managers to notify",
+      };
     }
-    
+
     // Group SIM cards by urgency
     const grouped = {
       overdue: [], // 30+ days
       critical: [], // 1-5 days remaining
-      warning: []   // 6-10 days remaining
+      warning: [], // 6-10 days remaining
     };
-    
-    simCards.forEach(simCard => {
+
+    simCards.forEach((simCard) => {
       // Use UTC dates to avoid timezone issues
       const chargedDate = new Date(simCard.dateCharged);
-      const chargedDateUTC = Date.UTC(chargedDate.getUTCFullYear(), chargedDate.getUTCMonth(), chargedDate.getUTCDate());
-      const currentDateUTC = Date.UTC(currentDate.getUTCFullYear(), currentDate.getUTCMonth(), currentDate.getUTCDate());
-      const daysSinceCharged = Math.floor((currentDateUTC - chargedDateUTC) / (1000 * 60 * 60 * 24));
+      const chargedDateUTC = Date.UTC(
+        chargedDate.getUTCFullYear(),
+        chargedDate.getUTCMonth(),
+        chargedDate.getUTCDate()
+      );
+      const currentDateUTC = Date.UTC(
+        currentDate.getUTCFullYear(),
+        currentDate.getUTCMonth(),
+        currentDate.getUTCDate()
+      );
+      const daysSinceCharged = Math.floor(
+        (currentDateUTC - chargedDateUTC) / (1000 * 60 * 60 * 24)
+      );
       const daysRemaining = 30 - daysSinceCharged;
-      
+
       if (daysRemaining <= 0) {
         grouped.overdue.push({ simCard, daysSinceCharged, daysRemaining });
       } else if (daysRemaining <= 5) {
@@ -960,110 +1023,124 @@ exports.checkSimCardCooldownAndNotify = async (io = null) => {
         grouped.warning.push({ simCard, daysSinceCharged, daysRemaining });
       }
     });
-    
+
     // Create notifications for each inventory manager
     let notificationCount = 0;
-    
+
     for (const manager of inventoryManagers) {
       // Create separate notifications for each urgency level
       const notifications = [];
-      
+
       // Overdue SIM cards (highest priority)
       if (grouped.overdue.length > 0) {
-        const simCardsList = grouped.overdue.map(item => 
-          `${item.simCard.simNumber} (${item.simCard.geo}/${item.simCard.operator}) - ${Math.abs(item.daysRemaining)} days overdue`
-        ).join(', ');
-        
+        const simCardsList = grouped.overdue
+          .map(
+            (item) =>
+              `${item.simCard.simNumber} (${item.simCard.geo}/${
+                item.simCard.operator
+              }) - ${Math.abs(item.daysRemaining)} days overdue`
+          )
+          .join(", ");
+
         notifications.push({
           recipient: manager._id,
           sender: null, // System notification
           title: `⚠️ ${grouped.overdue.length} SIM Card(s) Overdue for Recharge`,
           message: `The following SIM card(s) have exceeded their 30-day cooldown period: ${simCardsList}. Please recharge immediately.`,
-          type: 'sim_card_cooldown',
-          priority: 'urgent',
-          actionUrl: '/simcards',
+          type: "sim_card_cooldown",
+          priority: "urgent",
+          actionUrl: "/simcards",
           relatedEntity: {
-            type: 'SimCard'
+            type: "SimCard",
           },
           metadata: {
             simCardCount: grouped.overdue.length,
-            urgencyLevel: 'overdue',
-            simCardIds: grouped.overdue.map(item => item.simCard._id)
-          }
+            urgencyLevel: "overdue",
+            simCardIds: grouped.overdue.map((item) => item.simCard._id),
+          },
         });
       }
-      
+
       // Critical SIM cards (1-5 days remaining)
       if (grouped.critical.length > 0) {
-        const simCardsList = grouped.critical.map(item => 
-          `${item.simCard.simNumber} (${item.simCard.geo}/${item.simCard.operator}) - ${item.daysRemaining} day(s) left`
-        ).join(', ');
-        
+        const simCardsList = grouped.critical
+          .map(
+            (item) =>
+              `${item.simCard.simNumber} (${item.simCard.geo}/${item.simCard.operator}) - ${item.daysRemaining} day(s) left`
+          )
+          .join(", ");
+
         notifications.push({
           recipient: manager._id,
           sender: null,
           title: `🔴 ${grouped.critical.length} SIM Card(s) Need Urgent Attention`,
           message: `The following SIM card(s) have 5 or fewer days remaining in their cooldown period: ${simCardsList}.`,
-          type: 'sim_card_cooldown',
-          priority: 'high',
-          actionUrl: '/simcards',
+          type: "sim_card_cooldown",
+          priority: "high",
+          actionUrl: "/simcards",
           relatedEntity: {
-            type: 'SimCard'
+            type: "SimCard",
           },
           metadata: {
             simCardCount: grouped.critical.length,
-            urgencyLevel: 'critical',
-            simCardIds: grouped.critical.map(item => item.simCard._id)
-          }
+            urgencyLevel: "critical",
+            simCardIds: grouped.critical.map((item) => item.simCard._id),
+          },
         });
       }
-      
+
       // Warning SIM cards (6-10 days remaining)
       if (grouped.warning.length > 0) {
-        const simCardsList = grouped.warning.map(item => 
-          `${item.simCard.simNumber} (${item.simCard.geo}/${item.simCard.operator}) - ${item.daysRemaining} day(s) left`
-        ).join(', ');
-        
+        const simCardsList = grouped.warning
+          .map(
+            (item) =>
+              `${item.simCard.simNumber} (${item.simCard.geo}/${item.simCard.operator}) - ${item.daysRemaining} day(s) left`
+          )
+          .join(", ");
+
         notifications.push({
           recipient: manager._id,
           sender: null,
           title: `🟡 ${grouped.warning.length} SIM Card(s) Approaching Recharge`,
           message: `The following SIM card(s) have 10 or fewer days remaining in their cooldown period: ${simCardsList}.`,
-          type: 'sim_card_cooldown',
-          priority: 'medium',
-          actionUrl: '/simcards',
+          type: "sim_card_cooldown",
+          priority: "medium",
+          actionUrl: "/simcards",
           relatedEntity: {
-            type: 'SimCard'
+            type: "SimCard",
           },
           metadata: {
             simCardCount: grouped.warning.length,
-            urgencyLevel: 'warning',
-            simCardIds: grouped.warning.map(item => item.simCard._id)
-          }
+            urgencyLevel: "warning",
+            simCardIds: grouped.warning.map((item) => item.simCard._id),
+          },
         });
       }
-      
+
       // Create all notifications
       for (const notificationData of notifications) {
         const notification = await Notification.create(notificationData);
         notificationCount++;
-        
+
         // Emit real-time notification if socket.io is available
         if (io) {
           const unreadCount = await Notification.getUnreadCount(manager._id);
-          const populatedNotification = await Notification.findById(notification._id)
-            .populate('recipient', 'fullName email role');
-          
-          io.to(`user:${manager._id}`).emit('new_notification', {
+          const populatedNotification = await Notification.findById(
+            notification._id
+          ).populate("recipient", "fullName email role");
+
+          io.to(`user:${manager._id}`).emit("new_notification", {
             notification: populatedNotification,
-            unreadCount
+            unreadCount,
           });
         }
       }
     }
-    
-    console.log(`[SIM Card Cooldown Check] Created ${notificationCount} notification(s) for ${inventoryManagers.length} inventory manager(s)`);
-    
+
+    console.log(
+      `[SIM Card Cooldown Check] Created ${notificationCount} notification(s) for ${inventoryManagers.length} inventory manager(s)`
+    );
+
     return {
       success: true,
       count: notificationCount,
@@ -1072,12 +1149,11 @@ exports.checkSimCardCooldownAndNotify = async (io = null) => {
       breakdown: {
         overdue: grouped.overdue.length,
         critical: grouped.critical.length,
-        warning: grouped.warning.length
-      }
+        warning: grouped.warning.length,
+      },
     };
-    
   } catch (error) {
-    console.error('[SIM Card Cooldown Check] Error:', error);
+    console.error("[SIM Card Cooldown Check] Error:", error);
     throw error;
   }
 };

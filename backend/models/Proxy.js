@@ -1,4 +1,6 @@
 const mongoose = require("mongoose");
+const encryptFields = require("./plugins/encryptFields");
+
 const proxySchema = new mongoose.Schema(
   {
     proxyId: {
@@ -336,4 +338,7 @@ proxySchema.pre("save", function (next) {
   }
   next();
 });
+
+proxySchema.plugin(encryptFields, { fields: ["config.password"] });
+
 module.exports = mongoose.model("Proxy", proxySchema);

@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const encryptFields = require("./plugins/encryptFields");
 
 const ourNetworkSchema = new mongoose.Schema(
   {
@@ -32,8 +33,9 @@ const ourNetworkSchema = new mongoose.Schema(
         validate: {
           validator: function (addresses) {
             if (!Array.isArray(addresses)) return false;
-            return addresses.every(addr => 
-              !addr || addr.trim() === '' || /^0x[a-fA-F0-9]{40}$/.test(addr)
+            return addresses.every(
+              (addr) =>
+                !addr || addr.trim() === "" || /^0x[a-fA-F0-9]{40}$/.test(addr)
             );
           },
           message: "Invalid Ethereum wallet address format",
@@ -45,9 +47,13 @@ const ourNetworkSchema = new mongoose.Schema(
         validate: {
           validator: function (addresses) {
             if (!Array.isArray(addresses)) return false;
-            return addresses.every(addr =>
-              !addr || addr.trim() === '' || 
-              /^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$|^bc1[a-z0-9]{39,59}$/.test(addr)
+            return addresses.every(
+              (addr) =>
+                !addr ||
+                addr.trim() === "" ||
+                /^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$|^bc1[a-z0-9]{39,59}$/.test(
+                  addr
+                )
             );
           },
           message: "Invalid Bitcoin wallet address format",
@@ -59,8 +65,9 @@ const ourNetworkSchema = new mongoose.Schema(
         validate: {
           validator: function (addresses) {
             if (!Array.isArray(addresses)) return false;
-            return addresses.every(addr => 
-              !addr || addr.trim() === '' || /^T[A-Za-z1-9]{33}$/.test(addr)
+            return addresses.every(
+              (addr) =>
+                !addr || addr.trim() === "" || /^T[A-Za-z1-9]{33}$/.test(addr)
             );
           },
           message: "Invalid TRON wallet address format",
@@ -97,23 +104,33 @@ ourNetworkSchema.virtual("cryptoWalletUrls").get(function () {
 
   if (wallets.ethereum && wallets.ethereum.length > 0) {
     urls.ethereum = wallets.ethereum
-      .filter(addr => addr && addr.trim() !== '')
-      .map(addr => `https://etherscan.io/address/${addr}#tokentxns`);
+      .filter((addr) => addr && addr.trim() !== "")
+      .map((addr) => `https://etherscan.io/address/${addr}#tokentxns`);
   }
 
   if (wallets.bitcoin && wallets.bitcoin.length > 0) {
     urls.bitcoin = wallets.bitcoin
-      .filter(addr => addr && addr.trim() !== '')
-      .map(addr => `https://www.blockchain.com/explorer/addresses/btc/${addr}`);
+      .filter((addr) => addr && addr.trim() !== "")
+      .map(
+        (addr) => `https://www.blockchain.com/explorer/addresses/btc/${addr}`
+      );
   }
 
   if (wallets.tron && wallets.tron.length > 0) {
     urls.tron = wallets.tron
-      .filter(addr => addr && addr.trim() !== '')
-      .map(addr => `https://tronscan.org/#/address/${addr}/transfers`);
+      .filter((addr) => addr && addr.trim() !== "")
+      .map((addr) => `https://tronscan.org/#/address/${addr}/transfers`);
   }
 
   return urls;
+});
+
+ourNetworkSchema.plugin(encryptFields, {
+  fields: [
+    "cryptoWallets.ethereum",
+    "cryptoWallets.bitcoin",
+    "cryptoWallets.tron",
+  ],
 });
 
 module.exports = mongoose.model("OurNetwork", ourNetworkSchema);

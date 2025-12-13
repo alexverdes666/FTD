@@ -1,56 +1,66 @@
-const crypto = require('crypto');
+const CryptoJS = require("crypto-js");
 
-// Get encryption key from environment or generate a consistent one
-// IMPORTANT: In production, always set ENCRYPTION_KEY in .env
-let ENCRYPTION_KEY = process.env.ENCRYPTION_KEY;
-
-if (!ENCRYPTION_KEY) {
-  console.warn('⚠️  WARNING: ENCRYPTION_KEY not set in environment. Using fallback key.');
-  console.warn('⚠️  For production, generate a key with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"');
-  // Use a consistent fallback for development (not secure for production!)
-  ENCRYPTION_KEY = 'a'.repeat(64); // 64 hex characters
-}
-
-const ALGORITHM = 'aes-256-cbc';
+const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY;
+const PREFIX = "ENC:";
 
 /**
- * Encrypt a string using AES-256-CBC
- * @param {string} text - The text to encrypt
- * @returns {string} - The encrypted text in format "iv:encryptedData"
+ * Encrypts a text string using AES.
+ * @param {string} text - The text to encrypt.
+ * @returns {string} - The encrypted text with prefix.
  */
-function encrypt(text) {
-  const iv = crypto.randomBytes(16);
-  const cipher = crypto.createCipheriv(
-    ALGORITHM, 
-    Buffer.from(ENCRYPTION_KEY.slice(0, 64), 'hex'), 
-    iv
-  );
-  let encrypted = cipher.update(text);
-  encrypted = Buffer.concat([encrypted, cipher.final()]);
-  return iv.toString('hex') + ':' + encrypted.toString('hex');
-}
+const encrypt = (text) => {
+  if (!text) return text;
+  if (!ENCRYPTION_KEY) {
+    console.warn("ENCRYPTION_KEY is not defined. Skipping encryption.");
+    return text;
+  }
+  // If already encrypted, don't encrypt again
+  if (typeof text === "string" && text.startsWith(PREFIX)) {
+    return text;
+  }
+
+  try {
+    const ciphertext = CryptoJS.AES.encrypt(text, ENCRYPTION_KEY).toString();
+    return PREFIX + ciphertext;
+  } catch (error) {
+    console.error("Encryption error:", error);
+    return text;
+  }
+};
 
 /**
- * Decrypt a string that was encrypted with the encrypt function
- * @param {string} text - The encrypted text in format "iv:encryptedData"
- * @returns {string} - The decrypted plain text
+ * Decrypts a text string if it starts with the prefix.
+ * @param {string} text - The text to decrypt.
+ * @returns {string} - The decrypted text or original text.
  */
-function decrypt(text) {
-  const parts = text.split(':');
-  const iv = Buffer.from(parts.shift(), 'hex');
-  const encryptedText = Buffer.from(parts.join(':'), 'hex');
-  const decipher = crypto.createDecipheriv(
-    ALGORITHM, 
-    Buffer.from(ENCRYPTION_KEY.slice(0, 64), 'hex'), 
-    iv
-  );
-  let decrypted = decipher.update(encryptedText);
-  decrypted = Buffer.concat([decrypted, decipher.final()]);
-  return decrypted.toString();
-}
+const decrypt = (text) => {
+  if (!text) return text;
+  if (!ENCRYPTION_KEY) {
+    return text;
+  }
+
+  if (typeof text === "string" && text.startsWith(PREFIX)) {
+    try {
+      const ciphertext = text.slice(PREFIX.length);
+      const bytes = CryptoJS.AES.decrypt(ciphertext, ENCRYPTION_KEY);
+      const originalText = bytes.toString(CryptoJS.enc.Utf8);
+
+      // If decryption fails (empty string usually), return original
+      if (!originalText && ciphertext) {
+        // This might happen if key changed or data corrupted
+        return text;
+      }
+      return originalText;
+    } catch (error) {
+      console.error("Decryption error:", error);
+      return text;
+    }
+  }
+
+  return text;
+};
 
 module.exports = {
   encrypt,
-  decrypt
+  decrypt,
 };
-
