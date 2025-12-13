@@ -3,6 +3,7 @@ const mongoose = require("mongoose");
 const ClientNetwork = require("../models/ClientNetwork");
 const User = require("../models/User");
 const Lead = require("../models/Lead");
+const ClientNetworkAuditService = require("../services/clientNetworkAuditService");
 
 exports.getClientNetworks = async (req, res, next) => {
   try {
@@ -92,6 +93,13 @@ exports.createClientNetwork = async (req, res, next) => {
       { path: "createdBy", select: "fullName email" },
     ]);
 
+    // Log the creation - logs for all users
+    await ClientNetworkAuditService.logNetworkCreated(
+      clientNetwork,
+      req.user,
+      req
+    );
+
     res.status(201).json({
       success: true,
       message: "Client network created successfully",
@@ -129,6 +137,14 @@ exports.updateClientNetwork = async (req, res, next) => {
       });
     }
 
+    // Store previous data for audit logging
+    const previousData = {
+      name: clientNetwork.name,
+      description: clientNetwork.description,
+      isActive: clientNetwork.isActive,
+    };
+
+    // Apply updates
     if (name !== undefined) clientNetwork.name = name;
     if (description !== undefined) clientNetwork.description = description;
     if (isActive !== undefined) clientNetwork.isActive = isActive;
@@ -137,6 +153,22 @@ exports.updateClientNetwork = async (req, res, next) => {
     await clientNetwork.populate([
       { path: "createdBy", select: "fullName email" },
     ]);
+
+    // Prepare new data for audit logging
+    const newData = {
+      name: name !== undefined ? name : undefined,
+      description: description !== undefined ? description : undefined,
+      isActive: isActive !== undefined ? isActive : undefined,
+    };
+
+    // Log the update with detailed changes - logs for all users
+    await ClientNetworkAuditService.logNetworkUpdated(
+      clientNetwork,
+      previousData,
+      newData,
+      req.user,
+      req
+    );
 
     res.status(200).json({
       success: true,
@@ -163,6 +195,13 @@ exports.deleteClientNetwork = async (req, res, next) => {
         message: "Client network not found",
       });
     }
+
+    // Log the deletion before actually deleting - logs for all users
+    await ClientNetworkAuditService.logNetworkDeleted(
+      clientNetwork,
+      req.user,
+      req
+    );
 
     await ClientNetwork.findByIdAndDelete(req.params.id);
 

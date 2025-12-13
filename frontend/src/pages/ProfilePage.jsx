@@ -35,7 +35,6 @@ import {
   clearError,
 } from "../store/slices/authSlice";
 import TwoFactorManagement from "../components/TwoFactorManagement";
-import AdminAuditLogsSection from "../components/AdminAuditLogsSection";
 const profileSchema = yup.object({
   fullName: yup
     .string()
@@ -409,13 +408,6 @@ const ProfilePage = () => {
             )}
           </Grid>
         </Grid>
-
-        {/* Audit Logs Section - Full Width for Admin Only */}
-        {user.role === "admin" && (
-          <Grid item xs={12}>
-            <AdminAuditLogsSection />
-          </Grid>
-        )}
       </Grid>
     </Box>
   );

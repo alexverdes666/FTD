@@ -7,7 +7,7 @@ const {
   updateClientNetwork,
   deleteClientNetwork,
 } = require("../controllers/clientNetworks");
-const { protect, isAdmin, authorize } = require("../middleware/auth");
+const { protect, isAdmin } = require("../middleware/auth");
 
 const router = express.Router();
 
