@@ -7,6 +7,8 @@ const {
   updateOurNetwork,
   deleteOurNetwork,
   getMyOurNetworks,
+  getNetworkAuditLogs,
+  getAllAuditLogs,
 } = require("../controllers/ourNetworks");
 const { protect, isAdmin, authorize } = require("../middleware/auth");
 
@@ -53,8 +55,10 @@ router.post(
         if (!Array.isArray(value)) {
           throw new Error("Ethereum wallets must be an array");
         }
-        const validAddresses = value.filter(addr => addr && addr.trim() !== '');
-        if (validAddresses.some(addr => !/^0x[a-fA-F0-9]{40}$/.test(addr))) {
+        const validAddresses = value.filter(
+          (addr) => addr && addr.trim() !== ""
+        );
+        if (validAddresses.some((addr) => !/^0x[a-fA-F0-9]{40}$/.test(addr))) {
           throw new Error("Invalid Ethereum wallet address format");
         }
         return true;
@@ -66,10 +70,17 @@ router.post(
         if (!Array.isArray(value)) {
           throw new Error("Bitcoin wallets must be an array");
         }
-        const validAddresses = value.filter(addr => addr && addr.trim() !== '');
-        if (validAddresses.some(addr => 
-          !/^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$|^bc1[a-z0-9]{39,59}$/.test(addr)
-        )) {
+        const validAddresses = value.filter(
+          (addr) => addr && addr.trim() !== ""
+        );
+        if (
+          validAddresses.some(
+            (addr) =>
+              !/^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$|^bc1[a-z0-9]{39,59}$/.test(
+                addr
+              )
+          )
+        ) {
           throw new Error("Invalid Bitcoin wallet address format");
         }
         return true;
@@ -81,8 +92,10 @@ router.post(
         if (!Array.isArray(value)) {
           throw new Error("TRON wallets must be an array");
         }
-        const validAddresses = value.filter(addr => addr && addr.trim() !== '');
-        if (validAddresses.some(addr => !/^T[A-Za-z1-9]{33}$/.test(addr))) {
+        const validAddresses = value.filter(
+          (addr) => addr && addr.trim() !== ""
+        );
+        if (validAddresses.some((addr) => !/^T[A-Za-z1-9]{33}$/.test(addr))) {
           throw new Error("Invalid TRON wallet address format");
         }
         return true;
@@ -121,8 +134,10 @@ router.put(
         if (!Array.isArray(value)) {
           throw new Error("Ethereum wallets must be an array");
         }
-        const validAddresses = value.filter(addr => addr && addr.trim() !== '');
-        if (validAddresses.some(addr => !/^0x[a-fA-F0-9]{40}$/.test(addr))) {
+        const validAddresses = value.filter(
+          (addr) => addr && addr.trim() !== ""
+        );
+        if (validAddresses.some((addr) => !/^0x[a-fA-F0-9]{40}$/.test(addr))) {
           throw new Error("Invalid Ethereum wallet address format");
         }
         return true;
@@ -134,10 +149,17 @@ router.put(
         if (!Array.isArray(value)) {
           throw new Error("Bitcoin wallets must be an array");
         }
-        const validAddresses = value.filter(addr => addr && addr.trim() !== '');
-        if (validAddresses.some(addr => 
-          !/^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$|^bc1[a-z0-9]{39,59}$/.test(addr)
-        )) {
+        const validAddresses = value.filter(
+          (addr) => addr && addr.trim() !== ""
+        );
+        if (
+          validAddresses.some(
+            (addr) =>
+              !/^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$|^bc1[a-z0-9]{39,59}$/.test(
+                addr
+              )
+          )
+        ) {
           throw new Error("Invalid Bitcoin wallet address format");
         }
         return true;
@@ -149,8 +171,10 @@ router.put(
         if (!Array.isArray(value)) {
           throw new Error("TRON wallets must be an array");
         }
-        const validAddresses = value.filter(addr => addr && addr.trim() !== '');
-        if (validAddresses.some(addr => !/^T[A-Za-z1-9]{33}$/.test(addr))) {
+        const validAddresses = value.filter(
+          (addr) => addr && addr.trim() !== ""
+        );
+        if (validAddresses.some((addr) => !/^T[A-Za-z1-9]{33}$/.test(addr))) {
           throw new Error("Invalid TRON wallet address format");
         }
         return true;
@@ -160,5 +184,14 @@ router.put(
 );
 
 router.delete("/:id", [protect, isAdmin], deleteOurNetwork);
+
+// Audit log routes
+router.get("/audit-logs/all", [protect, isAdmin], getAllAuditLogs);
+
+router.get(
+  "/:id/audit-logs",
+  [protect, authorize("admin", "affiliate_manager")],
+  getNetworkAuditLogs
+);
 
 module.exports = router;

@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useDispatch, useSelector } from 'react-redux';
+import React, { useState } from "react";
+import { useDispatch, useSelector } from "react-redux";
 import {
   Box,
   Typography,
@@ -15,36 +15,44 @@ import {
   CircularProgress,
   Stack,
   Chip,
-} from '@mui/material';
+} from "@mui/material";
 import {
   Person as PersonIcon,
   Save as SaveIcon,
   Lock as LockIcon,
   Email as EmailIcon,
   Badge as BadgeIcon,
-} from '@mui/icons-material';
-import { useForm, Controller } from 'react-hook-form';
-import { yupResolver } from '@hookform/resolvers/yup';
-import * as yup from 'yup';
+} from "@mui/icons-material";
+import { useForm, Controller } from "react-hook-form";
+import { yupResolver } from "@hookform/resolvers/yup";
+import * as yup from "yup";
 import {
   selectUser,
   selectAuthLoading,
   selectAuthError,
   updateProfile,
   changePassword,
-  clearError
-} from '../store/slices/authSlice';
-import TwoFactorManagement from '../components/TwoFactorManagement';
+  clearError,
+} from "../store/slices/authSlice";
+import TwoFactorManagement from "../components/TwoFactorManagement";
+import AdminAuditLogsSection from "../components/AdminAuditLogsSection";
 const profileSchema = yup.object({
-  fullName: yup.string().required('Full name is required').min(2, 'Name must be at least 2 characters'),
-  email: yup.string().email('Invalid email').required('Email is required'),
+  fullName: yup
+    .string()
+    .required("Full name is required")
+    .min(2, "Name must be at least 2 characters"),
+  email: yup.string().email("Invalid email").required("Email is required"),
 });
 const passwordSchema = yup.object({
-  currentPassword: yup.string().required('Current password is required'),
-  newPassword: yup.string().required('New password is required').min(6, 'Password must be at least 6 characters'),
-  confirmPassword: yup.string()
-    .required('Please confirm your password')
-    .oneOf([yup.ref('newPassword')], 'Passwords must match'),
+  currentPassword: yup.string().required("Current password is required"),
+  newPassword: yup
+    .string()
+    .required("New password is required")
+    .min(6, "Password must be at least 6 characters"),
+  confirmPassword: yup
+    .string()
+    .required("Please confirm your password")
+    .oneOf([yup.ref("newPassword")], "Passwords must match"),
 });
 const ProfilePage = () => {
   const dispatch = useDispatch();
@@ -52,7 +60,7 @@ const ProfilePage = () => {
   const isLoading = useSelector(selectAuthLoading);
   const error = useSelector(selectAuthError);
   const [success, setSuccess] = useState(null);
-  const [activeTab, setActiveTab] = useState('profile');
+  const [activeTab, setActiveTab] = useState("profile");
   const {
     control: profileControl,
     handleSubmit: handleProfileSubmit,
@@ -60,8 +68,8 @@ const ProfilePage = () => {
   } = useForm({
     resolver: yupResolver(profileSchema),
     defaultValues: {
-      fullName: user?.fullName || '',
-      email: user?.email || '',
+      fullName: user?.fullName || "",
+      email: user?.email || "",
     },
   });
   const {
@@ -72,9 +80,9 @@ const ProfilePage = () => {
   } = useForm({
     resolver: yupResolver(passwordSchema),
     defaultValues: {
-      currentPassword: '',
-      newPassword: '',
-      confirmPassword: '',
+      currentPassword: "",
+      newPassword: "",
+      confirmPassword: "",
     },
   });
   React.useEffect(() => {
@@ -89,35 +97,43 @@ const ProfilePage = () => {
   const onSubmitProfile = async (data) => {
     try {
       await dispatch(updateProfile(data)).unwrap();
-      setSuccess('Profile updated successfully!');
-    } catch (error) {
-    }
+      setSuccess("Profile updated successfully!");
+    } catch (error) {}
   };
   const onSubmitPassword = async (data) => {
     try {
-      await dispatch(changePassword({
-        currentPassword: data.currentPassword,
-        newPassword: data.newPassword,
-      })).unwrap();
-      setSuccess('Password changed successfully!');
+      await dispatch(
+        changePassword({
+          currentPassword: data.currentPassword,
+          newPassword: data.newPassword,
+        })
+      ).unwrap();
+      setSuccess("Password changed successfully!");
       resetPasswordForm();
-    } catch (error) {
-    }
+    } catch (error) {}
   };
   const getRoleColor = (role) => {
     switch (role) {
-      case 'admin': return 'primary';
-      case 'affiliate_manager': return 'secondary';
-      case 'agent': return 'info';
-      default: return 'default';
+      case "admin":
+        return "primary";
+      case "affiliate_manager":
+        return "secondary";
+      case "agent":
+        return "info";
+      default:
+        return "default";
     }
   };
   const getRoleDisplayName = (role) => {
     switch (role) {
-      case 'admin': return 'Administrator';
-      case 'affiliate_manager': return 'Affiliate Manager';
-      case 'agent': return 'Agent';
-      default: return role;
+      case "admin":
+        return "Administrator";
+      case "affiliate_manager":
+        return "Affiliate Manager";
+      case "agent":
+        return "Agent";
+      default:
+        return role;
     }
   };
   if (!user) {
@@ -134,7 +150,11 @@ const ProfilePage = () => {
       </Typography>
       {}
       {success && (
-        <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccess(null)}>
+        <Alert
+          severity="success"
+          sx={{ mb: 2 }}
+          onClose={() => setSuccess(null)}
+        >
           {success}
         </Alert>
       )}
@@ -149,17 +169,23 @@ const ProfilePage = () => {
           <Card>
             <CardHeader title="Profile Overview" />
             <CardContent>
-              <Box display="flex" flexDirection="column" alignItems="center" mb={3}>
+              <Box
+                display="flex"
+                flexDirection="column"
+                alignItems="center"
+                mb={3}
+              >
                 <Avatar
                   sx={{
                     width: 100,
                     height: 100,
                     mb: 2,
-                    bgcolor: 'primary.main',
-                    fontSize: '2rem'
+                    bgcolor: "primary.main",
+                    fontSize: "2rem",
                   }}
                 >
-                  {user.fullName?.[0]?.toUpperCase() || user.email?.[0]?.toUpperCase()}
+                  {user.fullName?.[0]?.toUpperCase() ||
+                    user.email?.[0]?.toUpperCase()}
                 </Avatar>
                 <Typography variant="h6" gutterBottom>
                   {user.fullName}
@@ -173,19 +199,17 @@ const ProfilePage = () => {
               <Divider sx={{ my: 2 }} />
               <Stack spacing={2}>
                 <Box display="flex" alignItems="center">
-                  <EmailIcon sx={{ mr: 2, color: 'text.secondary' }} />
+                  <EmailIcon sx={{ mr: 2, color: "text.secondary" }} />
                   <Box>
                     <Typography variant="body2" color="textSecondary">
                       Email
                     </Typography>
-                    <Typography variant="body1">
-                      {user.email}
-                    </Typography>
+                    <Typography variant="body1">{user.email}</Typography>
                   </Box>
                 </Box>
                 {user.fourDigitCode && (
                   <Box display="flex" alignItems="center">
-                    <BadgeIcon sx={{ mr: 2, color: 'text.secondary' }} />
+                    <BadgeIcon sx={{ mr: 2, color: "text.secondary" }} />
                     <Box>
                       <Typography variant="body2" color="textSecondary">
                         Agent Code
@@ -197,7 +221,7 @@ const ProfilePage = () => {
                   </Box>
                 )}
                 <Box display="flex" alignItems="center">
-                  <PersonIcon sx={{ mr: 2, color: 'text.secondary' }} />
+                  <PersonIcon sx={{ mr: 2, color: "text.secondary" }} />
                   <Box>
                     <Typography variant="body2" color="textSecondary">
                       Role
@@ -209,7 +233,11 @@ const ProfilePage = () => {
                 </Box>
                 {user.permissions && (
                   <Box>
-                    <Typography variant="body2" color="textSecondary" gutterBottom>
+                    <Typography
+                      variant="body2"
+                      color="textSecondary"
+                      gutterBottom
+                    >
                       Permissions
                     </Typography>
                     <Stack direction="row" spacing={1} flexWrap="wrap">
@@ -241,10 +269,7 @@ const ProfilePage = () => {
             {}
             <Grid item xs={12}>
               <Card>
-                <CardHeader
-                  title="Edit Profile"
-                  avatar={<PersonIcon />}
-                />
+                <CardHeader title="Edit Profile" avatar={<PersonIcon />} />
                 <CardContent>
                   <form onSubmit={handleProfileSubmit(onSubmitProfile)}>
                     <Grid container spacing={2}>
@@ -289,7 +314,7 @@ const ProfilePage = () => {
                           {isLoading ? (
                             <CircularProgress size={24} />
                           ) : (
-                            'Update Profile'
+                            "Update Profile"
                           )}
                         </Button>
                       </Grid>
@@ -301,10 +326,7 @@ const ProfilePage = () => {
             {}
             <Grid item xs={12}>
               <Card>
-                <CardHeader
-                  title="Change Password"
-                  avatar={<LockIcon />}
-                />
+                <CardHeader title="Change Password" avatar={<LockIcon />} />
                 <CardContent>
                   <form onSubmit={handlePasswordSubmit(onSubmitPassword)}>
                     <Grid container spacing={2}>
@@ -319,7 +341,9 @@ const ProfilePage = () => {
                               label="Current Password"
                               type="password"
                               error={!!passwordErrors.currentPassword}
-                              helperText={passwordErrors.currentPassword?.message}
+                              helperText={
+                                passwordErrors.currentPassword?.message
+                              }
                             />
                           )}
                         />
@@ -351,7 +375,9 @@ const ProfilePage = () => {
                               label="Confirm New Password"
                               type="password"
                               error={!!passwordErrors.confirmPassword}
-                              helperText={passwordErrors.confirmPassword?.message}
+                              helperText={
+                                passwordErrors.confirmPassword?.message
+                              }
                             />
                           )}
                         />
@@ -366,7 +392,7 @@ const ProfilePage = () => {
                           {isLoading ? (
                             <CircularProgress size={24} />
                           ) : (
-                            'Change Password'
+                            "Change Password"
                           )}
                         </Button>
                       </Grid>
@@ -376,13 +402,20 @@ const ProfilePage = () => {
               </Card>
             </Grid>
             {/* Two-Factor Authentication Section */}
-            {user.role === 'admin' && (
+            {user.role === "admin" && (
               <Grid item xs={12}>
                 <TwoFactorManagement />
               </Grid>
             )}
           </Grid>
         </Grid>
+
+        {/* Audit Logs Section - Full Width for Admin Only */}
+        {user.role === "admin" && (
+          <Grid item xs={12}>
+            <AdminAuditLogsSection />
+          </Grid>
+        )}
       </Grid>
     </Box>
   );
