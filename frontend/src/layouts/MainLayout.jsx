@@ -49,6 +49,7 @@ import {
   CheckCircle as ApproveIcon,
   Announcement as AnnouncementIcon,
   TrackChanges as TargetIcon,
+  PhoneCallback as DepositCallIcon,
 } from "@mui/icons-material";
 import { logout, selectUser } from "../store/slices/authSlice";
 import Footer from "./Footer";
@@ -266,6 +267,11 @@ const MainLayout = () => {
               icon: <ApproveIcon />, 
               path: "/approve-am-calls"
             },
+            {
+              text: "Deposit Calls",
+              icon: <DepositCallIcon />,
+              path: "/deposit-calls"
+            },
             { text: "Agent Comments",
               icon: <CommentIcon />, 
               path: "/agent-comments" 
@@ -338,6 +344,11 @@ const MainLayout = () => {
               path: "/approve-am-calls"
             },
             {
+              text: "Deposit Calls",
+              icon: <DepositCallIcon />,
+              path: "/deposit-calls"
+            },
+            {
               text: "Agent Comments", 
               icon: <CommentIcon />, 
               path: "/agent-comments" 
@@ -372,6 +383,11 @@ const MainLayout = () => {
               text: "AM Calls Calendar", 
               icon: <CalendarIcon />, 
               path: "/agent-call-calendar"
+            },
+            {
+              text: "Deposit Calls",
+              icon: <DepositCallIcon />,
+              path: "/deposit-calls"
             }
           ]
         },

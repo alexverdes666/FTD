@@ -51,6 +51,7 @@ const callChangeRequestRoutes = require("./routes/callChangeRequests");
 const videoRoutes = require("./routes/video");
 const announcementRoutes = require("./routes/announcements");
 const amTargetRoutes = require("./routes/amTargets");
+const depositCallsRoutes = require("./routes/depositCalls");
 const errorHandler = require("./middleware/errorHandler");
 const SessionCleanupService = require("./services/sessionCleanupService");
 const AgentScraperService = require("./services/agentScraperService");
@@ -512,6 +513,7 @@ app.use("/api/call-change-requests", callChangeRequestRoutes);
 app.use("/api/video", videoRoutes);
 app.use("/api/announcements", announcementRoutes);
 app.use("/api/am-targets", amTargetRoutes);
+app.use("/api/deposit-calls", depositCallsRoutes);
 
 app.use("/api/system-config", systemConfigurationRoutes);
 const healthRoutes = require("./routes/health");

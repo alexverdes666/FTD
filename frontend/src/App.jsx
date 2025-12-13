@@ -57,6 +57,7 @@ import AgentCallsCalendarPage from "./pages/AgentCallsCalendarPage.jsx";
 import ApproveAMCallsPage from "./pages/ApproveAMCallsPage.jsx";
 import AnnouncementsPage from "./pages/AnnouncementsPage.jsx";
 import AMTargetsPage from "./pages/AMTargetsPage.jsx";
+import DepositCallsPage from "./pages/DepositCallsPage.jsx";
 
 // Component to handle role-based default routing
 const RoleBasedRedirect = () => {
@@ -339,6 +340,14 @@ function AppContent() {
               element={
                 <ProtectedRoute allowedRoles={["affiliate_manager", "admin", "lead_manager"]}>
                   <AMTargetsPage />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="deposit-calls" 
+              element={
+                <ProtectedRoute allowedRoles={["agent", "affiliate_manager", "admin"]}>
+                  <DepositCallsPage />
                 </ProtectedRoute>
               } 
             />

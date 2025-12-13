@@ -1,0 +1,957 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import { useSelector } from 'react-redux';
+import {
+  Box,
+  Container,
+  Typography,
+  Paper,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  TablePagination,
+  TextField,
+  InputAdornment,
+  IconButton,
+  Tooltip,
+  Chip,
+  Button,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  Grid,
+  Card,
+  CardContent,
+  CircularProgress,
+  Alert,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Tabs,
+  Tab,
+  Divider,
+  Badge
+} from '@mui/material';
+import {
+  Search as SearchIcon,
+  Refresh as RefreshIcon,
+  CalendarMonth as CalendarIcon,
+  TableChart as TableIcon,
+  CheckCircle as ApproveIcon,
+  Cancel as RejectIcon,
+  Schedule as ScheduleIcon,
+  Done as DoneIcon,
+  ChevronLeft as ChevronLeftIcon,
+  ChevronRight as ChevronRightIcon,
+  Phone as PhoneIcon,
+  Email as EmailIcon,
+  Person as PersonIcon
+} from '@mui/icons-material';
+import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
+import { selectUser } from '../store/slices/authSlice';
+import depositCallsService from '../services/depositCallsService';
+import api from '../services/api';
+import toast from 'react-hot-toast';
+
+// Call status colors
+const getStatusColor = (status) => {
+  switch (status) {
+    case 'completed': return 'success';
+    case 'pending_approval': return 'warning';
+    case 'scheduled': return 'info';
+    case 'skipped': return 'default';
+    default: return 'default';
+  }
+};
+
+// Format date for display
+const formatDateTime = (date) => {
+  if (!date) return '-';
+  return new Date(date).toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+};
+
+// Call Cell Component
+const CallCell = ({ call, callNumber, depositCall, onSchedule, onMarkDone, onApprove, onReject, isAdmin, isAM, isAgent }) => {
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [expectedDate, setExpectedDate] = useState(call?.expectedDate ? new Date(call.expectedDate) : null);
+  const [notes, setNotes] = useState('');
+
+  const handleSchedule = async () => {
+    if (!expectedDate) {
+      toast.error('Please select a date and time');
+      return;
+    }
+    await onSchedule(depositCall._id, callNumber, expectedDate.toISOString(), notes);
+    setDialogOpen(false);
+    setNotes('');
+  };
+
+  const handleMarkDone = async () => {
+    await onMarkDone(depositCall._id, callNumber, notes);
+    setDialogOpen(false);
+    setNotes('');
+  };
+
+  const canSchedule = isAgent || isAM || isAdmin;
+  const canMarkDone = isAgent || isAM || isAdmin;
+  const canApprove = (isAM || isAdmin) && call?.status === 'pending_approval';
+
+  return (
+    <TableCell sx={{ minWidth: 120, p: 1 }}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+        {call?.status === 'pending' ? (
+          <Button
+            size="small"
+            variant="outlined"
+            color="primary"
+            onClick={() => setDialogOpen(true)}
+            disabled={!canSchedule}
+            sx={{ fontSize: '0.7rem', py: 0.25 }}
+          >
+            Schedule
+          </Button>
+        ) : call?.status === 'scheduled' ? (
+          <>
+            <Typography variant="caption" color="info.main" fontWeight="bold">
+              {formatDateTime(call.expectedDate)}
+            </Typography>
+            {canMarkDone && (
+              <Button
+                size="small"
+                variant="contained"
+                color="success"
+                onClick={() => setDialogOpen(true)}
+                sx={{ fontSize: '0.65rem', py: 0.25 }}
+                startIcon={<DoneIcon sx={{ fontSize: 12 }} />}
+              >
+                Done
+              </Button>
+            )}
+          </>
+        ) : call?.status === 'pending_approval' ? (
+          <>
+            <Typography variant="caption" color="warning.main" fontWeight="bold">
+              Done: {formatDateTime(call.doneDate)}
+            </Typography>
+            <Chip label="Pending Approval" size="small" color="warning" sx={{ fontSize: '0.65rem' }} />
+            {canApprove && (
+              <Box sx={{ display: 'flex', gap: 0.5, mt: 0.5 }}>
+                <IconButton
+                  size="small"
+                  color="success"
+                  onClick={() => onApprove(depositCall._id, callNumber)}
+                >
+                  <ApproveIcon fontSize="small" />
+                </IconButton>
+                <IconButton
+                  size="small"
+                  color="error"
+                  onClick={() => onReject(depositCall._id, callNumber)}
+                >
+                  <RejectIcon fontSize="small" />
+                </IconButton>
+              </Box>
+            )}
+          </>
+        ) : call?.status === 'completed' ? (
+          <>
+            <Typography variant="caption" color="success.main" fontWeight="bold">
+              ✓ {formatDateTime(call.doneDate)}
+            </Typography>
+            <Chip label="Approved" size="small" color="success" sx={{ fontSize: '0.65rem' }} />
+          </>
+        ) : (
+          <Typography variant="caption" color="text.secondary">-</Typography>
+        )}
+      </Box>
+
+      {/* Schedule/Mark Done Dialog */}
+      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>
+          {call?.status === 'scheduled' ? `Mark Call ${callNumber} as Done` : `Schedule Call ${callNumber}`}
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ pt: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <Typography variant="body2" color="text.secondary">
+              FTD: <strong>{depositCall.ftdName}</strong>
+            </Typography>
+            {call?.status !== 'scheduled' && (
+              <LocalizationProvider dateAdapter={AdapterDateFns}>
+                <DateTimePicker
+                  label="Expected Date & Time"
+                  value={expectedDate}
+                  onChange={setExpectedDate}
+                  slotProps={{ textField: { fullWidth: true } }}
+                />
+              </LocalizationProvider>
+            )}
+            <TextField
+              label="Notes (optional)"
+              multiline
+              rows={2}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              fullWidth
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
+          {call?.status === 'scheduled' ? (
+            <Button onClick={handleMarkDone} variant="contained" color="success">
+              Mark as Done
+            </Button>
+          ) : (
+            <Button onClick={handleSchedule} variant="contained" color="primary">
+              Schedule
+            </Button>
+          )}
+        </DialogActions>
+      </Dialog>
+    </TableCell>
+  );
+};
+
+const DepositCallsPage = () => {
+  const user = useSelector(selectUser);
+  const isAdmin = user?.role === 'admin';
+  const isAM = user?.role === 'affiliate_manager';
+  const isAgent = user?.role === 'agent';
+
+  // State
+  const [tabValue, setTabValue] = useState(0); // 0 = Table, 1 = Calendar
+  const [depositCalls, setDepositCalls] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  
+  // Filters
+  const [search, setSearch] = useState('');
+  const [selectedAM, setSelectedAM] = useState('');
+  const [selectedAgent, setSelectedAgent] = useState('');
+  const [selectedBroker, setSelectedBroker] = useState('');
+  const [status, setStatus] = useState('active');
+  
+  // Pagination
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(25);
+  const [totalCount, setTotalCount] = useState(0);
+
+  // Data for filters
+  const [accountManagers, setAccountManagers] = useState([]);
+  const [agents, setAgents] = useState([]);
+  const [brokers, setBrokers] = useState([]);
+
+  // Calendar state
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [calendarEvents, setCalendarEvents] = useState([]);
+
+  // Day detail dialog state
+  const [selectedDay, setSelectedDay] = useState(null);
+  const [dayDetailOpen, setDayDetailOpen] = useState(false);
+
+  // Pending approvals count
+  const [pendingCount, setPendingCount] = useState(0);
+
+  // Fetch filter options
+  useEffect(() => {
+    const fetchFilterOptions = async () => {
+      try {
+        if (isAdmin || isAM) {
+          // Fetch AMs
+          const amResponse = await api.get('/users?role=affiliate_manager&isActive=true&limit=1000');
+          if (amResponse.data.success) {
+            setAccountManagers(amResponse.data.data || []);
+          }
+
+          // Fetch Agents
+          const agentResponse = await api.get('/users?role=agent&isActive=true&limit=1000');
+          if (agentResponse.data.success) {
+            setAgents(agentResponse.data.data || []);
+          }
+
+          // Fetch Client Brokers
+          const brokerResponse = await api.get('/client-brokers?isActive=true&limit=1000');
+          if (brokerResponse.data.success) {
+            setBrokers(brokerResponse.data.data || []);
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching filter options:', err);
+      }
+    };
+
+    fetchFilterOptions();
+  }, [isAdmin, isAM]);
+
+  // Fetch deposit calls
+  const fetchDepositCalls = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const params = {
+        page: page + 1,
+        limit: rowsPerPage,
+        status
+      };
+
+      if (search) params.search = search;
+      if (selectedAM) params.accountManager = selectedAM;
+      if (selectedAgent) params.assignedAgent = selectedAgent;
+      if (selectedBroker) params.clientBrokerId = selectedBroker;
+
+      const response = await depositCallsService.getDepositCalls(params);
+      
+      if (response.success) {
+        setDepositCalls(response.data || []);
+        setTotalCount(response.pagination?.total || 0);
+      }
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to fetch deposit calls');
+    } finally {
+      setLoading(false);
+    }
+  }, [page, rowsPerPage, search, selectedAM, selectedAgent, selectedBroker, status]);
+
+  // Fetch calendar events
+  const fetchCalendarEvents = useCallback(async () => {
+    try {
+      const startDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+      const endDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0, 23, 59, 59);
+      
+      const filters = {};
+      if (selectedAM) filters.accountManager = selectedAM;
+      if (selectedAgent) filters.assignedAgent = selectedAgent;
+
+      const response = await depositCallsService.getCalendarAppointments(
+        startDate.toISOString(),
+        endDate.toISOString(),
+        filters
+      );
+
+      if (response.success) {
+        setCalendarEvents(response.data || []);
+      }
+    } catch (err) {
+      console.error('Error fetching calendar events:', err);
+    }
+  }, [currentDate, selectedAM, selectedAgent]);
+
+  // Fetch pending approvals count
+  const fetchPendingCount = useCallback(async () => {
+    if (!isAdmin && !isAM) return;
+    
+    try {
+      const response = await depositCallsService.getPendingApprovals();
+      if (response.success) {
+        setPendingCount(response.count || 0);
+      }
+    } catch (err) {
+      console.error('Error fetching pending count:', err);
+    }
+  }, [isAdmin, isAM]);
+
+  useEffect(() => {
+    fetchDepositCalls();
+    fetchPendingCount();
+  }, [fetchDepositCalls, fetchPendingCount]);
+
+  useEffect(() => {
+    if (tabValue === 1) {
+      fetchCalendarEvents();
+    }
+  }, [tabValue, fetchCalendarEvents]);
+
+  // Handlers
+  const handleScheduleCall = async (depositCallId, callNumber, expectedDate, notes) => {
+    try {
+      await depositCallsService.scheduleCall(depositCallId, callNumber, expectedDate, notes);
+      toast.success(`Call ${callNumber} scheduled successfully`);
+      fetchDepositCalls();
+      if (tabValue === 1) fetchCalendarEvents();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to schedule call');
+    }
+  };
+
+  const handleMarkDone = async (depositCallId, callNumber, notes) => {
+    try {
+      await depositCallsService.markCallDone(depositCallId, callNumber, notes);
+      toast.success(`Call ${callNumber} marked as done - pending approval`);
+      fetchDepositCalls();
+      fetchPendingCount();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to mark call as done');
+    }
+  };
+
+  const handleApproveCall = async (depositCallId, callNumber) => {
+    try {
+      await depositCallsService.approveCall(depositCallId, callNumber);
+      toast.success(`Call ${callNumber} approved successfully`);
+      fetchDepositCalls();
+      fetchPendingCount();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to approve call');
+    }
+  };
+
+  const handleRejectCall = async (depositCallId, callNumber) => {
+    try {
+      await depositCallsService.rejectCall(depositCallId, callNumber);
+      toast.success(`Call ${callNumber} rejected - returned to scheduled`);
+      fetchDepositCalls();
+      fetchPendingCount();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to reject call');
+    }
+  };
+
+  // Calendar helpers
+  const getDaysInMonth = () => new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate();
+  const getFirstDayOfMonth = () => new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).getDay();
+
+  const getEventsForDay = (day) => {
+    return calendarEvents.filter(event => {
+      const eventDate = new Date(event.start);
+      return eventDate.getDate() === day && 
+             eventDate.getMonth() === currentDate.getMonth() &&
+             eventDate.getFullYear() === currentDate.getFullYear();
+    });
+  };
+
+  const renderCalendar = () => {
+    const daysInMonth = getDaysInMonth();
+    const firstDay = getFirstDayOfMonth();
+    const days = [];
+
+    // Empty cells before first day
+    for (let i = 0; i < firstDay; i++) {
+      days.push(
+        <Grid item xs={12/7} key={`empty-${i}`}>
+          <Card sx={{ minHeight: 120, bgcolor: 'grey.100' }}>
+            <CardContent sx={{ p: 1 }}>&nbsp;</CardContent>
+          </Card>
+        </Grid>
+      );
+    }
+
+    // Calendar days
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dayEvents = getEventsForDay(day);
+      const isToday = new Date().getDate() === day && 
+                      new Date().getMonth() === currentDate.getMonth() &&
+                      new Date().getFullYear() === currentDate.getFullYear();
+
+      const handleDayClick = () => {
+        setSelectedDay({ day, events: dayEvents, date: new Date(currentDate.getFullYear(), currentDate.getMonth(), day) });
+        setDayDetailOpen(true);
+      };
+
+      days.push(
+        <Grid item xs={12/7} key={day}>
+          <Card 
+            onClick={handleDayClick}
+            sx={{ 
+              minHeight: 120,
+              border: isToday ? '2px solid' : '1px solid',
+              borderColor: isToday ? 'primary.main' : 'grey.200',
+              overflow: 'hidden',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              '&:hover': {
+                boxShadow: 4,
+                borderColor: 'primary.light',
+                transform: 'scale(1.02)'
+              }
+            }}
+          >
+            <CardContent sx={{ p: 1 }}>
+              <Box display="flex" justifyContent="space-between" alignItems="center">
+                <Typography variant="subtitle2" fontWeight={isToday ? 'bold' : 'normal'}>
+                  {day}
+                </Typography>
+                {dayEvents.length > 0 && (
+                  <Badge badgeContent={dayEvents.length} color="primary" max={9} />
+                )}
+              </Box>
+              
+              <Box sx={{ mt: 0.5, maxHeight: 80, overflow: 'auto' }}>
+                {dayEvents.slice(0, 3).map((event, idx) => (
+                  <Tooltip key={idx} title={`${event.ftdName} - ${event.agent || 'Unassigned'}`}>
+                    <Chip
+                      label={`C${event.callNumber}: ${event.ftdName?.split(' ')[0]}`}
+                      size="small"
+                      color={getStatusColor(event.status)}
+                      sx={{ fontSize: '0.6rem', height: 18, mb: 0.25, maxWidth: '100%' }}
+                    />
+                  </Tooltip>
+                ))}
+                {dayEvents.length > 3 && (
+                  <Typography variant="caption" color="text.secondary">
+                    +{dayEvents.length - 3} more
+                  </Typography>
+                )}
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
+      );
+    }
+
+    return days;
+  };
+
+  return (
+    <Container maxWidth={false} sx={{ px: { xs: 1, sm: 2 } }}>
+      <Box sx={{ mb: 3 }}>
+        <Box display="flex" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={2}>
+          <Box>
+            <Typography variant="h4" fontWeight="bold">
+              Deposit Calls Follow-Up
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Track and manage FTD deposit call appointments
+            </Typography>
+          </Box>
+          <Box display="flex" gap={1}>
+            {(isAdmin || isAM) && pendingCount > 0 && (
+              <Chip
+                icon={<ScheduleIcon />}
+                label={`${pendingCount} Pending Approval${pendingCount !== 1 ? 's' : ''}`}
+                color="warning"
+                variant="filled"
+              />
+            )}
+            <Tooltip title="Refresh">
+              <IconButton onClick={() => { fetchDepositCalls(); if (tabValue === 1) fetchCalendarEvents(); }} color="primary">
+                <RefreshIcon />
+              </IconButton>
+            </Tooltip>
+          </Box>
+        </Box>
+      </Box>
+
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
+          {error}
+        </Alert>
+      )}
+
+      {/* Tabs */}
+      <Paper sx={{ mb: 2 }}>
+        <Tabs value={tabValue} onChange={(e, v) => setTabValue(v)}>
+          <Tab icon={<TableIcon />} label="Table View" iconPosition="start" />
+          <Tab icon={<CalendarIcon />} label="Calendar View" iconPosition="start" />
+        </Tabs>
+      </Paper>
+
+      {/* Filters */}
+      <Paper sx={{ p: 2, mb: 2 }}>
+        <Grid container spacing={2} alignItems="center">
+          <Grid item xs={12} sm={6} md={3}>
+            <TextField
+              fullWidth
+              size="small"
+              placeholder="Search by name, email, phone..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon fontSize="small" />
+                  </InputAdornment>
+                ),
+              }}
+            />
+          </Grid>
+
+          {(isAdmin || isAM) && (
+            <>
+              {isAdmin && (
+                <Grid item xs={12} sm={6} md={2}>
+                  <FormControl fullWidth size="small">
+                    <InputLabel>Account Manager</InputLabel>
+                    <Select
+                      value={selectedAM}
+                      onChange={(e) => setSelectedAM(e.target.value)}
+                      label="Account Manager"
+                    >
+                      <MenuItem value="">All AMs</MenuItem>
+                      {accountManagers.map(am => (
+                        <MenuItem key={am._id} value={am._id}>{am.fullName}</MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+              )}
+
+              <Grid item xs={12} sm={6} md={2}>
+                <FormControl fullWidth size="small">
+                  <InputLabel>Agent</InputLabel>
+                  <Select
+                    value={selectedAgent}
+                    onChange={(e) => setSelectedAgent(e.target.value)}
+                    label="Agent"
+                  >
+                    <MenuItem value="">All Agents</MenuItem>
+                    {agents.map(agent => (
+                      <MenuItem key={agent._id} value={agent._id}>{agent.fullName}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+
+              <Grid item xs={12} sm={6} md={2}>
+                <FormControl fullWidth size="small">
+                  <InputLabel>Client Broker</InputLabel>
+                  <Select
+                    value={selectedBroker}
+                    onChange={(e) => setSelectedBroker(e.target.value)}
+                    label="Client Broker"
+                  >
+                    <MenuItem value="">All Brokers</MenuItem>
+                    {brokers.map(broker => (
+                      <MenuItem key={broker._id} value={broker._id}>{broker.name}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+            </>
+          )}
+
+          <Grid item xs={12} sm={6} md={2}>
+            <FormControl fullWidth size="small">
+              <InputLabel>Status</InputLabel>
+              <Select
+                value={status}
+                onChange={(e) => setStatus(e.target.value)}
+                label="Status"
+              >
+                <MenuItem value="active">Active</MenuItem>
+                <MenuItem value="completed">Completed</MenuItem>
+                <MenuItem value="">All</MenuItem>
+              </Select>
+            </FormControl>
+          </Grid>
+        </Grid>
+      </Paper>
+
+      {/* Table View */}
+      {tabValue === 0 && (
+        <Paper sx={{ width: '100%', overflow: 'hidden' }}>
+          {loading ? (
+            <Box display="flex" justifyContent="center" alignItems="center" minHeight={400}>
+              <CircularProgress />
+            </Box>
+          ) : depositCalls.length === 0 ? (
+            <Box sx={{ textAlign: 'center', py: 6 }}>
+              <Typography variant="h6" color="text.secondary">
+                No deposit calls found
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                {search ? 'Try adjusting your search criteria' : 'Deposit calls will appear here when FTDs are processed'}
+              </Typography>
+            </Box>
+          ) : (
+            <>
+              <TableContainer sx={{ maxHeight: 'calc(100vh - 400px)' }}>
+                <Table stickyHeader size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell sx={{ minWidth: 120, fontWeight: 'bold', bgcolor: 'grey.100' }}>Client Broker</TableCell>
+                      <TableCell sx={{ minWidth: 120, fontWeight: 'bold', bgcolor: 'grey.100' }}>Account Manager</TableCell>
+                      <TableCell sx={{ minWidth: 140, fontWeight: 'bold', bgcolor: 'grey.100' }}>FTD Name</TableCell>
+                      <TableCell sx={{ minWidth: 160, fontWeight: 'bold', bgcolor: 'grey.100' }}>FTD Email</TableCell>
+                      <TableCell sx={{ minWidth: 120, fontWeight: 'bold', bgcolor: 'grey.100' }}>FTD Phone</TableCell>
+                      {[1,2,3,4,5,6,7,8,9,10].map(num => (
+                        <TableCell key={num} sx={{ minWidth: 100, fontWeight: 'bold', bgcolor: 'grey.100', textAlign: 'center' }}>
+                          Call {num}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {depositCalls.map((dc) => (
+                      <TableRow key={dc._id} hover>
+                        <TableCell>
+                          <Typography variant="body2" fontWeight="medium">
+                            {dc.clientBrokerId?.name || '-'}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Box display="flex" alignItems="center" gap={0.5}>
+                            <PersonIcon fontSize="small" color="action" />
+                            <Typography variant="body2">
+                              {dc.accountManager?.fullName || '-'}
+                            </Typography>
+                          </Box>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2" fontWeight="medium">
+                            {dc.ftdName || `${dc.leadId?.firstName} ${dc.leadId?.lastName}`}
+                          </Typography>
+                          {dc.assignedAgent && (
+                            <Typography variant="caption" color="text.secondary" display="block">
+                              Agent: {dc.assignedAgent.fullName}
+                            </Typography>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <Box display="flex" alignItems="center" gap={0.5}>
+                            <EmailIcon fontSize="small" color="action" />
+                            <Typography variant="caption">
+                              {dc.ftdEmail || dc.leadId?.newEmail || '-'}
+                            </Typography>
+                          </Box>
+                        </TableCell>
+                        <TableCell>
+                          <Box display="flex" alignItems="center" gap={0.5}>
+                            <PhoneIcon fontSize="small" color="action" />
+                            <Typography variant="caption">
+                              {dc.ftdPhone || dc.leadId?.newPhone || '-'}
+                            </Typography>
+                          </Box>
+                        </TableCell>
+                        {[1,2,3,4,5,6,7,8,9,10].map(num => (
+                          <CallCell
+                            key={num}
+                            call={dc[`call${num}`]}
+                            callNumber={num}
+                            depositCall={dc}
+                            onSchedule={handleScheduleCall}
+                            onMarkDone={handleMarkDone}
+                            onApprove={handleApproveCall}
+                            onReject={handleRejectCall}
+                            isAdmin={isAdmin}
+                            isAM={isAM}
+                            isAgent={isAgent}
+                          />
+                        ))}
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+              <TablePagination
+                component="div"
+                count={totalCount}
+                page={page}
+                onPageChange={(e, newPage) => setPage(newPage)}
+                rowsPerPage={rowsPerPage}
+                onRowsPerPageChange={(e) => {
+                  setRowsPerPage(parseInt(e.target.value, 10));
+                  setPage(0);
+                }}
+                rowsPerPageOptions={[10, 25, 50, 100]}
+              />
+            </>
+          )}
+        </Paper>
+      )}
+
+      {/* Calendar View */}
+      {tabValue === 1 && (
+        <Paper sx={{ p: 2 }}>
+          {/* Calendar Navigation */}
+          <Box display="flex" justifyContent="center" alignItems="center" gap={2} mb={3}>
+            <IconButton onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1))} color="primary">
+              <ChevronLeftIcon />
+            </IconButton>
+            <Typography variant="h5" fontWeight="bold" sx={{ minWidth: 200, textAlign: 'center' }}>
+              {currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+            </Typography>
+            <IconButton onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1))} color="primary">
+              <ChevronRightIcon />
+            </IconButton>
+          </Box>
+
+          {/* Day headers */}
+          <Grid container spacing={1} sx={{ mb: 1 }}>
+            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+              <Grid item xs={12/7} key={day}>
+                <Typography variant="subtitle2" fontWeight="bold" textAlign="center" color="primary">
+                  {day}
+                </Typography>
+              </Grid>
+            ))}
+          </Grid>
+
+          {/* Calendar Grid */}
+          <Grid container spacing={1}>
+            {renderCalendar()}
+          </Grid>
+
+          {/* Legend */}
+          <Box sx={{ mt: 3, display: 'flex', gap: 2, flexWrap: 'wrap', justifyContent: 'center' }}>
+            <Chip label="Scheduled" size="small" color="info" />
+            <Chip label="Pending Approval" size="small" color="warning" />
+            <Chip label="Completed" size="small" color="success" />
+          </Box>
+
+          {/* Day Detail Dialog */}
+          <Dialog 
+            open={dayDetailOpen} 
+            onClose={() => setDayDetailOpen(false)} 
+            maxWidth="md" 
+            fullWidth
+            PaperProps={{
+              sx: { minHeight: 400 }
+            }}
+          >
+            <DialogTitle sx={{ pb: 1 }}>
+              <Box display="flex" justifyContent="space-between" alignItems="center">
+                <Box>
+                  <Typography variant="h6" fontWeight="bold">
+                    {selectedDay?.date?.toLocaleDateString('en-US', { 
+                      weekday: 'long', 
+                      month: 'long', 
+                      day: 'numeric', 
+                      year: 'numeric' 
+                    })}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {selectedDay?.events?.length || 0} appointment{selectedDay?.events?.length !== 1 ? 's' : ''} scheduled
+                  </Typography>
+                </Box>
+                <IconButton onClick={() => setDayDetailOpen(false)}>
+                  <RejectIcon />
+                </IconButton>
+              </Box>
+            </DialogTitle>
+            <Divider />
+            <DialogContent sx={{ p: 0 }}>
+              {selectedDay?.events?.length === 0 ? (
+                <Box sx={{ textAlign: 'center', py: 6 }}>
+                  <CalendarIcon sx={{ fontSize: 64, color: 'grey.300', mb: 2 }} />
+                  <Typography variant="h6" color="text.secondary">
+                    No appointments scheduled
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Click on a scheduled call in the table view to add appointments
+                  </Typography>
+                </Box>
+              ) : (
+                <Box sx={{ p: 0 }}>
+                  {selectedDay?.events?.map((event, idx) => (
+                    <Box 
+                      key={idx} 
+                      sx={{ 
+                        p: 2, 
+                        borderBottom: idx < selectedDay.events.length - 1 ? '1px solid' : 'none',
+                        borderColor: 'grey.200',
+                        '&:hover': { bgcolor: 'grey.50' }
+                      }}
+                    >
+                      <Grid container spacing={2} alignItems="center">
+                        {/* Time & Call Number */}
+                        <Grid item xs={12} sm={2}>
+                          <Box sx={{ textAlign: { xs: 'left', sm: 'center' } }}>
+                            <Typography variant="h6" color="primary.main" fontWeight="bold">
+                              {new Date(event.start).toLocaleTimeString('en-US', { 
+                                hour: '2-digit', 
+                                minute: '2-digit' 
+                              })}
+                            </Typography>
+                            <Chip 
+                              label={`Call ${event.callNumber}`} 
+                              size="small" 
+                              color={getStatusColor(event.status)}
+                              sx={{ mt: 0.5 }}
+                            />
+                          </Box>
+                        </Grid>
+
+                        {/* FTD Info */}
+                        <Grid item xs={12} sm={4}>
+                          <Box display="flex" alignItems="center" gap={1} mb={0.5}>
+                            <PersonIcon fontSize="small" color="action" />
+                            <Typography variant="subtitle1" fontWeight="bold">
+                              {event.ftdName}
+                            </Typography>
+                          </Box>
+                          <Box display="flex" alignItems="center" gap={1} mb={0.5}>
+                            <EmailIcon fontSize="small" color="action" />
+                            <Typography variant="body2" color="text.secondary">
+                              {event.ftdEmail || '-'}
+                            </Typography>
+                          </Box>
+                          <Box display="flex" alignItems="center" gap={1}>
+                            <PhoneIcon fontSize="small" color="action" />
+                            <Typography variant="body2" color="text.secondary">
+                              {event.ftdPhone || '-'}
+                            </Typography>
+                          </Box>
+                        </Grid>
+
+                        {/* Agent & Broker */}
+                        <Grid item xs={12} sm={3}>
+                          <Typography variant="caption" color="text.secondary" display="block">
+                            Agent
+                          </Typography>
+                          <Typography variant="body2" fontWeight="medium">
+                            {event.agent || 'Unassigned'}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
+                            Client Broker
+                          </Typography>
+                          <Typography variant="body2" fontWeight="medium">
+                            {event.clientBroker || '-'}
+                          </Typography>
+                        </Grid>
+
+                        {/* Status & Actions */}
+                        <Grid item xs={12} sm={3}>
+                          <Box sx={{ textAlign: { xs: 'left', sm: 'right' } }}>
+                            <Chip 
+                              label={
+                                event.status === 'scheduled' ? 'Scheduled' :
+                                event.status === 'pending_approval' ? 'Pending Approval' :
+                                event.status === 'completed' ? 'Completed' : 
+                                event.status
+                              }
+                              color={getStatusColor(event.status)}
+                              size="small"
+                            />
+                            {event.accountManager && (
+                              <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
+                                AM: {event.accountManager}
+                              </Typography>
+                            )}
+                            {event.notes && (
+                              <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5, fontStyle: 'italic' }}>
+                                Note: {event.notes}
+                              </Typography>
+                            )}
+                          </Box>
+                        </Grid>
+                      </Grid>
+                    </Box>
+                  ))}
+                </Box>
+              )}
+            </DialogContent>
+            <DialogActions sx={{ p: 2, borderTop: '1px solid', borderColor: 'grey.200' }}>
+              <Button onClick={() => setDayDetailOpen(false)} variant="contained">
+                Close
+              </Button>
+            </DialogActions>
+          </Dialog>
+        </Paper>
+      )}
+    </Container>
+  );
+};
+
+export default DepositCallsPage;
+
