@@ -84,7 +84,7 @@ function checkModules() {
     try {
       // Try to require the module itself
       require(module);
-      
+
       // Try to get version, but don't fail if we can't
       let version = "installed";
       try {
@@ -94,7 +94,7 @@ function checkModules() {
         // Modern packages with exports don't allow direct package.json access
         // Module is installed, just can't read version
       }
-      
+
       console.log(`   ✅ ${module}: ${version}`);
     } catch (error) {
       console.log(`   ❌ ${module}: NOT FOUND - ${error.message}`);
