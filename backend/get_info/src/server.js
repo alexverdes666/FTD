@@ -74,7 +74,9 @@ app.get("/api/detect", (req, res) => {
   try {
     const detector = new UserDetector(req);
     const detection = detector.getFullDetection();
-    console.log(`[SUCCESS] Detection completed for ${detection.ip?.clientIp || "unknown"}`);
+    console.log(
+      `[SUCCESS] Detection completed for ${detection.ip?.clientIp || "unknown"}`
+    );
     res.json(detection);
   } catch (error) {
     console.error("[ERROR] Detection failed:", error.message);

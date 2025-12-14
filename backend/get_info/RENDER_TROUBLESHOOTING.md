@@ -7,6 +7,7 @@ If you're getting a 403 error when the main backend tries to call the get_info s
 ### Problem: CORS Configuration
 
 **Symptoms:**
+
 - Logs show: `Request failed with status code 403`
 - Service works when accessed directly in browser
 - Fails when called from backend
@@ -27,6 +28,7 @@ Then trigger a redeploy on Render for the `ftd-device-detection` service.
 ### Problem: Render Service Not Public
 
 **Symptoms:**
+
 - 403 or 401 errors
 - Service works locally but not on Render
 
@@ -41,6 +43,7 @@ Then trigger a redeploy on Render for the `ftd-device-detection` service.
 ### Problem: Rate Limiting or DDoS Protection
 
 **Symptoms:**
+
 - Works initially, then starts failing
 - 403 errors appear after many requests
 
@@ -55,6 +58,7 @@ Render may be rate limiting requests. Options:
 ### Problem: Missing Environment Variables
 
 **Symptoms:**
+
 - Service works but returns errors
 - 500 errors instead of 403
 
@@ -70,6 +74,7 @@ Check environment variables on Render:
 ### Problem: Service Cold Start
 
 **Symptoms:**
+
 - First request fails, subsequent requests work
 - Timeout errors followed by 403
 
@@ -78,6 +83,7 @@ Check environment variables on Render:
 Render's free tier has cold starts. Options:
 
 1. **Increase timeout** in `backend/middleware/deviceDetection.js`:
+
    ```javascript
    const GET_INFO_TIMEOUT = 10000; // Increase to 10 seconds
    ```
@@ -89,7 +95,7 @@ Render's free tier has cold starts. Options:
    // In main backend
    setInterval(async () => {
      try {
-       await axios.get('https://ftd-device-detection.onrender.com/health');
+       await axios.get("https://ftd-device-detection.onrender.com/health");
      } catch (error) {
        // Ignore errors
      }
@@ -106,6 +112,7 @@ GET_INFO_URL=https://ftd-device-detection.onrender.com/api/detect node test-cors
 ```
 
 This will:
+
 - Test basic connectivity
 - Check CORS headers
 - Verify the service is responding correctly
@@ -125,6 +132,7 @@ Open in browser: `https://ftd-device-detection.onrender.com/api/detect`
 Open in browser: `https://ftd-device-detection.onrender.com/health`
 
 **Expected:**
+
 ```json
 {
   "status": "healthy",
@@ -156,6 +164,7 @@ curl https://ftd-device-detection.onrender.com/api/detect \
 4. Look for incoming requests and any errors
 
 **Expected logs:**
+
 ```
 [timestamp] GET /api/detect from <IP>
 [SUCCESS] Detection completed for <IP>
@@ -182,12 +191,13 @@ Instead of separate services, include get_info in the main backend:
 1. Copy `backend/get_info/src` to `backend/services/detection`
 2. Import and mount in main backend:
    ```javascript
-   const detectionRouter = require('./services/detection/router');
-   app.use('/internal/detect', detectionRouter);
+   const detectionRouter = require("./services/detection/router");
+   app.use("/internal/detect", detectionRouter);
    ```
 3. Update middleware:
    ```javascript
-   const GET_INFO_URL = process.env.GET_INFO_URL || 'http://localhost:5000/internal/detect';
+   const GET_INFO_URL =
+     process.env.GET_INFO_URL || "http://localhost:5000/internal/detect";
    ```
 
 ### Option 3: Add API Key Authentication
@@ -195,24 +205,27 @@ Instead of separate services, include get_info in the main backend:
 Add a shared secret between services:
 
 1. **In get_info service** (`src/server.js`):
+
    ```javascript
    app.use((req, res, next) => {
-     const apiKey = req.headers['x-api-key'];
-     const expectedKey = process.env.API_KEY || 'your-secret-key';
-     
+     const apiKey = req.headers["x-api-key"];
+     const expectedKey = process.env.API_KEY || "your-secret-key";
+
      if (apiKey !== expectedKey) {
-       return res.status(403).json({ error: 'Invalid API key' });
+       return res.status(403).json({ error: "Invalid API key" });
      }
      next();
    });
    ```
 
 2. **In main backend** (`.env`):
+
    ```
    GET_INFO_API_KEY=your-secret-key
    ```
 
 3. **Update middleware** (`middleware/deviceDetection.js`):
+
    ```javascript
    headers: {
      'x-api-key': process.env.GET_INFO_API_KEY || '',
@@ -244,8 +257,10 @@ let failureCount = 0;
 
 setInterval(() => {
   const total = successCount + failureCount;
-  const successRate = total > 0 ? (successCount / total * 100).toFixed(2) : 0;
-  console.log(`[DeviceDetection] Success rate: ${successRate}% (${successCount}/${total})`);
+  const successRate = total > 0 ? ((successCount / total) * 100).toFixed(2) : 0;
+  console.log(
+    `[DeviceDetection] Success rate: ${successRate}% (${successCount}/${total})`
+  );
   successCount = 0;
   failureCount = 0;
 }, 60000); // Log every minute

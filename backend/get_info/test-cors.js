@@ -5,7 +5,8 @@
 
 const axios = require("axios");
 
-const GET_INFO_URL = process.env.GET_INFO_URL || "http://localhost:3000/api/detect";
+const GET_INFO_URL =
+  process.env.GET_INFO_URL || "http://localhost:3000/api/detect";
 
 console.log("🔍 Testing get_info service connection...");
 console.log(`📡 Target URL: ${GET_INFO_URL}\n`);
@@ -17,7 +18,7 @@ async function testConnection() {
       timeout: 5000,
       headers: {
         "user-agent": "FTD-Backend-Test/1.0",
-        "accept": "application/json",
+        accept: "application/json",
       },
     });
 
@@ -31,12 +32,20 @@ async function testConnection() {
     return true;
   } catch (error) {
     console.error("❌ Connection failed!");
-    
+
     if (error.response) {
-      console.error(`📛 Status: ${error.response.status} ${error.response.statusText}`);
-      console.error(`📄 Response:`, JSON.stringify(error.response.data, null, 2));
-      console.error(`🔐 Headers:`, JSON.stringify(error.response.headers, null, 2));
-      
+      console.error(
+        `📛 Status: ${error.response.status} ${error.response.statusText}`
+      );
+      console.error(
+        `📄 Response:`,
+        JSON.stringify(error.response.data, null, 2)
+      );
+      console.error(
+        `🔐 Headers:`,
+        JSON.stringify(error.response.headers, null, 2)
+      );
+
       if (error.response.status === 403) {
         console.error("\n🚨 403 Forbidden Error Detected!");
         console.error("Possible causes:");
@@ -64,20 +73,23 @@ async function testConnection() {
     console.error(`   URL: ${GET_INFO_URL}`);
     console.error(`   Method: GET`);
     console.error(`   Timeout: 5000ms`);
-    
+
     return false;
   }
 }
 
 async function testWithHeaders() {
   try {
-    console.log("2️⃣ Testing with forwarded headers (simulating real request)...");
+    console.log(
+      "2️⃣ Testing with forwarded headers (simulating real request)..."
+    );
     const response = await axios.get(GET_INFO_URL, {
       timeout: 5000,
       headers: {
-        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "user-agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         "x-forwarded-for": "94.101.205.231",
-        "accept": "application/json",
+        accept: "application/json",
         "accept-language": "en-US,en;q=0.9",
         "sec-ch-ua": '"Chromium";v="143"',
         "sec-ch-ua-mobile": "?0",
@@ -143,13 +155,19 @@ async function runTests() {
   console.log("═══════════════════════════════════════════════════════");
   console.log("  RESULTS");
   console.log("═══════════════════════════════════════════════════════");
-  console.log(`  Basic Connection: ${results.basicConnection ? "✅ PASS" : "❌ FAIL"}`);
-  console.log(`  With Headers:     ${results.withHeaders ? "✅ PASS" : "⏭️  SKIP"}`);
+  console.log(
+    `  Basic Connection: ${results.basicConnection ? "✅ PASS" : "❌ FAIL"}`
+  );
+  console.log(
+    `  With Headers:     ${results.withHeaders ? "✅ PASS" : "⏭️  SKIP"}`
+  );
   console.log(`  Health Check:     ${results.health ? "✅ PASS" : "⏭️  SKIP"}`);
   console.log("═══════════════════════════════════════════════════════\n");
 
   if (results.basicConnection && results.withHeaders && results.health) {
-    console.log("🎉 All tests passed! The get_info service is working correctly.");
+    console.log(
+      "🎉 All tests passed! The get_info service is working correctly."
+    );
   } else {
     console.log("⚠️  Some tests failed. Review the error messages above.");
     process.exit(1);

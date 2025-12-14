@@ -3,12 +3,15 @@
 ## 🚀 Deploy Now
 
 ### 1. Go to Render
+
 https://dashboard.render.com → `ftd-device-detection`
 
 ### 2. Deploy
+
 Click: **Manual Deploy** → **Deploy latest commit**
 
 ### 3. Wait (~2-3 min)
+
 Watch for: `Server running on http://localhost:10000`
 
 ---
@@ -16,12 +19,14 @@ Watch for: `Server running on http://localhost:10000`
 ## ✅ Test (Copy & Paste)
 
 ### Browser Tests:
+
 ```
 https://ftd-device-detection.onrender.com/health
 https://ftd-device-detection.onrender.com/api/detect
 ```
 
 ### PowerShell Test:
+
 ```powershell
 cd backend/get_info
 $env:GET_INFO_URL="https://ftd-device-detection.onrender.com/api/detect"
@@ -29,6 +34,7 @@ node test-cors.js
 ```
 
 ### curl Test:
+
 ```bash
 curl https://ftd-device-detection.onrender.com/health
 curl https://ftd-device-detection.onrender.com/api/detect
@@ -77,6 +83,7 @@ curl https://ftd-device-detection.onrender.com/api/detect
 ## 📊 Environment Check
 
 Main backend `.env` should have:
+
 ```
 GET_INFO_URL=https://ftd-device-detection.onrender.com/api/detect
 ```

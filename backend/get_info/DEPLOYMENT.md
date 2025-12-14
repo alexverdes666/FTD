@@ -23,6 +23,7 @@ git push origin main
 Open in browser: https://ftd-device-detection.onrender.com/health
 
 Expected response:
+
 ```json
 {
   "status": "healthy",
@@ -41,6 +42,7 @@ Expected: JSON with device detection data
 ### 5. Update Main Backend
 
 Ensure main backend `.env` has:
+
 ```
 GET_INFO_URL=https://ftd-device-detection.onrender.com/api/detect
 ```
@@ -50,6 +52,7 @@ Redeploy main backend if changed.
 ### 6. Test Integration
 
 From local machine:
+
 ```bash
 cd backend/get_info
 GET_INFO_URL=https://ftd-device-detection.onrender.com/api/detect node test-cors.js
@@ -60,6 +63,7 @@ Expected: All tests pass ✅
 ### 7. Monitor Logs
 
 On Render dashboard:
+
 1. Open `ftd-device-detection` service
 2. Go to **Logs** tab
 3. Make a request to your main backend
@@ -76,6 +80,7 @@ On Render dashboard:
 **Cause:** CORS or service permissions
 
 **Solution:**
+
 1. Verify latest code is deployed (check git commit hash in logs)
 2. Try accessing directly in browser first
 3. Check Render service is public (not private)
@@ -86,6 +91,7 @@ On Render dashboard:
 **Cause:** Cold start or slow service
 
 **Solution:**
+
 1. Increase timeout in `backend/middleware/deviceDetection.js`:
    ```javascript
    const GET_INFO_TIMEOUT = 10000; // 10 seconds
@@ -98,6 +104,7 @@ On Render dashboard:
 **Cause:** Deployment failed or crashed
 
 **Solution:**
+
 1. Check Render logs for errors
 2. Verify all dependencies installed
 3. Check `start.js` output for missing modules

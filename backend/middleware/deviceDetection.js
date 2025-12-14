@@ -149,7 +149,10 @@ const callGetInfoService = async (req) => {
       );
     } else {
       // Something happened in setting up the request that triggered an Error
-      console.log("[DeviceDetection] ⚠️  get_info service error:", error.message);
+      console.log(
+        "[DeviceDetection] ⚠️  get_info service error:",
+        error.message
+      );
     }
 
     return null;

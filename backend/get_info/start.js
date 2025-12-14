@@ -31,7 +31,7 @@ console.log("");
 // Check network connectivity
 async function checkNetworkConnectivity() {
   console.log("🌐 Network Connectivity Check:");
-  
+
   try {
     const addresses = await dns.resolve4("google.com");
     console.log(`   ✅ Internet connectivity: OK (${addresses[0]})`);
@@ -43,7 +43,9 @@ async function checkNetworkConnectivity() {
     const hostname = os.hostname();
     const addresses = await dns.resolve4(hostname).catch(() => null);
     if (addresses) {
-      console.log(`   ✅ Hostname resolution: OK (${hostname} -> ${addresses[0]})`);
+      console.log(
+        `   ✅ Hostname resolution: OK (${hostname} -> ${addresses[0]})`
+      );
     } else {
       console.log(`   ⚠️  Hostname resolution: Not available (${hostname})`);
     }
@@ -57,7 +59,7 @@ async function checkNetworkConnectivity() {
 // Check environment variables
 function checkEnvironmentVariables() {
   console.log("🔐 Environment Variables:");
-  
+
   const requiredVars = {
     PORT: process.env.PORT || "3000 (default)",
     NODE_ENV: process.env.NODE_ENV || "development (default)",
@@ -74,9 +76,9 @@ function checkEnvironmentVariables() {
 // Check required modules
 function checkModules() {
   console.log("📦 Required Modules:");
-  
+
   const modules = ["express", "cors", "ua-parser-js"];
-  
+
   for (const module of modules) {
     try {
       const pkg = require(`${module}/package.json`);
@@ -85,7 +87,7 @@ function checkModules() {
       console.log(`   ❌ ${module}: NOT FOUND`);
     }
   }
-  
+
   console.log("");
 }
 
@@ -96,24 +98,48 @@ async function startup() {
     checkModules();
     await checkNetworkConnectivity();
 
-    console.log("╔════════════════════════════════════════════════════════════╗");
-    console.log("║                                                            ║");
-    console.log("║   ✅ PRE-FLIGHT CHECKS COMPLETE                            ║");
-    console.log("║                                                            ║");
-    console.log("║   Starting Express server...                               ║");
-    console.log("║                                                            ║");
-    console.log("╚════════════════════════════════════════════════════════════╝");
+    console.log(
+      "╔════════════════════════════════════════════════════════════╗"
+    );
+    console.log(
+      "║                                                            ║"
+    );
+    console.log(
+      "║   ✅ PRE-FLIGHT CHECKS COMPLETE                            ║"
+    );
+    console.log(
+      "║                                                            ║"
+    );
+    console.log(
+      "║   Starting Express server...                               ║"
+    );
+    console.log(
+      "║                                                            ║"
+    );
+    console.log(
+      "╚════════════════════════════════════════════════════════════╝"
+    );
     console.log("");
 
     // Start the actual server
     require("./src/server");
   } catch (error) {
     console.error("");
-    console.error("╔════════════════════════════════════════════════════════════╗");
-    console.error("║                                                            ║");
-    console.error("║   ❌ STARTUP FAILED                                        ║");
-    console.error("║                                                            ║");
-    console.error("╚════════════════════════════════════════════════════════════╝");
+    console.error(
+      "╔════════════════════════════════════════════════════════════╗"
+    );
+    console.error(
+      "║                                                            ║"
+    );
+    console.error(
+      "║   ❌ STARTUP FAILED                                        ║"
+    );
+    console.error(
+      "║                                                            ║"
+    );
+    console.error(
+      "╚════════════════════════════════════════════════════════════╝"
+    );
     console.error("");
     console.error("Error:", error.message);
     console.error(error.stack);
