@@ -5,8 +5,15 @@ const UserDetector = require("./services/detector");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Middleware
-app.use(cors());
+// Middleware - Allow all origins for internal service
+app.use(
+  cors({
+    origin: "*",
+    methods: ["GET", "POST", "OPTIONS"],
+    allowedHeaders: ["*"],
+    credentials: false,
+  })
+);
 app.use(express.json());
 
 // Request Client Hints for more detailed detection
@@ -19,11 +26,56 @@ app.use((req, res, next) => {
   next();
 });
 
+// Health check endpoint for Render
+app.get("/health", (req, res) => {
+  res.json({
+    status: "ok",
+    service: "get_info",
+    timestamp: new Date().toISOString(),
+  });
+});
+
+// Root endpoint with service info
+app.get("/", (req, res) => {
+  res.json({
+    service: "User Detection API",
+    version: "1.0.0",
+    endpoints: {
+      detect: "/api/detect",
+      health: "/health",
+    },
+  });
+});
+
 // API Route - Get current user's full detection info
 app.get("/api/detect", (req, res) => {
-  const detector = new UserDetector(req);
-  const detection = detector.getFullDetection();
-  res.json(detection);
+  try {
+    console.log(
+      `[${new Date().toISOString()}] Detection request from IP: ${
+        req.headers["x-forwarded-for"] || req.ip
+      }`
+    );
+
+    const detector = new UserDetector(req);
+    const detection = detector.getFullDetection();
+
+    console.log(
+      `[${new Date().toISOString()}] Detection successful for IP: ${
+        detection.ip?.clientIp
+      }`
+    );
+
+    res.json(detection);
+  } catch (error) {
+    console.error(
+      `[${new Date().toISOString()}] Detection error:`,
+      error.message
+    );
+    res.status(500).json({
+      error: "Detection failed",
+      message: error.message,
+    });
+  }
 });
 
 // 404 handler

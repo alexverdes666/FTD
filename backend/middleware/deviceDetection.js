@@ -133,8 +133,23 @@ const callGetInfoService = async (req) => {
       return null;
     }
 
+    // For 403 errors, log more details
+    if (error.response?.status === 403) {
+      console.log(
+        `[DeviceDetection] ⚠️  get_info service returned 403 - GET_INFO_URL: ${GET_INFO_URL}`
+      );
+      console.log(
+        `[DeviceDetection] This may indicate CORS issues or the service is rejecting requests`
+      );
+      return null;
+    }
+
     // For timeout or other errors, also return null
-    console.log("[DeviceDetection] ⚠️  get_info service error:", error.message);
+    console.log(
+      `[DeviceDetection] ⚠️  get_info service error (${
+        error.response?.status || error.code
+      }): ${error.message}`
+    );
     return null;
   }
 };
