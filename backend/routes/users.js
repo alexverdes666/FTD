@@ -7,6 +7,9 @@ const {
   isManager,
 } = require("../middleware/auth");
 const {
+  requireSensitiveActionVerification,
+} = require("../middleware/sensitiveAction");
+const {
   getUsers,
   getUserById,
   createUser,
@@ -66,7 +69,9 @@ router.get(
     query("period")
       .optional()
       .isIn(["daily", "weekly", "monthly", "yearly", "all"])
-      .withMessage("Period must be one of: daily, weekly, monthly, yearly, all"),
+      .withMessage(
+        "Period must be one of: daily, weekly, monthly, yearly, all"
+      ),
     query("limit")
       .optional()
       .isInt({ min: 1, max: 50 })
@@ -80,13 +85,22 @@ router.get(
 );
 router.post("/sync-performance", [protect, isAdmin], syncAgentPerformance);
 router.get("/agents-with-lead-stats", [protect], getAgentsWithLeadStats);
-router.post("/agents-with-filtered-lead-stats", [protect], getAgentsWithFilteredLeadStats);
+router.post(
+  "/agents-with-filtered-lead-stats",
+  [protect],
+  getAgentsWithFilteredLeadStats
+);
 router.get("/:id", [protect, ownerOrAdmin], getUserById);
 router.post(
   "/",
   [
     protect,
     isAdmin,
+    // Require 2FA verification for creating users
+    requireSensitiveActionVerification("USER_CREATE", {
+      targetResourceType: "user",
+      getTargetResource: () => null, // New user, no ID yet
+    }),
     body("email")
       .isEmail()
       .normalizeEmail()
@@ -99,7 +113,14 @@ router.post(
       .isLength({ min: 2 })
       .withMessage("Full name must be at least 2 characters"),
     body("role")
-      .isIn(["admin", "affiliate_manager", "agent", "lead_manager", "refunds_manager", "inventory_manager"])
+      .isIn([
+        "admin",
+        "affiliate_manager",
+        "agent",
+        "lead_manager",
+        "refunds_manager",
+        "inventory_manager",
+      ])
       .withMessage(
         "Role must be admin, affiliate_manager, agent, lead_manager, refunds_manager, or inventory_manager"
       ),
@@ -162,7 +183,14 @@ router.put(
       .withMessage("Full name must be at least 2 characters"),
     body("role")
       .optional()
-      .isIn(["admin", "affiliate_manager", "agent", "lead_manager", "refunds_manager", "inventory_manager"])
+      .isIn([
+        "admin",
+        "affiliate_manager",
+        "agent",
+        "lead_manager",
+        "refunds_manager",
+        "inventory_manager",
+      ])
       .withMessage(
         "Role must be admin, affiliate_manager, agent, lead_manager, refunds_manager, or inventory_manager"
       ),
@@ -205,15 +233,52 @@ router.put(
   [
     protect,
     isAdmin,
+    // Require 2FA verification for changing user passwords
+    requireSensitiveActionVerification("USER_UPDATE_PASSWORD", {
+      targetResourceType: "user",
+    }),
     body("newPassword")
       .isLength({ min: 6 })
       .withMessage("Password must be at least 6 characters"),
   ],
   adminChangeUserPassword
 );
-router.post("/:id/kick-session", [protect, isAdmin], kickUserSession);
-router.delete("/:id", [protect, isAdmin], deleteUser);
-router.delete("/:id/permanent", [protect, isAdmin], permanentDeleteUser);
+router.post(
+  "/:id/kick-session",
+  [
+    protect,
+    isAdmin,
+    // Require 2FA verification for kicking user sessions
+    requireSensitiveActionVerification("USER_KICK_SESSION", {
+      targetResourceType: "user",
+    }),
+  ],
+  kickUserSession
+);
+router.delete(
+  "/:id",
+  [
+    protect,
+    isAdmin,
+    // Require 2FA verification for deleting users
+    requireSensitiveActionVerification("USER_DELETE", {
+      targetResourceType: "user",
+    }),
+  ],
+  deleteUser
+);
+router.delete(
+  "/:id/permanent",
+  [
+    protect,
+    isAdmin,
+    // Require 2FA verification for permanently deleting users
+    requireSensitiveActionVerification("USER_DELETE", {
+      targetResourceType: "user",
+    }),
+  ],
+  permanentDeleteUser
+);
 router.get(
   "/:id/performance",
   [

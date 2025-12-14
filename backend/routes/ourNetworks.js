@@ -11,6 +11,9 @@ const {
   getAllAuditLogs,
 } = require("../controllers/ourNetworks");
 const { protect, isAdmin, authorize } = require("../middleware/auth");
+const {
+  requireSensitiveActionVerification,
+} = require("../middleware/sensitiveAction");
 
 const router = express.Router();
 
@@ -35,6 +38,11 @@ router.post(
   [
     protect,
     isAdmin,
+    // Require 2FA verification for creating networks (contains wallets)
+    requireSensitiveActionVerification("WALLET_CREATE", {
+      targetResourceType: "network",
+      getTargetResource: () => null, // New resource, no ID yet
+    }),
     body("name")
       .trim()
       .isLength({ min: 1, max: 100 })
@@ -109,6 +117,10 @@ router.put(
   [
     protect,
     isAdmin,
+    // Require 2FA verification for updating networks (wallets may be changed)
+    requireSensitiveActionVerification("WALLET_UPDATE", {
+      targetResourceType: "network",
+    }),
     body("name")
       .optional()
       .trim()
@@ -183,7 +195,18 @@ router.put(
   updateOurNetwork
 );
 
-router.delete("/:id", [protect, isAdmin], deleteOurNetwork);
+router.delete(
+  "/:id",
+  [
+    protect,
+    isAdmin,
+    // Require 2FA verification for deleting networks (contains wallets)
+    requireSensitiveActionVerification("WALLET_DELETE", {
+      targetResourceType: "network",
+    }),
+  ],
+  deleteOurNetwork
+);
 
 // Audit log routes
 router.get("/audit-logs/all", [protect, isAdmin], getAllAuditLogs);

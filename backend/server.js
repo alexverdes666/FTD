@@ -52,6 +52,7 @@ const videoRoutes = require("./routes/video");
 const announcementRoutes = require("./routes/announcements");
 const amTargetRoutes = require("./routes/amTargets");
 const depositCallsRoutes = require("./routes/depositCalls");
+const securityAuditRoutes = require("./routes/securityAudit");
 const errorHandler = require("./middleware/errorHandler");
 const SessionCleanupService = require("./services/sessionCleanupService");
 const AgentScraperService = require("./services/agentScraperService");
@@ -146,6 +147,8 @@ const corsOptions = {
     "Authorization",
     "X-Requested-With",
     "Accept",
+    "X-2FA-Code", // For sensitive action 2FA verification
+    "X-2FA-Backup-Code", // For sensitive action backup code verification
   ],
   credentials: true,
   optionsSuccessStatus: 200,
@@ -519,6 +522,7 @@ app.use("/api/am-targets", amTargetRoutes);
 app.use("/api/deposit-calls", depositCallsRoutes);
 
 app.use("/api/system-config", systemConfigurationRoutes);
+app.use("/api/security-audit", securityAuditRoutes);
 const healthRoutes = require("./routes/health");
 app.use("/api/health", healthRoutes);
 app.use(errorHandler);

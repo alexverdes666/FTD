@@ -58,6 +58,8 @@ import AllNetworksScraperButton from "../components/AllNetworksScraperButton";
 import blockchainService from "../services/blockchain";
 import MonthYearSelector from "../components/common/MonthYearSelector";
 import dayjs from "dayjs";
+import SensitiveActionModal from "../components/SensitiveActionModal";
+import useSensitiveAction from "../hooks/useSensitiveAction";
 
 const ourNetworkSchema = yup.object({
   name: yup
@@ -126,6 +128,10 @@ const OurNetworksPage = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
   const user = useSelector(selectUser);
+
+  // Sensitive action hook for 2FA verification
+  const { executeSensitiveAction, sensitiveActionState, resetSensitiveAction } =
+    useSensitiveAction();
 
   const [ourNetworks, setOurNetworks] = useState([]);
   const [affiliateManagers, setAffiliateManagers] = useState([]);
@@ -452,13 +458,32 @@ const OurNetworksPage = () => {
       };
 
       if (editingNetwork) {
-        await api.put(`/our-networks/${editingNetwork._id}`, cleanedData);
+        // Use sensitive action verification for updating networks
+        await executeSensitiveAction({
+          actionName: "Update Network",
+          actionDescription: `This will update the network "${editingNetwork.name}" including any wallet changes.`,
+          apiCall: async (headers) => {
+            return await api.put(
+              `/our-networks/${editingNetwork._id}`,
+              cleanedData,
+              { headers }
+            );
+          },
+        });
         setNotification({
           message: "Our network updated successfully!",
           severity: "success",
         });
       } else {
-        await api.post("/our-networks", cleanedData);
+        // Use sensitive action verification for creating networks
+        await executeSensitiveAction({
+          actionName: "Create Network",
+          actionDescription:
+            "This will create a new network with the specified wallet addresses.",
+          apiCall: async (headers) => {
+            return await api.post("/our-networks", cleanedData, { headers });
+          },
+        });
         setNotification({
           message: "Our network created successfully!",
           severity: "success",
@@ -467,6 +492,10 @@ const OurNetworksPage = () => {
       handleCloseDialog();
       fetchOurNetworks();
     } catch (error) {
+      // Don't show error if user cancelled the action
+      if (error.message === "User cancelled sensitive action") {
+        return;
+      }
       setNotification({
         message: error.response?.data?.message || "Failed to save our network",
         severity: "error",
@@ -475,18 +504,37 @@ const OurNetworksPage = () => {
   };
 
   const handleDelete = async (networkId) => {
-    if (!window.confirm("Are you sure you want to delete this our network?")) {
+    // Find the network name for the confirmation message
+    const networkToDelete = ourNetworks.find((n) => n._id === networkId);
+    const networkName = networkToDelete?.name || "this network";
+
+    if (
+      !window.confirm(
+        `Are you sure you want to delete "${networkName}"? This action requires 2FA verification.`
+      )
+    ) {
       return;
     }
 
     try {
-      await api.delete(`/our-networks/${networkId}`);
+      // Use sensitive action verification for deleting networks
+      await executeSensitiveAction({
+        actionName: "Delete Network",
+        actionDescription: `This will permanently delete the network "${networkName}" and all associated wallet configurations.`,
+        apiCall: async (headers) => {
+          return await api.delete(`/our-networks/${networkId}`, { headers });
+        },
+      });
       setNotification({
         message: "Our network deleted successfully!",
         severity: "success",
       });
       fetchOurNetworks();
     } catch (error) {
+      // Don't show error if user cancelled the action
+      if (error.message === "User cancelled sensitive action") {
+        return;
+      }
       setNotification({
         message:
           error.response?.data?.message || "Failed to delete our network",
@@ -496,18 +544,34 @@ const OurNetworksPage = () => {
   };
 
   const handleToggleActive = async (network) => {
+    const newStatus = !network.isActive;
     try {
-      await api.put(`/our-networks/${network._id}`, {
-        isActive: !network.isActive,
+      // Use sensitive action verification for toggling network status
+      await executeSensitiveAction({
+        actionName: newStatus ? "Activate Network" : "Deactivate Network",
+        actionDescription: `This will ${
+          newStatus ? "activate" : "deactivate"
+        } the network "${network.name}".`,
+        apiCall: async (headers) => {
+          return await api.put(
+            `/our-networks/${network._id}`,
+            { isActive: newStatus },
+            { headers }
+          );
+        },
       });
       setNotification({
         message: `Our network ${
-          !network.isActive ? "activated" : "deactivated"
+          newStatus ? "activated" : "deactivated"
         } successfully!`,
         severity: "success",
       });
       fetchOurNetworks();
     } catch (error) {
+      // Don't show error if user cancelled the action
+      if (error.message === "User cancelled sensitive action") {
+        return;
+      }
       setNotification({
         message:
           error.response?.data?.message ||
@@ -2163,6 +2227,18 @@ const OurNetworksPage = () => {
         open={transactionHistoryOpen}
         onClose={handleCloseTransactionHistory}
         network={selectedNetworkForHistory}
+      />
+
+      {/* Sensitive Action 2FA Verification Modal */}
+      <SensitiveActionModal
+        open={sensitiveActionState.showModal}
+        onClose={resetSensitiveAction}
+        onVerify={sensitiveActionState.handleVerify}
+        actionName={sensitiveActionState.actionName}
+        actionDescription={sensitiveActionState.actionDescription}
+        loading={sensitiveActionState.verifying}
+        error={sensitiveActionState.error}
+        requires2FASetup={sensitiveActionState.requires2FASetup}
       />
     </Box>
   );
