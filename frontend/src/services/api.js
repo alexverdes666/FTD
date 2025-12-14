@@ -1,6 +1,20 @@
 import axios from "axios";
 import { store } from "../store/store";
 import { logout } from "../store/slices/authSlice";
+import { getDeviceId } from "../utils/deviceFingerprint";
+
+// Cache the device ID to avoid async issues in interceptors
+let cachedDeviceId = null;
+
+// Initialize device ID on module load
+(async () => {
+  try {
+    cachedDeviceId = await getDeviceId();
+  } catch (e) {
+    console.warn("Failed to get device ID:", e);
+  }
+})();
+
 const backendAPI = axios.create({
   baseURL: import.meta.env.VITE_API_URL || "http://localhost:5000/api",
   timeout: 30000,
@@ -18,13 +32,27 @@ const externalAPI = axios.create({
   },
 });
 backendAPI.interceptors.request.use(
-  (config) => {
+  async (config) => {
     const state = store.getState();
     const token = state.auth.token;
 
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+
+    // Add device ID for fingerprinting/audit trail
+    // Use cached value or fetch if not available
+    if (!cachedDeviceId) {
+      try {
+        cachedDeviceId = await getDeviceId();
+      } catch (e) {
+        // Ignore errors
+      }
+    }
+    if (cachedDeviceId) {
+      config.headers["X-Device-ID"] = cachedDeviceId;
+    }
+
     return config;
   },
   (error) => {

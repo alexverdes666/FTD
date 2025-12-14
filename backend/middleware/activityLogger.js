@@ -1,23 +1,36 @@
 /**
  * Activity Logger Middleware
  *
- * Provides detailed console logging for all API operations.
- * Tracks: WHEN (timestamp), WHO (user), WHAT (method, endpoint, payload, result)
- * Now includes BEFORE/AFTER change tracking for modifications.
+ * Comprehensive logging for all API operations.
+ * Tracks: WHO (user), WHEN (timestamp), WHAT (method, endpoint, payload, result)
+ *         WHERE (IP, geolocation), HOW (device, browser, OS)
  *
- * This middleware intercepts responses to capture both request and response data.
+ * Features:
+ * - Console logging with colors for development/debugging
+ * - Database persistence for audit trail
+ * - User agent parsing for device/browser info
+ * - IP tracking with forwarded headers support
+ * - Before/after change tracking for modifications
+ * - Risk scoring for security monitoring
  */
 
-// Import change computation utility
+const UAParser = require("ua-parser-js");
 const { computeChanges } = require("./changeTracker");
 
-// ANSI color codes for console output (works on Render and most terminals)
+// Lazy-load ActivityLog model to avoid circular dependency issues
+let ActivityLog = null;
+const getActivityLogModel = () => {
+  if (!ActivityLog) {
+    ActivityLog = require("../models/ActivityLog");
+  }
+  return ActivityLog;
+};
+
+// ANSI color codes for console output
 const colors = {
   reset: "\x1b[0m",
   bright: "\x1b[1m",
   dim: "\x1b[2m",
-
-  // Foreground colors
   red: "\x1b[31m",
   green: "\x1b[32m",
   yellow: "\x1b[33m",
@@ -25,14 +38,10 @@ const colors = {
   magenta: "\x1b[35m",
   cyan: "\x1b[36m",
   white: "\x1b[37m",
-
-  // Background colors
   bgRed: "\x1b[41m",
   bgGreen: "\x1b[42m",
   bgYellow: "\x1b[43m",
   bgBlue: "\x1b[44m",
-  bgMagenta: "\x1b[45m",
-  bgCyan: "\x1b[46m",
 };
 
 // Method colors for visual distinction
@@ -88,6 +97,8 @@ const SENSITIVE_FIELDS = [
   "ssn",
   "twoFactorSecret",
   "backupCodes",
+  "twoFactorBackupCodes",
+  "authorization",
 ];
 
 // Routes to skip detailed body logging (e.g., file uploads, health checks)
@@ -99,6 +110,19 @@ const SKIP_BODY_ROUTES = [
 
 // Routes to skip logging entirely (noisy endpoints)
 const SKIP_LOG_ROUTES = ["/api/health"];
+
+// Known bot patterns
+const BOT_PATTERNS = [
+  /bot/i,
+  /crawler/i,
+  /spider/i,
+  /scraper/i,
+  /curl/i,
+  /wget/i,
+  /python-requests/i,
+  /postman/i,
+  /insomnia/i,
+];
 
 /**
  * Recursively redacts sensitive fields from an object
@@ -150,7 +174,7 @@ const formatBody = (body, path) => {
 };
 
 /**
- * Get IP address from request
+ * Get IP address from request with full chain
  */
 const getClientIP = (req) => {
   const forwardedFor = req.headers["x-forwarded-for"];
@@ -166,17 +190,240 @@ const getClientIP = (req) => {
 };
 
 /**
+ * Get the full forwarded-for chain
+ */
+const getForwardedChain = (req) => {
+  return req.headers["x-forwarded-for"] || null;
+};
+
+/**
+ * Parse device fingerprint from X-Device-Fingerprint header
+ * The header contains a base64-encoded JSON object
+ */
+const parseDeviceFingerprint = (fingerprintHeader) => {
+  if (!fingerprintHeader) return null;
+
+  try {
+    const decoded = Buffer.from(fingerprintHeader, "base64").toString("utf-8");
+    const parsed = JSON.parse(decoded);
+
+    // Extract only the fields we care about
+    return {
+      screenWidth: parsed.screenWidth || null,
+      screenHeight: parsed.screenHeight || null,
+      colorDepth: parsed.colorDepth || null,
+      pixelRatio: parsed.pixelRatio || null,
+      timezone: parsed.timezone || null,
+      timezoneOffset: parsed.timezoneOffset || null,
+      language: parsed.language || null,
+      languages: parsed.languages || [],
+      platform: parsed.platform || null,
+      hardwareConcurrency: parsed.hardwareConcurrency || null,
+      deviceMemory: parsed.deviceMemory || null,
+      maxTouchPoints: parsed.maxTouchPoints || null,
+      webglVendor: parsed.webglVendor || null,
+      webglRenderer: parsed.webglRenderer || null,
+      canvasHash: parsed.canvasHash || null,
+      colorScheme: parsed.colorScheme || null,
+    };
+  } catch (e) {
+    return null;
+  }
+};
+
+/**
  * Format user info for logging
  */
 const formatUserInfo = (user) => {
-  if (!user)
-    return { id: "anonymous", name: "Anonymous", role: "none", email: "none" };
+  if (!user) return { id: null, name: "Anonymous", role: "none", email: null };
   return {
     id: user._id?.toString() || user.id || "unknown",
     name: user.fullName || user.name || "Unknown",
     role: user.role || "unknown",
     email: user.email || "unknown",
   };
+};
+
+/**
+ * Parse user agent for device/browser/OS info
+ */
+const parseUserAgent = (userAgentString) => {
+  if (!userAgentString) {
+    return {
+      device: { type: "unknown", vendor: null, model: null },
+      browser: { name: null, version: null },
+      os: { name: null, version: null },
+      isBot: false,
+    };
+  }
+
+  const parser = new UAParser(userAgentString);
+  const result = parser.getResult();
+
+  // Determine device type
+  let deviceType = result.device.type || "desktop";
+  if (!result.device.type) {
+    // UAParser doesn't always detect desktop, so we infer it
+    if (result.os.name && !result.device.type) {
+      deviceType = "desktop";
+    }
+  }
+
+  // Check if it's a bot
+  const isBot = BOT_PATTERNS.some((pattern) => pattern.test(userAgentString));
+
+  return {
+    device: {
+      type: isBot ? "bot" : deviceType,
+      vendor: result.device.vendor || null,
+      model: result.device.model || null,
+    },
+    browser: {
+      name: result.browser.name || null,
+      version: result.browser.version || null,
+    },
+    os: {
+      name: result.os.name || null,
+      version: result.os.version || null,
+    },
+    isBot,
+  };
+};
+
+/**
+ * Get status category from status code
+ */
+const getStatusCategory = (statusCode) => {
+  if (statusCode >= 500) return "server_error";
+  if (statusCode >= 400) return "client_error";
+  if (statusCode >= 300) return "redirect";
+  return "success";
+};
+
+/**
+ * Extract base path without query params and IDs
+ */
+const getBasePath = (path) => {
+  // Remove query string
+  let basePath = path.split("?")[0];
+
+  // Replace MongoDB ObjectIDs with :id placeholder for grouping
+  basePath = basePath.replace(/\/[0-9a-fA-F]{24}(?=\/|$)/g, "/:id");
+
+  return basePath;
+};
+
+/**
+ * Determine action type from method and path
+ */
+const getActionType = (method, path) => {
+  const basePath = getBasePath(path);
+  const parts = basePath.split("/").filter(Boolean);
+
+  if (parts.length < 2) return null;
+
+  // Get the resource name (e.g., "users", "leads")
+  const resource = parts[1].replace(/-/g, "_");
+
+  // Determine action
+  let action;
+  switch (method) {
+    case "GET":
+      action = parts.includes(":id") ? "view" : "list";
+      break;
+    case "POST":
+      action = "create";
+      break;
+    case "PUT":
+    case "PATCH":
+      action = "update";
+      break;
+    case "DELETE":
+      action = "delete";
+      break;
+    default:
+      action = method.toLowerCase();
+  }
+
+  // Check for special sub-actions
+  if (parts.length > 2) {
+    const lastPart = parts[parts.length - 1];
+    if (lastPart !== ":id" && !lastPart.match(/^[0-9a-fA-F]{24}$/)) {
+      action = lastPart.replace(/-/g, "_");
+    }
+  }
+
+  return `${resource}.${action}`;
+};
+
+/**
+ * Calculate risk score based on request characteristics
+ */
+const calculateRiskScore = (logData) => {
+  let score = 0;
+  const flags = [];
+
+  // Check if this is a 2FA challenge prompt (not a real failure)
+  const is2FAPrompt =
+    logData.statusCode === 403 &&
+    logData.error?.message?.includes("two-factor authentication");
+
+  // Failed requests increase risk (but not 2FA prompts - those are expected)
+  if (logData.statusCode >= 400 && !is2FAPrompt) {
+    score += 10;
+    if (logData.statusCode === 401 || logData.statusCode === 403) {
+      score += 15;
+      flags.push("failed_auth");
+    }
+  }
+
+  // 2FA prompts are normal workflow, just mark them
+  if (is2FAPrompt) {
+    flags.push("2fa_challenge");
+  }
+
+  // Sensitive operations
+  if (["DELETE", "PUT", "PATCH"].includes(logData.method)) {
+    score += 5;
+  }
+
+  // Anonymous requests to protected endpoints
+  if (!logData.user && !logData.path.includes("/auth/")) {
+    score += 10;
+  }
+
+  // Bot or suspicious user agent
+  if (logData.isBot) {
+    score += 20;
+    flags.push("suspicious_user_agent");
+  }
+
+  // Missing common headers
+  if (!logData.userAgent) {
+    score += 15;
+    flags.push("missing_headers");
+  }
+
+  // Rapid requests (would need to track this separately)
+  // This is a placeholder for future implementation
+
+  return { score: Math.min(score, 100), flags };
+};
+
+/**
+ * Save log to database
+ */
+const saveLogToDatabase = async (logData) => {
+  try {
+    const ActivityLogModel = getActivityLogModel();
+    await ActivityLogModel.create(logData);
+  } catch (error) {
+    // Don't fail the request if logging fails
+    console.error(
+      "[ActivityLogger] Failed to save log to database:",
+      error.message
+    );
+  }
 };
 
 /**
@@ -188,6 +435,8 @@ const activityLogger = (options = {}) => {
     logAllMethods = false, // If true, logs GET requests too
     logResponseBody = false, // If true, includes response body in logs
     minDuration = 0, // Only log requests that take longer than this (ms)
+    saveToDatabase = true, // If true, saves logs to MongoDB
+    consoleLog = true, // If true, outputs to console
   } = options;
 
   return (req, res, next) => {
@@ -205,7 +454,11 @@ const activityLogger = (options = {}) => {
     const requestId = `${Date.now()}-${Math.random()
       .toString(36)
       .substr(2, 9)}`;
-    const timestamp = new Date().toISOString();
+    const timestamp = new Date();
+
+    // Parse user agent upfront
+    const userAgentString = req.headers["user-agent"] || null;
+    const parsedUA = parseUserAgent(userAgentString);
 
     // Capture original response methods
     const originalSend = res.send;
@@ -225,7 +478,7 @@ const activityLogger = (options = {}) => {
     };
 
     // Log when response finishes
-    res.on("finish", () => {
+    res.on("finish", async () => {
       const duration = Date.now() - startTime;
 
       // Skip if duration is below threshold
@@ -236,33 +489,83 @@ const activityLogger = (options = {}) => {
       const path = req.originalUrl || req.url;
       const status = res.statusCode;
       const ip = getClientIP(req);
-      const userAgent = req.headers["user-agent"] || "unknown";
 
       // Determine if this was a successful operation
       const isSuccess = status >= 200 && status < 300;
       const statusEmoji = isSuccess ? "✅" : status >= 400 ? "❌" : "⚠️";
 
-      // Build the log message
-      const methodColor = methodColors[method] || colors.white;
-      const statusColor = getStatusColor(status);
-      const methodEmoji = getMethodEmoji(method);
-
-      // Create structured log for easy parsing
+      // Build the log data object
       const logData = {
         requestId,
         timestamp,
-        duration: `${duration}ms`,
+        duration,
         method,
         path,
-        status,
-        user: {
+        basePath: getBasePath(path),
+        statusCode: status,
+        statusCategory: getStatusCategory(status),
+        actionType: getActionType(method, path),
+
+        // User info
+        user: req.user?._id || req.user?.id || null,
+        userSnapshot: {
           id: user.id,
-          name: user.name,
-          role: user.role,
           email: user.email,
+          fullName: user.name,
+          role: user.role,
         },
+
+        // Request details
+        routeParams: Object.keys(req.params || {}).length > 0 ? req.params : {},
+        queryParams: Object.keys(req.query || {}).length > 0 ? req.query : {},
+        requestBody: null,
+
+        // IP and location
         ip,
-        userAgent: userAgent.substring(0, 100),
+        forwardedFor: getForwardedChain(req),
+
+        // Device/browser info
+        userAgent: userAgentString ? userAgentString.substring(0, 500) : null,
+        device: parsedUA.device,
+        browser: parsedUA.browser,
+        os: parsedUA.os,
+        isBot: parsedUA.isBot,
+
+        // Device fingerprint (from client)
+        deviceId: req.headers["x-device-id"] || null,
+        deviceFingerprint: parseDeviceFingerprint(
+          req.headers["x-device-fingerprint"]
+        ),
+
+        // Request context
+        origin: req.headers["origin"] || null,
+        referer: req.headers["referer"] || req.headers["referrer"] || null,
+        contentType: req.headers["content-type"] || null,
+        contentLength: parseInt(req.headers["content-length"]) || 0,
+        acceptLanguage: req.headers["accept-language"]
+          ? req.headers["accept-language"].substring(0, 100)
+          : null,
+
+        // Error info
+        error: {
+          message: null,
+          code: null,
+          stack: null,
+        },
+
+        // Security
+        isSensitiveAction: !!req.sensitiveActionVerified,
+        sensitiveActionVerified: req.sensitiveActionVerified ? true : null,
+        riskScore: 0,
+        securityFlags: [],
+
+        // Changes tracking
+        previousState: {
+          model: null,
+          documentId: null,
+          data: null,
+        },
+        changes: null,
       };
 
       // Add request body for mutating operations
@@ -270,16 +573,6 @@ const activityLogger = (options = {}) => {
         const formattedBody = formatBody(req.body, path);
         if (formattedBody) {
           logData.requestBody = formattedBody;
-        }
-
-        // Add query params if present
-        if (Object.keys(req.query).length > 0) {
-          logData.queryParams = req.query;
-        }
-
-        // Add route params if present
-        if (Object.keys(req.params).length > 0) {
-          logData.routeParams = req.params;
         }
 
         // Add previous state if available (from changeTracker middleware)
@@ -303,7 +596,7 @@ const activityLogger = (options = {}) => {
         }
       }
 
-      // Add response info for errors
+      // Add error info for failed requests
       if (status >= 400 && responseBody) {
         try {
           const parsed =
@@ -312,126 +605,189 @@ const activityLogger = (options = {}) => {
               : responseBody;
           logData.error = {
             message: parsed.message || parsed.error || "Unknown error",
-            success: parsed.success,
+            code: parsed.code || null,
+            stack: null, // Don't log stack traces for security
           };
         } catch (e) {
-          logData.error = { raw: String(responseBody).substring(0, 200) };
+          logData.error = {
+            message: String(responseBody).substring(0, 200),
+            code: null,
+            stack: null,
+          };
         }
       }
 
-      // Console output with colors
-      const separator = `${colors.dim}${"─".repeat(80)}${colors.reset}`;
+      // Calculate risk score
+      const { score, flags } = calculateRiskScore(logData);
+      logData.riskScore = score;
+      logData.securityFlags = flags;
 
-      console.log("\n" + separator);
-      console.log(
-        `${methodEmoji} ${statusEmoji} ${colors.bright}[ACTIVITY LOG]${colors.reset} ${timestamp}`
-      );
-      console.log(separator);
+      // Console output with colors (if enabled)
+      if (consoleLog) {
+        const methodColor = methodColors[method] || colors.white;
+        const statusColor = getStatusColor(status);
+        const methodEmoji = getMethodEmoji(method);
+        const separator = `${colors.dim}${"─".repeat(80)}${colors.reset}`;
 
-      // Method and Path
-      console.log(
-        `${colors.bright}Request:${colors.reset}  ${methodColor}${method}${colors.reset} ${path}`
-      );
-
-      // Status and Duration
-      console.log(
-        `${colors.bright}Response:${colors.reset} ${statusColor}${status}${colors.reset} (${duration}ms)`
-      );
-
-      // User Info
-      console.log(
-        `${colors.bright}User:${colors.reset}     ${colors.cyan}${user.name}${colors.reset} (${user.role}) [ID: ${user.id}]`
-      );
-      console.log(`${colors.bright}Email:${colors.reset}    ${user.email}`);
-
-      // IP and Request ID
-      console.log(`${colors.bright}IP:${colors.reset}       ${ip}`);
-      console.log(`${colors.bright}Req ID:${colors.reset}   ${requestId}`);
-
-      // Query params
-      if (logData.queryParams) {
+        console.log("\n" + separator);
         console.log(
-          `${colors.bright}Query:${colors.reset}    ${JSON.stringify(
-            logData.queryParams
-          )}`
+          `${methodEmoji} ${statusEmoji} ${colors.bright}[ACTIVITY LOG]${
+            colors.reset
+          } ${timestamp.toISOString()}`
         );
-      }
+        console.log(separator);
 
-      // Route params
-      if (logData.routeParams) {
+        // Method and Path
         console.log(
-          `${colors.bright}Params:${colors.reset}   ${JSON.stringify(
-            logData.routeParams
-          )}`
+          `${colors.bright}Request:${colors.reset}  ${methodColor}${method}${colors.reset} ${path}`
         );
-      }
 
-      // Show CHANGES section for PUT/PATCH with tracked changes
-      if (logData.changes && Object.keys(logData.changes).length > 0) {
+        // Status and Duration
         console.log(
-          `\n${colors.bright}${colors.yellow}📊 CHANGES DETECTED:${colors.reset}`
+          `${colors.bright}Response:${colors.reset} ${statusColor}${status}${colors.reset} (${duration}ms)`
         );
-        for (const [field, change] of Object.entries(logData.changes)) {
-          const fromStr =
-            typeof change.from === "object"
-              ? JSON.stringify(change.from)
-              : String(change.from ?? "(empty)");
-          const toStr =
-            typeof change.to === "object"
-              ? JSON.stringify(change.to)
-              : String(change.to ?? "(empty)");
 
-          console.log(`  ${colors.bright}${field}:${colors.reset}`);
-          console.log(`    ${colors.red}BEFORE:${colors.reset} ${fromStr}`);
-          console.log(`    ${colors.green}AFTER:${colors.reset}  ${toStr}`);
+        // User Info
+        console.log(
+          `${colors.bright}User:${colors.reset}     ${colors.cyan}${user.name}${
+            colors.reset
+          } (${user.role}) [ID: ${user.id || "anonymous"}]`
+        );
+        console.log(
+          `${colors.bright}Email:${colors.reset}    ${user.email || "N/A"}`
+        );
+
+        // IP and Device
+        console.log(`${colors.bright}IP:${colors.reset}       ${ip}`);
+        console.log(
+          `${colors.bright}Device:${colors.reset}   ${parsedUA.device.type} | ${
+            parsedUA.browser.name || "Unknown"
+          } ${parsedUA.browser.version || ""} | ${
+            parsedUA.os.name || "Unknown"
+          } ${parsedUA.os.version || ""}`
+        );
+        console.log(`${colors.bright}Req ID:${colors.reset}   ${requestId}`);
+
+        // Query params
+        if (
+          logData.queryParams &&
+          Object.keys(logData.queryParams).length > 0
+        ) {
+          console.log(
+            `${colors.bright}Query:${colors.reset}    ${JSON.stringify(
+              logData.queryParams
+            )}`
+          );
         }
+
+        // Route params
+        if (
+          logData.routeParams &&
+          Object.keys(logData.routeParams).length > 0
+        ) {
+          console.log(
+            `${colors.bright}Params:${colors.reset}   ${JSON.stringify(
+              logData.routeParams
+            )}`
+          );
+        }
+
+        // Show CHANGES section for PUT/PATCH with tracked changes
+        if (logData.changes && Object.keys(logData.changes).length > 0) {
+          console.log(
+            `\n${colors.bright}${colors.yellow}📊 CHANGES DETECTED:${colors.reset}`
+          );
+          for (const [field, change] of Object.entries(logData.changes)) {
+            const fromStr =
+              typeof change.from === "object"
+                ? JSON.stringify(change.from)
+                : String(change.from ?? "(empty)");
+            const toStr =
+              typeof change.to === "object"
+                ? JSON.stringify(change.to)
+                : String(change.to ?? "(empty)");
+
+            console.log(`  ${colors.bright}${field}:${colors.reset}`);
+            console.log(`    ${colors.red}BEFORE:${colors.reset} ${fromStr}`);
+            console.log(`    ${colors.green}AFTER:${colors.reset}  ${toStr}`);
+          }
+        }
+
+        // Show previous state for context
+        if (
+          logData.previousState.data &&
+          (!logData.changes || Object.keys(logData.changes).length === 0)
+        ) {
+          console.log(
+            `\n${colors.bright}${colors.blue}📋 PREVIOUS STATE (${logData.previousState.model}):${colors.reset}`
+          );
+          console.log(
+            colors.dim +
+              JSON.stringify(logData.previousState.data, null, 2) +
+              colors.reset
+          );
+        }
+
+        // Request Body for mutating operations
+        if (
+          ["POST", "PUT", "PATCH", "DELETE"].includes(method) &&
+          logData.requestBody
+        ) {
+          const payloadLabel =
+            method === "POST" ? "📥 NEW DATA:" : "📤 NEW VALUES:";
+          console.log(`\n${colors.bright}${payloadLabel}${colors.reset}`);
+          console.log(
+            colors.dim +
+              JSON.stringify(logData.requestBody, null, 2) +
+              colors.reset
+          );
+        }
+
+        // Error details
+        if (logData.error.message) {
+          console.log(
+            `\n${colors.red}${colors.bright}❌ Error:${colors.reset}    ${colors.red}${logData.error.message}${colors.reset}`
+          );
+        }
+
+        // Security warnings
+        if (logData.riskScore > 30) {
+          console.log(
+            `\n${colors.yellow}${colors.bright}⚠️  Risk Score: ${logData.riskScore}/100${colors.reset}`
+          );
+          if (logData.securityFlags.length > 0) {
+            console.log(
+              `${colors.yellow}   Flags: ${logData.securityFlags.join(", ")}${
+                colors.reset
+              }`
+            );
+          }
+        }
+
+        console.log(separator + "\n");
+
+        // Also log as structured JSON for log aggregation tools
+        console.log(
+          `[ACTIVITY_JSON] ${JSON.stringify({
+            requestId,
+            timestamp: timestamp.toISOString(),
+            duration: `${duration}ms`,
+            method,
+            path,
+            status,
+            user: logData.userSnapshot,
+            ip,
+            device: `${parsedUA.device.type}/${parsedUA.browser.name}/${parsedUA.os.name}`,
+            actionType: logData.actionType,
+            riskScore: logData.riskScore,
+          })}`
+        );
       }
 
-      // Show previous state for context (if no computed changes but we have previous state)
-      if (
-        logData.previousState &&
-        (!logData.changes || Object.keys(logData.changes).length === 0)
-      ) {
-        console.log(
-          `\n${colors.bright}${colors.blue}📋 PREVIOUS STATE (${logData.previousState.model}):${colors.reset}`
-        );
-        console.log(
-          colors.dim +
-            JSON.stringify(logData.previousState.data, null, 2) +
-            colors.reset
-        );
+      // Save to database (if enabled)
+      if (saveToDatabase) {
+        saveLogToDatabase(logData);
       }
-
-      // Request Body for mutating operations (new payload)
-      if (
-        ["POST", "PUT", "PATCH", "DELETE"].includes(method) &&
-        logData.requestBody
-      ) {
-        const payloadLabel =
-          method === "POST" ? "📥 NEW DATA:" : "📤 NEW VALUES:";
-        console.log(`\n${colors.bright}${payloadLabel}${colors.reset}`);
-        console.log(
-          colors.dim +
-            JSON.stringify(logData.requestBody, null, 2) +
-            colors.reset
-        );
-      }
-
-      // Error details
-      if (logData.error) {
-        console.log(
-          `\n${colors.red}${colors.bright}❌ Error:${colors.reset}    ${
-            colors.red
-          }${logData.error.message || JSON.stringify(logData.error)}${
-            colors.reset
-          }`
-        );
-      }
-
-      console.log(separator + "\n");
-
-      // Also log as structured JSON for log aggregation tools
-      console.log(`[ACTIVITY_JSON] ${JSON.stringify(logData)}`);
     });
 
     next();
@@ -456,6 +812,7 @@ const activitySummaryLogger = (req, res, next) => {
     const userInfo = user
       ? `${user.fullName || "Unknown"} (${user.role})`
       : "Anonymous";
+    const ip = getClientIP(req);
 
     const statusEmoji = res.statusCode >= 400 ? "❌" : "✅";
     const methodEmoji = getMethodEmoji(req.method);
@@ -465,6 +822,7 @@ const activitySummaryLogger = (req, res, next) => {
         `${req.method} ${req.originalUrl || req.url} | ` +
         `Status: ${res.statusCode} | ` +
         `User: ${userInfo} | ` +
+        `IP: ${ip} | ` +
         `Duration: ${duration}ms`
     );
   });
@@ -472,11 +830,65 @@ const activitySummaryLogger = (req, res, next) => {
   next();
 };
 
+/**
+ * Login/Logout specific logger
+ * Use this on auth routes for detailed authentication logging
+ */
+const authActivityLogger = async (req, res, next) => {
+  const originalJson = res.json;
+
+  res.json = function (body) {
+    // Capture auth result and log it
+    const isSuccess = body.success === true;
+    const ip = getClientIP(req);
+    const userAgentString = req.headers["user-agent"] || null;
+    const parsedUA = parseUserAgent(userAgentString);
+
+    const authLogData = {
+      type: req.path.includes("login")
+        ? "LOGIN"
+        : req.path.includes("logout")
+        ? "LOGOUT"
+        : "AUTH",
+      success: isSuccess,
+      email: req.body?.email || body?.user?.email || "unknown",
+      ip,
+      device: parsedUA.device,
+      browser: parsedUA.browser,
+      os: parsedUA.os,
+      userAgent: userAgentString,
+      timestamp: new Date().toISOString(),
+      failureReason: !isSuccess ? body.message || "Unknown" : null,
+    };
+
+    console.log(
+      `🔐 [AUTH] ${authLogData.type} | ` +
+        `${isSuccess ? "✅ SUCCESS" : "❌ FAILED"} | ` +
+        `Email: ${authLogData.email} | ` +
+        `IP: ${ip} | ` +
+        `Device: ${parsedUA.device.type}/${parsedUA.browser.name}`
+    );
+
+    // Could also save to database here for auth-specific logging
+    console.log(`[AUTH_JSON] ${JSON.stringify(authLogData)}`);
+
+    return originalJson.call(this, body);
+  };
+
+  next();
+};
+
 module.exports = {
   activityLogger,
   activitySummaryLogger,
+  authActivityLogger,
   // Export utilities for custom logging needs
   formatUserInfo,
   getClientIP,
   redactSensitiveData,
+  parseUserAgent,
+  getStatusCategory,
+  getBasePath,
+  getActionType,
+  calculateRiskScore,
 };
