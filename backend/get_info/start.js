@@ -82,11 +82,20 @@ function checkModules() {
 
   for (const module of modules) {
     try {
-      // First try to require the module itself
+      // Try to require the module itself
       require(module);
-      // Then get its version
-      const pkg = require(`${module}/package.json`);
-      console.log(`   ✅ ${module}: v${pkg.version}`);
+      
+      // Try to get version, but don't fail if we can't
+      let version = "installed";
+      try {
+        const pkg = require(`${module}/package.json`);
+        version = `v${pkg.version}`;
+      } catch (e) {
+        // Modern packages with exports don't allow direct package.json access
+        // Module is installed, just can't read version
+      }
+      
+      console.log(`   ✅ ${module}: ${version}`);
     } catch (error) {
       console.log(`   ❌ ${module}: NOT FOUND - ${error.message}`);
       allModulesOk = false;
