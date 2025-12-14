@@ -17,35 +17,23 @@ const getClientIP = (req) => {
   const forwardedFor = req.headers["x-forwarded-for"];
   if (forwardedFor) {
     // x-forwarded-for can contain multiple IPs, the first one is the client
-    const ip = forwardedFor.split(",")[0].trim();
-    console.log(
-      `[IP-DEBUG] x-forwarded-for: "${forwardedFor}" -> extracted: "${ip}"`
-    );
-    return ip;
+    return forwardedFor.split(",")[0].trim();
   }
 
   const realIP = req.headers["x-real-ip"];
   if (realIP) {
-    console.log(`[IP-DEBUG] x-real-ip: "${realIP}"`);
     return realIP.trim();
   }
 
   // Fallback to req.ip (Express's built-in IP detection)
-  const fallbackIP = req.ip || req.connection?.remoteAddress || "unknown";
-  console.log(`[IP-DEBUG] Fallback IP: "${fallbackIP}", req.ip: "${req.ip}"`);
-  return fallbackIP;
+  return req.ip || req.connection?.remoteAddress || "unknown";
 };
 
 // Check if IP is allowed for admin access
 const isAdminIPAllowed = (ip) => {
   // Handle IPv6-mapped IPv4 addresses (e.g., ::ffff:185.109.170.40)
   const cleanIP = ip.replace(/^::ffff:/, "");
-  const allowed = ADMIN_ALLOWED_IPS.includes(cleanIP);
-  console.log(
-    `[IP-DEBUG] Checking IP: "${ip}" -> cleaned: "${cleanIP}" -> allowed: ${allowed}`
-  );
-  console.log(`[IP-DEBUG] Whitelist: ${JSON.stringify(ADMIN_ALLOWED_IPS)}`);
-  return allowed;
+  return ADMIN_ALLOWED_IPS.includes(cleanIP);
 };
 exports.protect = async (req, res, next) => {
   try {

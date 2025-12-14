@@ -54,6 +54,8 @@ const amTargetRoutes = require("./routes/amTargets");
 const depositCallsRoutes = require("./routes/depositCalls");
 const securityAuditRoutes = require("./routes/securityAudit");
 const errorHandler = require("./middleware/errorHandler");
+const { activityLogger } = require("./middleware/activityLogger");
+const { changeTracker } = require("./middleware/changeTracker");
 const SessionCleanupService = require("./services/sessionCleanupService");
 const AgentScraperService = require("./services/agentScraperService");
 const schedulerService = require("./services/scheduler");
@@ -473,6 +475,22 @@ app.use((req, res, next) => {
   req.io = io;
   next();
 });
+
+// Change Tracker - Fetches previous state before modifications
+// This must come BEFORE activityLogger so previousState is available
+app.use(changeTracker);
+
+// Global Activity Logger - Logs all mutating operations (POST, PUT, PATCH, DELETE)
+// Captures: WHEN (timestamp), WHO (user), WHAT (method, endpoint, payload, result)
+// Now includes BEFORE/AFTER change tracking for modifications
+// This logs to console for Render to track
+app.use(
+  activityLogger({
+    logAllMethods: false, // Set to true to also log GET requests
+    logResponseBody: false, // Set to true to include response body in logs
+    minDuration: 0, // Log all requests regardless of duration
+  })
+);
 
 // Define routes AFTER Socket.IO setup so req.io is available
 app.use("/api/auth", authRoutes);
