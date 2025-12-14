@@ -76,10 +76,10 @@ function checkEnvironmentVariables() {
 // Check required modules
 function checkModules() {
   console.log("📦 Required Modules:");
-  
+
   const modules = ["express", "cors", "ua-parser-js"];
   let allModulesOk = true;
-  
+
   for (const module of modules) {
     try {
       // First try to require the module itself
@@ -92,16 +92,18 @@ function checkModules() {
       allModulesOk = false;
     }
   }
-  
+
   console.log("");
-  
+
   if (!allModulesOk) {
     console.error("⚠️  MISSING DEPENDENCIES DETECTED!");
     console.error("This may cause the service to fail.");
-    console.error("Render should have installed all dependencies from package.json");
+    console.error(
+      "Render should have installed all dependencies from package.json"
+    );
     console.error("");
   }
-  
+
   return allModulesOk;
 }
 
@@ -113,7 +115,9 @@ async function startup() {
     await checkNetworkConnectivity();
 
     if (!modulesOk) {
-      console.warn("⚠️  Warning: Some modules are missing. Service may not work correctly.");
+      console.warn(
+        "⚠️  Warning: Some modules are missing. Service may not work correctly."
+      );
       console.warn("Attempting to start anyway...");
       console.warn("");
     }

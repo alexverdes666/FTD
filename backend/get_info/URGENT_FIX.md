@@ -1,9 +1,11 @@
 # URGENT: Fix for ua-parser-js Missing on Render
 
 ## Issue
+
 Render deployment shows `ua-parser-js: NOT FOUND` even though it's in package.json.
 
 ## Root Cause
+
 Render might be caching old dependencies or not installing properly.
 
 ## Solution Options

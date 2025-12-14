@@ -7,18 +7,18 @@ try {
 } catch (error) {
   console.error("⚠️  ua-parser-js not found, using fallback parser");
   // Create a fallback parser
-  UAParser = function(ua) {
+  UAParser = function (ua) {
     this.setUA(ua);
   };
-  UAParser.prototype.setUA = function(ua) {
+  UAParser.prototype.setUA = function (ua) {
     this.ua = ua || "";
   };
-  UAParser.prototype.getResult = function() {
+  UAParser.prototype.getResult = function () {
     return {
       ua: this.ua,
       browser: { name: "Unknown", version: "" },
       os: { name: "Unknown", version: "" },
-      device: { type: "desktop", vendor: null, model: null }
+      device: { type: "desktop", vendor: null, model: null },
     };
   };
 }
@@ -28,7 +28,7 @@ try {
 } catch (error) {
   console.error("⚠️  geoip-lite not found, disabling geo lookup");
   geoip = {
-    lookup: () => null
+    lookup: () => null,
   };
 }
 
