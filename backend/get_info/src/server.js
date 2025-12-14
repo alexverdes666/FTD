@@ -5,15 +5,40 @@ const UserDetector = require("./services/detector");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Middleware - Allow all origins for internal service
-app.use(
-  cors({
-    origin: "*",
-    methods: ["GET", "POST", "OPTIONS"],
-    allowedHeaders: ["*"],
-    credentials: false,
-  })
-);
+// CORS Configuration - Allow all origins for maximum compatibility
+const corsOptions = {
+  origin: true, // Allow all origins
+  credentials: true,
+  methods: ["GET", "POST", "OPTIONS"],
+  allowedHeaders: [
+    "Content-Type",
+    "Authorization",
+    "X-Forwarded-For",
+    "X-Real-IP",
+    "CF-Connecting-IP",
+    "User-Agent",
+    "Accept",
+    "Accept-Language",
+    "Accept-Encoding",
+    "Origin",
+    "Referer",
+    "Sec-CH-UA",
+    "Sec-CH-UA-Mobile",
+    "Sec-CH-UA-Platform",
+    "Sec-CH-UA-Platform-Version",
+    "Sec-CH-UA-Arch",
+    "Sec-CH-UA-Bitness",
+    "Sec-CH-UA-Model",
+    "DNT",
+    "Sec-GPC",
+    "Sec-Fetch-Site",
+    "Sec-Fetch-Mode",
+    "Sec-Fetch-Dest",
+  ],
+};
+
+// Middleware
+app.use(cors(corsOptions));
 app.use(express.json());
 
 // Request Client Hints for more detailed detection
@@ -26,51 +51,33 @@ app.use((req, res, next) => {
   next();
 });
 
-// Health check endpoint for Render
-app.get("/health", (req, res) => {
-  res.json({
-    status: "ok",
-    service: "get_info",
-    timestamp: new Date().toISOString(),
-  });
+// Logging middleware
+app.use((req, res, next) => {
+  const timestamp = new Date().toISOString();
+  const ip = req.headers["x-forwarded-for"]?.split(",")[0] || req.ip;
+  console.log(`[${timestamp}] ${req.method} ${req.path} from ${ip}`);
+  next();
 });
 
-// Root endpoint with service info
-app.get("/", (req, res) => {
+// Health check endpoint
+app.get("/health", (req, res) => {
   res.json({
-    service: "User Detection API",
-    version: "1.0.0",
-    endpoints: {
-      detect: "/api/detect",
-      health: "/health",
-    },
+    status: "healthy",
+    service: "get_info",
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
   });
 });
 
 // API Route - Get current user's full detection info
 app.get("/api/detect", (req, res) => {
   try {
-    console.log(
-      `[${new Date().toISOString()}] Detection request from IP: ${
-        req.headers["x-forwarded-for"] || req.ip
-      }`
-    );
-
     const detector = new UserDetector(req);
     const detection = detector.getFullDetection();
-
-    console.log(
-      `[${new Date().toISOString()}] Detection successful for IP: ${
-        detection.ip?.clientIp
-      }`
-    );
-
+    console.log(`[SUCCESS] Detection completed for ${detection.ip?.clientIp || "unknown"}`);
     res.json(detection);
   } catch (error) {
-    console.error(
-      `[${new Date().toISOString()}] Detection error:`,
-      error.message
-    );
+    console.error("[ERROR] Detection failed:", error.message);
     res.status(500).json({
       error: "Detection failed",
       message: error.message,

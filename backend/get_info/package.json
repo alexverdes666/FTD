@@ -4,8 +4,10 @@
   "description": "Simple API for real-time user detection and device information",
   "main": "src/server.js",
   "scripts": {
-    "start": "node src/server.js",
-    "dev": "node --watch src/server.js"
+    "start": "node start.js",
+    "start:direct": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "test:cors": "node test-cors.js"
   },
   "keywords": [
     "detection",

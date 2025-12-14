@@ -150,6 +150,24 @@ PORT=8080 npm start
 
 This service is designed to be deployed alongside the main FTD backend on Render.
 
+### Quick Start
+
+See `DEPLOYMENT.md` for step-by-step deployment instructions.
+
+### Troubleshooting
+
+If you encounter 403 errors or connection issues, see `RENDER_TROUBLESHOOTING.md`.
+
+### Testing
+
+```bash
+# Test CORS and connectivity
+GET_INFO_URL=https://ftd-device-detection.onrender.com/api/detect node test-cors.js
+
+# Test health endpoint
+curl https://ftd-device-detection.onrender.com/health
+```
+
 ### Step 1: Prepare for Deployment
 
 1. Navigate to the `get_info` directory:

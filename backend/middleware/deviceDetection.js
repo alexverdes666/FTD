@@ -124,32 +124,34 @@ const callGetInfoService = async (req) => {
 
     return response.data;
   } catch (error) {
-    // If get_info service is not available, return null
-    // We'll fall back to basic detection
-    if (error.code === "ECONNREFUSED" || error.code === "ENOTFOUND") {
+    // Log detailed error information for debugging
+    if (error.response) {
+      // The request was made and the server responded with a status code
+      // that falls out of the range of 2xx
+      console.log(
+        `[DeviceDetection] ⚠️  get_info service error: ${error.message} (Status: ${error.response.status})`
+      );
+      if (error.response.status === 403) {
+        console.log(
+          "[DeviceDetection] 🚨 403 Forbidden - Check CORS configuration and service permissions"
+        );
+        console.log(`[DeviceDetection] Service URL: ${GET_INFO_URL}`);
+      }
+    } else if (error.request) {
+      // The request was made but no response was received
+      console.log(
+        "[DeviceDetection] ⚠️  get_info service no response:",
+        error.message
+      );
+    } else if (error.code === "ECONNREFUSED" || error.code === "ENOTFOUND") {
       console.log(
         "[DeviceDetection] ⚠️  get_info service not available, using fallback"
       );
-      return null;
+    } else {
+      // Something happened in setting up the request that triggered an Error
+      console.log("[DeviceDetection] ⚠️  get_info service error:", error.message);
     }
 
-    // For 403 errors, log more details
-    if (error.response?.status === 403) {
-      console.log(
-        `[DeviceDetection] ⚠️  get_info service returned 403 - GET_INFO_URL: ${GET_INFO_URL}`
-      );
-      console.log(
-        `[DeviceDetection] This may indicate CORS issues or the service is rejecting requests`
-      );
-      return null;
-    }
-
-    // For timeout or other errors, also return null
-    console.log(
-      `[DeviceDetection] ⚠️  get_info service error (${
-        error.response?.status || error.code
-      }): ${error.message}`
-    );
     return null;
   }
 };

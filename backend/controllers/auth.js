@@ -387,15 +387,38 @@ exports.verify2FAAndLogin = async (req, res, next) => {
     } else {
       // Verify TOTP token
       try {
+        console.log(
+          `🔐 Attempting to decrypt 2FA secret for user ${user.email}...`
+        );
+        console.log(
+          `🔑 ENCRYPTION_KEY is ${
+            process.env.ENCRYPTION_KEY ? "SET" : "NOT SET"
+          }`
+        );
+        console.log(
+          `📦 Secret starts with: ${user.twoFactorSecret?.substring(0, 10)}...`
+        );
+
         const decryptedSecret = decrypt(user.twoFactorSecret);
+
+        console.log(`✅ Successfully decrypted 2FA secret`);
+        console.log(`🔓 Decrypted secret length: ${decryptedSecret?.length}`);
+
         verified = speakeasy.totp.verify({
           secret: decryptedSecret,
           encoding: "base32",
           token: token,
           window: 2,
         });
+
+        console.log(`🎯 TOTP verification result: ${verified}`);
       } catch (decryptError) {
-        console.error("Error decrypting 2FA secret:", decryptError.message);
+        console.error("❌ Error decrypting 2FA secret:", decryptError.message);
+        console.error("📍 User:", user.email);
+        console.error(
+          "🔑 ENCRYPTION_KEY is set:",
+          !!process.env.ENCRYPTION_KEY
+        );
 
         // If decryption fails, the encryption key changed
         // Disable 2FA for this user so they can log in and re-enable it
