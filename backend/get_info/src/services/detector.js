@@ -1,5 +1,37 @@
-const UAParser = require("ua-parser-js");
-const geoip = require("geoip-lite");
+// Try to load dependencies with fallbacks
+let UAParser;
+let geoip;
+
+try {
+  UAParser = require("ua-parser-js");
+} catch (error) {
+  console.error("⚠️  ua-parser-js not found, using fallback parser");
+  // Create a fallback parser
+  UAParser = function(ua) {
+    this.setUA(ua);
+  };
+  UAParser.prototype.setUA = function(ua) {
+    this.ua = ua || "";
+  };
+  UAParser.prototype.getResult = function() {
+    return {
+      ua: this.ua,
+      browser: { name: "Unknown", version: "" },
+      os: { name: "Unknown", version: "" },
+      device: { type: "desktop", vendor: null, model: null }
+    };
+  };
+}
+
+try {
+  geoip = require("geoip-lite");
+} catch (error) {
+  console.error("⚠️  geoip-lite not found, disabling geo lookup");
+  geoip = {
+    lookup: () => null
+  };
+}
+
 const os = require("os");
 
 // Known anti-detect browser signatures and patterns

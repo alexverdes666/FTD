@@ -76,27 +76,47 @@ function checkEnvironmentVariables() {
 // Check required modules
 function checkModules() {
   console.log("📦 Required Modules:");
-
+  
   const modules = ["express", "cors", "ua-parser-js"];
-
+  let allModulesOk = true;
+  
   for (const module of modules) {
     try {
+      // First try to require the module itself
+      require(module);
+      // Then get its version
       const pkg = require(`${module}/package.json`);
       console.log(`   ✅ ${module}: v${pkg.version}`);
     } catch (error) {
-      console.log(`   ❌ ${module}: NOT FOUND`);
+      console.log(`   ❌ ${module}: NOT FOUND - ${error.message}`);
+      allModulesOk = false;
     }
   }
-
+  
   console.log("");
+  
+  if (!allModulesOk) {
+    console.error("⚠️  MISSING DEPENDENCIES DETECTED!");
+    console.error("This may cause the service to fail.");
+    console.error("Render should have installed all dependencies from package.json");
+    console.error("");
+  }
+  
+  return allModulesOk;
 }
 
 // Main startup
 async function startup() {
   try {
     checkEnvironmentVariables();
-    checkModules();
+    const modulesOk = checkModules();
     await checkNetworkConnectivity();
+
+    if (!modulesOk) {
+      console.warn("⚠️  Warning: Some modules are missing. Service may not work correctly.");
+      console.warn("Attempting to start anyway...");
+      console.warn("");
+    }
 
     console.log(
       "╔════════════════════════════════════════════════════════════╗"
