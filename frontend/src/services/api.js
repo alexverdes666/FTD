@@ -1,17 +1,22 @@
 import axios from "axios";
 import { store } from "../store/store";
 import { logout } from "../store/slices/authSlice";
-import { getDeviceId } from "../utils/deviceFingerprint";
+import {
+  getDeviceId,
+  getDeviceFingerprintHeader,
+} from "../utils/deviceFingerprint";
 
-// Cache the device ID to avoid async issues in interceptors
+// Cache the device ID and fingerprint to avoid async issues in interceptors
 let cachedDeviceId = null;
+let cachedFingerprint = null;
 
-// Initialize device ID on module load
+// Initialize device ID and fingerprint on module load
 (async () => {
   try {
     cachedDeviceId = await getDeviceId();
+    cachedFingerprint = await getDeviceFingerprintHeader();
   } catch (e) {
-    console.warn("Failed to get device ID:", e);
+    console.warn("Failed to get device fingerprint:", e);
   }
 })();
 
@@ -40,8 +45,8 @@ backendAPI.interceptors.request.use(
       config.headers.Authorization = `Bearer ${token}`;
     }
 
-    // Add device ID for fingerprinting/audit trail
-    // Use cached value or fetch if not available
+    // Add device ID and fingerprint for audit trail
+    // Use cached values or fetch if not available
     if (!cachedDeviceId) {
       try {
         cachedDeviceId = await getDeviceId();
@@ -49,8 +54,19 @@ backendAPI.interceptors.request.use(
         // Ignore errors
       }
     }
+    if (!cachedFingerprint) {
+      try {
+        cachedFingerprint = await getDeviceFingerprintHeader();
+      } catch (e) {
+        // Ignore errors
+      }
+    }
+
     if (cachedDeviceId) {
       config.headers["X-Device-ID"] = cachedDeviceId;
+    }
+    if (cachedFingerprint) {
+      config.headers["X-Device-Fingerprint"] = cachedFingerprint;
     }
 
     return config;

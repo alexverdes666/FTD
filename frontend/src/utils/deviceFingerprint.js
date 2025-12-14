@@ -150,12 +150,44 @@ const saveToIndexedDB = async (deviceId) => {
 };
 
 /**
+ * Detect if this is likely a Mac/Apple device based on various signals
+ */
+const detectAppleDevice = () => {
+  const nav = navigator || {};
+  const ua = nav.userAgent || "";
+  const platform = nav.platform || "";
+
+  const isMac = platform.includes("Mac") || ua.includes("Macintosh");
+  const isIOS =
+    /iPad|iPhone|iPod/.test(ua) ||
+    (platform === "MacIntel" && nav.maxTouchPoints > 1);
+  const isSafari =
+    ua.includes("Safari") && !ua.includes("Chrome") && !ua.includes("Chromium");
+
+  // Apple Silicon detection (M1/M2/M3 chips show as "MacIntel" but behave differently)
+  // These hints can help identify Apple Silicon vs Intel Macs
+  const isAppleSilicon =
+    isMac && nav.hardwareConcurrency >= 8 && nav.deviceMemory >= 8;
+
+  return {
+    isMac,
+    isIOS,
+    isSafari,
+    isAppleSilicon,
+    isAppleDevice: isMac || isIOS,
+  };
+};
+
+/**
  * Collect device fingerprint data (what we can gather)
  * Even if spoofed, the combination might be unique
  */
 const collectDeviceInfo = () => {
   const nav = navigator || {};
   const screen = window.screen || {};
+
+  // Detect Apple devices
+  const appleInfo = detectAppleDevice();
 
   // Collect what we can
   const info = {
@@ -186,31 +218,58 @@ const collectDeviceInfo = () => {
     // Connection info (if available)
     connectionType: nav.connection?.effectiveType || null,
     connectionDownlink: nav.connection?.downlink || null,
+    connectionRtt: nav.connection?.rtt || null,
+    connectionSaveData: nav.connection?.saveData || null,
 
     // WebGL info (may be spoofed but still useful)
     webglVendor: null,
     webglRenderer: null,
+    webglVersion: null,
 
     // Canvas fingerprint hash
     canvasHash: null,
+
+    // Audio fingerprint hash
+    audioHash: null,
 
     // Storage availability
     localStorage: !!window.localStorage,
     sessionStorage: !!window.sessionStorage,
     indexedDB: !!window.indexedDB,
 
-    // Other
+    // Media capabilities
+    webRTC: !!window.RTCPeerConnection,
+    webGL: !!window.WebGLRenderingContext,
+    webGL2: !!window.WebGL2RenderingContext,
+
+    // Apple-specific detection
+    ...appleInfo,
+
+    // Screen orientation
+    screenOrientation: screen.orientation?.type || null,
+
+    // Other media queries
     colorScheme: window.matchMedia("(prefers-color-scheme: dark)").matches
       ? "dark"
       : "light",
     reducedMotion: window.matchMedia("(prefers-reduced-motion: reduce)")
       .matches,
+    prefersContrast: window.matchMedia("(prefers-contrast: more)").matches
+      ? "more"
+      : "normal",
+
+    // Font detection (rough check for common fonts)
+    fontFingerprint: null,
+
+    // Battery status (if available, deprecated but still works in some browsers)
+    batteryCharging: null,
+    batteryLevel: null,
 
     // Collected at
     collectedAt: new Date().toISOString(),
   };
 
-  // Try to get WebGL info
+  // Try to get WebGL info (very useful for GPU identification)
   try {
     const canvas = document.createElement("canvas");
     const gl =
@@ -221,6 +280,11 @@ const collectDeviceInfo = () => {
         info.webglVendor = gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL);
         info.webglRenderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
       }
+      info.webglVersion = gl.getParameter(gl.VERSION);
+
+      // Get more WebGL parameters that can help identify the GPU
+      info.webglMaxTextureSize = gl.getParameter(gl.MAX_TEXTURE_SIZE);
+      info.webglMaxVertexAttribs = gl.getParameter(gl.MAX_VERTEX_ATTRIBS);
     }
   } catch (e) {
     // WebGL not available
@@ -245,6 +309,80 @@ const collectDeviceInfo = () => {
     info.canvasHash = simpleHash(dataUrl);
   } catch (e) {
     // Canvas not available
+  }
+
+  // Generate audio fingerprint
+  try {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (AudioContext) {
+      const audioCtx = new AudioContext();
+      const oscillator = audioCtx.createOscillator();
+      const analyser = audioCtx.createAnalyser();
+      const gainNode = audioCtx.createGain();
+      const scriptProcessor = audioCtx.createScriptProcessor(4096, 1, 1);
+
+      gainNode.gain.value = 0; // Mute
+      oscillator.type = "triangle";
+      oscillator.connect(analyser);
+      analyser.connect(scriptProcessor);
+      scriptProcessor.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+
+      oscillator.start(0);
+
+      // Get frequency data
+      const frequencyData = new Uint8Array(analyser.frequencyBinCount);
+      analyser.getByteFrequencyData(frequencyData);
+      info.audioHash = simpleHash(frequencyData.slice(0, 100).join(","));
+
+      oscillator.stop();
+      audioCtx.close();
+    }
+  } catch (e) {
+    // Audio fingerprinting not available
+  }
+
+  // Font detection (check for common Mac fonts)
+  try {
+    const testFonts = [
+      "SF Pro", // macOS system font
+      "Helvetica Neue", // macOS
+      "Segoe UI", // Windows
+      "Roboto", // Android/Chrome
+      "Ubuntu", // Linux
+    ];
+
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    const testString = "mmmmmmmmlli";
+    const baseFont = "monospace";
+
+    const getTextWidth = (font) => {
+      ctx.font = `72px ${font}, ${baseFont}`;
+      return ctx.measureText(testString).width;
+    };
+
+    const baseWidth = getTextWidth(baseFont);
+    const detectedFonts = testFonts.filter((font) => {
+      const width = getTextWidth(`"${font}"`);
+      return width !== baseWidth;
+    });
+
+    info.fontFingerprint = detectedFonts.join(",") || "default";
+  } catch (e) {
+    // Font detection failed
+  }
+
+  // Battery API (deprecated but still works in Chromium)
+  try {
+    if (navigator.getBattery) {
+      navigator.getBattery().then((battery) => {
+        info.batteryCharging = battery.charging;
+        info.batteryLevel = battery.level;
+      });
+    }
+  } catch (e) {
+    // Battery API not available
   }
 
   return info;

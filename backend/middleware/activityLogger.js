@@ -207,24 +207,51 @@ const parseDeviceFingerprint = (fingerprintHeader) => {
     const decoded = Buffer.from(fingerprintHeader, "base64").toString("utf-8");
     const parsed = JSON.parse(decoded);
 
-    // Extract only the fields we care about
+    // Extract all the fields we care about
     return {
+      // Screen
       screenWidth: parsed.screenWidth || null,
       screenHeight: parsed.screenHeight || null,
       colorDepth: parsed.colorDepth || null,
       pixelRatio: parsed.pixelRatio || null,
+
+      // Locale/Time
       timezone: parsed.timezone || null,
       timezoneOffset: parsed.timezoneOffset || null,
       language: parsed.language || null,
       languages: parsed.languages || [],
+
+      // Hardware
       platform: parsed.platform || null,
       hardwareConcurrency: parsed.hardwareConcurrency || null,
       deviceMemory: parsed.deviceMemory || null,
       maxTouchPoints: parsed.maxTouchPoints || null,
+
+      // WebGL (GPU identification)
       webglVendor: parsed.webglVendor || null,
       webglRenderer: parsed.webglRenderer || null,
+      webglVersion: parsed.webglVersion || null,
+      webglMaxTextureSize: parsed.webglMaxTextureSize || null,
+
+      // Fingerprint hashes
       canvasHash: parsed.canvasHash || null,
+      audioHash: parsed.audioHash || null,
+      fontFingerprint: parsed.fontFingerprint || null,
+
+      // Apple device detection
+      isMac: parsed.isMac || null,
+      isIOS: parsed.isIOS || null,
+      isSafari: parsed.isSafari || null,
+      isAppleSilicon: parsed.isAppleSilicon || null,
+      isAppleDevice: parsed.isAppleDevice || null,
+
+      // Preferences
       colorScheme: parsed.colorScheme || null,
+      reducedMotion: parsed.reducedMotion || null,
+
+      // Connection
+      connectionType: parsed.connectionType || null,
+      connectionDownlink: parsed.connectionDownlink || null,
     };
   } catch (e) {
     return null;

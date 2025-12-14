@@ -171,22 +171,49 @@ const activityLogSchema = new mongoose.Schema(
     },
     // Device fingerprint data (collected from browser)
     deviceFingerprint: {
+      // Screen
       screenWidth: { type: Number, default: null },
       screenHeight: { type: Number, default: null },
       colorDepth: { type: Number, default: null },
       pixelRatio: { type: Number, default: null },
+
+      // Locale/Time
       timezone: { type: String, default: null },
       timezoneOffset: { type: Number, default: null },
       language: { type: String, default: null },
       languages: [{ type: String }],
+
+      // Hardware
       platform: { type: String, default: null },
       hardwareConcurrency: { type: Number, default: null },
       deviceMemory: { type: Number, default: null },
       maxTouchPoints: { type: Number, default: null },
+
+      // WebGL (GPU identification)
       webglVendor: { type: String, default: null },
       webglRenderer: { type: String, default: null },
+      webglVersion: { type: String, default: null },
+      webglMaxTextureSize: { type: Number, default: null },
+
+      // Fingerprint hashes
       canvasHash: { type: String, default: null },
+      audioHash: { type: String, default: null },
+      fontFingerprint: { type: String, default: null },
+
+      // Apple device detection
+      isMac: { type: Boolean, default: null },
+      isIOS: { type: Boolean, default: null },
+      isSafari: { type: Boolean, default: null },
+      isAppleSilicon: { type: Boolean, default: null },
+      isAppleDevice: { type: Boolean, default: null },
+
+      // Preferences
       colorScheme: { type: String, default: null },
+      reducedMotion: { type: Boolean, default: null },
+
+      // Connection
+      connectionType: { type: String, default: null },
+      connectionDownlink: { type: Number, default: null },
     },
 
     // ==================== REQUEST CONTEXT ====================
