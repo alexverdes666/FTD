@@ -56,6 +56,7 @@ import {
   Save as SaveIcon,
   Person as PersonIcon,
   Visibility as ViewIcon,
+  PhoneInTalk as PhoneIcon,
 } from "@mui/icons-material";
 import { useForm, Controller } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
@@ -73,6 +74,8 @@ import { refundsService } from "../services/refunds";
 import CommentButton from "../components/CommentButton";
 import ClientBrokerManagementDialog from "../components/ClientBrokerManagementDialog";
 import GenderFallbackModal from "../components/GenderFallbackModal";
+import AssignDepositCallDialog from "../components/AssignDepositCallDialog";
+import depositCallsService from "../services/depositCallsService";
 
 const createOrderSchema = (userRole) => {
   return yup
@@ -107,7 +110,10 @@ const createOrderSchema = (userRole) => {
       notes: yup.string().default(""),
       selectedClientNetwork:
         userRole === "admin" || userRole === "affiliate_manager"
-          ? yup.string().required("Client Network selection is required").default("")
+          ? yup
+              .string()
+              .required("Client Network selection is required")
+              .default("")
           : yup.string().default(""),
       selectedOurNetwork: yup
         .string()
@@ -129,7 +135,7 @@ const createOrderSchema = (userRole) => {
           "Cannot create order for the same day",
           (value) => {
             // Admin users can bypass same-day restriction
-            if (userRole === 'admin') return true;
+            if (userRole === "admin") return true;
 
             if (!value) return false;
             const today = new Date();
@@ -144,7 +150,7 @@ const createOrderSchema = (userRole) => {
           "Cannot create order for tomorrow after 7:00 PM today",
           (value) => {
             // Admin users can bypass time restriction
-            if (userRole === 'admin') return true;
+            if (userRole === "admin") return true;
 
             if (!value) return false;
             const now = new Date();
@@ -156,7 +162,10 @@ const createOrderSchema = (userRole) => {
             plannedDay.setHours(0, 0, 0, 0);
 
             // If planning for tomorrow and current time is after 7 PM
-            if (plannedDay.getTime() === tomorrow.getTime() && now.getHours() >= 19) {
+            if (
+              plannedDay.getTime() === tomorrow.getTime() &&
+              now.getHours() >= 19
+            ) {
               return false;
             }
             return true;
@@ -179,7 +188,7 @@ const createOrderSchema = (userRole) => {
           const now = new Date();
           const tomorrow = new Date();
           tomorrow.setDate(tomorrow.getDate() + 1);
-          if (userRole === 'admin' || now.getHours() < 19) {
+          if (userRole === "admin" || now.getHours() < 19) {
             return tomorrow;
           } else {
             const dayAfterTomorrow = new Date();
@@ -192,12 +201,7 @@ const createOrderSchema = (userRole) => {
       "at-least-one",
       "At least one lead type must be requested",
       (value) => {
-        return (
-          (value.ftd || 0) +
-            (value.filler || 0) +
-            (value.cold || 0) >
-          0
-        );
+        return (value.ftd || 0) + (value.filler || 0) + (value.cold || 0) > 0;
       }
     );
 };
@@ -225,19 +229,21 @@ const getDisplayLeadType = (lead) => {
 // Helper function to calculate FTD cooldown status
 const getFTDCooldownStatus = (lead) => {
   const leadType = getDisplayLeadType(lead);
-  if (leadType !== 'ftd' && leadType !== 'filler') {
+  if (leadType !== "ftd" && leadType !== "filler") {
     return null; // Not an FTD/Filler lead
   }
-  
+
   if (!lead.lastUsedInOrder) {
     return null; // Never used, no cooldown
   }
-  
+
   const lastUsedDate = new Date(lead.lastUsedInOrder);
   const now = new Date();
-  const daysSinceUsed = Math.floor((now - lastUsedDate) / (1000 * 60 * 60 * 24));
+  const daysSinceUsed = Math.floor(
+    (now - lastUsedDate) / (1000 * 60 * 60 * 24)
+  );
   const cooldownPeriod = 10; // 10 days
-  
+
   if (daysSinceUsed < cooldownPeriod) {
     const daysRemaining = cooldownPeriod - daysSinceUsed;
     return {
@@ -246,7 +252,7 @@ const getFTDCooldownStatus = (lead) => {
       lastUsedDate: lastUsedDate,
     };
   }
-  
+
   return { inCooldown: false };
 };
 const useDebounce = (value, delay) => {
@@ -284,12 +290,17 @@ const OrdersPage = () => {
   const [loadingAgents, setLoadingAgents] = useState(false);
   const [filteredAgents, setFilteredAgents] = useState([]);
   const [filteredAgentsLoading, setFilteredAgentsLoading] = useState(false);
-  const [unassignedLeadsStats, setUnassignedLeadsStats] = useState({ ftd: null, filler: null });
+  const [unassignedLeadsStats, setUnassignedLeadsStats] = useState({
+    ftd: null,
+    filler: null,
+  });
   const [genderFallbackModalOpen, setGenderFallbackModalOpen] = useState(false);
   const [pendingOrderData, setPendingOrderData] = useState(null);
   const [insufficientAgentLeads, setInsufficientAgentLeads] = useState(null);
-  const [clientBrokerManagementOpen, setClientBrokerManagementOpen] = useState(false);
-  const [selectedOrderForManagement, setSelectedOrderForManagement] = useState(null);
+  const [clientBrokerManagementOpen, setClientBrokerManagementOpen] =
+    useState(false);
+  const [selectedOrderForManagement, setSelectedOrderForManagement] =
+    useState(null);
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [totalOrders, setTotalOrders] = useState(0);
@@ -329,8 +340,6 @@ const OrdersPage = () => {
     message: "",
   });
 
-
-
   // Create Broker Dialog State
   const [createBrokerDialog, setCreateBrokerDialog] = useState({
     open: false,
@@ -368,6 +377,13 @@ const OrdersPage = () => {
     orderStatus: null,
     permanentDelete: false,
     loading: false,
+  });
+
+  // Deposit Call Assignment State
+  const [assignDepositCallDialog, setAssignDepositCallDialog] = useState({
+    open: false,
+    order: null,
+    lead: null,
   });
 
   const fetchOrders = useCallback(async () => {
@@ -411,7 +427,9 @@ const OrdersPage = () => {
     if (user?.role !== "admin" && user?.role !== "affiliate_manager") return;
     setLoadingClientNetworks(true);
     try {
-      const response = await api.get("/client-networks?isActive=true&limit=1000");
+      const response = await api.get(
+        "/client-networks?isActive=true&limit=1000"
+      );
       setClientNetworks(response.data.data || []);
     } catch (err) {
       console.error("Failed to fetch client networks:", err);
@@ -467,7 +485,9 @@ const OrdersPage = () => {
   const fetchClientBrokers = useCallback(async () => {
     setLoadingClientBrokers(true);
     try {
-      const response = await api.get("/client-brokers?isActive=true&limit=1000");
+      const response = await api.get(
+        "/client-brokers?isActive=true&limit=1000"
+      );
       setClientBrokers(response.data.data || []);
     } catch (err) {
       console.error("Failed to fetch client brokers:", err);
@@ -497,40 +517,48 @@ const OrdersPage = () => {
   }, []);
 
   // Fetch agents with lead stats filtered by specific criteria
-  const fetchFilteredAgents = useCallback(async (leadType, country, clientNetwork, clientBrokers = []) => {
-    if (!leadType || !country || !clientNetwork) {
-      return;
-    }
-    
-    setFilteredAgentsLoading(true);
-    try {
-      const response = await api.post("/users/agents-with-filtered-lead-stats", {
-        leadType,
-        country,
-        clientNetwork,
-        clientBrokers,
-      });
-      
-      setFilteredAgents(response.data.data || []);
-      
-      // Store unassigned leads stats by lead type
-      setUnassignedLeadsStats(prev => ({
-        ...prev,
-        [leadType]: response.data.unassignedLeads || null,
-      }));
-      
-      return response.data;
-    } catch (err) {
-      console.error("Failed to fetch filtered agents:", err);
-      setNotification({
-        message: err.response?.data?.message || "Failed to load agents with matching leads",
-        severity: "warning",
-      });
-      return null;
-    } finally {
-      setFilteredAgentsLoading(false);
-    }
-  }, []);
+  const fetchFilteredAgents = useCallback(
+    async (leadType, country, clientNetwork, clientBrokers = []) => {
+      if (!leadType || !country || !clientNetwork) {
+        return;
+      }
+
+      setFilteredAgentsLoading(true);
+      try {
+        const response = await api.post(
+          "/users/agents-with-filtered-lead-stats",
+          {
+            leadType,
+            country,
+            clientNetwork,
+            clientBrokers,
+          }
+        );
+
+        setFilteredAgents(response.data.data || []);
+
+        // Store unassigned leads stats by lead type
+        setUnassignedLeadsStats((prev) => ({
+          ...prev,
+          [leadType]: response.data.unassignedLeads || null,
+        }));
+
+        return response.data;
+      } catch (err) {
+        console.error("Failed to fetch filtered agents:", err);
+        setNotification({
+          message:
+            err.response?.data?.message ||
+            "Failed to load agents with matching leads",
+          severity: "warning",
+        });
+        return null;
+      } finally {
+        setFilteredAgentsLoading(false);
+      }
+    },
+    []
+  );
 
   const onSubmitOrder = useCallback(
     async (data) => {
@@ -540,11 +568,12 @@ const OrdersPage = () => {
 
         if (data.ftdAgents && data.ftdAgents.length > 0) {
           data.ftdAgents.forEach((agentId, index) => {
-            if (agentId) { // Only add if agent is selected
+            if (agentId) {
+              // Only add if agent is selected
               agentAssignments.push({
-                leadType: 'ftd',
+                leadType: "ftd",
                 agentId: agentId,
-                index: index
+                index: index,
               });
             }
           });
@@ -552,11 +581,12 @@ const OrdersPage = () => {
 
         if (data.fillerAgents && data.fillerAgents.length > 0) {
           data.fillerAgents.forEach((agentId, index) => {
-            if (agentId) { // Only add if agent is selected
+            if (agentId) {
+              // Only add if agent is selected
               agentAssignments.push({
-                leadType: 'filler',
+                leadType: "filler",
                 agentId: agentId,
-                index: index
+                index: index,
               });
             }
           });
@@ -583,11 +613,16 @@ const OrdersPage = () => {
         const response = await api.post("/orders", orderData);
 
         // Check if any individual agent assignments were insufficient
-        if (response.data.agentAssignmentInsufficient && response.data.agentAssignmentInsufficient.length > 0) {
+        if (
+          response.data.agentAssignmentInsufficient &&
+          response.data.agentAssignmentInsufficient.length > 0
+        ) {
           // Order was created but some assignments couldn't be fulfilled even with filters
           // Just show a warning, don't ask for more input as it would create a duplicate order
           setNotification({
-            message: response.data.message || "Order created with warning - some agent assignments could not be fully fulfilled",
+            message:
+              response.data.message ||
+              "Order created with warning - some agent assignments could not be fully fulfilled",
             severity: "warning",
           });
           setCreateDialogOpen(false);
@@ -604,13 +639,20 @@ const OrdersPage = () => {
         fetchOrders();
       } catch (err) {
         // Check if the error is due to insufficient agent-assigned leads requiring gender selection
-        if (err.response?.data?.requiresGenderSelection && err.response?.data?.agentAssignmentInsufficient) {
+        if (
+          err.response?.data?.requiresGenderSelection &&
+          err.response?.data?.agentAssignmentInsufficient
+        ) {
           // Store the order data and show modal to ask for gender selection
           setPendingOrderData(data);
-          setInsufficientAgentLeads(err.response.data.agentAssignmentInsufficient);
+          setInsufficientAgentLeads(
+            err.response.data.agentAssignmentInsufficient
+          );
           setGenderFallbackModalOpen(true);
           setNotification({
-            message: err.response.data.message || "Agent has insufficient assigned leads - please select a gender to allow fallback to unassigned leads",
+            message:
+              err.response.data.message ||
+              "Agent has insufficient assigned leads - please select a gender to allow fallback to unassigned leads",
             severity: "warning",
           });
         } else {
@@ -646,106 +688,126 @@ const OrdersPage = () => {
     fetchOurNetworks();
     fetchCampaigns();
     fetchClientBrokers();
-  }, [fetchClientNetworks, fetchOurNetworks, fetchCampaigns, fetchClientBrokers]);
+  }, [
+    fetchClientNetworks,
+    fetchOurNetworks,
+    fetchCampaigns,
+    fetchClientBrokers,
+  ]);
 
-  const handleGenderFallbackSelect = useCallback(async (genderSelection) => {
-    if (!pendingOrderData) return;
+  const handleGenderFallbackSelect = useCallback(
+    async (genderSelection) => {
+      if (!pendingOrderData) return;
 
-    try {
-      // Check if we're using per-assignment genders (array) or single gender (string)
-      const isPerAssignment = Array.isArray(genderSelection);
+      try {
+        // Check if we're using per-assignment genders (array) or single gender (string)
+        const isPerAssignment = Array.isArray(genderSelection);
 
-      // Rebuild agentAssignments array from pendingOrderData
-      let agentAssignments = [];
+        // Rebuild agentAssignments array from pendingOrderData
+        let agentAssignments = [];
 
-      // ALWAYS rebuild ALL agent assignments from pendingOrderData first
-      if (pendingOrderData.ftdAgents && pendingOrderData.ftdAgents.length > 0) {
-        pendingOrderData.ftdAgents.forEach((agentId, index) => {
-          if (agentId) {
-            agentAssignments.push({
-              leadType: 'ftd',
-              agentId: agentId,
-              index: index
-            });
-          }
+        // ALWAYS rebuild ALL agent assignments from pendingOrderData first
+        if (
+          pendingOrderData.ftdAgents &&
+          pendingOrderData.ftdAgents.length > 0
+        ) {
+          pendingOrderData.ftdAgents.forEach((agentId, index) => {
+            if (agentId) {
+              agentAssignments.push({
+                leadType: "ftd",
+                agentId: agentId,
+                index: index,
+              });
+            }
+          });
+        }
+
+        if (
+          pendingOrderData.fillerAgents &&
+          pendingOrderData.fillerAgents.length > 0
+        ) {
+          pendingOrderData.fillerAgents.forEach((agentId, index) => {
+            if (agentId) {
+              agentAssignments.push({
+                leadType: "filler",
+                agentId: agentId,
+                index: index,
+              });
+            }
+          });
+        }
+
+        // If per-assignment genders, merge the gender selections into the assignments
+        if (isPerAssignment) {
+          // Create a map of gender selections by leadType and index
+          const genderMap = new Map();
+          genderSelection.forEach((gs) => {
+            const key = `${gs.leadType}-${gs.index}`;
+            genderMap.set(key, gs.gender);
+          });
+
+          // Add gender to matching assignments
+          agentAssignments = agentAssignments.map((assignment) => {
+            const key = `${assignment.leadType}-${assignment.index}`;
+            const gender = genderMap.get(key);
+            if (gender) {
+              return { ...assignment, gender };
+            }
+            return assignment;
+          });
+        }
+
+        // Retry the order with the selected gender(s)
+        const orderData = {
+          requests: {
+            ftd: pendingOrderData.ftd || 0,
+            filler: pendingOrderData.filler || 0,
+            cold: pendingOrderData.cold || 0,
+          },
+          priority: pendingOrderData.priority,
+          country: pendingOrderData.countryFilter,
+          gender: isPerAssignment ? null : genderSelection, // Only use global gender for old format
+          notes: pendingOrderData.notes,
+          plannedDate: pendingOrderData.plannedDate?.toISOString(),
+          selectedClientNetwork: pendingOrderData.selectedClientNetwork,
+          selectedOurNetwork: pendingOrderData.selectedOurNetwork,
+          selectedCampaign: pendingOrderData.selectedCampaign,
+          selectedClientBrokers: pendingOrderData.selectedClientBrokers,
+          agentFilter: pendingOrderData.agentFilter || null,
+          agentAssignments: agentAssignments,
+          perAssignmentGenders: isPerAssignment, // Flag to tell backend to use per-assignment genders
+        };
+
+        const response = await api.post("/orders", orderData);
+
+        setNotification({
+          message: isPerAssignment
+            ? `Order created successfully with ${
+                genderSelection.length
+              } gender fallback(s) and ${
+                agentAssignments.length - genderSelection.length
+              } agent-assigned lead(s)!`
+            : `Order created successfully with ${genderSelection} gender filter!`,
+          severity: "success",
+        });
+
+        setGenderFallbackModalOpen(false);
+        setCreateDialogOpen(false);
+        setPendingOrderData(null);
+        setInsufficientAgentLeads(null);
+        reset();
+        fetchOrders();
+      } catch (err) {
+        setNotification({
+          message:
+            err.response?.data?.message ||
+            "Failed to create order with gender filter",
+          severity: "error",
         });
       }
-
-      if (pendingOrderData.fillerAgents && pendingOrderData.fillerAgents.length > 0) {
-        pendingOrderData.fillerAgents.forEach((agentId, index) => {
-          if (agentId) {
-            agentAssignments.push({
-              leadType: 'filler',
-              agentId: agentId,
-              index: index
-            });
-          }
-        });
-      }
-
-      // If per-assignment genders, merge the gender selections into the assignments
-      if (isPerAssignment) {
-        // Create a map of gender selections by leadType and index
-        const genderMap = new Map();
-        genderSelection.forEach(gs => {
-          const key = `${gs.leadType}-${gs.index}`;
-          genderMap.set(key, gs.gender);
-        });
-
-        // Add gender to matching assignments
-        agentAssignments = agentAssignments.map(assignment => {
-          const key = `${assignment.leadType}-${assignment.index}`;
-          const gender = genderMap.get(key);
-          if (gender) {
-            return { ...assignment, gender };
-          }
-          return assignment;
-        });
-      }
-
-      // Retry the order with the selected gender(s)
-      const orderData = {
-        requests: {
-          ftd: pendingOrderData.ftd || 0,
-          filler: pendingOrderData.filler || 0,
-          cold: pendingOrderData.cold || 0,
-        },
-        priority: pendingOrderData.priority,
-        country: pendingOrderData.countryFilter,
-        gender: isPerAssignment ? null : genderSelection, // Only use global gender for old format
-        notes: pendingOrderData.notes,
-        plannedDate: pendingOrderData.plannedDate?.toISOString(),
-        selectedClientNetwork: pendingOrderData.selectedClientNetwork,
-        selectedOurNetwork: pendingOrderData.selectedOurNetwork,
-        selectedCampaign: pendingOrderData.selectedCampaign,
-        selectedClientBrokers: pendingOrderData.selectedClientBrokers,
-        agentFilter: pendingOrderData.agentFilter || null,
-        agentAssignments: agentAssignments,
-        perAssignmentGenders: isPerAssignment, // Flag to tell backend to use per-assignment genders
-      };
-
-      const response = await api.post("/orders", orderData);
-
-      setNotification({
-        message: isPerAssignment
-          ? `Order created successfully with ${genderSelection.length} gender fallback(s) and ${agentAssignments.length - genderSelection.length} agent-assigned lead(s)!`
-          : `Order created successfully with ${genderSelection} gender filter!`,
-        severity: "success",
-      });
-
-      setGenderFallbackModalOpen(false);
-      setCreateDialogOpen(false);
-      setPendingOrderData(null);
-      setInsufficientAgentLeads(null);
-      reset();
-      fetchOrders();
-    } catch (err) {
-      setNotification({
-        message: err.response?.data?.message || "Failed to create order with gender filter",
-        severity: "error",
-      });
-    }
-  }, [pendingOrderData, reset, fetchOrders]);
+    },
+    [pendingOrderData, reset, fetchOrders]
+  );
 
   const handleGenderFallbackClose = useCallback(() => {
     setGenderFallbackModalOpen(false);
@@ -758,7 +820,9 @@ const OrdersPage = () => {
     // Refresh the order data after lead updates
     if (selectedOrderForManagement) {
       try {
-        const response = await api.get(`/orders/${selectedOrderForManagement._id}`);
+        const response = await api.get(
+          `/orders/${selectedOrderForManagement._id}`
+        );
         const updatedOrder = response.data.data;
 
         // Update expandedRowData if it exists
@@ -766,7 +830,7 @@ const OrdersPage = () => {
           if (prev[updatedOrder._id]) {
             return {
               ...prev,
-              [updatedOrder._id]: updatedOrder
+              [updatedOrder._id]: updatedOrder,
             };
           }
           return prev;
@@ -839,7 +903,7 @@ const OrdersPage = () => {
   }, []);
 
   const handleDeleteOrderClick = useCallback((orderId, orderStatus) => {
-    const isCancelled = orderStatus === 'cancelled';
+    const isCancelled = orderStatus === "cancelled";
     setDeleteOrderDialog({
       open: true,
       orderId: orderId,
@@ -852,7 +916,7 @@ const OrdersPage = () => {
   const handleDeleteOrderConfirm = useCallback(async () => {
     if (!deleteOrderDialog.orderId) return;
 
-    setDeleteOrderDialog(prev => ({ ...prev, loading: true }));
+    setDeleteOrderDialog((prev) => ({ ...prev, loading: true }));
 
     try {
       if (deleteOrderDialog.permanentDelete) {
@@ -860,17 +924,19 @@ const OrdersPage = () => {
         await api.delete(`/orders/${deleteOrderDialog.orderId}/permanent`);
 
         setNotification({
-          message: "Order permanently deleted. All leads have been released back to the database.",
+          message:
+            "Order permanently deleted. All leads have been released back to the database.",
           severity: "success",
         });
       } else {
         // Cancel order - just marks as cancelled
         await api.delete(`/orders/${deleteOrderDialog.orderId}`, {
-          data: { reason: 'Cancelled by admin' }
+          data: { reason: "Cancelled by admin" },
         });
 
         setNotification({
-          message: "Order cancelled successfully. Networks and campaigns have been unassigned.",
+          message:
+            "Order cancelled successfully. Networks and campaigns have been unassigned.",
           severity: "success",
         });
       }
@@ -891,9 +957,13 @@ const OrdersPage = () => {
         message: err.response?.data?.message || "Failed to delete order",
         severity: "error",
       });
-      setDeleteOrderDialog(prev => ({ ...prev, loading: false }));
+      setDeleteOrderDialog((prev) => ({ ...prev, loading: false }));
     }
-  }, [deleteOrderDialog.orderId, deleteOrderDialog.permanentDelete, fetchOrders]);
+  }, [
+    deleteOrderDialog.orderId,
+    deleteOrderDialog.permanentDelete,
+    fetchOrders,
+  ]);
 
   const handleDeleteOrderCancel = useCallback(() => {
     setDeleteOrderDialog({
@@ -907,13 +977,15 @@ const OrdersPage = () => {
 
   const fetchRefundAssignmentStatus = useCallback(async (orderId) => {
     try {
-      const response = await refundsService.getOrderRefundAssignmentStatus(orderId);
-      setRefundAssignmentStatus(prev => ({
+      const response = await refundsService.getOrderRefundAssignmentStatus(
+        orderId
+      );
+      setRefundAssignmentStatus((prev) => ({
         ...prev,
-        [orderId]: response.data
+        [orderId]: response.data,
       }));
     } catch (err) {
-      console.error('Failed to fetch refund assignment status:', err);
+      console.error("Failed to fetch refund assignment status:", err);
       // Don't show error to user, just log it
     }
   }, []);
@@ -926,16 +998,18 @@ const OrdersPage = () => {
         delete newExpandedData[orderId];
         setExpandedRowData(newExpandedData);
         // Also remove the refund assignment status
-        setRefundAssignmentStatus(prev => {
+        setRefundAssignmentStatus((prev) => {
           const { [orderId]: removedStatus, ...restStatus } = prev;
           return restStatus;
         });
       } else {
         try {
           // First, load lightweight order data for fast expansion
-          const lightweightResponse = await api.get(`/orders/${orderId}?lightweight=true`);
+          const lightweightResponse = await api.get(
+            `/orders/${orderId}?lightweight=true`
+          );
           const lightweightData = lightweightResponse.data.data;
-          
+
           // Set lightweight data with loading flag for leads
           setExpandedRowData((prev) => ({
             ...prev,
@@ -953,7 +1027,7 @@ const OrdersPage = () => {
           // Then immediately fetch full lead details in the background
           const fullResponse = await api.get(`/orders/${orderId}`);
           const fullOrderData = fullResponse.data.data;
-          
+
           setExpandedRowData((prev) => ({
             ...prev,
             [orderId]: {
@@ -1032,8 +1106,6 @@ const OrdersPage = () => {
     [fetchOrders, expandedRowData]
   );
 
-
-
   // Refunds Manager Assignment Handlers
   const handleOpenRefundsAssignment = useCallback((orderId) => {
     setRefundsAssignmentDialog({
@@ -1059,7 +1131,11 @@ const OrdersPage = () => {
     if (refundsAssignmentDialog.orderId) {
       fetchRefundAssignmentStatus(refundsAssignmentDialog.orderId);
     }
-  }, [fetchOrders, refundsAssignmentDialog.orderId, fetchRefundAssignmentStatus]);
+  }, [
+    fetchOrders,
+    refundsAssignmentDialog.orderId,
+    fetchRefundAssignmentStatus,
+  ]);
 
   const handleCreateNewBroker = useCallback(() => {
     setCreateBrokerDialog({ open: true, loading: false });
@@ -1169,7 +1245,10 @@ const OrdersPage = () => {
         });
 
         const brokerId = editBrokerDialog.broker._id;
-        const response = await api.put(`/client-brokers/${brokerId}`, brokerData);
+        const response = await api.put(
+          `/client-brokers/${brokerId}`,
+          brokerData
+        );
 
         setNotification({
           message: `Client broker "${brokerData.name}" updated successfully!`,
@@ -1193,10 +1272,9 @@ const OrdersPage = () => {
     [editBrokerDialog.broker, fetchClientBrokers]
   );
 
-
   const handleOpenChangeFTDDialog = useCallback((order, lead) => {
     // Allow changing FTD leads (which includes both FTD and Filler since fillers are FTD type)
-    if (lead.leadType !== 'ftd') {
+    if (lead.leadType !== "ftd") {
       setNotification({
         message: "Only FTD/Filler leads can be changed",
         severity: "warning",
@@ -1219,60 +1297,74 @@ const OrdersPage = () => {
     });
   }, []);
 
-  const handleChangeFTDSuccess = useCallback(async (changeData) => {
-    // Determine if it was a filler based on order metadata
-    const leadMetadata = changeFTDDialog.order?.leadsMetadata?.find(m => m.leadId?.toString() === changeData.oldLead.id?.toString());
-    const isFillerOrder = leadMetadata?.orderedAs === 'filler';
-    const leadLabel = isFillerOrder ? 'Filler' : 'FTD';
+  const handleChangeFTDSuccess = useCallback(
+    async (changeData) => {
+      // Determine if it was a filler based on order metadata
+      const leadMetadata = changeFTDDialog.order?.leadsMetadata?.find(
+        (m) => m.leadId?.toString() === changeData.oldLead.id?.toString()
+      );
+      const isFillerOrder = leadMetadata?.orderedAs === "filler";
+      const leadLabel = isFillerOrder ? "Filler" : "FTD";
 
-    setNotification({
-      message: `${leadLabel} lead successfully changed from ${changeData.oldLead.firstName} ${changeData.oldLead.lastName} to ${changeData.newLead.firstName} ${changeData.newLead.lastName}`,
-      severity: "success",
-    });
+      setNotification({
+        message: `${leadLabel} lead successfully changed from ${changeData.oldLead.firstName} ${changeData.oldLead.lastName} to ${changeData.newLead.firstName} ${changeData.newLead.lastName}`,
+        severity: "success",
+      });
 
-    // Refresh the orders and expanded order data
-    await fetchOrders();
-    if (changeFTDDialog.order && expandedRowData[changeFTDDialog.order._id]) {
-      toggleRowExpansion(changeFTDDialog.order._id);
-    }
-  }, [changeFTDDialog.order, expandedRowData, fetchOrders, toggleRowExpansion]);
+      // Refresh the orders and expanded order data
+      await fetchOrders();
+      if (changeFTDDialog.order && expandedRowData[changeFTDDialog.order._id]) {
+        toggleRowExpansion(changeFTDDialog.order._id);
+      }
+    },
+    [changeFTDDialog.order, expandedRowData, fetchOrders, toggleRowExpansion]
+  );
 
   // Convert lead type between FTD and Filler
-  const handleConvertLeadType = useCallback(async (order, lead) => {
-    if (lead.leadType !== 'ftd') {
-      setNotification({
-        message: "Only FTD/Filler leads can be converted",
-        severity: "warning",
-      });
-      return;
-    }
-
-    const leadMetadata = order.leadsMetadata?.find(m => m.leadId?.toString() === lead._id?.toString());
-    const currentType = leadMetadata?.orderedAs || 'ftd';
-    const newType = currentType === 'ftd' ? 'filler' : 'ftd';
-
-    try {
-      const response = await api.post(`/orders/${order._id}/leads/${lead._id}/convert-lead-type`);
-      
-      if (response.data.success) {
+  const handleConvertLeadType = useCallback(
+    async (order, lead) => {
+      if (lead.leadType !== "ftd") {
         setNotification({
-          message: `Lead ${lead.firstName} ${lead.lastName} converted from ${currentType.toUpperCase()} to ${newType.toUpperCase()}`,
-          severity: "success",
+          message: "Only FTD/Filler leads can be converted",
+          severity: "warning",
         });
-
-        // Refresh the orders and expanded order data
-        await fetchOrders();
-        if (expandedRowData[order._id]) {
-          toggleRowExpansion(order._id);
-        }
+        return;
       }
-    } catch (err) {
-      setNotification({
-        message: err.response?.data?.message || "Failed to convert lead type",
-        severity: "error",
-      });
-    }
-  }, [fetchOrders, expandedRowData, toggleRowExpansion]);
+
+      const leadMetadata = order.leadsMetadata?.find(
+        (m) => m.leadId?.toString() === lead._id?.toString()
+      );
+      const currentType = leadMetadata?.orderedAs || "ftd";
+      const newType = currentType === "ftd" ? "filler" : "ftd";
+
+      try {
+        const response = await api.post(
+          `/orders/${order._id}/leads/${lead._id}/convert-lead-type`
+        );
+
+        if (response.data.success) {
+          setNotification({
+            message: `Lead ${lead.firstName} ${
+              lead.lastName
+            } converted from ${currentType.toUpperCase()} to ${newType.toUpperCase()}`,
+            severity: "success",
+          });
+
+          // Refresh the orders and expanded order data
+          await fetchOrders();
+          if (expandedRowData[order._id]) {
+            toggleRowExpansion(order._id);
+          }
+        }
+      } catch (err) {
+        setNotification({
+          message: err.response?.data?.message || "Failed to convert lead type",
+          severity: "error",
+        });
+      }
+    },
+    [fetchOrders, expandedRowData, toggleRowExpansion]
+  );
 
   const handleOpenAssignLeadDialog = useCallback((lead) => {
     setAssignLeadDialog({
@@ -1288,25 +1380,32 @@ const OrdersPage = () => {
     });
   }, []);
 
-  const handleAssignLeadSuccess = useCallback(async (assignmentData) => {
-    setNotification({
-      message: `Lead ${assignmentData.leadId.slice(-8)} successfully assigned to ${assignmentData.agentName}`,
-      severity: "success",
-    });
+  const handleAssignLeadSuccess = useCallback(
+    async (assignmentData) => {
+      setNotification({
+        message: `Lead ${assignmentData.leadId.slice(
+          -8
+        )} successfully assigned to ${assignmentData.agentName}`,
+        severity: "success",
+      });
 
-    // Refresh the orders and expanded order data
-    await fetchOrders();
+      // Refresh the orders and expanded order data
+      await fetchOrders();
 
-    // Refresh expanded order data if it exists
-    if (assignLeadDialog.lead && expandedRowData) {
-      const orderId = Object.keys(expandedRowData).find(id =>
-        expandedRowData[id].leads?.some(lead => lead._id === assignmentData.leadId)
-      );
-      if (orderId) {
-        toggleRowExpansion(orderId);
+      // Refresh expanded order data if it exists
+      if (assignLeadDialog.lead && expandedRowData) {
+        const orderId = Object.keys(expandedRowData).find((id) =>
+          expandedRowData[id].leads?.some(
+            (lead) => lead._id === assignmentData.leadId
+          )
+        );
+        if (orderId) {
+          toggleRowExpansion(orderId);
+        }
       }
-    }
-  }, [assignLeadDialog.lead, expandedRowData, fetchOrders, toggleRowExpansion]);
+    },
+    [assignLeadDialog.lead, expandedRowData, fetchOrders, toggleRowExpansion]
+  );
 
   const handleCopyToClipboard = useCallback(async (text, fieldName) => {
     try {
@@ -1323,6 +1422,61 @@ const OrdersPage = () => {
       });
     }
   }, []);
+
+  // Deposit Call Dialog Handlers
+  const handleOpenAssignDepositCallDialog = useCallback((order, lead) => {
+    setAssignDepositCallDialog({
+      open: true,
+      order: order,
+      lead: lead,
+    });
+  }, []);
+
+  const handleCloseAssignDepositCallDialog = useCallback(() => {
+    setAssignDepositCallDialog({
+      open: false,
+      order: null,
+      lead: null,
+    });
+  }, []);
+
+  const handleAssignDepositCall = useCallback(
+    async (orderId, leadId, agentId) => {
+      try {
+        const response = await depositCallsService.assignToAgent(
+          orderId,
+          leadId,
+          agentId
+        );
+
+        setNotification({
+          message: response.isNew
+            ? "Deposit call created and assigned to agent successfully"
+            : "Deposit call reassigned to agent successfully",
+          severity: "success",
+        });
+
+        // Refresh the orders and expanded order data
+        await fetchOrders();
+
+        // Refresh expanded order data if it exists
+        if (orderId && expandedRowData[orderId]) {
+          toggleRowExpansion(orderId);
+        }
+
+        handleCloseAssignDepositCallDialog();
+      } catch (err) {
+        console.error("Error assigning deposit call:", err);
+        throw err; // Re-throw to be handled by the dialog
+      }
+    },
+    [
+      expandedRowData,
+      fetchOrders,
+      toggleRowExpansion,
+      handleCloseAssignDepositCallDialog,
+    ]
+  );
 
   const handleCloseCopyNotification = useCallback(() => {
     setCopyNotification({ open: false, message: "" });
@@ -1341,7 +1495,6 @@ const OrdersPage = () => {
     };
     return countryMapping[countryName] || countryName;
   };
-
 
   const renderLeadCounts = (label, requested, fulfilled) => (
     <Typography variant="body2">
@@ -1553,10 +1706,25 @@ const OrdersPage = () => {
                         <TableCell>
                           <Tooltip
                             title={
-                              order.status === "cancelled" && order.cancellationReason
-                                ? `Cancellation Details: ${order.cancellationReason.split(' | ').length > 1 ? order.cancellationReason.split(' | ').length + ' issues found' : order.cancellationReason}`
-                                : order.status === "partial" && order.partialFulfillmentReason
-                                ? `Partial Fulfillment: ${order.partialFulfillmentReason.split(' | ').length > 1 ? order.partialFulfillmentReason.split(' | ').length + ' lead types affected' : order.partialFulfillmentReason}`
+                              order.status === "cancelled" &&
+                              order.cancellationReason
+                                ? `Cancellation Details: ${
+                                    order.cancellationReason.split(" | ")
+                                      .length > 1
+                                      ? order.cancellationReason.split(" | ")
+                                          .length + " issues found"
+                                      : order.cancellationReason
+                                  }`
+                                : order.status === "partial" &&
+                                  order.partialFulfillmentReason
+                                ? `Partial Fulfillment: ${
+                                    order.partialFulfillmentReason.split(" | ")
+                                      .length > 1
+                                      ? order.partialFulfillmentReason.split(
+                                          " | "
+                                        ).length + " lead types affected"
+                                      : order.partialFulfillmentReason
+                                  }`
                                 : ""
                             }
                             placement="top"
@@ -1565,9 +1733,9 @@ const OrdersPage = () => {
                               tooltip: {
                                 sx: {
                                   maxWidth: 400,
-                                  fontSize: '0.875rem'
-                                }
-                              }
+                                  fontSize: "0.875rem",
+                                },
+                              },
                             }}
                           >
                             <Chip
@@ -1605,17 +1773,24 @@ const OrdersPage = () => {
                             <DownloadIcon fontSize="small" />
                           </IconButton>
 
-                          {(user?.role === "admin" || user?.role === "affiliate_manager") && (
+                          {(user?.role === "admin" ||
+                            user?.role === "affiliate_manager") && (
                             <IconButton
                               size="small"
-                              onClick={() => handleDeleteOrderClick(order._id, order.status)}
-                              title={order.status === 'cancelled' ? "Permanently Delete Order" : "Cancel Order"}
+                              onClick={() =>
+                                handleDeleteOrderClick(order._id, order.status)
+                              }
+                              title={
+                                order.status === "cancelled"
+                                  ? "Permanently Delete Order"
+                                  : "Cancel Order"
+                              }
                               color="error"
                               sx={{
-                                '&:hover': {
-                                  backgroundColor: 'error.light',
-                                  color: 'error.contrastText'
-                                }
+                                "&:hover": {
+                                  backgroundColor: "error.light",
+                                  color: "error.contrastText",
+                                },
                               }}
                             >
                               <DeleteIcon fontSize="small" />
@@ -1646,64 +1821,161 @@ const OrdersPage = () => {
                             unmountOnExit
                           >
                             <Box sx={{ p: 3, bgcolor: "grey.50" }}>
-                              <Typography variant="h6" sx={{ mb: 3, fontWeight: 600, color: "primary.main" }}>
+                              <Typography
+                                variant="h6"
+                                sx={{
+                                  mb: 3,
+                                  fontWeight: 600,
+                                  color: "primary.main",
+                                }}
+                              >
                                 Order Details
                               </Typography>
                               {expandedDetails ? (
                                 <Grid container spacing={2}>
                                   {/* Status Reason Alerts */}
-                                  {(expandedDetails.status === "cancelled" && expandedDetails.cancellationReason) && (
-                                    <Grid item xs={12}>
-                                      <Alert severity="error" sx={{ borderRadius: 2 }}>
-                                        <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
-                                          Cancellation Reason:
-                                        </Typography>
-                                        {expandedDetails.cancellationReason.split(' | ').map((reason, index) => (
-                                          <Typography key={index} variant="body2" sx={{ ml: 1 }}>
-                                            • {reason}
+                                  {expandedDetails.status === "cancelled" &&
+                                    expandedDetails.cancellationReason && (
+                                      <Grid item xs={12}>
+                                        <Alert
+                                          severity="error"
+                                          sx={{ borderRadius: 2 }}
+                                        >
+                                          <Typography
+                                            variant="body2"
+                                            sx={{ fontWeight: 600, mb: 0.5 }}
+                                          >
+                                            Cancellation Reason:
                                           </Typography>
-                                        ))}
-                                      </Alert>
-                                    </Grid>
-                                  )}
-                                  {(expandedDetails.status === "partial" && expandedDetails.partialFulfillmentReason) && (
-                                    <Grid item xs={12}>
-                                      <Alert severity="warning" sx={{ borderRadius: 2 }}>
-                                        <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
-                                          Partial Fulfillment Reason:
-                                        </Typography>
-                                        {expandedDetails.partialFulfillmentReason.split(' | ').map((reason, index) => (
-                                          <Typography key={index} variant="body2" sx={{ ml: 1 }}>
-                                            • {reason}
+                                          {expandedDetails.cancellationReason
+                                            .split(" | ")
+                                            .map((reason, index) => (
+                                              <Typography
+                                                key={index}
+                                                variant="body2"
+                                                sx={{ ml: 1 }}
+                                              >
+                                                • {reason}
+                                              </Typography>
+                                            ))}
+                                        </Alert>
+                                      </Grid>
+                                    )}
+                                  {expandedDetails.status === "partial" &&
+                                    expandedDetails.partialFulfillmentReason && (
+                                      <Grid item xs={12}>
+                                        <Alert
+                                          severity="warning"
+                                          sx={{ borderRadius: 2 }}
+                                        >
+                                          <Typography
+                                            variant="body2"
+                                            sx={{ fontWeight: 600, mb: 0.5 }}
+                                          >
+                                            Partial Fulfillment Reason:
                                           </Typography>
-                                        ))}
-                                      </Alert>
-                                    </Grid>
-                                  )}
+                                          {expandedDetails.partialFulfillmentReason
+                                            .split(" | ")
+                                            .map((reason, index) => (
+                                              <Typography
+                                                key={index}
+                                                variant="body2"
+                                                sx={{ ml: 1 }}
+                                              >
+                                                • {reason}
+                                              </Typography>
+                                            ))}
+                                        </Alert>
+                                      </Grid>
+                                    )}
 
                                   {/* Detailed Information Row */}
                                   <Grid item xs={12} md={6}>
-                                    <Paper elevation={0} sx={{ p: 2.5, borderRadius: 2, border: 1, borderColor: "divider", height: "100%" }}>
-                                      <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 2, color: "primary.main" }}>
+                                    <Paper
+                                      elevation={0}
+                                      sx={{
+                                        p: 2.5,
+                                        borderRadius: 2,
+                                        border: 1,
+                                        borderColor: "divider",
+                                        height: "100%",
+                                      }}
+                                    >
+                                      <Typography
+                                        variant="subtitle2"
+                                        sx={{
+                                          fontWeight: 600,
+                                          mb: 2,
+                                          color: "primary.main",
+                                        }}
+                                      >
                                         Account Manager
                                       </Typography>
-                                      <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
-                                        <Box sx={{ display: "flex", justifyContent: "space-between" }}>
-                                          <Typography variant="body2" color="text.secondary">Name:</Typography>
-                                          <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                                            {expandedDetails.requester?.fullName || "N/A"}
+                                      <Box
+                                        sx={{
+                                          display: "flex",
+                                          flexDirection: "column",
+                                          gap: 1,
+                                        }}
+                                      >
+                                        <Box
+                                          sx={{
+                                            display: "flex",
+                                            justifyContent: "space-between",
+                                          }}
+                                        >
+                                          <Typography
+                                            variant="body2"
+                                            color="text.secondary"
+                                          >
+                                            Name:
+                                          </Typography>
+                                          <Typography
+                                            variant="body2"
+                                            sx={{ fontWeight: 500 }}
+                                          >
+                                            {expandedDetails.requester
+                                              ?.fullName || "N/A"}
                                           </Typography>
                                         </Box>
-                                        <Box sx={{ display: "flex", justifyContent: "space-between" }}>
-                                          <Typography variant="body2" color="text.secondary">Email:</Typography>
-                                          <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                                            {expandedDetails.requester?.email || "N/A"}
+                                        <Box
+                                          sx={{
+                                            display: "flex",
+                                            justifyContent: "space-between",
+                                          }}
+                                        >
+                                          <Typography
+                                            variant="body2"
+                                            color="text.secondary"
+                                          >
+                                            Email:
+                                          </Typography>
+                                          <Typography
+                                            variant="body2"
+                                            sx={{ fontWeight: 500 }}
+                                          >
+                                            {expandedDetails.requester?.email ||
+                                              "N/A"}
                                           </Typography>
                                         </Box>
-                                        <Box sx={{ display: "flex", justifyContent: "space-between" }}>
-                                          <Typography variant="body2" color="text.secondary">Role:</Typography>
-                                          <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                                            {expandedDetails.requester?.role || "N/A"}
+                                        <Box
+                                          sx={{
+                                            display: "flex",
+                                            justifyContent: "space-between",
+                                          }}
+                                        >
+                                          <Typography
+                                            variant="body2"
+                                            color="text.secondary"
+                                          >
+                                            Role:
+                                          </Typography>
+                                          <Typography
+                                            variant="body2"
+                                            sx={{ fontWeight: 500 }}
+                                          >
+                                            {expandedDetails.requester?.role ||
+                                              "N/A"}
                                           </Typography>
                                         </Box>
                                       </Box>
@@ -1711,33 +1983,106 @@ const OrdersPage = () => {
                                   </Grid>
 
                                   <Grid item xs={12} md={6}>
-                                    <Paper elevation={0} sx={{ p: 2.5, borderRadius: 2, border: 1, borderColor: "divider", height: "100%" }}>
-                                      <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 2, color: "primary.main" }}>
+                                    <Paper
+                                      elevation={0}
+                                      sx={{
+                                        p: 2.5,
+                                        borderRadius: 2,
+                                        border: 1,
+                                        borderColor: "divider",
+                                        height: "100%",
+                                      }}
+                                    >
+                                      <Typography
+                                        variant="subtitle2"
+                                        sx={{
+                                          fontWeight: 600,
+                                          mb: 2,
+                                          color: "primary.main",
+                                        }}
+                                      >
                                         Order Info & Filters
                                       </Typography>
-                                      <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
-                                        <Box sx={{ display: "flex", justifyContent: "space-between" }}>
-                                          <Typography variant="body2" color="text.secondary">Created:</Typography>
-                                          <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                                            {new Date(expandedDetails.createdAt).toLocaleDateString()}
+                                      <Box
+                                        sx={{
+                                          display: "flex",
+                                          flexDirection: "column",
+                                          gap: 1,
+                                        }}
+                                      >
+                                        <Box
+                                          sx={{
+                                            display: "flex",
+                                            justifyContent: "space-between",
+                                          }}
+                                        >
+                                          <Typography
+                                            variant="body2"
+                                            color="text.secondary"
+                                          >
+                                            Created:
+                                          </Typography>
+                                          <Typography
+                                            variant="body2"
+                                            sx={{ fontWeight: 500 }}
+                                          >
+                                            {new Date(
+                                              expandedDetails.createdAt
+                                            ).toLocaleDateString()}
                                           </Typography>
                                         </Box>
-                                        <Box sx={{ display: "flex", justifyContent: "space-between" }}>
-                                          <Typography variant="body2" color="text.secondary">Country:</Typography>
-                                          <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                                            {expandedDetails.countryFilter || "Any"}
+                                        <Box
+                                          sx={{
+                                            display: "flex",
+                                            justifyContent: "space-between",
+                                          }}
+                                        >
+                                          <Typography
+                                            variant="body2"
+                                            color="text.secondary"
+                                          >
+                                            Country:
+                                          </Typography>
+                                          <Typography
+                                            variant="body2"
+                                            sx={{ fontWeight: 500 }}
+                                          >
+                                            {expandedDetails.countryFilter ||
+                                              "Any"}
                                           </Typography>
                                         </Box>
-                                        <Box sx={{ display: "flex", justifyContent: "space-between" }}>
-                                          <Typography variant="body2" color="text.secondary">Gender:</Typography>
-                                          <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                                            {expandedDetails.genderFilter || "Any"}
+                                        <Box
+                                          sx={{
+                                            display: "flex",
+                                            justifyContent: "space-between",
+                                          }}
+                                        >
+                                          <Typography
+                                            variant="body2"
+                                            color="text.secondary"
+                                          >
+                                            Gender:
+                                          </Typography>
+                                          <Typography
+                                            variant="body2"
+                                            sx={{ fontWeight: 500 }}
+                                          >
+                                            {expandedDetails.genderFilter ||
+                                              "Any"}
                                           </Typography>
                                         </Box>
                                         {expandedDetails.notes && (
                                           <Box sx={{ mt: 0.5 }}>
-                                            <Typography variant="body2" color="text.secondary">Notes:</Typography>
-                                            <Typography variant="body2" sx={{ fontWeight: 500, mt: 0.5 }}>
+                                            <Typography
+                                              variant="body2"
+                                              color="text.secondary"
+                                            >
+                                              Notes:
+                                            </Typography>
+                                            <Typography
+                                              variant="body2"
+                                              sx={{ fontWeight: 500, mt: 0.5 }}
+                                            >
                                               {expandedDetails.notes}
                                             </Typography>
                                           </Box>
@@ -1748,40 +2093,107 @@ const OrdersPage = () => {
 
                                   {/* Network Configuration */}
                                   <Grid item xs={12}>
-                                    <Paper elevation={0} sx={{ p: 2.5, borderRadius: 2, border: 1, borderColor: "divider" }}>
-                                      <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 2, color: "primary.main" }}>
+                                    <Paper
+                                      elevation={0}
+                                      sx={{
+                                        p: 2.5,
+                                        borderRadius: 2,
+                                        border: 1,
+                                        borderColor: "divider",
+                                      }}
+                                    >
+                                      <Typography
+                                        variant="subtitle2"
+                                        sx={{
+                                          fontWeight: 600,
+                                          mb: 2,
+                                          color: "primary.main",
+                                        }}
+                                      >
                                         Network Configuration
                                       </Typography>
                                       <Grid container spacing={2}>
                                         <Grid item xs={12} sm={6} md={3}>
-                                          <Typography variant="caption" color="text.secondary">Campaign</Typography>
-                                          <Typography variant="body2" sx={{ fontWeight: 500, mt: 0.5 }}>
-                                            {expandedDetails.selectedCampaign?.name || "N/A"}
+                                          <Typography
+                                            variant="caption"
+                                            color="text.secondary"
+                                          >
+                                            Campaign
+                                          </Typography>
+                                          <Typography
+                                            variant="body2"
+                                            sx={{ fontWeight: 500, mt: 0.5 }}
+                                          >
+                                            {expandedDetails.selectedCampaign
+                                              ?.name || "N/A"}
                                           </Typography>
                                         </Grid>
                                         <Grid item xs={12} sm={6} md={3}>
-                                          <Typography variant="caption" color="text.secondary">Our Network</Typography>
-                                          <Typography variant="body2" sx={{ fontWeight: 500, mt: 0.5 }}>
-                                            {expandedDetails.selectedOurNetwork?.name || "N/A"}
+                                          <Typography
+                                            variant="caption"
+                                            color="text.secondary"
+                                          >
+                                            Our Network
+                                          </Typography>
+                                          <Typography
+                                            variant="body2"
+                                            sx={{ fontWeight: 500, mt: 0.5 }}
+                                          >
+                                            {expandedDetails.selectedOurNetwork
+                                              ?.name || "N/A"}
                                           </Typography>
                                         </Grid>
                                         <Grid item xs={12} sm={6} md={3}>
-                                          <Typography variant="caption" color="text.secondary">Client Network</Typography>
-                                          <Typography variant="body2" sx={{ fontWeight: 500, mt: 0.5 }}>
-                                            {expandedDetails.selectedClientNetwork?.name || "N/A"}
+                                          <Typography
+                                            variant="caption"
+                                            color="text.secondary"
+                                          >
+                                            Client Network
+                                          </Typography>
+                                          <Typography
+                                            variant="body2"
+                                            sx={{ fontWeight: 500, mt: 0.5 }}
+                                          >
+                                            {expandedDetails
+                                              .selectedClientNetwork?.name ||
+                                              "N/A"}
                                           </Typography>
                                         </Grid>
                                         <Grid item xs={12} sm={6} md={3}>
-                                          <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
-                                            <Typography variant="caption" color="text.secondary">Client Brokers</Typography>
+                                          <Box
+                                            sx={{
+                                              display: "flex",
+                                              flexDirection: "column",
+                                              gap: 1,
+                                            }}
+                                          >
+                                            <Typography
+                                              variant="caption"
+                                              color="text.secondary"
+                                            >
+                                              Client Brokers
+                                            </Typography>
                                             <Button
                                               size="small"
                                               variant="outlined"
-                                              onClick={() => handleOpenClientBrokerManagement(expandedDetails)}
+                                              onClick={() =>
+                                                handleOpenClientBrokerManagement(
+                                                  expandedDetails
+                                                )
+                                              }
                                               startIcon={<BusinessIcon />}
                                               sx={{ width: "fit-content" }}
                                             >
-                                              Manage ({expandedDetails.leads?.filter(lead => lead.assignedClientBrokers?.length > 0).length || 0}/{expandedDetails.leads?.length || 0})
+                                              Manage (
+                                              {expandedDetails.leads?.filter(
+                                                (lead) =>
+                                                  lead.assignedClientBrokers
+                                                    ?.length > 0
+                                              ).length || 0}
+                                              /
+                                              {expandedDetails.leads?.length ||
+                                                0}
+                                              )
                                             </Button>
                                           </Box>
                                         </Grid>
@@ -1790,405 +2202,383 @@ const OrdersPage = () => {
                                   </Grid>
 
                                   {/* Show leads section if we have leads or are loading them */}
-                                  {((expandedDetails.leads && expandedDetails.leads.length > 0) || expandedDetails.leadsLoading) && (
-                                      <Grid item xs={12}>
-                                        <Box
-                                          sx={{
-                                            mb: 2,
-                                            p: 2,
-                                            bgcolor: "background.paper",
-                                            borderRadius: 1,
-                                          }}
-                                        >
-                                          {expandedDetails.leadsLoading ? (
-                                            <Box
-                                              sx={{
-                                                display: "flex",
-                                                flexDirection: "column",
-                                                alignItems: "center",
-                                                justifyContent: "center",
-                                                p: 4,
-                                                gap: 2,
-                                              }}
-                                            >
-                                              <CircularProgress />
-                                              <Typography variant="body2" color="text.secondary">
-                                                Loading {expandedDetails.leadsCount || 0} leads...
-                                              </Typography>
-                                            </Box>
-                                          ) : (
-                                            <>
+                                  {((expandedDetails.leads &&
+                                    expandedDetails.leads.length > 0) ||
+                                    expandedDetails.leadsLoading) && (
+                                    <Grid item xs={12}>
+                                      <Box
+                                        sx={{
+                                          mb: 2,
+                                          p: 2,
+                                          bgcolor: "background.paper",
+                                          borderRadius: 1,
+                                        }}
+                                      >
+                                        {expandedDetails.leadsLoading ? (
                                           <Box
                                             sx={{
                                               display: "flex",
-                                              justifyContent: "space-between",
+                                              flexDirection: "column",
                                               alignItems: "center",
-                                              mb: 2,
-                                              flexWrap: "wrap",
-                                              gap: 1,
+                                              justifyContent: "center",
+                                              p: 4,
+                                              gap: 2,
                                             }}
                                           >
+                                            <CircularProgress />
                                             <Typography
-                                              variant="subtitle1"
-                                              sx={{ fontWeight: "bold" }}
+                                              variant="body2"
+                                              color="text.secondary"
                                             >
-                                              Assigned Leads (
-                                              {expandedDetails.leads.length})
+                                              Loading{" "}
+                                              {expandedDetails.leadsCount || 0}{" "}
+                                              leads...
                                             </Typography>
+                                          </Box>
+                                        ) : (
+                                          <>
                                             <Box
                                               sx={{
                                                 display: "flex",
-                                                gap: 1,
+                                                justifyContent: "space-between",
+                                                alignItems: "center",
+                                                mb: 2,
                                                 flexWrap: "wrap",
+                                                gap: 1,
                                               }}
                                             >
-                                              <Button
-                                                size="small"
-                                                startIcon={<DownloadIcon />}
-                                                onClick={() =>
-                                                  handleExportLeads(order._id)
-                                                }
-                                                variant="outlined"
+                                              <Typography
+                                                variant="subtitle1"
+                                                sx={{ fontWeight: "bold" }}
                                               >
-                                                Export CSV
-                                              </Button>
-                                              {(user?.role === "admin" ||
-                                                user?.role === "affiliate_manager" ||
-                                                user?.role === "lead_manager") &&
-                                                expandedDetails?.fulfilled?.ftd > 0 && (
-                                                  <Tooltip
-                                                    title={
-                                                      refundAssignmentStatus[expandedDetails._id]?.isAssigned
-                                                        ? `${refundAssignmentStatus[expandedDetails._id]?.assignmentCount || 0} FTD lead(s) already assigned`
-                                                        : `Assign ${expandedDetails?.fulfilled?.ftd || 0} FTD lead(s) to refunds manager`
-                                                    }
-                                                  >
-                                                    <Button
-                                                      size="small"
-                                                      variant={refundAssignmentStatus[expandedDetails._id]?.isAssigned ? "outlined" : "contained"}
-                                                      color={refundAssignmentStatus[expandedDetails._id]?.isAssigned ? "success" : "primary"}
-                                                      startIcon={refundAssignmentStatus[expandedDetails._id]?.isAssigned ? <CheckCircleIcon /> : <SendIcon />}
-                                                      onClick={() =>
-                                                        handleOpenRefundsAssignment(
-                                                          expandedDetails._id
-                                                        )
-                                                      }
-                                                      disabled={refundAssignmentStatus[expandedDetails._id]?.isAssigned}
-                                                    >
-                                                      {refundAssignmentStatus[expandedDetails._id]?.isAssigned
-                                                        ? "Assigned to Refunds"
-                                                        : "Assign to Refunds"
-                                                      }
-                                                    </Button>
-                                                  </Tooltip>
-                                                )}
-                                              <Button
-                                                size="small"
-                                                onClick={() =>
-                                                  expandAllLeads(
-                                                    expandedDetails.leads
-                                                  )
-                                                }
-                                                variant="outlined"
+                                                Assigned Leads (
+                                                {expandedDetails.leads.length})
+                                              </Typography>
+                                              <Box
+                                                sx={{
+                                                  display: "flex",
+                                                  gap: 1,
+                                                  flexWrap: "wrap",
+                                                }}
                                               >
-                                                Expand All
-                                              </Button>
-                                              <Button
-                                                size="small"
-                                                onClick={() =>
-                                                  collapseAllLeads(
-                                                    expandedDetails.leads
-                                                  )
-                                                }
-                                                variant="outlined"
-                                              >
-                                                Collapse All
-                                              </Button>
-                                            </Box>
-                                          </Box>
-                                          <TableContainer
-                                            component={Paper}
-                                            elevation={1}
-                                            sx={{
-                                              maxHeight: 400,
-                                              borderRadius: 1,
-                                            }}
-                                          >
-                                            <Table size="small">
-                                              <TableHead>
-                                                <TableRow
-                                                  sx={{
-                                                    bgcolor: "action.hover",
-                                                  }}
+                                                <Button
+                                                  size="small"
+                                                  startIcon={<DownloadIcon />}
+                                                  onClick={() =>
+                                                    handleExportLeads(order._id)
+                                                  }
+                                                  variant="outlined"
                                                 >
-                                                  <TableCell
-                                                    sx={{ fontWeight: "bold" }}
-                                                  >
-                                                    Type
-                                                  </TableCell>
-                                                  <TableCell
-                                                    sx={{ fontWeight: "bold" }}
-                                                  >
-                                                    Name
-                                                  </TableCell>
-                                                  <TableCell
-                                                    sx={{
-                                                      display: {
-                                                        xs: "none",
-                                                        sm: "table-cell",
-                                                      },
-                                                      fontWeight: "bold",
-                                                    }}
-                                                  >
-                                                    Country
-                                                  </TableCell>
-                                                  <TableCell
-                                                    sx={{
-                                                      display: {
-                                                        xs: "none",
-                                                        sm: "table-cell",
-                                                      },
-                                                      fontWeight: "bold",
-                                                    }}
-                                                  >
-                                                    Email
-                                                  </TableCell>
-                                                  <TableCell
-                                                    sx={{
-                                                      display: {
-                                                        xs: "none",
-                                                        md: "table-cell",
-                                                      },
-                                                      fontWeight: "bold",
-                                                    }}
-                                                  >
-                                                    Phone
-                                                  </TableCell>
-                                                  <TableCell
-                                                    sx={{
-                                                      display: {
-                                                        xs: "none",
-                                                        md: "table-cell",
-                                                      },
-                                                      fontWeight: "bold",
-                                                    }}
-                                                  >
-                                                    Status
-                                                  </TableCell>
-                                                  <TableCell
-                                                    sx={{ fontWeight: "bold" }}
-                                                  >
-                                                    Actions
-                                                  </TableCell>
-                                                </TableRow>
-                                              </TableHead>
-                                              <TableBody>
-                                                {expandedDetails.leads.map(
-                                                  (lead) => (
-                                                    <React.Fragment
-                                                      key={lead._id}
-                                                    >
-                                                      <TableRow>
-                                                        <TableCell>
-                                                          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                                                            <Chip
-                                                              label={getDisplayLeadType(lead)?.toUpperCase() || "UNKNOWN"}
-                                                              size="small"
-                                                            />
-                                                            {(() => {
-                                                              const cooldownStatus = getFTDCooldownStatus(lead);
-                                                              if (cooldownStatus?.inCooldown) {
-                                                                return (
-                                                                  <Tooltip title={`Last used on ${cooldownStatus.lastUsedDate.toLocaleDateString()}. FTD leads cannot be reused for 10 days.`}>
-                                                                    <Chip
-                                                                      label={`Cooldown: ${cooldownStatus.daysRemaining}d`}
-                                                                      size="small"
-                                                                      color="warning"
-                                                                      variant="outlined"
-                                                                    />
-                                                                  </Tooltip>
-                                                                );
-                                                              }
-                                                              return null;
-                                                            })()}
-                                                          </Box>
-                                                        </TableCell>
-                                                        <TableCell>
-                                                          <Box>
-                                                            <Typography variant="body2">
-                                                              {lead.firstName}{" "}
-                                                              {lead.lastName}
-                                                            </Typography>
-                                                            {lead.assignedAgent && (
-                                                              <Chip
-                                                                icon={<PersonIcon />}
-                                                                label={
-                                                                  typeof lead.assignedAgent === 'object' && lead.assignedAgent.fullName
-                                                                    ? `Agent: ${lead.assignedAgent.fullName}`
-                                                                    : "Assigned to Agent"
-                                                                }
-                                                                size="small"
-                                                                color="success"
-                                                                variant="outlined"
-                                                                sx={{ mt: 0.5 }}
-                                                                title={
-                                                                  typeof lead.assignedAgent === 'object' && lead.assignedAgent.email
-                                                                    ? lead.assignedAgent.email
-                                                                    : undefined
-                                                                }
-                                                              />
-                                                            )}
-                                                          </Box>
-                                                        </TableCell>
-                                                        <TableCell
-                                                          sx={{
-                                                            display: {
-                                                              xs: "none",
-                                                              sm: "table-cell",
-                                                            },
-                                                          }}
-                                                        >
-                                                          {lead.country}
-                                                        </TableCell>
-                                                        <TableCell
-                                                          sx={{
-                                                            display: {
-                                                              xs: "none",
-                                                              sm: "table-cell",
-                                                            },
-                                                          }}
-                                                        >
-                                                          {lead.newEmail}
-                                                        </TableCell>
-                                                        <TableCell
-                                                          sx={{
-                                                            display: {
-                                                              xs: "none",
-                                                              md: "table-cell",
-                                                            },
-                                                          }}
-                                                        >
-                                                          {lead.newPhone || "N/A"}
-                                                        </TableCell>
-                                                        <TableCell
-                                                          sx={{
-                                                            display: {
-                                                              xs: "none",
-                                                              md: "table-cell",
-                                                            },
-                                                          }}
-                                                        >
-                                                          {(() => {
-                                                            const networkHistory =
-                                                              lead.clientNetworkHistory?.find(
-                                                                (history) =>
-                                                                  history.orderId?.toString() ===
-                                                                  order._id.toString()
-                                                              );
-                                                            return null;
-                                                            })()}
-                                                          {/* Cancel lead button for admin and affiliate managers */}
-                                                          {(user?.role === "admin" || user?.role === "affiliate_manager") && (
-                                                            <>
-                                                              <IconButton
-                                                                size="small"
-                                                                onClick={() =>
-                                                                  handleCancelLead(
-                                                                    order._id,
-                                                                    lead._id,
-                                                                    `${lead.firstName} ${lead.lastName}`
-                                                                  )
-                                                                }
-                                                                title={`Cancel lead ${lead.firstName} ${lead.lastName} from this order`}
-                                                                color="error"
-                                                                sx={{ ml: 1 }}
-                                                              >
-                                                                <DeleteIcon fontSize="small" />
-                                                              </IconButton>
-                                                              {/* Change FTD/Filler button - for FTD leads (includes fillers) */}
-                                                              {lead.leadType === 'ftd' && (() => {
-                                                                const leadMetadata = order.leadsMetadata?.find(m => m.leadId?.toString() === lead._id?.toString());
-                                                                const isFillerOrder = leadMetadata?.orderedAs === 'filler';
-                                                                const leadLabel = isFillerOrder ? 'Filler' : 'FTD';
-                                                                const convertToLabel = isFillerOrder ? 'FTD' : 'Filler';
-                                                                return (
-                                                                  <>
-                                                                    <IconButton
-                                                                      size="small"
-                                                                      onClick={() =>
-                                                                        handleOpenChangeFTDDialog(order, lead)
-                                                                      }
-                                                                      title={`Change ${leadLabel} lead ${lead.firstName} ${lead.lastName}`}
-                                                                      color="primary"
-                                                                      sx={{ ml: 1 }}
-                                                                    >
-                                                                      <SwapIcon fontSize="small" />
-                                                                    </IconButton>
-                                                                    <IconButton
-                                                                      size="small"
-                                                                      onClick={() =>
-                                                                        handleConvertLeadType(order, lead)
-                                                                      }
-                                                                      title={`Convert to ${convertToLabel}`}
-                                                                      color="secondary"
-                                                                      sx={{ ml: 0.5 }}
-                                                                    >
-                                                                      <ConvertIcon fontSize="small" />
-                                                                    </IconButton>
-                                                                  </>
-                                                                );
-                                                              })()}
-                                                              {/* Assign to Agent button - only if not already assigned */}
-                                                              {!lead.assignedAgent && (
-                                                                <IconButton
-                                                                  size="small"
-                                                                  onClick={() =>
-                                                                    handleOpenAssignLeadDialog(lead)
-                                                                  }
-                                                                  title={`Assign ${lead.firstName} ${lead.lastName} to agent`}
-                                                                  color="success"
-                                                                  sx={{ ml: 1 }}
-                                                                >
-                                                                  <AssignIcon fontSize="small" />
-                                                                </IconButton>
-                                                              )}
-                                                            </>
-                                                          )}
-                                                        </TableCell>
-                                                        <TableCell>
-                                                          <IconButton
-                                                            size="small"
-                                                            onClick={() =>
-                                                              toggleLeadExpansion(
-                                                                lead._id
-                                                              )
-                                                            }
-                                                            aria-label={
-                                                              expandedLeads[
-                                                                lead._id
+                                                  Export CSV
+                                                </Button>
+                                                {(user?.role === "admin" ||
+                                                  user?.role ===
+                                                    "affiliate_manager" ||
+                                                  user?.role ===
+                                                    "lead_manager") &&
+                                                  expandedDetails?.fulfilled
+                                                    ?.ftd > 0 && (
+                                                    <Tooltip
+                                                      title={
+                                                        refundAssignmentStatus[
+                                                          expandedDetails._id
+                                                        ]?.isAssigned
+                                                          ? `${
+                                                              refundAssignmentStatus[
+                                                                expandedDetails
+                                                                  ._id
                                                               ]
-                                                                ? "collapse"
-                                                                : "expand"
-                                                            }
+                                                                ?.assignmentCount ||
+                                                              0
+                                                            } FTD lead(s) already assigned`
+                                                          : `Assign ${
+                                                              expandedDetails
+                                                                ?.fulfilled
+                                                                ?.ftd || 0
+                                                            } FTD lead(s) to refunds manager`
+                                                      }
+                                                    >
+                                                      <Button
+                                                        size="small"
+                                                        variant={
+                                                          refundAssignmentStatus[
+                                                            expandedDetails._id
+                                                          ]?.isAssigned
+                                                            ? "outlined"
+                                                            : "contained"
+                                                        }
+                                                        color={
+                                                          refundAssignmentStatus[
+                                                            expandedDetails._id
+                                                          ]?.isAssigned
+                                                            ? "success"
+                                                            : "primary"
+                                                        }
+                                                        startIcon={
+                                                          refundAssignmentStatus[
+                                                            expandedDetails._id
+                                                          ]?.isAssigned ? (
+                                                            <CheckCircleIcon />
+                                                          ) : (
+                                                            <SendIcon />
+                                                          )
+                                                        }
+                                                        onClick={() =>
+                                                          handleOpenRefundsAssignment(
+                                                            expandedDetails._id
+                                                          )
+                                                        }
+                                                        disabled={
+                                                          refundAssignmentStatus[
+                                                            expandedDetails._id
+                                                          ]?.isAssigned
+                                                        }
+                                                      >
+                                                        {refundAssignmentStatus[
+                                                          expandedDetails._id
+                                                        ]?.isAssigned
+                                                          ? "Assigned to Refunds"
+                                                          : "Assign to Refunds"}
+                                                      </Button>
+                                                    </Tooltip>
+                                                  )}
+                                                <Button
+                                                  size="small"
+                                                  onClick={() =>
+                                                    expandAllLeads(
+                                                      expandedDetails.leads
+                                                    )
+                                                  }
+                                                  variant="outlined"
+                                                >
+                                                  Expand All
+                                                </Button>
+                                                <Button
+                                                  size="small"
+                                                  onClick={() =>
+                                                    collapseAllLeads(
+                                                      expandedDetails.leads
+                                                    )
+                                                  }
+                                                  variant="outlined"
+                                                >
+                                                  Collapse All
+                                                </Button>
+                                              </Box>
+                                            </Box>
+                                            <TableContainer
+                                              component={Paper}
+                                              elevation={1}
+                                              sx={{
+                                                maxHeight: 400,
+                                                borderRadius: 1,
+                                              }}
+                                            >
+                                              <Table size="small">
+                                                <TableHead>
+                                                  <TableRow
+                                                    sx={{
+                                                      bgcolor: "action.hover",
+                                                    }}
+                                                  >
+                                                    <TableCell
+                                                      sx={{
+                                                        fontWeight: "bold",
+                                                      }}
+                                                    >
+                                                      Type
+                                                    </TableCell>
+                                                    <TableCell
+                                                      sx={{
+                                                        fontWeight: "bold",
+                                                      }}
+                                                    >
+                                                      Name
+                                                    </TableCell>
+                                                    <TableCell
+                                                      sx={{
+                                                        display: {
+                                                          xs: "none",
+                                                          sm: "table-cell",
+                                                        },
+                                                        fontWeight: "bold",
+                                                      }}
+                                                    >
+                                                      Country
+                                                    </TableCell>
+                                                    <TableCell
+                                                      sx={{
+                                                        display: {
+                                                          xs: "none",
+                                                          sm: "table-cell",
+                                                        },
+                                                        fontWeight: "bold",
+                                                      }}
+                                                    >
+                                                      Email
+                                                    </TableCell>
+                                                    <TableCell
+                                                      sx={{
+                                                        display: {
+                                                          xs: "none",
+                                                          md: "table-cell",
+                                                        },
+                                                        fontWeight: "bold",
+                                                      }}
+                                                    >
+                                                      Phone
+                                                    </TableCell>
+                                                    <TableCell
+                                                      sx={{
+                                                        display: {
+                                                          xs: "none",
+                                                          md: "table-cell",
+                                                        },
+                                                        fontWeight: "bold",
+                                                      }}
+                                                    >
+                                                      Status
+                                                    </TableCell>
+                                                    <TableCell
+                                                      sx={{
+                                                        fontWeight: "bold",
+                                                      }}
+                                                    >
+                                                      Actions
+                                                    </TableCell>
+                                                  </TableRow>
+                                                </TableHead>
+                                                <TableBody>
+                                                  {expandedDetails.leads.map(
+                                                    (lead) => (
+                                                      <React.Fragment
+                                                        key={lead._id}
+                                                      >
+                                                        <TableRow>
+                                                          <TableCell>
+                                                            <Box
+                                                              sx={{
+                                                                display: "flex",
+                                                                flexDirection:
+                                                                  "column",
+                                                                gap: 0.5,
+                                                              }}
+                                                            >
+                                                              <Chip
+                                                                label={
+                                                                  getDisplayLeadType(
+                                                                    lead
+                                                                  )?.toUpperCase() ||
+                                                                  "UNKNOWN"
+                                                                }
+                                                                size="small"
+                                                              />
+                                                              {(() => {
+                                                                const cooldownStatus =
+                                                                  getFTDCooldownStatus(
+                                                                    lead
+                                                                  );
+                                                                if (
+                                                                  cooldownStatus?.inCooldown
+                                                                ) {
+                                                                  return (
+                                                                    <Tooltip
+                                                                      title={`Last used on ${cooldownStatus.lastUsedDate.toLocaleDateString()}. FTD leads cannot be reused for 10 days.`}
+                                                                    >
+                                                                      <Chip
+                                                                        label={`Cooldown: ${cooldownStatus.daysRemaining}d`}
+                                                                        size="small"
+                                                                        color="warning"
+                                                                        variant="outlined"
+                                                                      />
+                                                                    </Tooltip>
+                                                                  );
+                                                                }
+                                                                return null;
+                                                              })()}
+                                                            </Box>
+                                                          </TableCell>
+                                                          <TableCell>
+                                                            <Box>
+                                                              <Typography variant="body2">
+                                                                {lead.firstName}{" "}
+                                                                {lead.lastName}
+                                                              </Typography>
+                                                              {lead.assignedAgent && (
+                                                                <Chip
+                                                                  icon={
+                                                                    <PersonIcon />
+                                                                  }
+                                                                  label={
+                                                                    typeof lead.assignedAgent ===
+                                                                      "object" &&
+                                                                    lead
+                                                                      .assignedAgent
+                                                                      .fullName
+                                                                      ? `Agent: ${lead.assignedAgent.fullName}`
+                                                                      : "Assigned to Agent"
+                                                                  }
+                                                                  size="small"
+                                                                  color="success"
+                                                                  variant="outlined"
+                                                                  sx={{
+                                                                    mt: 0.5,
+                                                                  }}
+                                                                  title={
+                                                                    typeof lead.assignedAgent ===
+                                                                      "object" &&
+                                                                    lead
+                                                                      .assignedAgent
+                                                                      .email
+                                                                      ? lead
+                                                                          .assignedAgent
+                                                                          .email
+                                                                      : undefined
+                                                                  }
+                                                                />
+                                                              )}
+                                                            </Box>
+                                                          </TableCell>
+                                                          <TableCell
+                                                            sx={{
+                                                              display: {
+                                                                xs: "none",
+                                                                sm: "table-cell",
+                                                              },
+                                                            }}
                                                           >
-                                                            {expandedLeads[
-                                                              lead._id
-                                                            ] ? (
-                                                              <ExpandLessIcon />
-                                                            ) : (
-                                                              <ExpandMoreIcon />
-                                                            )}
-                                                          </IconButton>
-                                                          {}
-                                                          {(lead.leadType ===
-                                                            "ftd" ||
-                                                            lead.leadType ===
-                                                              "filler") &&
-                                                            (user?.role ===
-                                                              "admin" ||
-                                                              user?.role ===
-                                                                "affiliate_manager") &&
-                                                            (() => {
+                                                            {lead.country}
+                                                          </TableCell>
+                                                          <TableCell
+                                                            sx={{
+                                                              display: {
+                                                                xs: "none",
+                                                                sm: "table-cell",
+                                                              },
+                                                            }}
+                                                          >
+                                                            {lead.newEmail}
+                                                          </TableCell>
+                                                          <TableCell
+                                                            sx={{
+                                                              display: {
+                                                                xs: "none",
+                                                                md: "table-cell",
+                                                              },
+                                                            }}
+                                                          >
+                                                            {lead.newPhone ||
+                                                              "N/A"}
+                                                          </TableCell>
+                                                          <TableCell
+                                                            sx={{
+                                                              display: {
+                                                                xs: "none",
+                                                                md: "table-cell",
+                                                              },
+                                                            }}
+                                                          >
+                                                            {(() => {
                                                               const networkHistory =
                                                                 lead.clientNetworkHistory?.find(
                                                                   (history) =>
@@ -2197,63 +2587,250 @@ const OrdersPage = () => {
                                                                 );
                                                               return null;
                                                             })()}
-                                                        </TableCell>
-                                                      </TableRow>
-                                                      {expandedLeads[
-                                                        lead._id
-                                                      ] && (
-                                                        <TableRow>
-                                                          <TableCell
-                                                            colSpan={7}
-                                                            sx={{
-                                                              py: 0,
-                                                              border: 0,
-                                                            }}
-                                                          >
-                                                            <Collapse
-                                                              in={
+                                                            {/* Cancel lead button for admin and affiliate managers */}
+                                                            {(user?.role ===
+                                                              "admin" ||
+                                                              user?.role ===
+                                                                "affiliate_manager") && (
+                                                              <>
+                                                                <IconButton
+                                                                  size="small"
+                                                                  onClick={() =>
+                                                                    handleCancelLead(
+                                                                      order._id,
+                                                                      lead._id,
+                                                                      `${lead.firstName} ${lead.lastName}`
+                                                                    )
+                                                                  }
+                                                                  title={`Cancel lead ${lead.firstName} ${lead.lastName} from this order`}
+                                                                  color="error"
+                                                                  sx={{ ml: 1 }}
+                                                                >
+                                                                  <DeleteIcon fontSize="small" />
+                                                                </IconButton>
+                                                                {/* Change FTD/Filler button - for FTD leads (includes fillers) */}
+                                                                {lead.leadType ===
+                                                                  "ftd" &&
+                                                                  (() => {
+                                                                    const leadMetadata =
+                                                                      order.leadsMetadata?.find(
+                                                                        (m) =>
+                                                                          m.leadId?.toString() ===
+                                                                          lead._id?.toString()
+                                                                      );
+                                                                    const isFillerOrder =
+                                                                      leadMetadata?.orderedAs ===
+                                                                      "filler";
+                                                                    const leadLabel =
+                                                                      isFillerOrder
+                                                                        ? "Filler"
+                                                                        : "FTD";
+                                                                    const convertToLabel =
+                                                                      isFillerOrder
+                                                                        ? "FTD"
+                                                                        : "Filler";
+                                                                    return (
+                                                                      <>
+                                                                        <IconButton
+                                                                          size="small"
+                                                                          onClick={() =>
+                                                                            handleOpenChangeFTDDialog(
+                                                                              order,
+                                                                              lead
+                                                                            )
+                                                                          }
+                                                                          title={`Change ${leadLabel} lead ${lead.firstName} ${lead.lastName}`}
+                                                                          color="primary"
+                                                                          sx={{
+                                                                            ml: 1,
+                                                                          }}
+                                                                        >
+                                                                          <SwapIcon fontSize="small" />
+                                                                        </IconButton>
+                                                                        <IconButton
+                                                                          size="small"
+                                                                          onClick={() =>
+                                                                            handleConvertLeadType(
+                                                                              order,
+                                                                              lead
+                                                                            )
+                                                                          }
+                                                                          title={`Convert to ${convertToLabel}`}
+                                                                          color="secondary"
+                                                                          sx={{
+                                                                            ml: 0.5,
+                                                                          }}
+                                                                        >
+                                                                          <ConvertIcon fontSize="small" />
+                                                                        </IconButton>
+                                                                      </>
+                                                                    );
+                                                                  })()}
+                                                                {/* Assign to Agent button - only if not already assigned */}
+                                                                {!lead.assignedAgent && (
+                                                                  <IconButton
+                                                                    size="small"
+                                                                    onClick={() =>
+                                                                      handleOpenAssignLeadDialog(
+                                                                        lead
+                                                                      )
+                                                                    }
+                                                                    title={`Assign ${lead.firstName} ${lead.lastName} to agent`}
+                                                                    color="success"
+                                                                    sx={{
+                                                                      ml: 1,
+                                                                    }}
+                                                                  >
+                                                                    <AssignIcon fontSize="small" />
+                                                                  </IconButton>
+                                                                )}
+                                                                {/* Assign Deposit Call button - for FTD leads */}
+                                                                {(lead.leadType ===
+                                                                  "ftd" ||
+                                                                  getDisplayLeadType(
+                                                                    lead
+                                                                  ) ===
+                                                                    "ftd") && (
+                                                                  <Tooltip title="Assign deposit call to agent">
+                                                                    <IconButton
+                                                                      size="small"
+                                                                      onClick={() =>
+                                                                        handleOpenAssignDepositCallDialog(
+                                                                          order,
+                                                                          lead
+                                                                        )
+                                                                      }
+                                                                      color="info"
+                                                                      sx={{
+                                                                        ml: 1,
+                                                                      }}
+                                                                    >
+                                                                      <PhoneIcon fontSize="small" />
+                                                                    </IconButton>
+                                                                  </Tooltip>
+                                                                )}
+                                                              </>
+                                                            )}
+                                                          </TableCell>
+                                                          <TableCell>
+                                                            <IconButton
+                                                              size="small"
+                                                              onClick={() =>
+                                                                toggleLeadExpansion(
+                                                                  lead._id
+                                                                )
+                                                              }
+                                                              aria-label={
                                                                 expandedLeads[
                                                                   lead._id
                                                                 ]
+                                                                  ? "collapse"
+                                                                  : "expand"
                                                               }
-                                                              timeout="auto"
-                                                              unmountOnExit
                                                             >
-                                                              <Box
-                                                                sx={{ p: 2 }}
-                                                              >
-                                                                <LeadDetailCard
-                                                                  lead={lead}
-                                                                  onLeadUpdate={(updatedLead) => {
-                                                                    // Update the expanded details
-                                                                    setExpandedRowData((prev) => ({
-                                                                      ...prev,
-                                                                      [expandedDetails._id]: {
-                                                                        ...prev[expandedDetails._id],
-                                                                        leads: prev[expandedDetails._id].leads.map(l =>
-                                                                          l._id === updatedLead._id ? updatedLead : l
-                                                                        )
-                                                                      }
-                                                                    }));
-                                                                    fetchOrders(); // Refresh main orders list
-                                                                  }}
-                                                                />
-                                                              </Box>
-                                                            </Collapse>
+                                                              {expandedLeads[
+                                                                lead._id
+                                                              ] ? (
+                                                                <ExpandLessIcon />
+                                                              ) : (
+                                                                <ExpandMoreIcon />
+                                                              )}
+                                                            </IconButton>
+                                                            {}
+                                                            {(lead.leadType ===
+                                                              "ftd" ||
+                                                              lead.leadType ===
+                                                                "filler") &&
+                                                              (user?.role ===
+                                                                "admin" ||
+                                                                user?.role ===
+                                                                  "affiliate_manager") &&
+                                                              (() => {
+                                                                const networkHistory =
+                                                                  lead.clientNetworkHistory?.find(
+                                                                    (history) =>
+                                                                      history.orderId?.toString() ===
+                                                                      order._id.toString()
+                                                                  );
+                                                                return null;
+                                                              })()}
                                                           </TableCell>
                                                         </TableRow>
-                                                      )}
-                                                    </React.Fragment>
-                                                  )
-                                                )}
-                                              </TableBody>
-                                            </Table>
-                                          </TableContainer>
+                                                        {expandedLeads[
+                                                          lead._id
+                                                        ] && (
+                                                          <TableRow>
+                                                            <TableCell
+                                                              colSpan={7}
+                                                              sx={{
+                                                                py: 0,
+                                                                border: 0,
+                                                              }}
+                                                            >
+                                                              <Collapse
+                                                                in={
+                                                                  expandedLeads[
+                                                                    lead._id
+                                                                  ]
+                                                                }
+                                                                timeout="auto"
+                                                                unmountOnExit
+                                                              >
+                                                                <Box
+                                                                  sx={{ p: 2 }}
+                                                                >
+                                                                  <LeadDetailCard
+                                                                    lead={lead}
+                                                                    onLeadUpdate={(
+                                                                      updatedLead
+                                                                    ) => {
+                                                                      // Update the expanded details
+                                                                      setExpandedRowData(
+                                                                        (
+                                                                          prev
+                                                                        ) => ({
+                                                                          ...prev,
+                                                                          [expandedDetails._id]:
+                                                                            {
+                                                                              ...prev[
+                                                                                expandedDetails
+                                                                                  ._id
+                                                                              ],
+                                                                              leads:
+                                                                                prev[
+                                                                                  expandedDetails
+                                                                                    ._id
+                                                                                ].leads.map(
+                                                                                  (
+                                                                                    l
+                                                                                  ) =>
+                                                                                    l._id ===
+                                                                                    updatedLead._id
+                                                                                      ? updatedLead
+                                                                                      : l
+                                                                                ),
+                                                                            },
+                                                                        })
+                                                                      );
+                                                                      fetchOrders(); // Refresh main orders list
+                                                                    }}
+                                                                  />
+                                                                </Box>
+                                                              </Collapse>
+                                                            </TableCell>
+                                                          </TableRow>
+                                                        )}
+                                                      </React.Fragment>
+                                                    )
+                                                  )}
+                                                </TableBody>
+                                              </Table>
+                                            </TableContainer>
                                           </>
-                                          )}
-                                        </Box>
-                                      </Grid>
-                                    )}
+                                        )}
+                                      </Box>
+                                    </Grid>
+                                  )}
                                 </Grid>
                               ) : (
                                 <Box
@@ -2368,7 +2945,11 @@ const OrdersPage = () => {
                       error={!!errors.priority}
                     >
                       <InputLabel>Priority</InputLabel>
-                      <Select {...field} label="Priority" value={field.value || ""}>
+                      <Select
+                        {...field}
+                        label="Priority"
+                        value={field.value || ""}
+                      >
                         <MenuItem value="low">Low</MenuItem>
                         <MenuItem value="medium">Medium</MenuItem>
                         <MenuItem value="high">High</MenuItem>
@@ -2382,9 +2963,17 @@ const OrdersPage = () => {
                   name="genderFilter"
                   control={control}
                   render={({ field }) => (
-                    <FormControl fullWidth size="small" error={!!errors.genderFilter}>
+                    <FormControl
+                      fullWidth
+                      size="small"
+                      error={!!errors.genderFilter}
+                    >
                       <InputLabel>Gender (Optional)</InputLabel>
-                      <Select {...field} label="Gender (Optional)" value={field.value || ""}>
+                      <Select
+                        {...field}
+                        label="Gender (Optional)"
+                        value={field.value || ""}
+                      >
                         <MenuItem value="">All</MenuItem>
                         <MenuItem value="male">Male</MenuItem>
                         <MenuItem value="female">Female</MenuItem>
@@ -2433,7 +3022,8 @@ const OrdersPage = () => {
               </Grid>
 
               {/* Client Network Selection */}
-              {(user?.role === "admin" || user?.role === "affiliate_manager") && (
+              {(user?.role === "admin" ||
+                user?.role === "affiliate_manager") && (
                 <Grid item xs={12}>
                   <Controller
                     name="selectedClientNetwork"
@@ -2443,12 +3033,17 @@ const OrdersPage = () => {
                         <Autocomplete
                           options={clientNetworks}
                           getOptionLabel={(option) => option.name || ""}
-                          value={clientNetworks.find(n => n._id === value) || null}
+                          value={
+                            clientNetworks.find((n) => n._id === value) || null
+                          }
                           onChange={(event, newValue) => {
                             onChange(newValue ? newValue._id : "");
                             // Reset filtered agents when client network changes
                             setFilteredAgents([]);
-                            setUnassignedLeadsStats({ ftd: null, filler: null });
+                            setUnassignedLeadsStats({
+                              ftd: null,
+                              filler: null,
+                            });
                           }}
                           disabled={loadingClientNetworks}
                           size="small"
@@ -2477,7 +3072,9 @@ const OrdersPage = () => {
                               </Box>
                             </li>
                           )}
-                          isOptionEqualToValue={(option, value) => option._id === value._id}
+                          isOptionEqualToValue={(option, value) =>
+                            option._id === value._id
+                          }
                         />
                         {errors.selectedClientNetwork?.message && (
                           <Typography
@@ -2514,7 +3111,7 @@ const OrdersPage = () => {
                       <Autocomplete
                         options={ourNetworks}
                         getOptionLabel={(option) => option.name || ""}
-                        value={ourNetworks.find(n => n._id === value) || null}
+                        value={ourNetworks.find((n) => n._id === value) || null}
                         onChange={(event, newValue) => {
                           onChange(newValue ? newValue._id : "");
                         }}
@@ -2545,7 +3142,9 @@ const OrdersPage = () => {
                             </Box>
                           </li>
                         )}
-                        isOptionEqualToValue={(option, value) => option._id === value._id}
+                        isOptionEqualToValue={(option, value) =>
+                          option._id === value._id
+                        }
                       />
                       {errors.selectedOurNetwork?.message && (
                         <Typography
@@ -2644,9 +3243,11 @@ const OrdersPage = () => {
                         multiple
                         options={clientBrokers}
                         getOptionLabel={(option) => option.name || ""}
-                        value={clientBrokers.filter(broker => (value || []).includes(broker._id))}
+                        value={clientBrokers.filter((broker) =>
+                          (value || []).includes(broker._id)
+                        )}
                         onChange={(event, newValue) => {
-                          onChange(newValue.map(broker => broker._id));
+                          onChange(newValue.map((broker) => broker._id));
                           // Reset filtered agents when client brokers change
                           setFilteredAgents([]);
                           setUnassignedLeadsStats({ ftd: null, filler: null });
@@ -2690,11 +3291,13 @@ const OrdersPage = () => {
                               key={option._id}
                               label={option.name}
                               size="small"
-                              sx={{ height: 'auto' }}
+                              sx={{ height: "auto" }}
                             />
                           ))
                         }
-                        isOptionEqualToValue={(option, value) => option._id === value._id}
+                        isOptionEqualToValue={(option, value) =>
+                          option._id === value._id
+                        }
                         disableCloseOnSelect
                       />
                       {errors.selectedClientBrokers?.message && (
@@ -2713,8 +3316,8 @@ const OrdersPage = () => {
                           sx={{
                             mt: 1,
                             ml: 1.5,
-                            display: 'block',
-                            lineHeight: 1.2
+                            display: "block",
+                            lineHeight: 1.2,
                           }}
                         >
                           {loadingClientBrokers
@@ -2728,167 +3331,282 @@ const OrdersPage = () => {
               </Grid>
 
               {/* Load Agents Button - Shows when criteria are set and FTD or Filler > 0 */}
-              {(watch("ftd") > 0 || watch("filler") > 0) && watch("countryFilter") && watch("selectedClientNetwork") && (
-                <Grid item xs={12}>
-                  <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
-                    <Button
-                      variant="outlined"
-                      color="primary"
-                      onClick={async () => {
-                        const country = watch("countryFilter");
-                        const clientNetwork = watch("selectedClientNetwork");
-                        const clientBrokersSelected = watch("selectedClientBrokers") || [];
-                        
-                        // Fetch filtered agents for FTD/Filler leads
-                        // Both FTD and Filler are stored with leadType: 'ftd' in the database
-                        // So we always search for 'ftd' type leads
-                        if (watch("ftd") > 0 || watch("filler") > 0) {
-                          await fetchFilteredAgents("ftd", country, clientNetwork, clientBrokersSelected);
-                        }
+              {(watch("ftd") > 0 || watch("filler") > 0) &&
+                watch("countryFilter") &&
+                watch("selectedClientNetwork") && (
+                  <Grid item xs={12}>
+                    <Box
+                      sx={{
+                        display: "flex",
+                        gap: 2,
+                        flexWrap: "wrap",
+                        alignItems: "center",
                       }}
-                      disabled={filteredAgentsLoading}
-                      startIcon={filteredAgentsLoading ? <CircularProgress size={16} /> : <PersonIcon />}
                     >
-                      {filteredAgentsLoading ? "Loading Agents..." : "Load Matching Agents"}
-                    </Button>
-                    
-                    {filteredAgents.length > 0 && (
-                      <Typography variant="body2" color="success.main">
-                        Found {filteredAgents.length} agent(s) with leads matching your criteria (country + network + broker filters)
-                      </Typography>
-                    )}
-                    
-                    {!filteredAgentsLoading && filteredAgents.length === 0 && unassignedLeadsStats.ftd !== null && (
-                      <Typography variant="body2" color="warning.main">
-                        No agents found with leads matching your criteria. Use unassigned leads option.
-                      </Typography>
-                    )}
-                  </Box>
-                  
-                  {/* Unassigned leads info - shows filtered stats */}
-                  {(unassignedLeadsStats.ftd || unassignedLeadsStats.filler) && (
-                    <Box sx={{ mt: 1, p: 1.5, bgcolor: 'action.hover', borderRadius: 1 }}>
-                      <Typography variant="subtitle2" gutterBottom>
-                        Unassigned Leads Matching Criteria:
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-                        These are leads not assigned to any agent, filtered by your selected country, client network, and client brokers
-                      </Typography>
-                      {unassignedLeadsStats.ftd && watch("ftd") > 0 && (
-                        <Typography variant="body2" color="text.secondary">
-                          FTD: <strong>{unassignedLeadsStats.ftd.available}</strong> matching available, {unassignedLeadsStats.ftd.onCooldown} matching on cooldown
+                      <Button
+                        variant="outlined"
+                        color="primary"
+                        onClick={async () => {
+                          const country = watch("countryFilter");
+                          const clientNetwork = watch("selectedClientNetwork");
+                          const clientBrokersSelected =
+                            watch("selectedClientBrokers") || [];
+
+                          // Fetch filtered agents for FTD/Filler leads
+                          // Both FTD and Filler are stored with leadType: 'ftd' in the database
+                          // So we always search for 'ftd' type leads
+                          if (watch("ftd") > 0 || watch("filler") > 0) {
+                            await fetchFilteredAgents(
+                              "ftd",
+                              country,
+                              clientNetwork,
+                              clientBrokersSelected
+                            );
+                          }
+                        }}
+                        disabled={filteredAgentsLoading}
+                        startIcon={
+                          filteredAgentsLoading ? (
+                            <CircularProgress size={16} />
+                          ) : (
+                            <PersonIcon />
+                          )
+                        }
+                      >
+                        {filteredAgentsLoading
+                          ? "Loading Agents..."
+                          : "Load Matching Agents"}
+                      </Button>
+
+                      {filteredAgents.length > 0 && (
+                        <Typography variant="body2" color="success.main">
+                          Found {filteredAgents.length} agent(s) with leads
+                          matching your criteria (country + network + broker
+                          filters)
                         </Typography>
                       )}
-                      {unassignedLeadsStats.filler && watch("filler") > 0 && (
-                        <Typography variant="body2" color="text.secondary">
-                          Filler: <strong>{unassignedLeadsStats.filler.available}</strong> matching available, {unassignedLeadsStats.filler.onCooldown} matching on cooldown
-                        </Typography>
-                      )}
+
+                      {!filteredAgentsLoading &&
+                        filteredAgents.length === 0 &&
+                        unassignedLeadsStats.ftd !== null && (
+                          <Typography variant="body2" color="warning.main">
+                            No agents found with leads matching your criteria.
+                            Use unassigned leads option.
+                          </Typography>
+                        )}
                     </Box>
-                  )}
-                </Grid>
-              )}
+
+                    {/* Unassigned leads info - shows filtered stats */}
+                    {(unassignedLeadsStats.ftd ||
+                      unassignedLeadsStats.filler) && (
+                      <Box
+                        sx={{
+                          mt: 1,
+                          p: 1.5,
+                          bgcolor: "action.hover",
+                          borderRadius: 1,
+                        }}
+                      >
+                        <Typography variant="subtitle2" gutterBottom>
+                          Unassigned Leads Matching Criteria:
+                        </Typography>
+                        <Typography
+                          variant="caption"
+                          color="text.secondary"
+                          sx={{ display: "block", mb: 1 }}
+                        >
+                          These are leads not assigned to any agent, filtered by
+                          your selected country, client network, and client
+                          brokers
+                        </Typography>
+                        {unassignedLeadsStats.ftd && watch("ftd") > 0 && (
+                          <Typography variant="body2" color="text.secondary">
+                            FTD:{" "}
+                            <strong>
+                              {unassignedLeadsStats.ftd.available}
+                            </strong>{" "}
+                            matching available,{" "}
+                            {unassignedLeadsStats.ftd.onCooldown} matching on
+                            cooldown
+                          </Typography>
+                        )}
+                        {unassignedLeadsStats.filler && watch("filler") > 0 && (
+                          <Typography variant="body2" color="text.secondary">
+                            Filler:{" "}
+                            <strong>
+                              {unassignedLeadsStats.filler.available}
+                            </strong>{" "}
+                            matching available,{" "}
+                            {unassignedLeadsStats.filler.onCooldown} matching on
+                            cooldown
+                          </Typography>
+                        )}
+                      </Box>
+                    )}
+                  </Grid>
+                )}
 
               {/* Individual FTD Agent Assignments - Shows after filtered agents are loaded */}
-              {watch("ftd") > 0 && (filteredAgents.length > 0 || unassignedLeadsStats.ftd !== null) && (
-                <Grid item xs={12}>
-                  <Typography variant="subtitle2" color="primary" sx={{ mb: 1, fontWeight: 600 }}>
-                    Assign FTD Leads to Agents
-                  </Typography>
-                  <Grid container spacing={2}>
-                    {Array.from({ length: watch("ftd") }, (_, index) => (
-                      <Grid item xs={12} sm={6} md={4} key={`ftd-agent-${index}`}>
-                        <Controller
-                          name={`ftdAgents.${index}`}
-                          control={control}
-                          render={({ field }) => (
-                            <FormControl fullWidth size="small">
-                              <InputLabel>FTD #{index + 1} Agent</InputLabel>
-                              <Select
-                                {...field}
-                                label={`FTD #${index + 1} Agent`}
-                                value={field.value || ""}
-                                disabled={filteredAgentsLoading}
-                              >
-                                <MenuItem value="">
-                                  <em>Unassigned lead {unassignedLeadsStats.ftd ? `(${unassignedLeadsStats.ftd.available} matching available)` : ''}</em>
-                                </MenuItem>
-                                {filteredAgents.map((agent) => (
-                                  <MenuItem 
-                                    key={agent._id} 
-                                    value={agent._id}
-                                    disabled={agent.filteredLeadStats?.available === 0}
-                                  >
-                                    {agent.fullName || agent.email} — {agent.filteredLeadStats?.available || 0} matching available, {agent.filteredLeadStats?.onCooldown || 0} matching on cooldown
+              {watch("ftd") > 0 &&
+                (filteredAgents.length > 0 ||
+                  unassignedLeadsStats.ftd !== null) && (
+                  <Grid item xs={12}>
+                    <Typography
+                      variant="subtitle2"
+                      color="primary"
+                      sx={{ mb: 1, fontWeight: 600 }}
+                    >
+                      Assign FTD Leads to Agents
+                    </Typography>
+                    <Grid container spacing={2}>
+                      {Array.from({ length: watch("ftd") }, (_, index) => (
+                        <Grid
+                          item
+                          xs={12}
+                          sm={6}
+                          md={4}
+                          key={`ftd-agent-${index}`}
+                        >
+                          <Controller
+                            name={`ftdAgents.${index}`}
+                            control={control}
+                            render={({ field }) => (
+                              <FormControl fullWidth size="small">
+                                <InputLabel>FTD #{index + 1} Agent</InputLabel>
+                                <Select
+                                  {...field}
+                                  label={`FTD #${index + 1} Agent`}
+                                  value={field.value || ""}
+                                  disabled={filteredAgentsLoading}
+                                >
+                                  <MenuItem value="">
+                                    <em>
+                                      Unassigned lead{" "}
+                                      {unassignedLeadsStats.ftd
+                                        ? `(${unassignedLeadsStats.ftd.available} matching available)`
+                                        : ""}
+                                    </em>
                                   </MenuItem>
-                                ))}
-                              </Select>
-                              <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
-                                Stats show only leads matching your selected criteria
-                              </Typography>
-                            </FormControl>
-                          )}
-                        />
-                      </Grid>
-                    ))}
+                                  {filteredAgents.map((agent) => (
+                                    <MenuItem
+                                      key={agent._id}
+                                      value={agent._id}
+                                      disabled={
+                                        agent.filteredLeadStats?.available === 0
+                                      }
+                                    >
+                                      {agent.fullName || agent.email} —{" "}
+                                      {agent.filteredLeadStats?.available || 0}{" "}
+                                      matching available,{" "}
+                                      {agent.filteredLeadStats?.onCooldown || 0}{" "}
+                                      matching on cooldown
+                                    </MenuItem>
+                                  ))}
+                                </Select>
+                                <Typography
+                                  variant="caption"
+                                  color="text.secondary"
+                                  sx={{ mt: 0.5, display: "block" }}
+                                >
+                                  Stats show only leads matching your selected
+                                  criteria
+                                </Typography>
+                              </FormControl>
+                            )}
+                          />
+                        </Grid>
+                      ))}
+                    </Grid>
                   </Grid>
-                </Grid>
-              )}
+                )}
 
               {/* Individual Filler Agent Assignments - Shows after filtered agents are loaded */}
-              {watch("filler") > 0 && (filteredAgents.length > 0 || unassignedLeadsStats.filler !== null) && (
-                <Grid item xs={12}>
-                  <Typography variant="subtitle2" color="secondary" sx={{ mb: 1, fontWeight: 600 }}>
-                    Assign Filler Leads to Agents
-                  </Typography>
-                  <Grid container spacing={2}>
-                    {Array.from({ length: watch("filler") }, (_, index) => (
-                      <Grid item xs={12} sm={6} md={4} key={`filler-agent-${index}`}>
-                        <Controller
-                          name={`fillerAgents.${index}`}
-                          control={control}
-                          render={({ field }) => (
-                            <FormControl fullWidth size="small">
-                              <InputLabel>Filler #{index + 1} Agent</InputLabel>
-                              <Select
-                                {...field}
-                                label={`Filler #${index + 1} Agent`}
-                                value={field.value || ""}
-                                disabled={filteredAgentsLoading}
-                              >
-                                <MenuItem value="">
-                                  <em>Unassigned lead {unassignedLeadsStats.filler ? `(${unassignedLeadsStats.filler.available} matching available)` : ''}</em>
-                                </MenuItem>
-                                {filteredAgents.map((agent) => (
-                                  <MenuItem 
-                                    key={agent._id} 
-                                    value={agent._id}
-                                    disabled={agent.filteredLeadStats?.available === 0}
-                                  >
-                                    {agent.fullName || agent.email} — {agent.filteredLeadStats?.available || 0} matching available, {agent.filteredLeadStats?.onCooldown || 0} matching on cooldown
+              {watch("filler") > 0 &&
+                (filteredAgents.length > 0 ||
+                  unassignedLeadsStats.filler !== null) && (
+                  <Grid item xs={12}>
+                    <Typography
+                      variant="subtitle2"
+                      color="secondary"
+                      sx={{ mb: 1, fontWeight: 600 }}
+                    >
+                      Assign Filler Leads to Agents
+                    </Typography>
+                    <Grid container spacing={2}>
+                      {Array.from({ length: watch("filler") }, (_, index) => (
+                        <Grid
+                          item
+                          xs={12}
+                          sm={6}
+                          md={4}
+                          key={`filler-agent-${index}`}
+                        >
+                          <Controller
+                            name={`fillerAgents.${index}`}
+                            control={control}
+                            render={({ field }) => (
+                              <FormControl fullWidth size="small">
+                                <InputLabel>
+                                  Filler #{index + 1} Agent
+                                </InputLabel>
+                                <Select
+                                  {...field}
+                                  label={`Filler #${index + 1} Agent`}
+                                  value={field.value || ""}
+                                  disabled={filteredAgentsLoading}
+                                >
+                                  <MenuItem value="">
+                                    <em>
+                                      Unassigned lead{" "}
+                                      {unassignedLeadsStats.filler
+                                        ? `(${unassignedLeadsStats.filler.available} matching available)`
+                                        : ""}
+                                    </em>
                                   </MenuItem>
-                                ))}
-                              </Select>
-                              <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
-                                Stats show only leads matching your selected criteria
-                              </Typography>
-                            </FormControl>
-                          )}
-                        />
-                      </Grid>
-                    ))}
+                                  {filteredAgents.map((agent) => (
+                                    <MenuItem
+                                      key={agent._id}
+                                      value={agent._id}
+                                      disabled={
+                                        agent.filteredLeadStats?.available === 0
+                                      }
+                                    >
+                                      {agent.fullName || agent.email} —{" "}
+                                      {agent.filteredLeadStats?.available || 0}{" "}
+                                      matching available,{" "}
+                                      {agent.filteredLeadStats?.onCooldown || 0}{" "}
+                                      matching on cooldown
+                                    </MenuItem>
+                                  ))}
+                                </Select>
+                                <Typography
+                                  variant="caption"
+                                  color="text.secondary"
+                                  sx={{ mt: 0.5, display: "block" }}
+                                >
+                                  Stats show only leads matching your selected
+                                  criteria
+                                </Typography>
+                              </FormControl>
+                            )}
+                          />
+                        </Grid>
+                      ))}
+                    </Grid>
                   </Grid>
-                </Grid>
-              )}
+                )}
 
               {/* Show message if FTD/Filler requested but criteria not complete */}
-              {(watch("ftd") > 0 || watch("filler") > 0) && (!watch("countryFilter") || !watch("selectedClientNetwork")) && (
-                <Grid item xs={12}>
-                  <Alert severity="info" sx={{ mt: 1 }}>
-                    Please select country and client network to load agents with matching leads for assignment.
-                  </Alert>
-                </Grid>
-              )}
+              {(watch("ftd") > 0 || watch("filler") > 0) &&
+                (!watch("countryFilter") ||
+                  !watch("selectedClientNetwork")) && (
+                  <Grid item xs={12}>
+                    <Alert severity="info" sx={{ mt: 1 }}>
+                      Please select country and client network to load agents
+                      with matching leads for assignment.
+                    </Alert>
+                  </Grid>
+                )}
               <Grid item xs={12}>
                 <Controller
                   name="notes"
@@ -2918,14 +3636,23 @@ const OrdersPage = () => {
                       label="Planned Date"
                       type="date"
                       error={!!errors.plannedDate}
-                      helperText={errors.plannedDate?.message || "Select the date for when this order should be processed"}
+                      helperText={
+                        errors.plannedDate?.message ||
+                        "Select the date for when this order should be processed"
+                      }
                       size="small"
                       InputLabelProps={{
                         shrink: true,
                       }}
-                      value={field.value ? new Date(field.value).toISOString().split('T')[0] : ''}
+                      value={
+                        field.value
+                          ? new Date(field.value).toISOString().split("T")[0]
+                          : ""
+                      }
                       onChange={(e) => {
-                        const dateValue = e.target.value ? new Date(e.target.value) : null;
+                        const dateValue = e.target.value
+                          ? new Date(e.target.value)
+                          : null;
                         field.onChange(dateValue);
                       }}
                     />
@@ -2945,19 +3672,21 @@ const OrdersPage = () => {
             )}
           </DialogContent>
           <DialogActions>
-            <Button onClick={() => {
-              setCreateDialogOpen(false);
-              setFilteredAgents([]);
-              setUnassignedLeadsStats({ ftd: null, filler: null });
-            }}>Cancel</Button>
+            <Button
+              onClick={() => {
+                setCreateDialogOpen(false);
+                setFilteredAgents([]);
+                setUnassignedLeadsStats({ ftd: null, filler: null });
+              }}
+            >
+              Cancel
+            </Button>
             <Button type="submit" variant="contained" disabled={isSubmitting}>
               {isSubmitting ? <CircularProgress size={24} /> : "Create Order"}
             </Button>
           </DialogActions>
         </form>
       </Dialog>
-
-
 
       {/* Create New Broker Dialog */}
       <Dialog
@@ -3155,6 +3884,15 @@ const OrdersPage = () => {
         onClose={handleCloseAssignLeadDialog}
         lead={assignLeadDialog.lead}
         onSuccess={handleAssignLeadSuccess}
+      />
+
+      {/* Assign Deposit Call Dialog */}
+      <AssignDepositCallDialog
+        open={assignDepositCallDialog.open}
+        onClose={handleCloseAssignDepositCallDialog}
+        order={assignDepositCallDialog.order}
+        lead={assignDepositCallDialog.lead}
+        onAssign={handleAssignDepositCall}
       />
 
       {/* Gender Fallback Modal */}
@@ -3373,6 +4111,15 @@ const OrdersPage = () => {
         onSuccess={handleAssignLeadSuccess}
       />
 
+      {/* Assign Deposit Call Dialog */}
+      <AssignDepositCallDialog
+        open={assignDepositCallDialog.open}
+        onClose={handleCloseAssignDepositCallDialog}
+        order={assignDepositCallDialog.order}
+        lead={assignDepositCallDialog.lead}
+        onAssign={handleAssignDepositCall}
+      />
+
       {/* Delete Order Confirmation Dialog */}
       <Dialog
         open={deleteOrderDialog.open}
@@ -3381,41 +4128,60 @@ const OrdersPage = () => {
         fullWidth
       >
         <DialogTitle>
-          {deleteOrderDialog.permanentDelete ? 'Permanently Delete Order' : 'Cancel Order'}
+          {deleteOrderDialog.permanentDelete
+            ? "Permanently Delete Order"
+            : "Cancel Order"}
         </DialogTitle>
         <DialogContent>
           {deleteOrderDialog.permanentDelete ? (
             <>
               <Alert severity="error" sx={{ mb: 2 }}>
                 <Typography variant="body2">
-                  <strong>Warning:</strong> This will permanently delete the order from the database!
+                  <strong>Warning:</strong> This will permanently delete the
+                  order from the database!
                 </Typography>
               </Alert>
               <Typography>
-                Are you sure you want to permanently delete this order? This action will:
+                Are you sure you want to permanently delete this order? This
+                action will:
               </Typography>
               <Box sx={{ mt: 2, ml: 2 }}>
-                <Typography variant="body2">• Permanently remove the order from the database</Typography>
-                <Typography variant="body2" sx={{ mt: 1, fontWeight: 'bold', color: 'error.main' }}>
+                <Typography variant="body2">
+                  • Permanently remove the order from the database
+                </Typography>
+                <Typography
+                  variant="body2"
+                  sx={{ mt: 1, fontWeight: "bold", color: "error.main" }}
+                >
                   This action cannot be undone!
                 </Typography>
-                <Typography variant="body2" sx={{ mt: 1, fontStyle: 'italic', color: 'text.secondary' }}>
-                  Note: All cleanup (removing assignments, releasing leads, etc.) was already done when the order was cancelled.
+                <Typography
+                  variant="body2"
+                  sx={{ mt: 1, fontStyle: "italic", color: "text.secondary" }}
+                >
+                  Note: All cleanup (removing assignments, releasing leads,
+                  etc.) was already done when the order was cancelled.
                 </Typography>
               </Box>
-              {deleteOrderDialog.orderStatus !== 'cancelled' && (
+              {deleteOrderDialog.orderStatus !== "cancelled" && (
                 <Box sx={{ mt: 2 }}>
                   <FormControlLabel
                     control={
                       <Checkbox
                         checked={deleteOrderDialog.permanentDelete}
-                        onChange={(e) => setDeleteOrderDialog(prev => ({ ...prev, permanentDelete: e.target.checked }))}
+                        onChange={(e) =>
+                          setDeleteOrderDialog((prev) => ({
+                            ...prev,
+                            permanentDelete: e.target.checked,
+                          }))
+                        }
                         color="error"
                       />
                     }
                     label={
                       <Typography variant="body2" color="error">
-                        I understand this will permanently delete a non-cancelled order
+                        I understand this will permanently delete a
+                        non-cancelled order
                       </Typography>
                     }
                   />
@@ -3428,12 +4194,24 @@ const OrdersPage = () => {
                 Are you sure you want to cancel this order? This action will:
               </Typography>
               <Box sx={{ mt: 2, ml: 2 }}>
-                <Typography variant="body2">• Mark the order as cancelled</Typography>
-                <Typography variant="body2">• Remove client network assignments</Typography>
-                <Typography variant="body2">• Remove our network assignments</Typography>
-                <Typography variant="body2">• Remove campaign assignments</Typography>
-                <Typography variant="body2" sx={{ mt: 1, fontStyle: 'italic', color: 'text.secondary' }}>
-                  Note: The order will still exist in the database and can be permanently deleted later.
+                <Typography variant="body2">
+                  • Mark the order as cancelled
+                </Typography>
+                <Typography variant="body2">
+                  • Remove client network assignments
+                </Typography>
+                <Typography variant="body2">
+                  • Remove our network assignments
+                </Typography>
+                <Typography variant="body2">
+                  • Remove campaign assignments
+                </Typography>
+                <Typography
+                  variant="body2"
+                  sx={{ mt: 1, fontStyle: "italic", color: "text.secondary" }}
+                >
+                  Note: The order will still exist in the database and can be
+                  permanently deleted later.
                 </Typography>
               </Box>
             </>
@@ -3451,11 +4229,21 @@ const OrdersPage = () => {
             color="error"
             variant="contained"
             disabled={deleteOrderDialog.loading}
-            startIcon={deleteOrderDialog.loading ? <CircularProgress size={20} /> : <DeleteIcon />}
+            startIcon={
+              deleteOrderDialog.loading ? (
+                <CircularProgress size={20} />
+              ) : (
+                <DeleteIcon />
+              )
+            }
           >
             {deleteOrderDialog.loading
-              ? (deleteOrderDialog.permanentDelete ? 'Permanently Deleting...' : 'Cancelling...')
-              : (deleteOrderDialog.permanentDelete ? 'Permanently Delete' : 'Cancel Order')}
+              ? deleteOrderDialog.permanentDelete
+                ? "Permanently Deleting..."
+                : "Cancelling..."
+              : deleteOrderDialog.permanentDelete
+              ? "Permanently Delete"
+              : "Cancel Order"}
           </Button>
         </DialogActions>
       </Dialog>
@@ -3467,8 +4255,9 @@ const OrdersPage = () => {
         onSelectGender={handleGenderFallbackSelect}
         agentName={
           pendingOrderData?.agentFilter
-            ? agents.find(a => a._id === pendingOrderData.agentFilter)?.fullName || 'this agent'
-            : 'this agent'
+            ? agents.find((a) => a._id === pendingOrderData.agentFilter)
+                ?.fullName || "this agent"
+            : "this agent"
         }
         insufficientTypes={insufficientAgentLeads || {}}
         agents={agents}
@@ -3677,7 +4466,9 @@ const EditBrokerForm = ({ broker, onSubmit, loading, onCancel }) => {
               type="submit"
               variant="contained"
               disabled={loading || !formData.name.trim()}
-              startIcon={loading ? <CircularProgress size={16} /> : <SaveIcon />}
+              startIcon={
+                loading ? <CircularProgress size={16} /> : <SaveIcon />
+              }
             >
               {loading ? "Updating..." : "Update Broker"}
             </Button>
@@ -3810,5 +4601,3 @@ const BrokerManagementTable = ({
 };
 
 export default OrdersPage;
-
-

@@ -1,32 +1,32 @@
-const DepositCall = require('../models/DepositCall');
-const Lead = require('../models/Lead');
-const Order = require('../models/Order');
-const User = require('../models/User');
-const ClientBroker = require('../models/ClientBroker');
-const mongoose = require('mongoose');
+const DepositCall = require("../models/DepositCall");
+const Lead = require("../models/Lead");
+const Order = require("../models/Order");
+const User = require("../models/User");
+const ClientBroker = require("../models/ClientBroker");
+const mongoose = require("mongoose");
 
 // Get all deposit calls with filters
 exports.getDepositCalls = async (req, res, next) => {
   try {
-    const { 
-      page = 1, 
+    const {
+      page = 1,
       limit = 50,
       accountManager,
       assignedAgent,
       clientBrokerId,
-      status = 'active',
+      status = "active",
       startDate,
       endDate,
-      search
+      search,
     } = req.query;
 
     const query = {};
-    
+
     // Role-based filtering
-    if (req.user.role === 'agent') {
+    if (req.user.role === "agent") {
       // Agents can only see their assigned deposit calls
       query.assignedAgent = req.user.id;
-    } else if (req.user.role === 'affiliate_manager') {
+    } else if (req.user.role === "affiliate_manager") {
       // AMs can see their own assigned deposit calls OR filter by agent
       if (assignedAgent) {
         query.assignedAgent = assignedAgent;
@@ -34,10 +34,10 @@ exports.getDepositCalls = async (req, res, next) => {
         // Show all that they are AM for, or assigned to them as agent
         query.$or = [
           { accountManager: req.user.id },
-          { assignedAgent: req.user.id }
+          { assignedAgent: req.user.id },
         ];
       }
-    } else if (req.user.role === 'admin') {
+    } else if (req.user.role === "admin") {
       // Admins can filter by any AM or agent
       if (accountManager) {
         query.accountManager = accountManager;
@@ -48,7 +48,7 @@ exports.getDepositCalls = async (req, res, next) => {
     } else {
       return res.status(403).json({
         success: false,
-        message: 'Not authorized to view deposit calls'
+        message: "Not authorized to view deposit calls",
       });
     }
 
@@ -76,85 +76,88 @@ exports.getDepositCalls = async (req, res, next) => {
 
     if (search) {
       // Use aggregation for search across populated fields
-      const searchRegex = new RegExp(search, 'i');
+      const searchRegex = new RegExp(search, "i");
       const pipeline = [
         { $match: query },
         {
           $lookup: {
-            from: 'leads',
-            localField: 'leadId',
-            foreignField: '_id',
-            as: 'lead'
-          }
+            from: "leads",
+            localField: "leadId",
+            foreignField: "_id",
+            as: "lead",
+          },
         },
-        { $unwind: { path: '$lead', preserveNullAndEmptyArrays: true } },
+        { $unwind: { path: "$lead", preserveNullAndEmptyArrays: true } },
         {
           $match: {
             $or: [
               { ftdName: searchRegex },
               { ftdEmail: searchRegex },
               { ftdPhone: searchRegex },
-              { 'lead.firstName': searchRegex },
-              { 'lead.lastName': searchRegex }
-            ]
-          }
+              { "lead.firstName": searchRegex },
+              { "lead.lastName": searchRegex },
+            ],
+          },
         },
         { $sort: { createdAt: -1 } },
         { $skip: (parseInt(page) - 1) * parseInt(limit) },
-        { $limit: parseInt(limit) }
+        { $limit: parseInt(limit) },
       ];
 
       depositCalls = await DepositCall.aggregate(pipeline);
-      
+
       // Get count
       const countPipeline = [
         { $match: query },
         {
           $lookup: {
-            from: 'leads',
-            localField: 'leadId',
-            foreignField: '_id',
-            as: 'lead'
-          }
+            from: "leads",
+            localField: "leadId",
+            foreignField: "_id",
+            as: "lead",
+          },
         },
-        { $unwind: { path: '$lead', preserveNullAndEmptyArrays: true } },
+        { $unwind: { path: "$lead", preserveNullAndEmptyArrays: true } },
         {
           $match: {
             $or: [
               { ftdName: searchRegex },
               { ftdEmail: searchRegex },
               { ftdPhone: searchRegex },
-              { 'lead.firstName': searchRegex },
-              { 'lead.lastName': searchRegex }
-            ]
-          }
+              { "lead.firstName": searchRegex },
+              { "lead.lastName": searchRegex },
+            ],
+          },
         },
-        { $count: 'total' }
+        { $count: "total" },
       ];
-      
+
       const countResult = await DepositCall.aggregate(countPipeline);
       total = countResult[0]?.total || 0;
 
       // Populate additional fields
       await DepositCall.populate(depositCalls, [
-        { path: 'leadId', select: 'firstName lastName newEmail newPhone country' },
-        { path: 'orderId', select: 'createdAt plannedDate status' },
-        { path: 'clientBrokerId', select: 'name domain' },
-        { path: 'accountManager', select: 'fullName email' },
-        { path: 'assignedAgent', select: 'fullName email' },
-        { path: 'createdBy', select: 'fullName' }
+        {
+          path: "leadId",
+          select: "firstName lastName newEmail newPhone country",
+        },
+        { path: "orderId", select: "createdAt plannedDate status" },
+        { path: "clientBrokerId", select: "name domain" },
+        { path: "accountManager", select: "fullName email" },
+        { path: "assignedAgent", select: "fullName email" },
+        { path: "createdBy", select: "fullName" },
       ]);
     } else {
       // Standard query
       total = await DepositCall.countDocuments(query);
-      
+
       depositCalls = await DepositCall.find(query)
-        .populate('leadId', 'firstName lastName newEmail newPhone country')
-        .populate('orderId', 'createdAt plannedDate status')
-        .populate('clientBrokerId', 'name domain')
-        .populate('accountManager', 'fullName email')
-        .populate('assignedAgent', 'fullName email')
-        .populate('createdBy', 'fullName')
+        .populate("leadId", "firstName lastName newEmail newPhone country")
+        .populate("orderId", "createdAt plannedDate status")
+        .populate("clientBrokerId", "name domain")
+        .populate("accountManager", "fullName email")
+        .populate("assignedAgent", "fullName email")
+        .populate("createdBy", "fullName")
         .sort({ createdAt: -1 })
         .skip((parseInt(page) - 1) * parseInt(limit))
         .limit(parseInt(limit))
@@ -168,8 +171,8 @@ exports.getDepositCalls = async (req, res, next) => {
         current: parseInt(page),
         pages: Math.ceil(total / parseInt(limit)),
         total,
-        limit: parseInt(limit)
-      }
+        limit: parseInt(limit),
+      },
     });
   } catch (error) {
     next(error);
@@ -180,32 +183,34 @@ exports.getDepositCalls = async (req, res, next) => {
 exports.getDepositCallById = async (req, res, next) => {
   try {
     const depositCall = await DepositCall.findById(req.params.id)
-      .populate('leadId', 'firstName lastName newEmail newPhone country')
-      .populate('orderId', 'createdAt plannedDate status')
-      .populate('clientBrokerId', 'name domain')
-      .populate('accountManager', 'fullName email')
-      .populate('assignedAgent', 'fullName email')
-      .populate('createdBy', 'fullName');
+      .populate("leadId", "firstName lastName newEmail newPhone country")
+      .populate("orderId", "createdAt plannedDate status")
+      .populate("clientBrokerId", "name domain")
+      .populate("accountManager", "fullName email")
+      .populate("assignedAgent", "fullName email")
+      .populate("createdBy", "fullName");
 
     if (!depositCall) {
       return res.status(404).json({
         success: false,
-        message: 'Deposit call not found'
+        message: "Deposit call not found",
       });
     }
 
     // Check access
-    if (req.user.role === 'agent' && 
-        depositCall.assignedAgent?.toString() !== req.user.id) {
+    if (
+      req.user.role === "agent" &&
+      depositCall.assignedAgent?.toString() !== req.user.id
+    ) {
       return res.status(403).json({
         success: false,
-        message: 'Not authorized to view this deposit call'
+        message: "Not authorized to view this deposit call",
       });
     }
 
     res.status(200).json({
       success: true,
-      data: depositCall
+      data: depositCall,
     });
   } catch (error) {
     next(error);
@@ -215,13 +220,14 @@ exports.getDepositCallById = async (req, res, next) => {
 // Create deposit call
 exports.createDepositCall = async (req, res, next) => {
   try {
-    const { leadId, orderId, clientBrokerId, accountManager, assignedAgent } = req.body;
+    const { leadId, orderId, clientBrokerId, accountManager, assignedAgent } =
+      req.body;
 
     // Only admin and AM can create deposit calls
-    if (!['admin', 'affiliate_manager'].includes(req.user.role)) {
+    if (!["admin", "affiliate_manager"].includes(req.user.role)) {
       return res.status(403).json({
         success: false,
-        message: 'Not authorized to create deposit calls'
+        message: "Not authorized to create deposit calls",
       });
     }
 
@@ -230,7 +236,7 @@ exports.createDepositCall = async (req, res, next) => {
     if (!lead) {
       return res.status(404).json({
         success: false,
-        message: 'Lead not found'
+        message: "Lead not found",
       });
     }
 
@@ -239,7 +245,7 @@ exports.createDepositCall = async (req, res, next) => {
     if (existing) {
       return res.status(400).json({
         success: false,
-        message: 'Deposit call tracking already exists for this lead and order'
+        message: "Deposit call tracking already exists for this lead and order",
       });
     }
 
@@ -253,21 +259,21 @@ exports.createDepositCall = async (req, res, next) => {
       ftdName: `${lead.firstName} ${lead.lastName}`,
       ftdEmail: lead.newEmail,
       ftdPhone: lead.newPhone,
-      createdBy: req.user.id
+      createdBy: req.user.id,
     });
 
     // Populate and return
     const populated = await DepositCall.findById(depositCall._id)
-      .populate('leadId', 'firstName lastName newEmail newPhone country')
-      .populate('orderId', 'createdAt plannedDate status')
-      .populate('clientBrokerId', 'name domain')
-      .populate('accountManager', 'fullName email')
-      .populate('assignedAgent', 'fullName email');
+      .populate("leadId", "firstName lastName newEmail newPhone country")
+      .populate("orderId", "createdAt plannedDate status")
+      .populate("clientBrokerId", "name domain")
+      .populate("accountManager", "fullName email")
+      .populate("assignedAgent", "fullName email");
 
     res.status(201).json({
       success: true,
-      message: 'Deposit call tracking created successfully',
-      data: populated
+      message: "Deposit call tracking created successfully",
+      data: populated,
     });
   } catch (error) {
     next(error);
@@ -280,10 +286,10 @@ exports.updateDepositCall = async (req, res, next) => {
     const { accountManager, assignedAgent, clientBrokerId, status } = req.body;
 
     // Only admin and AM can update deposit calls
-    if (!['admin', 'affiliate_manager'].includes(req.user.role)) {
+    if (!["admin", "affiliate_manager"].includes(req.user.role)) {
       return res.status(403).json({
         success: false,
-        message: 'Not authorized to update deposit calls'
+        message: "Not authorized to update deposit calls",
       });
     }
 
@@ -291,30 +297,32 @@ exports.updateDepositCall = async (req, res, next) => {
     if (!depositCall) {
       return res.status(404).json({
         success: false,
-        message: 'Deposit call not found'
+        message: "Deposit call not found",
       });
     }
 
     // Update fields
-    if (accountManager !== undefined) depositCall.accountManager = accountManager;
+    if (accountManager !== undefined)
+      depositCall.accountManager = accountManager;
     if (assignedAgent !== undefined) depositCall.assignedAgent = assignedAgent;
-    if (clientBrokerId !== undefined) depositCall.clientBrokerId = clientBrokerId;
+    if (clientBrokerId !== undefined)
+      depositCall.clientBrokerId = clientBrokerId;
     if (status !== undefined) depositCall.status = status;
 
     await depositCall.save();
 
     // Populate and return
     const populated = await DepositCall.findById(depositCall._id)
-      .populate('leadId', 'firstName lastName newEmail newPhone country')
-      .populate('orderId', 'createdAt plannedDate status')
-      .populate('clientBrokerId', 'name domain')
-      .populate('accountManager', 'fullName email')
-      .populate('assignedAgent', 'fullName email');
+      .populate("leadId", "firstName lastName newEmail newPhone country")
+      .populate("orderId", "createdAt plannedDate status")
+      .populate("clientBrokerId", "name domain")
+      .populate("accountManager", "fullName email")
+      .populate("assignedAgent", "fullName email");
 
     res.status(200).json({
       success: true,
-      message: 'Deposit call updated successfully',
-      data: populated
+      message: "Deposit call updated successfully",
+      data: populated,
     });
   } catch (error) {
     next(error);
@@ -331,22 +339,24 @@ exports.scheduleCall = async (req, res, next) => {
     if (!depositCall) {
       return res.status(404).json({
         success: false,
-        message: 'Deposit call not found'
+        message: "Deposit call not found",
       });
     }
 
     // Check access - agents can only schedule for their own
-    if (req.user.role === 'agent' && 
-        depositCall.assignedAgent?.toString() !== req.user.id) {
+    if (
+      req.user.role === "agent" &&
+      depositCall.assignedAgent?.toString() !== req.user.id
+    ) {
       return res.status(403).json({
         success: false,
-        message: 'Not authorized to schedule calls for this deposit'
+        message: "Not authorized to schedule calls for this deposit",
       });
     }
 
     // Schedule the call
     depositCall.scheduleCall(callNumber, new Date(expectedDate), req.user.id);
-    
+
     if (notes) {
       depositCall[`call${callNumber}`].notes = notes;
     }
@@ -356,7 +366,7 @@ exports.scheduleCall = async (req, res, next) => {
     res.status(200).json({
       success: true,
       message: `Call ${callNumber} scheduled successfully`,
-      data: depositCall
+      data: depositCall,
     });
   } catch (error) {
     next(error);
@@ -373,27 +383,29 @@ exports.markCallDone = async (req, res, next) => {
     if (!depositCall) {
       return res.status(404).json({
         success: false,
-        message: 'Deposit call not found'
+        message: "Deposit call not found",
       });
     }
 
     // Check access - agents can only mark done for their own
-    if (req.user.role === 'agent' && 
-        depositCall.assignedAgent?.toString() !== req.user.id) {
+    if (
+      req.user.role === "agent" &&
+      depositCall.assignedAgent?.toString() !== req.user.id
+    ) {
       return res.status(403).json({
         success: false,
-        message: 'Not authorized to mark calls for this deposit'
+        message: "Not authorized to mark calls for this deposit",
       });
     }
 
     // Mark the call as done (pending approval)
-    depositCall.markCallDone(callNumber, req.user.id, notes || '');
+    depositCall.markCallDone(callNumber, req.user.id, notes || "");
     await depositCall.save();
 
     res.status(200).json({
       success: true,
       message: `Call ${callNumber} marked as done and pending approval`,
-      data: depositCall
+      data: depositCall,
     });
   } catch (error) {
     next(error);
@@ -407,10 +419,10 @@ exports.approveCall = async (req, res, next) => {
     const { id } = req.params;
 
     // Only admin and AM can approve
-    if (!['admin', 'affiliate_manager'].includes(req.user.role)) {
+    if (!["admin", "affiliate_manager"].includes(req.user.role)) {
       return res.status(403).json({
         success: false,
-        message: 'Not authorized to approve calls'
+        message: "Not authorized to approve calls",
       });
     }
 
@@ -418,16 +430,18 @@ exports.approveCall = async (req, res, next) => {
     if (!depositCall) {
       return res.status(404).json({
         success: false,
-        message: 'Deposit call not found'
+        message: "Deposit call not found",
       });
     }
 
     // AM can only approve their assigned deposit calls
-    if (req.user.role === 'affiliate_manager' && 
-        depositCall.accountManager?.toString() !== req.user.id) {
+    if (
+      req.user.role === "affiliate_manager" &&
+      depositCall.accountManager?.toString() !== req.user.id
+    ) {
       return res.status(403).json({
         success: false,
-        message: 'Not authorized to approve calls for this deposit'
+        message: "Not authorized to approve calls for this deposit",
       });
     }
 
@@ -438,7 +452,7 @@ exports.approveCall = async (req, res, next) => {
     res.status(200).json({
       success: true,
       message: `Call ${callNumber} approved successfully`,
-      data: depositCall
+      data: depositCall,
     });
   } catch (error) {
     next(error);
@@ -452,10 +466,10 @@ exports.rejectCall = async (req, res, next) => {
     const { id } = req.params;
 
     // Only admin and AM can reject
-    if (!['admin', 'affiliate_manager'].includes(req.user.role)) {
+    if (!["admin", "affiliate_manager"].includes(req.user.role)) {
       return res.status(403).json({
         success: false,
-        message: 'Not authorized to reject calls'
+        message: "Not authorized to reject calls",
       });
     }
 
@@ -463,16 +477,18 @@ exports.rejectCall = async (req, res, next) => {
     if (!depositCall) {
       return res.status(404).json({
         success: false,
-        message: 'Deposit call not found'
+        message: "Deposit call not found",
       });
     }
 
     // AM can only reject their assigned deposit calls
-    if (req.user.role === 'affiliate_manager' && 
-        depositCall.accountManager?.toString() !== req.user.id) {
+    if (
+      req.user.role === "affiliate_manager" &&
+      depositCall.accountManager?.toString() !== req.user.id
+    ) {
       return res.status(403).json({
         success: false,
-        message: 'Not authorized to reject calls for this deposit'
+        message: "Not authorized to reject calls for this deposit",
       });
     }
 
@@ -483,7 +499,7 @@ exports.rejectCall = async (req, res, next) => {
     res.status(200).json({
       success: true,
       message: `Call ${callNumber} rejected, returned to scheduled state`,
-      data: depositCall
+      data: depositCall,
     });
   } catch (error) {
     next(error);
@@ -494,15 +510,15 @@ exports.rejectCall = async (req, res, next) => {
 exports.getPendingApprovals = async (req, res, next) => {
   try {
     // Only admin and AM can view pending approvals
-    if (!['admin', 'affiliate_manager'].includes(req.user.role)) {
+    if (!["admin", "affiliate_manager"].includes(req.user.role)) {
       return res.status(403).json({
         success: false,
-        message: 'Not authorized to view pending approvals'
+        message: "Not authorized to view pending approvals",
       });
     }
 
     let depositCalls;
-    if (req.user.role === 'admin') {
+    if (req.user.role === "admin") {
       depositCalls = await DepositCall.getPendingApprovals();
     } else {
       // AM sees only their assigned
@@ -510,30 +526,30 @@ exports.getPendingApprovals = async (req, res, next) => {
     }
 
     // Transform to include call details
-    const result = depositCalls.map(dc => {
+    const result = depositCalls.map((dc) => {
       const pendingCalls = [];
       for (let i = 1; i <= 10; i++) {
         const call = dc[`call${i}`];
-        if (call && call.status === 'pending_approval') {
+        if (call && call.status === "pending_approval") {
           pendingCalls.push({
             callNumber: i,
             expectedDate: call.expectedDate,
             doneDate: call.doneDate,
             markedBy: call.markedBy,
-            notes: call.notes
+            notes: call.notes,
           });
         }
       }
       return {
         ...dc.toObject(),
-        pendingCalls
+        pendingCalls,
       };
     });
 
     res.status(200).json({
       success: true,
       data: result,
-      count: result.length
+      count: result.length,
     });
   } catch (error) {
     next(error);
@@ -548,7 +564,7 @@ exports.getCalendarAppointments = async (req, res, next) => {
     if (!startDate || !endDate) {
       return res.status(400).json({
         success: false,
-        message: 'startDate and endDate are required'
+        message: "startDate and endDate are required",
       });
     }
 
@@ -556,32 +572,39 @@ exports.getCalendarAppointments = async (req, res, next) => {
     const end = new Date(endDate);
 
     const filters = {};
-    
+
     // Role-based filtering
-    if (req.user.role === 'agent') {
+    if (req.user.role === "agent") {
       filters.assignedAgent = req.user.id;
-    } else if (req.user.role === 'affiliate_manager') {
+    } else if (req.user.role === "affiliate_manager") {
       if (assignedAgent) {
         filters.assignedAgent = assignedAgent;
       } else {
         // Show all their assigned
         filters.accountManager = req.user.id;
       }
-    } else if (req.user.role === 'admin') {
+    } else if (req.user.role === "admin") {
       if (accountManager) filters.accountManager = accountManager;
       if (assignedAgent) filters.assignedAgent = assignedAgent;
     }
 
-    const depositCalls = await DepositCall.getUpcomingAppointments(start, end, filters);
+    const depositCalls = await DepositCall.getUpcomingAppointments(
+      start,
+      end,
+      filters
+    );
 
     // Transform to calendar events
     const events = [];
-    depositCalls.forEach(dc => {
+    depositCalls.forEach((dc) => {
       for (let i = 1; i <= 10; i++) {
         const call = dc[`call${i}`];
-        if (call && call.expectedDate && 
-            new Date(call.expectedDate) >= start && 
-            new Date(call.expectedDate) <= end) {
+        if (
+          call &&
+          call.expectedDate &&
+          new Date(call.expectedDate) >= start &&
+          new Date(call.expectedDate) <= end
+        ) {
           events.push({
             id: `${dc._id}_call${i}`,
             depositCallId: dc._id,
@@ -596,7 +619,7 @@ exports.getCalendarAppointments = async (req, res, next) => {
             accountManager: dc.accountManager?.fullName,
             agent: dc.assignedAgent?.fullName,
             doneDate: call.doneDate,
-            notes: call.notes
+            notes: call.notes,
           });
         }
       }
@@ -608,7 +631,7 @@ exports.getCalendarAppointments = async (req, res, next) => {
     res.status(200).json({
       success: true,
       data: events,
-      count: events.length
+      count: events.length,
     });
   } catch (error) {
     next(error);
@@ -621,33 +644,33 @@ exports.createFromOrder = async (req, res, next) => {
     const { orderId } = req.body;
 
     // Only admin and AM can create
-    if (!['admin', 'affiliate_manager'].includes(req.user.role)) {
+    if (!["admin", "affiliate_manager"].includes(req.user.role)) {
       return res.status(403).json({
         success: false,
-        message: 'Not authorized to create deposit calls'
+        message: "Not authorized to create deposit calls",
       });
     }
 
     const order = await Order.findById(orderId)
       .populate({
-        path: 'leads',
-        match: { leadType: 'ftd' }
+        path: "leads",
+        match: { leadType: "ftd" },
       })
-      .populate('selectedClientBrokers')
-      .populate('requester');
+      .populate("selectedClientBrokers")
+      .populate("requester");
 
     if (!order) {
       return res.status(404).json({
         success: false,
-        message: 'Order not found'
+        message: "Order not found",
       });
     }
 
-    const ftdLeads = order.leads.filter(lead => lead.leadType === 'ftd');
+    const ftdLeads = order.leads.filter((lead) => lead.leadType === "ftd");
     if (ftdLeads.length === 0) {
       return res.status(400).json({
         success: false,
-        message: 'No FTD leads found in this order'
+        message: "No FTD leads found in this order",
       });
     }
 
@@ -663,13 +686,16 @@ exports.createFromOrder = async (req, res, next) => {
       }
 
       // Get client broker from lead's history
-      const clientBrokerId = lead.assignedClientBrokers?.[0] || 
-                            order.selectedClientBrokers?.[0]?._id || null;
+      const clientBrokerId =
+        lead.assignedClientBrokers?.[0] ||
+        order.selectedClientBrokers?.[0]?._id ||
+        null;
 
       // Determine AM (requester if AM, or null for admin to assign)
-      const accountManager = order.requester?.role === 'affiliate_manager' 
-        ? order.requester._id 
-        : null;
+      const accountManager =
+        order.requester?.role === "affiliate_manager"
+          ? order.requester._id
+          : null;
 
       const depositCall = await DepositCall.create({
         leadId: lead._id,
@@ -680,7 +706,7 @@ exports.createFromOrder = async (req, res, next) => {
         ftdName: `${lead.firstName} ${lead.lastName}`,
         ftdEmail: lead.newEmail,
         ftdPhone: lead.newPhone,
-        createdBy: req.user.id
+        createdBy: req.user.id,
       });
 
       created.push(depositCall._id);
@@ -691,8 +717,130 @@ exports.createFromOrder = async (req, res, next) => {
       message: `Created ${created.length} deposit call records, skipped ${skipped.length} existing`,
       data: {
         created,
-        skipped
-      }
+        skipped,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Create/assign deposit call for a single FTD lead to an agent
+exports.createAndAssignToAgent = async (req, res, next) => {
+  try {
+    const { orderId, leadId, agentId } = req.body;
+
+    // Only admin and AM can create and assign
+    if (!["admin", "affiliate_manager"].includes(req.user.role)) {
+      return res.status(403).json({
+        success: false,
+        message: "Not authorized to assign deposit calls",
+      });
+    }
+
+    // Validate inputs
+    if (!orderId || !leadId || !agentId) {
+      return res.status(400).json({
+        success: false,
+        message: "Order ID, Lead ID, and Agent ID are required",
+      });
+    }
+
+    // Verify order exists
+    const order = await Order.findById(orderId)
+      .populate("selectedClientBrokers")
+      .populate("requester");
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found",
+      });
+    }
+
+    // Verify lead exists and is FTD
+    const lead = await Lead.findById(leadId);
+    if (!lead) {
+      return res.status(404).json({
+        success: false,
+        message: "Lead not found",
+      });
+    }
+
+    if (lead.leadType !== "ftd") {
+      return res.status(400).json({
+        success: false,
+        message: "Only FTD leads can be assigned deposit calls",
+      });
+    }
+
+    // Verify agent exists and has agent role
+    const agent = await User.findById(agentId);
+    if (!agent || agent.role !== "agent") {
+      return res.status(404).json({
+        success: false,
+        message: "Valid agent not found",
+      });
+    }
+
+    // Check if deposit call already exists
+    let depositCall = await DepositCall.findOne({ leadId, orderId });
+
+    if (depositCall) {
+      // Update existing deposit call with new agent assignment
+      depositCall.assignedAgent = agentId;
+      await depositCall.save();
+
+      // Populate for response
+      await depositCall.populate(
+        "leadId accountManager assignedAgent clientBrokerId"
+      );
+
+      return res.status(200).json({
+        success: true,
+        message: "Deposit call reassigned to agent successfully",
+        data: depositCall,
+        isNew: false,
+      });
+    }
+
+    // Get client broker from lead's history or order
+    const clientBrokerId =
+      lead.assignedClientBrokers?.[0] ||
+      order.selectedClientBrokers?.[0]?._id ||
+      null;
+
+    // Determine AM (requester if AM, or current user if admin)
+    const accountManager =
+      order.requester?.role === "affiliate_manager"
+        ? order.requester._id
+        : req.user.role === "affiliate_manager"
+        ? req.user.id
+        : null;
+
+    // Create new deposit call
+    depositCall = await DepositCall.create({
+      leadId: lead._id,
+      orderId,
+      clientBrokerId,
+      accountManager,
+      assignedAgent: agentId,
+      ftdName: `${lead.firstName} ${lead.lastName}`,
+      ftdEmail: lead.newEmail,
+      ftdPhone: lead.newPhone,
+      createdBy: req.user.id,
+    });
+
+    // Populate for response
+    await depositCall.populate(
+      "leadId accountManager assignedAgent clientBrokerId"
+    );
+
+    res.status(201).json({
+      success: true,
+      message: "Deposit call created and assigned to agent successfully",
+      data: depositCall,
+      isNew: true,
     });
   } catch (error) {
     next(error);
@@ -709,23 +857,29 @@ exports.bulkScheduleCalls = async (req, res, next) => {
     if (!depositCall) {
       return res.status(404).json({
         success: false,
-        message: 'Deposit call not found'
+        message: "Deposit call not found",
       });
     }
 
     // Check access
-    if (req.user.role === 'agent' && 
-        depositCall.assignedAgent?.toString() !== req.user.id) {
+    if (
+      req.user.role === "agent" &&
+      depositCall.assignedAgent?.toString() !== req.user.id
+    ) {
       return res.status(403).json({
         success: false,
-        message: 'Not authorized to schedule calls for this deposit'
+        message: "Not authorized to schedule calls for this deposit",
       });
     }
 
     // Schedule all calls
     for (const call of calls) {
       if (call.callNumber >= 1 && call.callNumber <= 10 && call.expectedDate) {
-        depositCall.scheduleCall(call.callNumber, new Date(call.expectedDate), req.user.id);
+        depositCall.scheduleCall(
+          call.callNumber,
+          new Date(call.expectedDate),
+          req.user.id
+        );
         if (call.notes) {
           depositCall[`call${call.callNumber}`].notes = call.notes;
         }
@@ -737,10 +891,9 @@ exports.bulkScheduleCalls = async (req, res, next) => {
     res.status(200).json({
       success: true,
       message: `Scheduled ${calls.length} calls successfully`,
-      data: depositCall
+      data: depositCall,
     });
   } catch (error) {
     next(error);
   }
 };
-
