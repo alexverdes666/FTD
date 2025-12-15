@@ -55,12 +55,13 @@ GOIP_GATEWAY_PASSWORD=Greedisgood10!
 **Risk:** If this file is committed to a public repository, it exposes the gateway password.
 **Recommendation:** Replace with a dummy value like `your-password-here`.
 
-### 1.4 2FA Security Downgrade Risk (High)
+### 1.4 2FA Security Downgrade Risk (High) - FIXED
 
 **Location:** `backend/controllers/auth.js` (Lines 425-433)
 **Issue:** If 2FA secret decryption fails (e.g., due to key rotation issues or configuration errors), the system automatically disables 2FA for the user.
 
 ```javascript
+// BEFORE FIX:
 await User.findByIdAndUpdate(userId, {
   twoFactorEnabled: false,
   // ...
@@ -69,6 +70,7 @@ await User.findByIdAndUpdate(userId, {
 
 **Risk:** This "fail-open" behavior allows a potential security bypass. If an attacker can trigger a decryption error (or if the environment is misconfigured), the account loses its 2FA protection automatically.
 **Recommendation:** "Fail closed". Do not disable 2FA automatically on system errors. Log the error and require administrator intervention or a secure manual reset flow (e.g., email recovery).
+**Status:** Fixed. System now fails closed (returns 500 error) and logs the issue without disabling 2FA.
 
 ---
 
@@ -116,5 +118,5 @@ The codebase is generally well-structured with good use of `express-validator` a
 1.  **PATCH:** Remove hardcoded credentials from `agentScraperService.js`.
 2.  **PATCH:** Implement `dompurify` in `ChatWindow.jsx`.
 3.  **CLEANUP:** Sanitize `backend/env.example`.
-4.  **FIX:** Change 2FA error handling to fail-closed.
+4.  **FIX:** [COMPLETED] Change 2FA error handling to fail-closed.
 5.  **CONFIG:** Add global rate limiting.
