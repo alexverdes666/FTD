@@ -2,7 +2,7 @@ const express = require("express");
 const axios = require("axios");
 const { protect } = require("../middleware/auth");
 const router = express.Router();
-const EXTERNAL_API_BASE = "https://agent-report-mfl3.onrender.com/api/mongodb";
+const EXTERNAL_API_BASE = "https://agent-report-1.onrender.com/api/mongodb";
 router.get("/", protect, async (req, res, next) => {
   try {
     if (req.user.role !== "admin") {

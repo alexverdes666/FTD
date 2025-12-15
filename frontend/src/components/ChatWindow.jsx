@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import DOMPurify from 'dompurify';
 import {
   Box,
   Paper,
@@ -2344,7 +2345,7 @@ const ChatWindow = ({ isOpen, onClose, initialConversationId = null, initialPart
                                       }
                                     }}
                                     dangerouslySetInnerHTML={{ 
-                                      __html: message.highlightedContent || message.content 
+                                      __html: DOMPurify.sanitize(message.highlightedContent || message.content) 
                                     }}
                                   />
                                   {message.replyTo && (
@@ -2495,7 +2496,7 @@ const ChatWindow = ({ isOpen, onClose, initialConversationId = null, initialPart
                                   <Typography 
                                     variant="body1"
                                     dangerouslySetInnerHTML={{
-                                      __html: parseMentions(message.content, user._id)
+                                      __html: DOMPurify.sanitize(parseMentions(message.content, user._id))
                                     }}
                                     sx={{
                                       fontSize: '0.95rem',

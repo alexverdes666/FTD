@@ -1,4 +1,4 @@
-const EXTERNAL_API_BASE = "https://agent-report-mfl3.onrender.com/api/mongodb";
+const EXTERNAL_API_BASE = "https://agent-report-1.onrender.com/api/mongodb";
 
 /**
  * Get available months with agent call data

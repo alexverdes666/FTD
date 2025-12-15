@@ -2,7 +2,7 @@ const axios = require("axios");
 const User = require("../models/User");
 
 const EXTERNAL_API_URL =
-  "https://agent-report-mfl3.onrender.com/api/mongodb/agents";
+  "https://agent-report-1.onrender.com/api/mongodb/agents";
 
 class AgentMonthlyHistoryService {
   constructor() {

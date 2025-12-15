@@ -115,7 +115,7 @@ exports.login = async (req, res, next) => {
     if (user.role === "agent" && user.fullName) {
       try {
         const agentResponse = await axios.get(
-          `https://agent-report-mfl3.onrender.com/api/mongodb/agents/${encodeURIComponent(
+          `https://agent-report-1.onrender.com/api/mongodb/agents/${encodeURIComponent(
             user.fullName
           )}`
         );
@@ -420,23 +420,12 @@ exports.verify2FAAndLogin = async (req, res, next) => {
           !!process.env.ENCRYPTION_KEY
         );
 
-        // If decryption fails, the encryption key changed
-        // Disable 2FA for this user so they can log in and re-enable it
-        await User.findByIdAndUpdate(
-          userId,
-          {
-            twoFactorEnabled: false,
-            twoFactorSecret: null,
-            twoFactorBackupCodes: [],
-          },
-          { new: true }
-        );
-
-        return res.status(400).json({
+        // If decryption fails, we must NOT disable 2FA (Fail Closed)
+        // Log the error and require admin intervention or manual reset
+        return res.status(500).json({
           success: false,
           message:
-            "2FA encryption key mismatch. 2FA has been disabled for your account. Please log in again and re-enable 2FA.",
-          twoFactorReset: true,
+            "System error during 2FA verification. Please contact support.",
         });
       }
     }
@@ -455,7 +444,7 @@ exports.verify2FAAndLogin = async (req, res, next) => {
     if (user.role === "agent" && user.fullName) {
       try {
         const agentResponse = await axios.get(
-          `https://agent-report-mfl3.onrender.com/api/mongodb/agents/${encodeURIComponent(
+          `https://agent-report-1.onrender.com/api/mongodb/agents/${encodeURIComponent(
             user.fullName
           )}`
         );
@@ -549,7 +538,7 @@ exports.switchAccount = async (req, res, next) => {
     if (targetUser.role === "agent" && targetUser.fullName) {
       try {
         const agentResponse = await axios.get(
-          `https://agent-report-mfl3.onrender.com/api/mongodb/agents/${encodeURIComponent(
+          `https://agent-report-1.onrender.com/api/mongodb/agents/${encodeURIComponent(
             targetUser.fullName
           )}`
         );

@@ -3,7 +3,7 @@ const AgentPerformance = require("../models/AgentPerformance");
 const User = require("../models/User");
 
 const EXTERNAL_API_URL =
-  "https://agent-report-mfl3.onrender.com/api/mongodb/agents/performance";
+  "https://agent-report-1.onrender.com/api/mongodb/agents/performance";
 
 class ExternalAgentPerformanceService {
   constructor() {
