@@ -58,6 +58,8 @@ import { yupResolver } from "@hookform/resolvers/yup";
 import * as yup from "yup";
 import api from "../services/api";
 import { selectUser } from "../store/slices/authSlice";
+import useSensitiveAction from "../hooks/useSensitiveAction";
+import SensitiveActionModal from "../components/SensitiveActionModal";
 const StyledCard = styled(Card)(({ theme }) => ({
   background: alpha(theme.palette.background.paper, 0.8),
   backdropFilter: "blur(10px)",
@@ -477,6 +479,8 @@ const UserDialog = React.memo(
 const UsersPage = () => {
   const theme = useTheme();
   const currentUser = useSelector(selectUser);
+  const { executeSensitiveAction, sensitiveActionState, resetSensitiveAction } =
+    useSensitiveAction();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -506,7 +510,11 @@ const UsersPage = () => {
       password: "",
       newPassword: "",
       isActive: true,
-      permissions: { canCreateOrders: true, canManageLeads: false, canManageRefunds: false },
+      permissions: {
+        canCreateOrders: true,
+        canManageLeads: false,
+        canManageRefunds: false,
+      },
       _isEditing: false,
     },
   });
@@ -601,58 +609,113 @@ const UsersPage = () => {
             data.newPassword &&
             data.newPassword.trim() !== ""
           ) {
-            await api.put(`/users/${dialogState.user._id}/password`, {
-              newPassword: data.newPassword,
+            await executeSensitiveAction({
+              actionName: "Change User Password",
+              actionDescription: `Changing password for ${dialogState.user.fullName}`,
+              apiCall: (headers) =>
+                api.put(
+                  `/users/${dialogState.user._id}/password`,
+                  {
+                    newPassword: data.newPassword,
+                  },
+                  { headers }
+                ),
             });
           }
 
           showSuccess("User updated successfully!");
         } else {
-          await api.post("/users", { ...userData, ...permissionsData });
+          await executeSensitiveAction({
+            actionName: "Create User",
+            actionDescription: `Creating new user ${data.fullName} (${data.role})`,
+            apiCall: (headers) =>
+              api.post(
+                "/users",
+                { ...userData, ...permissionsData },
+                { headers }
+              ),
+          });
           showSuccess("User created successfully!");
         }
         handleDialogClose();
         fetchUsers();
       } catch (err) {
-        setError(err.response?.data?.message || "Failed to save user.");
+        if (err.message !== "User cancelled sensitive action") {
+          setError(err.response?.data?.message || "Failed to save user.");
+        }
       }
     },
-    [dialogState.user, fetchUsers, handleDialogClose]
+    [
+      dialogState.user,
+      fetchUsers,
+      handleDialogClose,
+      currentUser,
+      executeSensitiveAction,
+    ]
   );
   const handleDeactivateUser = useCallback(async () => {
     clearMessages();
     try {
-      await api.delete(`/users/${dialogState.user._id}`);
+      await executeSensitiveAction({
+        actionName: "Deactivate User",
+        actionDescription: `Deactivating user ${dialogState.user.fullName}`,
+        apiCall: (headers) =>
+          api.delete(`/users/${dialogState.user._id}`, { headers }),
+      });
       showSuccess("User deactivated successfully!");
       handleDialogClose();
       fetchUsers();
     } catch (err) {
-      setError(err.response?.data?.message || "Failed to deactivate user.");
+      if (err.message !== "User cancelled sensitive action") {
+        setError(err.response?.data?.message || "Failed to deactivate user.");
+      }
     }
-  }, [dialogState.user, fetchUsers, handleDialogClose]);
+  }, [dialogState.user, fetchUsers, handleDialogClose, executeSensitiveAction]);
 
   const handlePermanentDeleteUser = useCallback(async () => {
     clearMessages();
     try {
-      await api.delete(`/users/${dialogState.user._id}/permanent`);
+      await executeSensitiveAction({
+        actionName: "Delete User",
+        actionDescription: `Permanently deleting user ${dialogState.user.fullName}`,
+        apiCall: (headers) =>
+          api.delete(`/users/${dialogState.user._id}/permanent`, { headers }),
+      });
       showSuccess("User permanently deleted successfully!");
       handleDialogClose();
       fetchUsers();
     } catch (err) {
-      setError(err.response?.data?.message || "Failed to permanently delete user.");
+      if (err.message !== "User cancelled sensitive action") {
+        setError(
+          err.response?.data?.message || "Failed to permanently delete user."
+        );
+      }
     }
-  }, [dialogState.user, fetchUsers, handleDialogClose]);
+  }, [dialogState.user, fetchUsers, handleDialogClose, executeSensitiveAction]);
 
   const handleKickSession = useCallback(async () => {
     clearMessages();
     try {
-      await api.post(`/users/${dialogState.user._id}/kick-session`);
-      showSuccess(`Session kicked for ${dialogState.user.fullName}. They will need to log in again.`);
+      await executeSensitiveAction({
+        actionName: "Kick Session",
+        actionDescription: `Kicking session for ${dialogState.user.fullName}`,
+        apiCall: (headers) =>
+          api.post(
+            `/users/${dialogState.user._id}/kick-session`,
+            {},
+            { headers }
+          ),
+      });
+      showSuccess(
+        `Session kicked for ${dialogState.user.fullName}. They will need to log in again.`
+      );
       handleDialogClose();
     } catch (err) {
-      setError(err.response?.data?.message || "Failed to kick user session.");
+      if (err.message !== "User cancelled sensitive action") {
+        setError(err.response?.data?.message || "Failed to kick user session.");
+      }
     }
-  }, [dialogState.user, handleDialogClose]);
+  }, [dialogState.user, handleDialogClose, executeSensitiveAction]);
   const handleApproveUser = useCallback(
     async (role) => {
       clearMessages();
@@ -1005,7 +1068,14 @@ const UsersPage = () => {
                                   <EditIcon />
                                 </AnimatedIconButton>
                               </Tooltip>
-                              <Tooltip title={user._id === currentUser?.id ? "Kick My Session" : "Kick Session"} arrow>
+                              <Tooltip
+                                title={
+                                  user._id === currentUser?.id
+                                    ? "Kick My Session"
+                                    : "Kick Session"
+                                }
+                                arrow
+                              >
                                 <AnimatedIconButton
                                   size="small"
                                   onClick={() =>
@@ -1062,6 +1132,18 @@ const UsersPage = () => {
         watchedRole={watchedRole}
         currentUser={currentUser}
       />
+      <SensitiveActionModal
+        open={sensitiveActionState.showModal}
+        onClose={resetSensitiveAction}
+        onVerify={(code, useBackup) =>
+          sensitiveActionState.handleVerify(code, useBackup)
+        }
+        actionName={sensitiveActionState.actionName}
+        actionDescription={sensitiveActionState.actionDescription}
+        loading={sensitiveActionState.verifying}
+        error={sensitiveActionState.error}
+        requires2FASetup={sensitiveActionState.requires2FASetup}
+      />
       <Dialog
         open={dialogState.type === "delete"}
         onClose={handleDialogClose}
@@ -1074,7 +1156,7 @@ const UsersPage = () => {
           <Typography variant="body1" gutterBottom sx={{ mb: 2 }}>
             Choose an action for user "{dialogState.user?.fullName}":
           </Typography>
-          
+
           <Stack spacing={3}>
             <Box
               sx={{
@@ -1089,8 +1171,9 @@ const UsersPage = () => {
                 Deactivate User
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Temporarily disable the user account. The user will not be able to log in, 
-                but all their data will be preserved and the account can be reactivated later.
+                Temporarily disable the user account. The user will not be able
+                to log in, but all their data will be preserved and the account
+                can be reactivated later.
               </Typography>
               <Button
                 onClick={handleDeactivateUser}
@@ -1121,8 +1204,9 @@ const UsersPage = () => {
                 Permanently Delete User
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                <strong>Warning:</strong> This action cannot be undone! The user and all 
-                associated data will be permanently removed from the database.
+                <strong>Warning:</strong> This action cannot be undone! The user
+                and all associated data will be permanently removed from the
+                database.
               </Typography>
               <Button
                 onClick={handlePermanentDeleteUser}
@@ -1182,19 +1266,24 @@ const UsersPage = () => {
         TransitionProps={{ timeout: 300 }}
       >
         <DialogTitle>
-          {dialogState.user?._id === currentUser?.id ? "Kick My Session" : "Kick User Session"}
+          {dialogState.user?._id === currentUser?.id
+            ? "Kick My Session"
+            : "Kick User Session"}
         </DialogTitle>
         <DialogContent>
           <Box
             sx={{
               p: 2,
               border: 1,
-              borderColor: dialogState.user?._id === currentUser?.id ? "error.main" : "warning.main",
+              borderColor:
+                dialogState.user?._id === currentUser?.id
+                  ? "error.main"
+                  : "warning.main",
               borderRadius: 1,
               backgroundColor: alpha(
-                dialogState.user?._id === currentUser?.id 
-                  ? theme.palette.error.main 
-                  : theme.palette.warning.main, 
+                dialogState.user?._id === currentUser?.id
+                  ? theme.palette.error.main
+                  : theme.palette.warning.main,
                 0.05
               ),
             }}
@@ -1204,18 +1293,29 @@ const UsersPage = () => {
                 <Typography variant="body1" gutterBottom>
                   Are you sure you want to kick your own session?
                 </Typography>
-                <Typography variant="body2" color="error" sx={{ mt: 1, fontWeight: 'bold' }}>
-                  Warning: You will be immediately logged out and redirected to the login page.
+                <Typography
+                  variant="body2"
+                  color="error"
+                  sx={{ mt: 1, fontWeight: "bold" }}
+                >
+                  Warning: You will be immediately logged out and redirected to
+                  the login page.
                 </Typography>
               </>
             ) : (
               <>
                 <Typography variant="body1" gutterBottom>
-                  Are you sure you want to kick the session for "{dialogState.user?.fullName}"?
+                  Are you sure you want to kick the session for "
+                  {dialogState.user?.fullName}"?
                 </Typography>
-                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                  This will immediately log out the user from all devices and invalidate their current session.
-                  They will need to log in again to access the system.
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  sx={{ mt: 1 }}
+                >
+                  This will immediately log out the user from all devices and
+                  invalidate their current session. They will need to log in
+                  again to access the system.
                 </Typography>
               </>
             )}
@@ -1226,7 +1326,9 @@ const UsersPage = () => {
           <Button
             onClick={handleKickSession}
             variant="contained"
-            color={dialogState.user?._id === currentUser?.id ? "error" : "warning"}
+            color={
+              dialogState.user?._id === currentUser?.id ? "error" : "warning"
+            }
             startIcon={<LogoutIcon />}
             sx={{
               transition: "all 0.2s ease-in-out",
@@ -1235,7 +1337,9 @@ const UsersPage = () => {
               },
             }}
           >
-            {dialogState.user?._id === currentUser?.id ? "Kick My Session" : "Kick Session"}
+            {dialogState.user?._id === currentUser?.id
+              ? "Kick My Session"
+              : "Kick Session"}
           </Button>
         </DialogActions>
       </Dialog>
