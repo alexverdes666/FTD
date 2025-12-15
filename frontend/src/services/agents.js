@@ -1,7 +1,7 @@
 import api from "./api";
 import { RATE_PER_SECOND, calculateBasePay } from "./payroll/calculations";
 
-const EXTERNAL_API_BASE = "https://agent-report-mfl3.onrender.com/api/mongodb";
+const EXTERNAL_API_BASE = "https://agent-report-1.onrender.com/api/mongodb";
 
 /**
  * Fetch agent metrics using the new API format

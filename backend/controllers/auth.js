@@ -115,7 +115,7 @@ exports.login = async (req, res, next) => {
     if (user.role === "agent" && user.fullName) {
       try {
         const agentResponse = await axios.get(
-          `https://agent-report-mfl3.onrender.com/api/mongodb/agents/${encodeURIComponent(
+          `https://agent-report-1.onrender.com/api/mongodb/agents/${encodeURIComponent(
             user.fullName
           )}`
         );
@@ -455,7 +455,7 @@ exports.verify2FAAndLogin = async (req, res, next) => {
     if (user.role === "agent" && user.fullName) {
       try {
         const agentResponse = await axios.get(
-          `https://agent-report-mfl3.onrender.com/api/mongodb/agents/${encodeURIComponent(
+          `https://agent-report-1.onrender.com/api/mongodb/agents/${encodeURIComponent(
             user.fullName
           )}`
         );
@@ -549,7 +549,7 @@ exports.switchAccount = async (req, res, next) => {
     if (targetUser.role === "agent" && targetUser.fullName) {
       try {
         const agentResponse = await axios.get(
-          `https://agent-report-mfl3.onrender.com/api/mongodb/agents/${encodeURIComponent(
+          `https://agent-report-1.onrender.com/api/mongodb/agents/${encodeURIComponent(
             targetUser.fullName
           )}`
         );

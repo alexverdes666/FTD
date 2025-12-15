@@ -20,11 +20,15 @@ class AgentScraperService {
   constructor() {
     // --- 1. Configuration from Environment Variables (with defaults) ---
     this.scraperUrl =
-      process.env.SCRAPER_API_URL ||
-      "https://agent-report-mfl3.onrender.com/api";
+      process.env.SCRAPER_API_URL || "https://agent-report-1.onrender.com/api";
+    if (!process.env.SCRAPER_USERNAME || !process.env.SCRAPER_PASSWORD) {
+      throw new Error(
+        "SCRAPER_USERNAME and SCRAPER_PASSWORD environment variables are required."
+      );
+    }
     this.scraperCredentials = {
-      username: process.env.SCRAPER_USERNAME || "admiin",
-      password: process.env.SCRAPER_PASSWORD || "AdminPBX@123",
+      username: process.env.SCRAPER_USERNAME,
+      password: process.env.SCRAPER_PASSWORD,
     };
     this.cronSchedule =
       process.env.SCRAPER_CRON_SCHEDULE || DEFAULT_CRON_SCHEDULE;
