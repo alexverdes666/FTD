@@ -102,9 +102,7 @@ const createOrderSchema = (userRole) => {
         .default(0),
       countryFilter: yup
         .string()
-        .required("Country filter is required")
-        .min(2, "Country must be at least 2 characters")
-        .default(""),
+        .default(""),  // Country filter is only required in non-manual mode (validated in onSubmitOrder)
       genderFilter: yup.string().oneOf(["", "male", "female"]).default(""),
       priority: yup.string().oneOf(["low", "medium", "high"]).default("medium"),
       notes: yup.string().default(""),
@@ -196,14 +194,9 @@ const createOrderSchema = (userRole) => {
             return dayAfterTomorrow;
           }
         }),
-    })
-    .test(
-      "at-least-one",
-      "At least one lead type must be requested",
-      (value) => {
-        return (value.ftd || 0) + (value.filler || 0) + (value.cold || 0) > 0;
-      }
-    );
+    });
+    // Note: "at-least-one lead type" validation is done in onSubmitOrder 
+    // to support manual selection mode which doesn't use lead counts
 };
 const getStatusColor = (status) => {
   const colors = {
@@ -299,6 +292,13 @@ const OrdersPage = () => {
   const [insufficientAgentLeads, setInsufficientAgentLeads] = useState(null);
   const [clientBrokerManagementOpen, setClientBrokerManagementOpen] =
     useState(false);
+  
+  // Manual Lead Selection State
+  const [manualSelectionMode, setManualSelectionMode] = useState(false);
+  const [manualLeadEmails, setManualLeadEmails] = useState("");
+  const [manualLeads, setManualLeads] = useState([]); // [{lead, agent, leadType}]
+  const [searchingLeads, setSearchingLeads] = useState(false);
+  const [allAgents, setAllAgents] = useState([]);
   const [selectedOrderForManagement, setSelectedOrderForManagement] =
     useState(null);
   const [page, setPage] = useState(0);
@@ -560,56 +560,219 @@ const OrdersPage = () => {
     []
   );
 
+  // Fetch all agents for manual lead selection
+  const fetchAllAgents = useCallback(async () => {
+    try {
+      const response = await api.get("/users?role=agent&limit=1000");
+      setAllAgents(response.data.data || []);
+    } catch (err) {
+      console.error("Failed to fetch all agents:", err);
+    }
+  }, []);
+
+  // Search leads by emails for manual selection
+  const searchLeadsByEmails = useCallback(async () => {
+    if (!manualLeadEmails.trim()) {
+      setNotification({
+        message: "Please enter at least one email address",
+        severity: "warning",
+      });
+      return;
+    }
+
+    setSearchingLeads(true);
+    try {
+      // Parse emails - support both newline and space separated
+      const emails = manualLeadEmails
+        .split(/[\n\s,]+/)
+        .map((e) => e.trim().toLowerCase())
+        .filter((e) => e.length > 0);
+
+      if (emails.length === 0) {
+        setNotification({
+          message: "No valid emails found",
+          severity: "warning",
+        });
+        return;
+      }
+
+      // Search for leads by emails
+      const response = await api.post("/leads/search-by-emails", { emails });
+      const foundLeads = response.data.data || [];
+
+      if (foundLeads.length === 0) {
+        setNotification({
+          message: "No leads found with the provided emails",
+          severity: "warning",
+        });
+        return;
+      }
+
+      // Map found leads to manual selection format
+      const manualLeadEntries = foundLeads.map((lead) => ({
+        lead,
+        agent: lead.assignedAgent?._id || "",
+      }));
+
+      setManualLeads(manualLeadEntries);
+
+      // Show notification about found/not found
+      const notFoundEmails = emails.filter(
+        (email) =>
+          !foundLeads.some(
+            (lead) => lead.newEmail.toLowerCase() === email.toLowerCase()
+          )
+      );
+
+      if (notFoundEmails.length > 0) {
+        setNotification({
+          message: `Found ${foundLeads.length} leads. Not found: ${notFoundEmails.join(", ")}`,
+          severity: "warning",
+        });
+      } else {
+        setNotification({
+          message: `Found all ${foundLeads.length} leads`,
+          severity: "success",
+        });
+      }
+    } catch (err) {
+      console.error("Failed to search leads:", err);
+      setNotification({
+        message: err.response?.data?.message || "Failed to search leads",
+        severity: "error",
+      });
+    } finally {
+      setSearchingLeads(false);
+    }
+  }, [manualLeadEmails]);
+
+  // Update manual lead agent assignment
+  const updateManualLeadAgent = useCallback((index, agentId) => {
+    setManualLeads((prev) =>
+      prev.map((entry, i) =>
+        i === index ? { ...entry, agent: agentId } : entry
+      )
+    );
+  }, []);
+
+  // Remove a lead from manual selection
+  const removeManualLead = useCallback((index) => {
+    setManualLeads((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
   const onSubmitOrder = useCallback(
     async (data) => {
       try {
-        // Build agentAssignments array from ftdAgents and fillerAgents
-        const agentAssignments = [];
+        let orderData;
 
-        if (data.ftdAgents && data.ftdAgents.length > 0) {
-          data.ftdAgents.forEach((agentId, index) => {
-            if (agentId) {
-              // Only add if agent is selected
-              agentAssignments.push({
-                leadType: "ftd",
-                agentId: agentId,
-                index: index,
-              });
-            }
-          });
+        // Check if using manual lead selection mode
+        if (manualSelectionMode) {
+          // Validate that leads are selected
+          if (manualLeads.length === 0) {
+            setNotification({
+              message: "Please search and select leads first",
+              severity: "warning",
+            });
+            return;
+          }
+
+          // Validate that all leads have agent assignments
+          const leadsWithoutAgents = manualLeads.filter((entry) => !entry.agent);
+          if (leadsWithoutAgents.length > 0) {
+            setNotification({
+              message: `Please assign agents to all leads (${leadsWithoutAgents.length} unassigned)`,
+              severity: "warning",
+            });
+            return;
+          }
+
+          // Build manual leads data - use the lead's original type
+          const manualLeadsData = manualLeads.map((entry) => ({
+            leadId: entry.lead._id,
+            agentId: entry.agent,
+            leadType: entry.lead.leadType, // Use original lead type from the record
+          }));
+
+          orderData = {
+            manualSelection: true,
+            manualLeads: manualLeadsData,
+            priority: data.priority,
+            notes: data.notes,
+            plannedDate: data.plannedDate?.toISOString(),
+            selectedClientNetwork: data.selectedClientNetwork,
+            selectedOurNetwork: data.selectedOurNetwork,
+            selectedCampaign: data.selectedCampaign,
+            selectedClientBrokers: data.selectedClientBrokers,
+          };
+        } else {
+          // Validate that at least one lead type is requested (non-manual mode)
+          const totalLeads = (data.ftd || 0) + (data.filler || 0) + (data.cold || 0);
+          if (totalLeads === 0) {
+            setNotification({
+              message: "At least one lead type must be requested",
+              severity: "warning",
+            });
+            return;
+          }
+
+          // Validate country filter in non-manual mode
+          if (!data.countryFilter || data.countryFilter.length < 2) {
+            setNotification({
+              message: "Country filter is required (at least 2 characters)",
+              severity: "warning",
+            });
+            return;
+          }
+
+          // Build agentAssignments array from ftdAgents and fillerAgents
+          const agentAssignments = [];
+
+          if (data.ftdAgents && data.ftdAgents.length > 0) {
+            data.ftdAgents.forEach((agentId, index) => {
+              if (agentId) {
+                // Only add if agent is selected
+                agentAssignments.push({
+                  leadType: "ftd",
+                  agentId: agentId,
+                  index: index,
+                });
+              }
+            });
+          }
+
+          if (data.fillerAgents && data.fillerAgents.length > 0) {
+            data.fillerAgents.forEach((agentId, index) => {
+              if (agentId) {
+                // Only add if agent is selected
+                agentAssignments.push({
+                  leadType: "filler",
+                  agentId: agentId,
+                  index: index,
+                });
+              }
+            });
+          }
+
+          orderData = {
+            requests: {
+              ftd: data.ftd || 0,
+              filler: data.filler || 0,
+              cold: data.cold || 0,
+            },
+            priority: data.priority,
+            country: data.countryFilter,
+            gender: data.genderFilter,
+            notes: data.notes,
+            plannedDate: data.plannedDate?.toISOString(),
+            selectedClientNetwork: data.selectedClientNetwork,
+            selectedOurNetwork: data.selectedOurNetwork,
+            selectedCampaign: data.selectedCampaign,
+            selectedClientBrokers: data.selectedClientBrokers,
+            agentFilter: data.agentFilter || null,
+            agentAssignments: agentAssignments,
+          };
         }
 
-        if (data.fillerAgents && data.fillerAgents.length > 0) {
-          data.fillerAgents.forEach((agentId, index) => {
-            if (agentId) {
-              // Only add if agent is selected
-              agentAssignments.push({
-                leadType: "filler",
-                agentId: agentId,
-                index: index,
-              });
-            }
-          });
-        }
-
-        const orderData = {
-          requests: {
-            ftd: data.ftd || 0,
-            filler: data.filler || 0,
-            cold: data.cold || 0,
-          },
-          priority: data.priority,
-          country: data.countryFilter,
-          gender: data.genderFilter,
-          notes: data.notes,
-          plannedDate: data.plannedDate?.toISOString(),
-          selectedClientNetwork: data.selectedClientNetwork,
-          selectedOurNetwork: data.selectedOurNetwork,
-          selectedCampaign: data.selectedCampaign,
-          selectedClientBrokers: data.selectedClientBrokers,
-          agentFilter: data.agentFilter || null,
-          agentAssignments: agentAssignments,
-        };
         const response = await api.post("/orders", orderData);
 
         // Check if any individual agent assignments were insufficient
@@ -663,7 +826,7 @@ const OrdersPage = () => {
         }
       }
     },
-    [reset, fetchOrders]
+    [reset, fetchOrders, manualSelectionMode, manualLeads]
   );
 
   const handleOpenClientBrokerManagement = useCallback((order) => {
@@ -683,16 +846,22 @@ const OrdersPage = () => {
     // Reset filtered agents state
     setFilteredAgents([]);
     setUnassignedLeadsStats({ ftd: null, filler: null });
+    // Reset manual selection state
+    setManualSelectionMode(false);
+    setManualLeadEmails("");
+    setManualLeads([]);
     // Fetch all required data for the form
     fetchClientNetworks();
     fetchOurNetworks();
     fetchCampaigns();
     fetchClientBrokers();
+    fetchAllAgents();
   }, [
     fetchClientNetworks,
     fetchOurNetworks,
     fetchCampaigns,
     fetchClientBrokers,
+    fetchAllAgents,
   ]);
 
   const handleGenderFallbackSelect = useCallback(
@@ -2871,69 +3040,308 @@ const OrdersPage = () => {
           setCreateDialogOpen(false);
           setFilteredAgents([]);
           setUnassignedLeadsStats({ ftd: null, filler: null });
+          setManualSelectionMode(false);
+          setManualLeadEmails("");
+          setManualLeads([]);
         }}
-        maxWidth="md"
+        maxWidth="lg"
         fullWidth
       >
         <DialogTitle>Create New Order</DialogTitle>
         <form onSubmit={handleSubmit(onSubmitOrder)}>
           <DialogContent>
             <Grid container spacing={2}>
-              <Grid item xs={6} sm={3}>
-                <Controller
-                  name="ftd"
-                  control={control}
-                  render={({ field }) => (
-                    <TextField
-                      {...field}
-                      fullWidth
-                      label="FTD"
-                      type="number"
-                      error={!!errors.ftd}
-                      helperText={errors.ftd?.message}
-                      inputProps={{ min: 0 }}
-                      size="small"
-                    />
-                  )}
-                />
+              {/* Manual Selection Mode Toggle */}
+              <Grid item xs={12}>
+                <Box
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 2,
+                    p: 2,
+                    bgcolor: manualSelectionMode ? "primary.50" : "action.hover",
+                    borderRadius: 1,
+                    border: manualSelectionMode ? "2px solid" : "1px solid",
+                    borderColor: manualSelectionMode ? "primary.main" : "divider",
+                  }}
+                >
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        checked={manualSelectionMode}
+                        onChange={(e) => {
+                          setManualSelectionMode(e.target.checked);
+                          if (!e.target.checked) {
+                            setManualLeadEmails("");
+                            setManualLeads([]);
+                          }
+                        }}
+                        color="primary"
+                      />
+                    }
+                    label={
+                      <Box>
+                        <Typography variant="subtitle2" fontWeight="bold">
+                          Manual Lead Selection
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          Select specific leads by email instead of random selection
+                        </Typography>
+                      </Box>
+                    }
+                  />
+                </Box>
               </Grid>
-              <Grid item xs={6} sm={3}>
-                <Controller
-                  name="filler"
-                  control={control}
-                  render={({ field }) => (
+
+              {/* Manual Selection Mode UI */}
+              {manualSelectionMode && (
+                <>
+                  <Grid item xs={12}>
                     <TextField
-                      {...field}
                       fullWidth
-                      label="Filler"
-                      type="number"
-                      error={!!errors.filler}
-                      helperText={errors.filler?.message}
-                      inputProps={{ min: 0 }}
+                      multiline
+                      rows={4}
+                      label="Lead Emails (one per line or space/comma separated)"
+                      placeholder="email1@example.com&#10;email2@example.com&#10;email3@example.com"
+                      value={manualLeadEmails}
+                      onChange={(e) => setManualLeadEmails(e.target.value)}
                       size="small"
+                      helperText="Enter the email addresses of leads you want to include in this order"
                     />
+                  </Grid>
+                  <Grid item xs={12}>
+                    <Button
+                      variant="contained"
+                      onClick={searchLeadsByEmails}
+                      disabled={searchingLeads || !manualLeadEmails.trim()}
+                      startIcon={
+                        searchingLeads ? (
+                          <CircularProgress size={16} color="inherit" />
+                        ) : (
+                          <PersonIcon />
+                        )
+                      }
+                    >
+                      {searchingLeads ? "Searching..." : "Search Leads"}
+                    </Button>
+                  </Grid>
+
+                  {/* Display found leads with agent assignment */}
+                  {manualLeads.length > 0 && (
+                    <Grid item xs={12}>
+                      <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
+                        Found Leads ({manualLeads.length})
+                      </Typography>
+                      <TableContainer component={Paper} variant="outlined">
+                        <Table size="small">
+                          <TableHead>
+                            <TableRow>
+                              <TableCell>Email</TableCell>
+                              <TableCell>Name</TableCell>
+                              <TableCell>Country</TableCell>
+                              <TableCell>Type</TableCell>
+                              <TableCell>Assign to Agent *</TableCell>
+                              <TableCell width={50}></TableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {manualLeads.map((entry, index) => (
+                              <TableRow key={entry.lead._id}>
+                                <TableCell>
+                                  <Typography variant="body2" sx={{ fontSize: "0.75rem" }}>
+                                    {entry.lead.newEmail}
+                                  </Typography>
+                                </TableCell>
+                                <TableCell>
+                                  {entry.lead.firstName} {entry.lead.lastName}
+                                </TableCell>
+                                <TableCell>{entry.lead.country}</TableCell>
+                                <TableCell>
+                                  <Chip
+                                    label={entry.lead.leadType?.toUpperCase()}
+                                    size="small"
+                                    color={
+                                      entry.lead.leadType === "ftd"
+                                        ? "success"
+                                        : entry.lead.leadType === "filler"
+                                        ? "warning"
+                                        : "default"
+                                    }
+                                  />
+                                </TableCell>
+                                <TableCell>
+                                  <FormControl fullWidth size="small">
+                                    <Select
+                                      value={entry.agent}
+                                      onChange={(e) =>
+                                        updateManualLeadAgent(index, e.target.value)
+                                      }
+                                      displayEmpty
+                                      error={!entry.agent}
+                                    >
+                                      <MenuItem value="">
+                                        <em>Select Agent</em>
+                                      </MenuItem>
+                                      {allAgents.map((agent) => (
+                                        <MenuItem key={agent._id} value={agent._id}>
+                                          {agent.fullName || agent.email}
+                                        </MenuItem>
+                                      ))}
+                                    </Select>
+                                  </FormControl>
+                                </TableCell>
+                                <TableCell>
+                                  <IconButton
+                                    size="small"
+                                    onClick={() => removeManualLead(index)}
+                                    color="error"
+                                  >
+                                    <DeleteIcon fontSize="small" />
+                                  </IconButton>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </TableContainer>
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{ mt: 1, display: "block" }}
+                      >
+                        * All leads must have an agent assigned before creating the order
+                      </Typography>
+                    </Grid>
                   )}
-                />
-              </Grid>
-              <Grid item xs={6} sm={3}>
-                <Controller
-                  name="cold"
-                  control={control}
-                  render={({ field }) => (
-                    <TextField
-                      {...field}
-                      fullWidth
-                      label="Cold"
-                      type="number"
-                      error={!!errors.cold}
-                      helperText={errors.cold?.message}
-                      inputProps={{ min: 0 }}
-                      size="small"
+                </>
+              )}
+
+              {/* Normal Selection Mode UI */}
+              {!manualSelectionMode && (
+                <>
+                  <Grid item xs={6} sm={3}>
+                    <Controller
+                      name="ftd"
+                      control={control}
+                      render={({ field }) => (
+                        <TextField
+                          {...field}
+                          fullWidth
+                          label="FTD"
+                          type="number"
+                          error={!!errors.ftd}
+                          helperText={errors.ftd?.message}
+                          inputProps={{ min: 0 }}
+                          size="small"
+                        />
+                      )}
                     />
-                  )}
-                />
-              </Grid>
-              {/* Priority and Gender */}
+                  </Grid>
+                  <Grid item xs={6} sm={3}>
+                    <Controller
+                      name="filler"
+                      control={control}
+                      render={({ field }) => (
+                        <TextField
+                          {...field}
+                          fullWidth
+                          label="Filler"
+                          type="number"
+                          error={!!errors.filler}
+                          helperText={errors.filler?.message}
+                          inputProps={{ min: 0 }}
+                          size="small"
+                        />
+                      )}
+                    />
+                  </Grid>
+                  <Grid item xs={6} sm={3}>
+                    <Controller
+                      name="cold"
+                      control={control}
+                      render={({ field }) => (
+                        <TextField
+                          {...field}
+                          fullWidth
+                          label="Cold"
+                          type="number"
+                          error={!!errors.cold}
+                          helperText={errors.cold?.message}
+                          inputProps={{ min: 0 }}
+                          size="small"
+                        />
+                      )}
+                    />
+                  </Grid>
+                  {/* Gender (Normal mode only) */}
+                  <Grid item xs={12} sm={6}>
+                    <Controller
+                      name="genderFilter"
+                      control={control}
+                      render={({ field }) => (
+                        <FormControl
+                          fullWidth
+                          size="small"
+                          error={!!errors.genderFilter}
+                        >
+                          <InputLabel>Gender (Optional)</InputLabel>
+                          <Select
+                            {...field}
+                            label="Gender (Optional)"
+                            value={field.value || ""}
+                          >
+                            <MenuItem value="">All</MenuItem>
+                            <MenuItem value="male">Male</MenuItem>
+                            <MenuItem value="female">Female</MenuItem>
+                            <MenuItem value="not_defined">Not Defined</MenuItem>
+                          </Select>
+                        </FormControl>
+                      )}
+                    />
+                  </Grid>
+
+                  {/* Country Filter */}
+                  <Grid item xs={12}>
+                    <Controller
+                      name="countryFilter"
+                      control={control}
+                      render={({ field }) => (
+                        <FormControl
+                          fullWidth
+                          size="small"
+                          error={!!errors.countryFilter}
+                        >
+                          <InputLabel>Country Filter *</InputLabel>
+                          <Select
+                            {...field}
+                            label="Country Filter *"
+                            value={field.value || ""}
+                          >
+                            {getSortedCountries().map((country) => (
+                              <MenuItem key={country.code} value={country.name}>
+                                {country.name}
+                              </MenuItem>
+                            ))}
+                          </Select>
+                          {errors.countryFilter?.message && (
+                            <Typography
+                              variant="caption"
+                              color="error"
+                              sx={{ mt: 0.5, ml: 1.5 }}
+                            >
+                              {errors.countryFilter.message}
+                            </Typography>
+                          )}
+                        </FormControl>
+                      )}
+                    />
+                  </Grid>
+                </>
+              )}
+
+              {/* Common fields for both modes */}
+
+              {/* Priority */}
               <Grid item xs={12} sm={6}>
                 <Controller
                   name="priority"
@@ -2954,68 +3362,6 @@ const OrdersPage = () => {
                         <MenuItem value="medium">Medium</MenuItem>
                         <MenuItem value="high">High</MenuItem>
                       </Select>
-                    </FormControl>
-                  )}
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <Controller
-                  name="genderFilter"
-                  control={control}
-                  render={({ field }) => (
-                    <FormControl
-                      fullWidth
-                      size="small"
-                      error={!!errors.genderFilter}
-                    >
-                      <InputLabel>Gender (Optional)</InputLabel>
-                      <Select
-                        {...field}
-                        label="Gender (Optional)"
-                        value={field.value || ""}
-                      >
-                        <MenuItem value="">All</MenuItem>
-                        <MenuItem value="male">Male</MenuItem>
-                        <MenuItem value="female">Female</MenuItem>
-                        <MenuItem value="not_defined">Not Defined</MenuItem>
-                      </Select>
-                    </FormControl>
-                  )}
-                />
-              </Grid>
-
-              {/* Country Filter */}
-              <Grid item xs={12}>
-                <Controller
-                  name="countryFilter"
-                  control={control}
-                  render={({ field }) => (
-                    <FormControl
-                      fullWidth
-                      size="small"
-                      error={!!errors.countryFilter}
-                    >
-                      <InputLabel>Country Filter *</InputLabel>
-                      <Select
-                        {...field}
-                        label="Country Filter *"
-                        value={field.value || ""}
-                      >
-                        {getSortedCountries().map((country) => (
-                          <MenuItem key={country.code} value={country.name}>
-                            {country.name}
-                          </MenuItem>
-                        ))}
-                      </Select>
-                      {errors.countryFilter?.message && (
-                        <Typography
-                          variant="caption"
-                          color="error"
-                          sx={{ mt: 0.5, ml: 1.5 }}
-                        >
-                          {errors.countryFilter.message}
-                        </Typography>
-                      )}
                     </FormControl>
                   )}
                 />
@@ -3330,8 +3676,9 @@ const OrdersPage = () => {
                 />
               </Grid>
 
-              {/* Load Agents Button - Shows when criteria are set and FTD or Filler > 0 */}
-              {(watch("ftd") > 0 || watch("filler") > 0) &&
+              {/* Load Agents Button - Shows when criteria are set and FTD or Filler > 0 (Normal mode only) */}
+              {!manualSelectionMode &&
+                (watch("ftd") > 0 || watch("filler") > 0) &&
                 watch("countryFilter") &&
                 watch("selectedClientNetwork") && (
                   <Grid item xs={12}>
@@ -3446,8 +3793,9 @@ const OrdersPage = () => {
                   </Grid>
                 )}
 
-              {/* Individual FTD Agent Assignments - Shows after filtered agents are loaded */}
-              {watch("ftd") > 0 &&
+              {/* Individual FTD Agent Assignments - Shows after filtered agents are loaded (Normal mode only) */}
+              {!manualSelectionMode &&
+                watch("ftd") > 0 &&
                 (filteredAgents.length > 0 ||
                   unassignedLeadsStats.ftd !== null) && (
                   <Grid item xs={12}>
@@ -3520,8 +3868,9 @@ const OrdersPage = () => {
                   </Grid>
                 )}
 
-              {/* Individual Filler Agent Assignments - Shows after filtered agents are loaded */}
-              {watch("filler") > 0 &&
+              {/* Individual Filler Agent Assignments - Shows after filtered agents are loaded (Normal mode only) */}
+              {!manualSelectionMode &&
+                watch("filler") > 0 &&
                 (filteredAgents.length > 0 ||
                   unassignedLeadsStats.filler !== null) && (
                   <Grid item xs={12}>
@@ -3596,8 +3945,9 @@ const OrdersPage = () => {
                   </Grid>
                 )}
 
-              {/* Show message if FTD/Filler requested but criteria not complete */}
-              {(watch("ftd") > 0 || watch("filler") > 0) &&
+              {/* Show message if FTD/Filler requested but criteria not complete (Normal mode only) */}
+              {!manualSelectionMode &&
+                (watch("ftd") > 0 || watch("filler") > 0) &&
                 (!watch("countryFilter") ||
                   !watch("selectedClientNetwork")) && (
                   <Grid item xs={12}>
@@ -3607,6 +3957,8 @@ const OrdersPage = () => {
                     </Alert>
                   </Grid>
                 )}
+
+              {/* Common fields for both modes */}
               <Grid item xs={12}>
                 <Controller
                   name="notes"
@@ -3677,6 +4029,9 @@ const OrdersPage = () => {
                 setCreateDialogOpen(false);
                 setFilteredAgents([]);
                 setUnassignedLeadsStats({ ftd: null, filler: null });
+                setManualSelectionMode(false);
+                setManualLeadEmails("");
+                setManualLeads([]);
               }}
             >
               Cancel

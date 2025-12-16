@@ -1049,10 +1049,213 @@ const generateDetailedReasonForLeadType = async (
 
   return reason;
 };
+
+// Handle manual selection order creation
+const handleManualSelectionOrder = async (req, res, next) => {
+  try {
+    const {
+      manualLeads,
+      priority,
+      notes,
+      plannedDate,
+      selectedClientNetwork,
+      selectedOurNetwork,
+      selectedCampaign,
+      selectedClientBrokers,
+    } = req.body;
+
+    // Validate required fields
+    if (!selectedOurNetwork) {
+      return res.status(400).json({
+        success: false,
+        message: "Our Network selection is required",
+      });
+    }
+
+    if (!selectedCampaign) {
+      return res.status(400).json({
+        success: false,
+        message: "Campaign selection is required",
+      });
+    }
+
+    // Validate all manual leads
+    const leadIds = manualLeads.map(ml => ml.leadId);
+    const foundLeads = await Lead.find({ _id: { $in: leadIds } });
+
+    if (foundLeads.length !== leadIds.length) {
+      const foundIds = foundLeads.map(l => l._id.toString());
+      const missingIds = leadIds.filter(id => !foundIds.includes(id));
+      return res.status(400).json({
+        success: false,
+        message: `Some leads not found: ${missingIds.join(", ")}`,
+      });
+    }
+
+    // Validate agents exist
+    const User = require("../models/User");
+    const agentIds = [...new Set(manualLeads.map(ml => ml.agentId))];
+    const foundAgents = await User.find({ _id: { $in: agentIds }, role: "agent" });
+    
+    if (foundAgents.length !== agentIds.length) {
+      const foundAgentIds = foundAgents.map(a => a._id.toString());
+      const missingAgentIds = agentIds.filter(id => !foundAgentIds.includes(id));
+      return res.status(400).json({
+        success: false,
+        message: `Some agents not found: ${missingAgentIds.join(", ")}`,
+      });
+    }
+
+    // Create a map of leadId -> lead for easy lookup
+    const leadMap = new Map(foundLeads.map(l => [l._id.toString(), l]));
+
+    // Calculate requests counts based on manual lead types
+    const requestsCounts = { ftd: 0, filler: 0, cold: 0 };
+    manualLeads.forEach(ml => {
+      if (requestsCounts[ml.leadType] !== undefined) {
+        requestsCounts[ml.leadType]++;
+      }
+    });
+
+    // Get the first lead's country (for display purposes - manual orders may have mixed countries)
+    const firstLead = leadMap.get(manualLeads[0].leadId);
+    const orderCountry = firstLead?.country || "Mixed";
+
+    // Create leadsMetadata to track how each lead was ordered
+    const leadsMetadata = manualLeads.map(ml => ({
+      leadId: ml.leadId,
+      orderedAs: ml.leadType,
+    }));
+
+    // Create the order
+    const Order = require("../models/Order");
+    const order = new Order({
+      requester: req.user._id,
+      requests: requestsCounts,
+      fulfilled: requestsCounts, // Manual selection - all leads are fulfilled
+      status: "fulfilled",
+      priority: priority || "medium",
+      notes: notes ? `[Manual Selection] ${notes}` : "[Manual Selection]",
+      plannedDate: plannedDate ? new Date(plannedDate) : new Date(),
+      countryFilter: orderCountry,
+      selectedClientNetwork: selectedClientNetwork || null,
+      selectedOurNetwork: selectedOurNetwork,
+      selectedCampaign: selectedCampaign,
+      selectedClientBrokers: selectedClientBrokers || [],
+      leads: leadIds,
+      leadsMetadata,
+    });
+
+    await order.save();
+
+    // Update each lead with order assignment and agent assignment
+    const updatePromises = manualLeads.map(async (ml) => {
+      const lead = leadMap.get(ml.leadId);
+      
+      // Update assigned agent
+      lead.assignedAgent = ml.agentId;
+      lead.assignedAgentAt = new Date();
+      
+      // Update lastUsedInOrder for cooldown tracking
+      lead.lastUsedInOrder = new Date();
+      
+      // Add client network to history if provided
+      if (selectedClientNetwork) {
+        if (!lead.clientNetworkHistory) {
+          lead.clientNetworkHistory = [];
+        }
+        lead.clientNetworkHistory.push({
+          clientNetwork: selectedClientNetwork,
+          assignedAt: new Date(),
+          assignedBy: req.user._id,
+          orderId: order._id,
+        });
+      }
+
+      // Add our network to history
+      if (selectedOurNetwork) {
+        if (!lead.ourNetworkHistory) {
+          lead.ourNetworkHistory = [];
+        }
+        lead.ourNetworkHistory.push({
+          ourNetwork: selectedOurNetwork,
+          assignedAt: new Date(),
+          assignedBy: req.user._id,
+          orderId: order._id,
+        });
+      }
+
+      // Add client brokers to history if provided
+      if (selectedClientBrokers && selectedClientBrokers.length > 0) {
+        selectedClientBrokers.forEach(brokerId => {
+          if (!lead.assignedClientBrokers) {
+            lead.assignedClientBrokers = [];
+          }
+          if (!lead.assignedClientBrokers.includes(brokerId)) {
+            lead.assignedClientBrokers.push(brokerId);
+          }
+          if (!lead.clientBrokerHistory) {
+            lead.clientBrokerHistory = [];
+          }
+          lead.clientBrokerHistory.push({
+            clientBroker: brokerId,
+            assignedAt: new Date(),
+            assignedBy: req.user._id,
+            orderId: order._id,
+          });
+        });
+      }
+
+      // Add campaign to history
+      if (selectedCampaign) {
+        if (!lead.campaignHistory) {
+          lead.campaignHistory = [];
+        }
+        lead.campaignHistory.push({
+          campaign: selectedCampaign,
+          assignedAt: new Date(),
+          assignedBy: req.user._id,
+          orderId: order._id,
+        });
+      }
+
+      return lead.save();
+    });
+
+    await Promise.all(updatePromises);
+
+    // Populate the order for response
+    const populatedOrder = await Order.findById(order._id)
+      .populate("leads", "firstName lastName newEmail newPhone country leadType orderedAs")
+      .populate("requester", "fullName email")
+      .populate("selectedClientNetwork", "name")
+      .populate("selectedOurNetwork", "name")
+      .populate("selectedCampaign", "name");
+
+    console.log(`[MANUAL-ORDER] Created order ${order._id} with ${manualLeads.length} manually selected leads`);
+
+    return res.status(201).json({
+      success: true,
+      message: `Order created successfully with ${manualLeads.length} manually selected leads`,
+      data: mergeLeadsWithMetadata(populatedOrder),
+    });
+  } catch (error) {
+    console.error("Error creating manual selection order:", error);
+    next(error);
+  }
+};
+
 exports.createOrder = async (req, res, next) => {
   try {
+    console.log("[ORDER-CREATE] Received order request:", {
+      manualSelection: req.body.manualSelection,
+      manualLeadsCount: req.body.manualLeads?.length,
+      country: req.body.country,
+    });
+    
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
+      console.log("[ORDER-CREATE] Validation errors:", errors.array());
       return res.status(400).json({
         success: false,
         message: "Validation error",
@@ -1073,7 +1276,16 @@ exports.createOrder = async (req, res, next) => {
       agentFilter,
       agentAssignments = [], // Array of {leadType, agentId, index, gender (optional)}
       perAssignmentGenders = false, // Flag to indicate if using per-assignment genders
+      // Manual selection mode fields
+      manualSelection = false,
+      manualLeads = [], // Array of {leadId, agentId, leadType}
     } = req.body;
+
+    // Handle manual selection mode
+    if (manualSelection && manualLeads.length > 0) {
+      return await handleManualSelectionOrder(req, res, next);
+    }
+
     const { ftd = 0, filler = 0, cold = 0 } = requests || {};
     if (ftd + filler + cold === 0) {
       return res.status(400).json({

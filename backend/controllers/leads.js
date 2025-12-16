@@ -3542,3 +3542,37 @@ exports.getLeadsByAgent = async (req, res, next) => {
     next(error);
   }
 };
+
+// Search leads by email addresses (for manual order creation)
+exports.searchLeadsByEmails = async (req, res, next) => {
+  try {
+    const { emails } = req.body;
+
+    if (!emails || !Array.isArray(emails) || emails.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Please provide an array of email addresses",
+      });
+    }
+
+    // Normalize emails to lowercase and trim
+    const normalizedEmails = emails.map(e => e.trim().toLowerCase());
+
+    // Search for leads with matching emails
+    const leads = await Lead.find({
+      newEmail: { $in: normalizedEmails }
+    }).populate('assignedAgent', 'fullName email');
+
+    res.status(200).json({
+      success: true,
+      data: leads,
+      meta: {
+        requested: normalizedEmails.length,
+        found: leads.length,
+      },
+    });
+  } catch (error) {
+    console.error("Error searching leads by emails:", error);
+    next(error);
+  }
+};

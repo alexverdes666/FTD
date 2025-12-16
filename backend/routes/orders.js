@@ -56,11 +56,15 @@ router.post(
       .isLength({ max: 500 })
       .withMessage("Notes must be less than 500 characters"),
     body("country")
-      .notEmpty()
-      .withMessage("Country filter is required")
-      .trim()
-      .isLength({ min: 2 })
-      .withMessage("Country must be at least 2 characters"),
+      .custom((value, { req }) => {
+        // Country is only required for non-manual selection orders
+        if (!req.body.manualSelection) {
+          if (!value || value.trim().length < 2) {
+            throw new Error("Country filter is required (at least 2 characters)");
+          }
+        }
+        return true;
+      }),
     body("gender")
       .optional({ nullable: true })
       .isIn(["male", "female", "not_defined", null, ""])

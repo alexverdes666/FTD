@@ -39,6 +39,7 @@ const {
   assignLeadsToAgent,
   unassignLeadsFromAgent,
   getLeadsByAgent,
+  searchLeadsByEmails,
 } = require("../controllers/leads");
 const router = express.Router();
 router.get(
@@ -200,6 +201,20 @@ router.get(
   [protect, authorize("admin", "affiliate_manager")],
   getLeadAssignmentHistory
 );
+
+// Search leads by email addresses (for manual order creation)
+router.post(
+  "/search-by-emails",
+  [
+    protect,
+    authorize("admin", "affiliate_manager"),
+    body("emails")
+      .isArray({ min: 1 })
+      .withMessage("emails must be a non-empty array"),
+  ],
+  searchLeadsByEmails
+);
+
 router.post(
   "/assign",
   [
