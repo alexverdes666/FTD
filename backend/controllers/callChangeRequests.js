@@ -242,18 +242,35 @@ exports.getPendingRequests = async (req, res, next) => {
       });
     }
 
-    const requests = await CallChangeRequest.find({ status: "pending" })
+    let requests = await CallChangeRequest.find({ status: "pending" })
       .populate("leadId", "firstName lastName")
       .populate({
         path: "orderId",
         select: "status createdAt requester selectedClientNetwork",
-        populate: {
-          path: "selectedClientNetwork",
-          select: "name"
-        }
+        populate: [
+          {
+            path: "selectedClientNetwork",
+            select: "name"
+          },
+          {
+            path: "requester",
+            select: "fullName"
+          }
+        ]
       })
       .populate("requestedBy", "fullName email")
       .sort({ createdAt: -1 });
+
+    // Filter for affiliate_manager: only show requests for orders they requested
+    if (req.user.role === "affiliate_manager") {
+      requests = requests.filter(request => {
+        // Check if order exists and requester matches current user
+        // Note: request.orderId is the populated order object
+        return request.orderId && 
+               request.orderId.requester && 
+               request.orderId.requester._id.toString() === req.user.id;
+      });
+    }
 
     res.status(200).json({
       success: true,
@@ -285,6 +302,17 @@ exports.approveRequest = async (req, res, next) => {
         success: false,
         message: "Call change request not found",
       });
+    }
+
+    // Check ownership for affiliate_manager
+    if (req.user.role === "affiliate_manager") {
+      const order = await Order.findById(request.orderId);
+      if (!order || order.requester.toString() !== req.user.id) {
+        return res.status(403).json({
+          success: false,
+          message: "Not authorized to approve call change requests for this order",
+        });
+      }
     }
 
     if (request.status !== "pending") {
@@ -378,6 +406,17 @@ exports.rejectRequest = async (req, res, next) => {
         success: false,
         message: "Call change request not found",
       });
+    }
+
+    // Check ownership for affiliate_manager
+    if (req.user.role === "affiliate_manager") {
+      const order = await Order.findById(request.orderId);
+      if (!order || order.requester.toString() !== req.user.id) {
+        return res.status(403).json({
+          success: false,
+          message: "Not authorized to reject call change requests for this order",
+        });
+      }
     }
 
     if (request.status !== "pending") {

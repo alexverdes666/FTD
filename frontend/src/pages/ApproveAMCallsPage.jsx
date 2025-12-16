@@ -9,7 +9,6 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  Button,
   Chip,
   CircularProgress,
   Alert,
@@ -103,6 +102,7 @@ const ApproveAMCallsPage = () => {
       request.leadId?.firstName?.toLowerCase().includes(term) ||
       request.leadId?.lastName?.toLowerCase().includes(term) ||
       request.requestedBy?.fullName?.toLowerCase().includes(term) ||
+      request.orderId?.requester?.fullName?.toLowerCase().includes(term) ||
       request.orderId?.selectedClientNetwork?.name?.toLowerCase().includes(term)
     );
   });
@@ -157,7 +157,7 @@ const ApproveAMCallsPage = () => {
       <Paper sx={{ p: 3, mb: 3 }}>
         <TextField
           fullWidth
-          placeholder="Search by lead name, agent name, or client network..."
+          placeholder="Search by lead, agent, AM, or client network..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           InputProps={{
@@ -193,6 +193,7 @@ const ApproveAMCallsPage = () => {
                   <TableCell>Order Date</TableCell>
                   <TableCell>Lead Name</TableCell>
                   <TableCell>Client Network</TableCell>
+                  <TableCell>Account Manager</TableCell>
                   <TableCell>Agent</TableCell>
                   <TableCell>Current Call</TableCell>
                   <TableCell>Requested Call</TableCell>
@@ -227,6 +228,11 @@ const ApproveAMCallsPage = () => {
                     <TableCell>
                       <Typography variant="body2">
                         {request.orderId?.selectedClientNetwork?.name || "N/A"}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="body2">
+                        {request.orderId?.requester?.fullName || "N/A"}
                       </Typography>
                     </TableCell>
                     <TableCell>
@@ -275,30 +281,26 @@ const ApproveAMCallsPage = () => {
                       <Box sx={{ display: "flex", gap: 1, justifyContent: "center" }}>
                         <Tooltip title="Approve">
                           <span>
-                            <Button
-                              variant="contained"
+                            <IconButton
                               color="success"
                               size="small"
-                              startIcon={<ApproveIcon />}
                               onClick={() => handleApprove(request._id)}
                               disabled={processingId === request._id}
                             >
-                              Approve
-                            </Button>
+                              <ApproveIcon />
+                            </IconButton>
                           </span>
                         </Tooltip>
                         <Tooltip title="Reject">
                           <span>
-                            <Button
-                              variant="outlined"
+                            <IconButton
                               color="error"
                               size="small"
-                              startIcon={<RejectIcon />}
                               onClick={() => handleReject(request._id)}
                               disabled={processingId === request._id}
                             >
-                              Reject
-                            </Button>
+                              <RejectIcon />
+                            </IconButton>
                           </span>
                         </Tooltip>
                       </Box>

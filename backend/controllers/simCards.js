@@ -1027,20 +1027,38 @@ exports.checkSimCardCooldownAndNotify = async (io = null) => {
     // Create notifications for each inventory manager
     let notificationCount = 0;
 
+    // Helper to format SIM list with truncation
+    const formatSimList = (items, getLabel) => {
+      const MAX_LENGTH = 800; // Leave buffer for prefix/suffix
+      let list = "";
+      let count = 0;
+      
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        const label = getLabel(item);
+        
+        // If adding this item would exceed limit (plus ", ... and X more")
+        if (list.length + label.length > MAX_LENGTH) {
+          const remaining = items.length - i;
+          list += `, ... and ${remaining} more`;
+          break;
+        }
+        
+        list += (i > 0 ? ", " : "") + label;
+        count++;
+      }
+      return list;
+    };
+
     for (const manager of inventoryManagers) {
       // Create separate notifications for each urgency level
       const notifications = [];
 
       // Overdue SIM cards (highest priority)
       if (grouped.overdue.length > 0) {
-        const simCardsList = grouped.overdue
-          .map(
-            (item) =>
-              `${item.simCard.simNumber} (${item.simCard.geo}/${
-                item.simCard.operator
-              }) - ${Math.abs(item.daysRemaining)} days overdue`
-          )
-          .join(", ");
+        const simCardsList = formatSimList(grouped.overdue, (item) => 
+          `${item.simCard.simNumber} (${item.simCard.geo}/${item.simCard.operator}) - ${Math.abs(item.daysRemaining)} days overdue`
+        );
 
         notifications.push({
           recipient: manager._id,
@@ -1063,12 +1081,9 @@ exports.checkSimCardCooldownAndNotify = async (io = null) => {
 
       // Critical SIM cards (1-5 days remaining)
       if (grouped.critical.length > 0) {
-        const simCardsList = grouped.critical
-          .map(
-            (item) =>
-              `${item.simCard.simNumber} (${item.simCard.geo}/${item.simCard.operator}) - ${item.daysRemaining} day(s) left`
-          )
-          .join(", ");
+        const simCardsList = formatSimList(grouped.critical, (item) => 
+          `${item.simCard.simNumber} (${item.simCard.geo}/${item.simCard.operator}) - ${item.daysRemaining} day(s) left`
+        );
 
         notifications.push({
           recipient: manager._id,
@@ -1091,12 +1106,9 @@ exports.checkSimCardCooldownAndNotify = async (io = null) => {
 
       // Warning SIM cards (6-10 days remaining)
       if (grouped.warning.length > 0) {
-        const simCardsList = grouped.warning
-          .map(
-            (item) =>
-              `${item.simCard.simNumber} (${item.simCard.geo}/${item.simCard.operator}) - ${item.daysRemaining} day(s) left`
-          )
-          .join(", ");
+        const simCardsList = formatSimList(grouped.warning, (item) => 
+          `${item.simCard.simNumber} (${item.simCard.geo}/${item.simCard.operator}) - ${item.daysRemaining} day(s) left`
+        );
 
         notifications.push({
           recipient: manager._id,
