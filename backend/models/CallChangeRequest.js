@@ -58,7 +58,9 @@ callChangeRequestSchema.index({ status: 1, createdAt: -1 });
 callChangeRequestSchema.index({ leadId: 1, orderId: 1 });
 callChangeRequestSchema.index({ requestedBy: 1 });
 
-const CallChangeRequest = mongoose.model("CallChangeRequest", callChangeRequestSchema);
+const CallChangeRequest = mongoose.model(
+  "CallChangeRequest",
+  callChangeRequestSchema
+);
 
 module.exports = CallChangeRequest;
-

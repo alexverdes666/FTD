@@ -53,7 +53,9 @@ const ApproveAMCallsPage = () => {
       const response = await api.get("/call-change-requests/pending");
       setRequests(response.data.data || []);
     } catch (err) {
-      setError(err.response?.data?.message || "Failed to fetch pending requests");
+      setError(
+        err.response?.data?.message || "Failed to fetch pending requests"
+      );
     } finally {
       setLoading(false);
     }
@@ -111,6 +113,46 @@ const ApproveAMCallsPage = () => {
     }
   };
 
+  const renderCallNumber = (callNumber, size = 32) => {
+    if (!callNumber) {
+      return (
+        <Chip
+          label="NONE"
+          size="small"
+          color="default"
+          variant="outlined"
+          sx={{ fontWeight: "bold" }}
+        />
+      );
+    }
+
+    const num = callNumber.replace(/\D/g, "");
+
+    // Handle double-digit numbers (like 10)
+    if (num.length > 1) {
+      return (
+        <Box sx={{ display: "inline-flex", alignItems: "center" }}>
+          {num.split("").map((digit, index) => (
+            <img
+              key={index}
+              src={`/numbers/${digit}.png`}
+              alt={digit}
+              style={{ width: size, height: size, verticalAlign: "middle" }}
+            />
+          ))}
+        </Box>
+      );
+    }
+
+    return (
+      <img
+        src={`/numbers/${num}.png`}
+        alt={callNumber}
+        style={{ width: size, height: size, verticalAlign: "middle" }}
+      />
+    );
+  };
+
   const filteredRequests = requests.filter((request) => {
     if (!searchTerm) return true;
     const term = searchTerm.toLowerCase();
@@ -127,10 +169,26 @@ const ApproveAMCallsPage = () => {
     <Grid container spacing={3}>
       {filteredRequests.map((request) => (
         <Grid item xs={12} sm={6} md={4} key={request._id}>
-          <Card elevation={2} sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
-            <CardContent sx={{ flexGrow: 1 }}>
-              <Box sx={{ display: "flex", justifyContent: "space-between", mb: 2 }}>
-                <Typography variant="subtitle2" color="text.secondary">
+          <Card
+            elevation={2}
+            sx={{ height: "100%", display: "flex", flexDirection: "column" }}
+          >
+            <CardContent sx={{ flexGrow: 1, textAlign: "center" }}>
+              <Box
+                sx={{
+                  display: "flex",
+                  justifyContent: "center",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  gap: 1,
+                  mb: 2,
+                }}
+              >
+                <Typography
+                  variant="subtitle2"
+                  color="text.secondary"
+                  sx={{ fontStyle: "italic" }}
+                >
                   {request.orderId?.createdAt
                     ? new Date(request.orderId.createdAt).toLocaleDateString()
                     : "N/A"}
@@ -140,10 +198,15 @@ const ApproveAMCallsPage = () => {
                   size="small"
                   color="primary"
                   variant="outlined"
+                  sx={{ fontWeight: "bold" }}
                 />
               </Box>
-              
-              <Typography variant="h6" gutterBottom>
+
+              <Typography
+                variant="h6"
+                gutterBottom
+                sx={{ fontWeight: "bold", textAlign: "center" }}
+              >
                 {request.leadId?.firstName && request.leadId?.lastName
                   ? `${request.leadId.firstName} ${request.leadId.lastName}`
                   : "Unknown Lead"}
@@ -151,64 +214,100 @@ const ApproveAMCallsPage = () => {
 
               <Divider sx={{ my: 1.5 }} />
 
-              <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2 }}>
-                <Box>
-                  <Typography variant="caption" color="text.secondary" display="block">
+              <Box
+                sx={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: 2,
+                  textAlign: "center",
+                }}
+              >
+                <Box
+                  sx={{
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                  }}
+                >
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    display="block"
+                    sx={{ fontWeight: "bold", textTransform: "uppercase" }}
+                  >
                     Current Call
                   </Typography>
-                  <Chip
-                    label={request.currentCallNumber || "None"}
-                    size="small"
-                    color="default"
-                    variant="outlined"
-                    sx={{ mt: 0.5 }}
-                  />
+                  <Box sx={{ mt: 0.5 }}>
+                    {renderCallNumber(request.currentCallNumber, 40)}
+                  </Box>
                   {request.currentVerified && (
                     <Chip
-                      label="Verified"
+                      label="VERIFIED"
                       size="small"
                       color="success"
                       variant="outlined"
-                      sx={{ ml: 0.5, mt: 0.5 }}
+                      sx={{ mt: 0.5, fontWeight: "bold", fontSize: "0.7rem" }}
                     />
                   )}
                 </Box>
-                <Box>
-                  <Typography variant="caption" color="text.secondary" display="block">
+                <Box
+                  sx={{
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                  }}
+                >
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    display="block"
+                    sx={{ fontWeight: "bold", textTransform: "uppercase" }}
+                  >
                     Requested Call
                   </Typography>
-                  <Chip
-                    label={request.requestedCallNumber || "None"}
-                    size="small"
-                    color="primary"
-                    variant="filled"
-                    sx={{ mt: 0.5 }}
-                  />
+                  <Box sx={{ mt: 0.5 }}>
+                    {renderCallNumber(request.requestedCallNumber, 40)}
+                  </Box>
                   {request.requestedVerified && (
                     <Chip
-                      label="Verified"
+                      label="VERIFIED"
                       size="small"
                       color="success"
                       variant="filled"
-                      sx={{ ml: 0.5, mt: 0.5 }}
+                      sx={{ mt: 0.5, fontWeight: "bold", fontSize: "0.7rem" }}
                     />
                   )}
                 </Box>
               </Box>
 
-              <Box sx={{ mt: 2 }}>
-                <Typography variant="caption" color="text.secondary" display="block">
-                  Account Manager: {request.orderId?.requester?.fullName || "N/A"}
+              <Box sx={{ mt: 2, textAlign: "center" }}>
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  display="block"
+                >
+                  <span style={{ fontWeight: 600 }}>AM:</span>{" "}
+                  {request.orderId?.requester?.fullName || "N/A"}
                 </Typography>
-                <Typography variant="caption" color="text.secondary" display="block">
-                  Agent: {request.requestedBy?.fullName || "Unknown"}
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  display="block"
+                >
+                  <span style={{ fontWeight: 600 }}>Agent:</span>{" "}
+                  {request.requestedBy?.fullName || "Unknown"}
                 </Typography>
-                <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
-                  Request Date: {new Date(request.createdAt).toLocaleString()}
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  display="block"
+                  sx={{ mt: 1, fontStyle: "italic" }}
+                >
+                  Requested: {new Date(request.createdAt).toLocaleString()}
                 </Typography>
               </Box>
             </CardContent>
-            <CardActions sx={{ justifyContent: "flex-end", p: 2, pt: 0 }}>
+            <CardActions sx={{ justifyContent: "center", p: 2, pt: 0 }}>
               <Tooltip title="Reject">
                 <IconButton
                   color="error"
@@ -262,7 +361,7 @@ const ApproveAMCallsPage = () => {
         <Typography variant="h4" gutterBottom>
           Approve AM Call Changes
         </Typography>
-        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+        <Box sx={{ display: "flex", gap: 2, alignItems: "center" }}>
           <ToggleButtonGroup
             value={viewMode}
             exclusive
@@ -296,12 +395,23 @@ const ApproveAMCallsPage = () => {
       )}
 
       {success && (
-        <Alert severity="success" sx={{ mb: 3 }} onClose={() => setSuccess(null)}>
+        <Alert
+          severity="success"
+          sx={{ mb: 3 }}
+          onClose={() => setSuccess(null)}
+        >
           {success}
         </Alert>
       )}
 
-      <Paper sx={{ p: 3, mb: 3, backgroundColor: viewMode === 'card' ? 'transparent' : undefined, boxShadow: viewMode === 'card' ? 'none' : undefined }}>
+      <Paper
+        sx={{
+          p: 3,
+          mb: 3,
+          backgroundColor: viewMode === "card" ? "transparent" : undefined,
+          boxShadow: viewMode === "card" ? "none" : undefined,
+        }}
+      >
         <TextField
           fullWidth
           placeholder="Search by lead, agent, AM, or client network..."
@@ -317,14 +427,21 @@ const ApproveAMCallsPage = () => {
           sx={{ mb: 3 }}
         />
 
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          {filteredRequests.length} pending request{filteredRequests.length !== 1 ? "s" : ""}
+        <Typography
+          variant="body2"
+          color="text.secondary"
+          sx={{ mb: 2, textAlign: "center" }}
+        >
+          {filteredRequests.length} pending request
+          {filteredRequests.length !== 1 ? "s" : ""}
         </Typography>
 
         {filteredRequests.length === 0 ? (
           <Box sx={{ textAlign: "center", py: 6 }}>
             <Typography variant="h6" color="text.secondary">
-              {searchTerm ? "No matching requests found" : "No pending call change requests"}
+              {searchTerm
+                ? "No matching requests found"
+                : "No pending call change requests"}
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
               {searchTerm
@@ -337,73 +454,71 @@ const ApproveAMCallsPage = () => {
             <Table>
               <TableHead>
                 <TableRow>
-                  <TableCell>Order Date</TableCell>
-                  <TableCell>Lead Name</TableCell>
-                  <TableCell>Client Network</TableCell>
-                  <TableCell>Account Manager</TableCell>
-                  <TableCell>Agent</TableCell>
-                  <TableCell>Current Call</TableCell>
-                  <TableCell>Requested Call</TableCell>
-                  <TableCell>Current Verified</TableCell>
-                  <TableCell>Requested Verified</TableCell>
-                  <TableCell>Request Date</TableCell>
+                  <TableCell align="center">Order Date</TableCell>
+                  <TableCell align="center">Lead Name</TableCell>
+                  <TableCell align="center">Client Network</TableCell>
+                  <TableCell align="center">Account Manager</TableCell>
+                  <TableCell align="center">Agent</TableCell>
+                  <TableCell align="center">Current Call</TableCell>
+                  <TableCell align="center">Requested Call</TableCell>
+                  <TableCell align="center">Current Verified</TableCell>
+                  <TableCell align="center">Requested Verified</TableCell>
+                  <TableCell align="center">Request Date</TableCell>
                   <TableCell align="center">Actions</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {filteredRequests.map((request) => (
                   <TableRow key={request._id} hover>
-                    <TableCell>
+                    <TableCell align="center">
                       <Typography variant="body2" fontWeight="medium">
-                        {request.orderId?.createdAt 
-                          ? new Date(request.orderId.createdAt).toLocaleDateString()
+                        {request.orderId?.createdAt
+                          ? new Date(
+                              request.orderId.createdAt
+                            ).toLocaleDateString()
                           : "N/A"}
                       </Typography>
                       {request.orderId?.createdAt && (
-                        <Typography variant="caption" color="text.secondary" display="block">
-                          {new Date(request.orderId.createdAt).toLocaleTimeString()}
+                        <Typography
+                          variant="caption"
+                          color="text.secondary"
+                          display="block"
+                        >
+                          {new Date(
+                            request.orderId.createdAt
+                          ).toLocaleTimeString()}
                         </Typography>
                       )}
                     </TableCell>
-                    <TableCell>
+                    <TableCell align="center">
                       <Typography variant="body2">
                         {request.leadId?.firstName && request.leadId?.lastName
                           ? `${request.leadId.firstName} ${request.leadId.lastName}`
                           : "N/A"}
                       </Typography>
                     </TableCell>
-                    <TableCell>
+                    <TableCell align="center">
                       <Typography variant="body2">
                         {request.orderId?.selectedClientNetwork?.name || "N/A"}
                       </Typography>
                     </TableCell>
-                    <TableCell>
+                    <TableCell align="center">
                       <Typography variant="body2">
                         {request.orderId?.requester?.fullName || "N/A"}
                       </Typography>
                     </TableCell>
-                    <TableCell>
+                    <TableCell align="center">
                       <Typography variant="body2">
                         {request.requestedBy?.fullName || "Unknown"}
                       </Typography>
                     </TableCell>
-                    <TableCell>
-                      <Chip
-                        label={request.currentCallNumber || "None"}
-                        size="small"
-                        color="default"
-                        variant="outlined"
-                      />
+                    <TableCell align="center">
+                      {renderCallNumber(request.currentCallNumber, 28)}
                     </TableCell>
-                    <TableCell>
-                      <Chip
-                        label={request.requestedCallNumber || "None"}
-                        size="small"
-                        color="primary"
-                        variant="filled"
-                      />
+                    <TableCell align="center">
+                      {renderCallNumber(request.requestedCallNumber, 28)}
                     </TableCell>
-                    <TableCell>
+                    <TableCell align="center">
                       <Chip
                         label={request.currentVerified ? "Yes" : "No"}
                         size="small"
@@ -411,21 +526,33 @@ const ApproveAMCallsPage = () => {
                         variant="outlined"
                       />
                     </TableCell>
-                    <TableCell>
+                    <TableCell align="center">
                       <Chip
                         label={request.requestedVerified ? "Yes" : "No"}
                         size="small"
-                        color={request.requestedVerified ? "success" : "default"}
-                        variant={request.currentVerified !== request.requestedVerified ? "filled" : "outlined"}
+                        color={
+                          request.requestedVerified ? "success" : "default"
+                        }
+                        variant={
+                          request.currentVerified !== request.requestedVerified
+                            ? "filled"
+                            : "outlined"
+                        }
                       />
                     </TableCell>
-                    <TableCell>
+                    <TableCell align="center">
                       <Typography variant="body2" sx={{ fontSize: "0.875rem" }}>
                         {new Date(request.createdAt).toLocaleString()}
                       </Typography>
                     </TableCell>
                     <TableCell align="center">
-                      <Box sx={{ display: "flex", gap: 1, justifyContent: "center" }}>
+                      <Box
+                        sx={{
+                          display: "flex",
+                          gap: 1,
+                          justifyContent: "center",
+                        }}
+                      >
                         <Tooltip title="Approve">
                           <span>
                             <IconButton
@@ -466,4 +593,3 @@ const ApproveAMCallsPage = () => {
 };
 
 export default ApproveAMCallsPage;
-
