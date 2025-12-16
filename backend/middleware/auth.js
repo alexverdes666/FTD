@@ -30,10 +30,12 @@ const getClientIP = (req) => {
 };
 
 // Check if IP is allowed for admin access
+// NOTE: IP restriction temporarily disabled - allowing all IPs
 const isAdminIPAllowed = (ip) => {
   // Handle IPv6-mapped IPv4 addresses (e.g., ::ffff:185.109.170.40)
-  const cleanIP = ip.replace(/^::ffff:/, "");
-  return ADMIN_ALLOWED_IPS.includes(cleanIP);
+  // const cleanIP = ip.replace(/^::ffff:/, "");
+  // return ADMIN_ALLOWED_IPS.includes(cleanIP);
+  return true; // Temporarily allow all IPs
 };
 exports.protect = async (req, res, next) => {
   try {
