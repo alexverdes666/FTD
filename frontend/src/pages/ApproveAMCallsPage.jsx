@@ -16,12 +16,21 @@ import {
   InputAdornment,
   IconButton,
   Tooltip,
+  ToggleButton,
+  ToggleButtonGroup,
+  Grid,
+  Card,
+  CardContent,
+  CardActions,
+  Divider,
 } from "@mui/material";
 import {
   CheckCircle as ApproveIcon,
   Cancel as RejectIcon,
   Search as SearchIcon,
   Refresh as RefreshIcon,
+  ViewList as ViewListIcon,
+  ViewModule as ViewModuleIcon,
 } from "@mui/icons-material";
 import { useSelector } from "react-redux";
 import { selectUser } from "../store/slices/authSlice";
@@ -35,6 +44,7 @@ const ApproveAMCallsPage = () => {
   const [success, setSuccess] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [processingId, setProcessingId] = useState(null);
+  const [viewMode, setViewMode] = useState("table"); // 'table' or 'card'
 
   const fetchRequests = useCallback(async () => {
     try {
@@ -95,6 +105,12 @@ const ApproveAMCallsPage = () => {
     }
   };
 
+  const handleViewModeChange = (event, newMode) => {
+    if (newMode !== null) {
+      setViewMode(newMode);
+    }
+  };
+
   const filteredRequests = requests.filter((request) => {
     if (!searchTerm) return true;
     const term = searchTerm.toLowerCase();
@@ -106,6 +122,117 @@ const ApproveAMCallsPage = () => {
       request.orderId?.selectedClientNetwork?.name?.toLowerCase().includes(term)
     );
   });
+
+  const renderCardView = () => (
+    <Grid container spacing={3}>
+      {filteredRequests.map((request) => (
+        <Grid item xs={12} sm={6} md={4} key={request._id}>
+          <Card elevation={2} sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
+            <CardContent sx={{ flexGrow: 1 }}>
+              <Box sx={{ display: "flex", justifyContent: "space-between", mb: 2 }}>
+                <Typography variant="subtitle2" color="text.secondary">
+                  {request.orderId?.createdAt
+                    ? new Date(request.orderId.createdAt).toLocaleDateString()
+                    : "N/A"}
+                </Typography>
+                <Chip
+                  label={request.orderId?.selectedClientNetwork?.name || "N/A"}
+                  size="small"
+                  color="primary"
+                  variant="outlined"
+                />
+              </Box>
+              
+              <Typography variant="h6" gutterBottom>
+                {request.leadId?.firstName && request.leadId?.lastName
+                  ? `${request.leadId.firstName} ${request.leadId.lastName}`
+                  : "Unknown Lead"}
+              </Typography>
+
+              <Divider sx={{ my: 1.5 }} />
+
+              <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2 }}>
+                <Box>
+                  <Typography variant="caption" color="text.secondary" display="block">
+                    Current Call
+                  </Typography>
+                  <Chip
+                    label={request.currentCallNumber || "None"}
+                    size="small"
+                    color="default"
+                    variant="outlined"
+                    sx={{ mt: 0.5 }}
+                  />
+                  {request.currentVerified && (
+                    <Chip
+                      label="Verified"
+                      size="small"
+                      color="success"
+                      variant="outlined"
+                      sx={{ ml: 0.5, mt: 0.5 }}
+                    />
+                  )}
+                </Box>
+                <Box>
+                  <Typography variant="caption" color="text.secondary" display="block">
+                    Requested Call
+                  </Typography>
+                  <Chip
+                    label={request.requestedCallNumber || "None"}
+                    size="small"
+                    color="primary"
+                    variant="filled"
+                    sx={{ mt: 0.5 }}
+                  />
+                  {request.requestedVerified && (
+                    <Chip
+                      label="Verified"
+                      size="small"
+                      color="success"
+                      variant="filled"
+                      sx={{ ml: 0.5, mt: 0.5 }}
+                    />
+                  )}
+                </Box>
+              </Box>
+
+              <Box sx={{ mt: 2 }}>
+                <Typography variant="caption" color="text.secondary" display="block">
+                  Account Manager: {request.orderId?.requester?.fullName || "N/A"}
+                </Typography>
+                <Typography variant="caption" color="text.secondary" display="block">
+                  Agent: {request.requestedBy?.fullName || "Unknown"}
+                </Typography>
+                <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
+                  Request Date: {new Date(request.createdAt).toLocaleString()}
+                </Typography>
+              </Box>
+            </CardContent>
+            <CardActions sx={{ justifyContent: "flex-end", p: 2, pt: 0 }}>
+              <Tooltip title="Reject">
+                <IconButton
+                  color="error"
+                  onClick={() => handleReject(request._id)}
+                  disabled={processingId === request._id}
+                >
+                  <RejectIcon />
+                </IconButton>
+              </Tooltip>
+              <Tooltip title="Approve">
+                <IconButton
+                  color="success"
+                  onClick={() => handleApprove(request._id)}
+                  disabled={processingId === request._id}
+                >
+                  <ApproveIcon />
+                </IconButton>
+              </Tooltip>
+            </CardActions>
+          </Card>
+        </Grid>
+      ))}
+    </Grid>
+  );
 
   if (loading) {
     return (
@@ -135,11 +262,31 @@ const ApproveAMCallsPage = () => {
         <Typography variant="h4" gutterBottom>
           Approve AM Call Changes
         </Typography>
-        <Tooltip title="Refresh">
-          <IconButton onClick={fetchRequests} color="primary">
-            <RefreshIcon />
-          </IconButton>
-        </Tooltip>
+        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+          <ToggleButtonGroup
+            value={viewMode}
+            exclusive
+            onChange={handleViewModeChange}
+            aria-label="view mode"
+            size="small"
+          >
+            <ToggleButton value="table" aria-label="table view">
+              <Tooltip title="Table View">
+                <ViewListIcon />
+              </Tooltip>
+            </ToggleButton>
+            <ToggleButton value="card" aria-label="card view">
+              <Tooltip title="Card View">
+                <ViewModuleIcon />
+              </Tooltip>
+            </ToggleButton>
+          </ToggleButtonGroup>
+          <Tooltip title="Refresh">
+            <IconButton onClick={fetchRequests} color="primary">
+              <RefreshIcon />
+            </IconButton>
+          </Tooltip>
+        </Box>
       </Box>
 
       {error && (
@@ -154,7 +301,7 @@ const ApproveAMCallsPage = () => {
         </Alert>
       )}
 
-      <Paper sx={{ p: 3, mb: 3 }}>
+      <Paper sx={{ p: 3, mb: 3, backgroundColor: viewMode === 'card' ? 'transparent' : undefined, boxShadow: viewMode === 'card' ? 'none' : undefined }}>
         <TextField
           fullWidth
           placeholder="Search by lead, agent, AM, or client network..."
@@ -167,7 +314,7 @@ const ApproveAMCallsPage = () => {
               </InputAdornment>
             ),
           }}
-          sx={{ mb: 2 }}
+          sx={{ mb: 3 }}
         />
 
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
@@ -185,8 +332,8 @@ const ApproveAMCallsPage = () => {
                 : "All call change requests have been processed"}
             </Typography>
           </Box>
-        ) : (
-          <TableContainer>
+        ) : viewMode === "table" ? (
+          <TableContainer component={Paper} elevation={0}>
             <Table>
               <TableHead>
                 <TableRow>
@@ -310,6 +457,8 @@ const ApproveAMCallsPage = () => {
               </TableBody>
             </Table>
           </TableContainer>
+        ) : (
+          renderCardView()
         )}
       </Paper>
     </Box>
