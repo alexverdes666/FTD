@@ -257,9 +257,9 @@ const WithdrawalsPage = () => {
             >
               <Card>
                 <CardContent>
-                  <Box display="flex" alignItems="center">
+                  <Box display="flex" alignItems="center" justifyContent="center">
                     <PendingIcon sx={{ mr: 2, color: 'warning.main' }} />
-                    <Box>
+                    <Box sx={{ textAlign: 'center' }}>
                       <Typography variant="h4" color="warning.main">
                         {stats.pending}
                       </Typography>
@@ -284,9 +284,9 @@ const WithdrawalsPage = () => {
             >
               <Card>
                 <CardContent>
-                  <Box display="flex" alignItems="center">
+                  <Box display="flex" alignItems="center" justifyContent="center">
                     <CompletedIcon sx={{ mr: 2, color: 'success.main' }} />
-                    <Box>
+                    <Box sx={{ textAlign: 'center' }}>
                       <Typography variant="h4" color="success.main">
                         {stats.completed}
                       </Typography>
@@ -311,9 +311,9 @@ const WithdrawalsPage = () => {
             >
               <Card>
                 <CardContent>
-                  <Box display="flex" alignItems="center">
+                  <Box display="flex" alignItems="center" justifyContent="center">
                     <MoneyIcon sx={{ mr: 2, color: 'primary.main' }} />
-                    <Box>
+                    <Box sx={{ textAlign: 'center' }}>
                       <Typography variant="h4" color="primary.main">
                         {formatCurrency(stats.totalAmount)}
                       </Typography>
@@ -338,9 +338,9 @@ const WithdrawalsPage = () => {
             >
               <Card>
                 <CardContent>
-                  <Box display="flex" alignItems="center">
+                  <Box display="flex" alignItems="center" justifyContent="center">
                     <PersonIcon sx={{ mr: 2, color: 'info.main' }} />
-                    <Box>
+                    <Box sx={{ textAlign: 'center' }}>
                       <Typography variant="h4" color="info.main">
                         {stats.total}
                       </Typography>
@@ -363,7 +363,13 @@ const WithdrawalsPage = () => {
       <Card sx={{ mb: 3 }}>
         <CardContent>
           <Stack spacing={3}>
-            <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
+            <Stack
+              direction="row"
+              spacing={2}
+              alignItems="center"
+              justifyContent="center"
+              flexWrap="wrap"
+            >
               <FormControl variant="outlined" size="small" sx={{ minWidth: 150 }}>
                 <InputLabel id="status-filter-label">Status Filter</InputLabel>
                 <Select
@@ -413,7 +419,7 @@ const WithdrawalsPage = () => {
 
             {/* Custom Date Range Inputs */}
             {dateFilter === 'custom' && (
-              <Stack direction="row" spacing={2} alignItems="center">
+              <Stack direction="row" spacing={2} alignItems="center" justifyContent="center">
                 <TextField
                   label="Start Date"
                   type="date"
@@ -441,8 +447,9 @@ const WithdrawalsPage = () => {
         <CardHeader
           title="Withdrawal Requests"
           subheader={`${withdrawals.length} requests found`}
+          sx={{ textAlign: 'center' }}
           action={
-            <Stack direction="row" spacing={1}>
+            <Stack direction="row" spacing={1} justifyContent="center">
               <Chip
                 icon={<WalletIcon />}
                 label={`Status: ${statusFilter === 'all' ? 'All' : getWithdrawalStatusText(statusFilter)}`}
@@ -468,14 +475,14 @@ const WithdrawalsPage = () => {
               <Table>
                 <TableHead>
                   <TableRow>
-                    <TableCell>Agent</TableCell>
-                    <TableCell>Amount</TableCell>
-                    <TableCell>For Month</TableCell>
-                    <TableCell>Wallet Address</TableCell>
-                    <TableCell>Status</TableCell>
-                    <TableCell>Request Date</TableCell>
-                    <TableCell>Processed Date</TableCell>
-                    <TableCell>Actions</TableCell>
+                    <TableCell align="center">Agent</TableCell>
+                    <TableCell align="center">Amount</TableCell>
+                    <TableCell align="center">For Month</TableCell>
+                    <TableCell align="center">Wallet Address</TableCell>
+                    <TableCell align="center">Status</TableCell>
+                    <TableCell align="center">Request Date</TableCell>
+                    <TableCell align="center">Processed Date</TableCell>
+                    <TableCell align="center">Actions</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -488,12 +495,12 @@ const WithdrawalsPage = () => {
                         }
                       }}
                     >
-                      <TableCell>
-                        <Box>
+                      <TableCell align="center">
+                        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                           <Typography variant="body2" fontWeight="medium">
                             {withdrawal.agent?.fullName}
                           </Typography>
-                          <Typography variant="caption" color="text.secondary">
+                          <Typography variant="caption" sx={{ color: 'success.light' }}>
                             {withdrawal.agent?.email}
                           </Typography>
                           {withdrawal.agent?.fourDigitCode && (
@@ -503,8 +510,8 @@ const WithdrawalsPage = () => {
                           )}
                         </Box>
                       </TableCell>
-                      <TableCell>
-                        <Box>
+                      <TableCell align="center">
+                        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                           <Typography variant="body2" fontWeight="medium">
                             {formatCurrency(withdrawal.amount)}
                           </Typography>
@@ -514,7 +521,7 @@ const WithdrawalsPage = () => {
                           </Typography>
                         </Box>
                       </TableCell>
-                      <TableCell>
+                      <TableCell align="center">
                         <Chip
                           label={formatWithdrawalMonth(withdrawal.withdrawalMonth, withdrawal.withdrawalYear)}
                           color="info"
@@ -522,14 +529,14 @@ const WithdrawalsPage = () => {
                           variant="outlined"
                         />
                       </TableCell>
-                      <TableCell>
-                        <Box>
+                      <TableCell align="center">
+                        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                           {/* New format: separate ERC20 and TRC20 wallets */}
                           {withdrawal.usdtErc20Wallet || withdrawal.usdtTrc20Wallet ? (
                             <>
                               {withdrawal.usdtErc20Wallet && (
-                                <Box mb={0.5}>
-                                  <Typography variant="caption" color="text.secondary" fontWeight="medium">
+                                <Box mb={0.5} sx={{ textAlign: 'center' }}>
+                                  <Typography variant="caption" color="text.secondary" fontWeight="bold">
                                     ERC20:
                                   </Typography>
                                   <Typography
@@ -546,8 +553,8 @@ const WithdrawalsPage = () => {
                                 </Box>
                               )}
                               {withdrawal.usdtTrc20Wallet && (
-                                <Box>
-                                  <Typography variant="caption" color="text.secondary" fontWeight="medium">
+                                <Box sx={{ textAlign: 'center' }}>
+                                  <Typography variant="caption" color="text.secondary" fontWeight="bold">
                                     TRC20:
                                   </Typography>
                                   <Typography
@@ -595,7 +602,7 @@ const WithdrawalsPage = () => {
                           )}
                         </Box>
                       </TableCell>
-                      <TableCell>
+                      <TableCell align="center">
                         <Chip
                           icon={getStatusIcon(withdrawal.status)}
                           label={getWithdrawalStatusText(withdrawal.status)}
@@ -603,14 +610,14 @@ const WithdrawalsPage = () => {
                           size="small"
                         />
                       </TableCell>
-                      <TableCell>
+                      <TableCell align="center">
                         <Typography variant="body2">
                           {formatDate(withdrawal.createdAt)}
                         </Typography>
                       </TableCell>
-                      <TableCell>
+                      <TableCell align="center">
                         {withdrawal.processedAt ? (
-                          <Box>
+                          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                             <Typography variant="body2">
                               {formatDate(withdrawal.processedAt)}
                             </Typography>
@@ -626,8 +633,8 @@ const WithdrawalsPage = () => {
                           </Typography>
                         )}
                       </TableCell>
-                      <TableCell>
-                        <Stack direction="row" spacing={1}>
+                      <TableCell align="center">
+                        <Stack direction="row" spacing={1} justifyContent="center">
                           <Tooltip title="Process Withdrawal">
                             <IconButton
                               size="small"
