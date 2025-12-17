@@ -636,7 +636,7 @@ const OurNetworksPage = () => {
       );
       const { newTransactions, totalUsdValue } = response.data.summary;
       const valueText = totalUsdValue
-        ? ` with total value $${totalUsdValue}`
+        ? ` with total value $${Math.floor(Number(totalUsdValue))}`
         : "";
 
       // Show global notification only, don't use per-network notifications to avoid duplication and layout shifts
@@ -1043,7 +1043,7 @@ const OurNetworksPage = () => {
                               fontWeight="bold"
                               color="success.main"
                             >
-                              ${summary.totalUsdValue}
+                              ${Math.floor(Number(summary.totalUsdValue))}
                             </Typography>
                           </Box>
                         );
@@ -1518,7 +1518,9 @@ const OurNetworksPage = () => {
                                   {walletData && (
                                     <Chip
                                       size="small"
-                                      label={`$${walletData.totalUsdValue}`}
+                                      label={`$${Math.floor(
+                                        Number(walletData.totalUsdValue)
+                                      )}`}
                                       color="success"
                                       sx={{
                                         fontWeight: "bold",
@@ -1618,7 +1620,9 @@ const OurNetworksPage = () => {
                                   {walletData && (
                                     <Chip
                                       size="small"
-                                      label={`$${walletData.totalUsdValue}`}
+                                      label={`$${Math.floor(
+                                        Number(walletData.totalUsdValue)
+                                      )}`}
                                       color="success"
                                       sx={{
                                         fontWeight: "bold",
@@ -1714,7 +1718,9 @@ const OurNetworksPage = () => {
                                   {walletData && (
                                     <Chip
                                       size="small"
-                                      label={`$${walletData.totalUsdValue}`}
+                                      label={`$${Math.floor(
+                                        Number(walletData.totalUsdValue)
+                                      )}`}
                                       color="success"
                                       sx={{
                                         fontWeight: "bold",
