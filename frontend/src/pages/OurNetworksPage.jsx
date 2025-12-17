@@ -31,6 +31,8 @@ import {
   useTheme,
   useMediaQuery,
   CircularProgress,
+  Snackbar,
+  Slide,
 } from "@mui/material";
 import {
   Add as AddIcon,
@@ -149,10 +151,12 @@ const OurNetworksPage = () => {
     message: "",
     severity: "info",
   });
+  const [isSnackbarOpen, setIsSnackbarOpen] = useState(false);
 
   // Scraper state management
   const [scrapingNetworks, setScrapingNetworks] = useState(new Set());
-  const [scraperNotifications, setScraperNotifications] = useState({});
+  // Removed scraperNotifications state to avoid duplication and layout shifts
+
 
   // Network summaries state
   const [networkSummaries, setNetworkSummaries] = useState({});
@@ -165,7 +169,7 @@ const OurNetworksPage = () => {
 
   // Month filter state
   const [selectedMonth, setSelectedMonth] = useState(dayjs());
-  const [useMonthFilter, setUseMonthFilter] = useState(true);
+  const [useMonthFilter, setUseMonthFilter] = useState(false);
 
   const {
     control,
@@ -213,6 +217,23 @@ const OurNetworksPage = () => {
     control,
     name: "cryptoWallets.tron",
   });
+
+  useEffect(() => {
+    if (notification.message) {
+      setIsSnackbarOpen(true);
+    }
+  }, [notification.message]);
+
+  const handleCloseSnackbar = (event, reason) => {
+    if (reason === "clickaway") {
+      return;
+    }
+    setIsSnackbarOpen(false);
+  };
+
+  const handleSnackbarExited = () => {
+    setNotification((prev) => ({ ...prev, message: "" }));
+  };
 
   const fetchOurNetworks = useCallback(async () => {
     try {
@@ -597,10 +618,7 @@ const OurNetworksPage = () => {
     setScrapingNetworks((prev) => new Set([...prev, networkId]));
 
     // Clear previous notifications for this network
-    setScraperNotifications((prev) => ({
-      ...prev,
-      [networkId]: null,
-    }));
+    // setScraperNotifications((prev) => ({ ...prev, [networkId]: null }));
 
     try {
       const response = await blockchainService.triggerNetworkScrapers(
@@ -611,23 +629,7 @@ const OurNetworksPage = () => {
         ? ` with total value $${totalUsdValue.toFixed(2)}`
         : "";
 
-      setScraperNotifications((prev) => ({
-        ...prev,
-        [networkId]: {
-          message: `Scrapers completed for "${network.name}"! Found ${newTransactions} new transactions${valueText}.`,
-          severity: "success",
-        },
-      }));
-
-      // Auto-clear scraper notification after 10 seconds
-      setTimeout(() => {
-        setScraperNotifications((prev) => ({
-          ...prev,
-          [networkId]: null,
-        }));
-      }, 10000);
-
-      // Show global notification too
+      // Show global notification only, don't use per-network notifications to avoid duplication and layout shifts
       setNotification({
         message: `Scrapers completed for "${network.name}"! Found ${newTransactions} new transactions${valueText}.`,
         severity: "success",
@@ -637,24 +639,6 @@ const OurNetworksPage = () => {
       fetchNetworkSummary(networkId);
     } catch (error) {
       console.error("Error triggering network scrapers:", error);
-
-      setScraperNotifications((prev) => ({
-        ...prev,
-        [networkId]: {
-          message:
-            error.response?.data?.message ||
-            `Failed to run scrapers for "${network.name}"`,
-          severity: "error",
-        },
-      }));
-
-      // Auto-clear scraper notification after 10 seconds
-      setTimeout(() => {
-        setScraperNotifications((prev) => ({
-          ...prev,
-          [networkId]: null,
-        }));
-      }, 10000);
 
       setNotification({
         message:
@@ -684,76 +668,36 @@ const OurNetworksPage = () => {
   }
 
   return (
-    <Box sx={{ p: 3 }}>
-      <Box
-        sx={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          mb: 3,
+    <Box sx={{ p: isMobile ? 2 : 3, pt: 0, mt: -2 }}>
+      <Snackbar
+        open={isSnackbarOpen}
+        autoHideDuration={3000}
+        onClose={handleCloseSnackbar}
+        anchorOrigin={{ vertical: "top", horizontal: "right" }}
+        TransitionComponent={Slide}
+        TransitionProps={{
+          direction: "down",
+          timeout: 1000,
+          onExited: handleSnackbarExited,
         }}
+        sx={{ top: { xs: 16, sm: 24 }, right: { xs: 16, sm: 24 } }}
       >
-        <Typography variant="h4" component="h1" fontWeight="bold">
-          {user?.role === "admin" ? "Our Networks" : "My Assigned Networks"}
-        </Typography>
-        <Box sx={{ display: "flex", gap: 2, alignItems: "center" }}>
-          {/* Run All Scrapers Button */}
-          <AllNetworksScraperButton
-            variant="contained"
-            size="medium"
-            onComplete={fetchOurNetworks}
-          />
-
-          {/* Add Network Button (Admin only) */}
-          {user?.role === "admin" && (
-            <Button
-              variant="contained"
-              startIcon={<AddIcon />}
-              onClick={() => handleOpenDialog()}
-              sx={{ minWidth: isMobile ? "auto" : "200px" }}
-            >
-              {isMobile ? "Add" : "Add Our Network"}
-            </Button>
-          )}
-        </Box>
-      </Box>
-
-      <Collapse in={!!notification.message}>
         <Alert
           severity={notification.severity}
-          onClose={() => setNotification({ message: "", severity: "info" })}
-          sx={{ mb: 2 }}
+          sx={{ width: "100%", boxShadow: 3 }}
         >
           {notification.message}
         </Alert>
-      </Collapse>
+      </Snackbar>
 
-      {/* Scraper Notifications */}
-      {Object.entries(scraperNotifications).map(
-        ([networkId, notif]) =>
-          notif && (
-            <Alert
-              key={networkId}
-              severity={notif.severity}
-              onClose={() =>
-                setScraperNotifications((prev) => ({
-                  ...prev,
-                  [networkId]: null,
-                }))
-              }
-              sx={{ mb: 1 }}
-            >
-              {notif.message}
-            </Alert>
-          )
-      )}
+      {/* Add spacing to prevent top content from being hidden if notification is persistent (though it overlays now) */}
+      <Box sx={{ height: 0 }} />
 
       <Paper sx={{ p: 2, mb: 3 }}>
         <Box
           sx={{
             display: "flex",
             gap: 2,
-            flexWrap: "wrap",
             alignItems: "center",
           }}
         >
@@ -767,36 +711,15 @@ const OurNetworksPage = () => {
             size="small"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            sx={{ minWidth: isMobile ? "100%" : "300px" }}
+            sx={{ minWidth: 250 }}
           />
-          {user?.role === "admin" && (
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={showActiveOnly}
-                  onChange={(e) => setShowActiveOnly(e.target.checked)}
-                />
-              }
-              label="Show active only"
-            />
-          )}
-          <Button
-            variant="outlined"
-            onClick={fetchOurNetworks}
-            disabled={loading}
-          >
-            Search
-          </Button>
-        </Box>
 
-        {/* Month Filter Section */}
-        <Box sx={{ mt: 2, pt: 2, borderTop: 1, borderColor: "divider" }}>
           <Box
             sx={{
               display: "flex",
-              gap: 2,
-              flexWrap: "wrap",
               alignItems: "center",
+              gap: 1,
+              pl: 1,
             }}
           >
             <FormControlLabel
@@ -806,15 +729,15 @@ const OurNetworksPage = () => {
                   onChange={(e) => setUseMonthFilter(e.target.checked)}
                 />
               }
-              label="Filter by Month"
+              label="Month Filter"
+              sx={{ whiteSpace: "nowrap" }}
             />
 
             {useMonthFilter && (
-              <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+              <>
                 <MonthYearSelector
                   selectedDate={selectedMonth}
                   onDateChange={setSelectedMonth}
-                  label="Filter Month & Year"
                   showCurrentSelection={false}
                   size="small"
                 />
@@ -822,7 +745,6 @@ const OurNetworksPage = () => {
                   variant="contained"
                   size="small"
                   onClick={() => {
-                    // Refresh all network summaries with the new month filter
                     ourNetworks.forEach((network) => {
                       if (hasWallets(network)) {
                         fetchNetworkSummary(network._id);
@@ -831,9 +753,30 @@ const OurNetworksPage = () => {
                   }}
                   disabled={summariesLoading.size > 0}
                 >
-                  Apply Filter
+                  Apply
                 </Button>
-              </Box>
+              </>
+            )}
+          </Box>
+
+          <Box sx={{ ml: "auto", display: "flex", gap: 2, alignItems: "center" }}>
+            {/* Run All Scrapers Button */}
+            <AllNetworksScraperButton
+              variant="contained"
+              size="medium"
+              onComplete={fetchOurNetworks}
+            />
+
+            {/* Add Network Button (Admin only) */}
+            {user?.role === "admin" && (
+              <Button
+                variant="contained"
+                startIcon={<AddIcon />}
+                onClick={() => handleOpenDialog()}
+                sx={{ minWidth: isMobile ? "auto" : "200px" }}
+              >
+                {isMobile ? "Add" : "Add Our Network"}
+              </Button>
             )}
           </Box>
         </Box>
@@ -890,7 +833,16 @@ const OurNetworksPage = () => {
                     </Typography>
                   </TableCell>
                   <TableCell>
-                    <Typography variant="body2" color="text.secondary">
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      sx={{
+                        maxWidth: 200,
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                      }}
+                    >
                       {network.description || "No description"}
                     </Typography>
                   </TableCell>
@@ -909,329 +861,102 @@ const OurNetworksPage = () => {
                     )}
                   </TableCell>
                   <TableCell>
-                    <Box
-                      sx={{
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: 0.5,
-                        minWidth: 200,
-                      }}
-                    >
-                      {/* Helper function to get wallet addresses as array */}
+                    <Box sx={{ display: "flex", gap: 1, flexWrap: "nowrap", overflowX: "auto" }}>
                       {(() => {
-                        const getWalletArray = (wallet) => {
+                        const getWalletCount = (wallet) => {
                           if (Array.isArray(wallet))
                             return wallet.filter(
                               (addr) => addr && addr.trim() !== ""
-                            );
-                          return wallet ? [wallet] : [];
+                            ).length;
+                          return wallet ? 1 : 0;
                         };
 
-                        // Get wallet arrays
-                        const ethereumWallets = getWalletArray(
+                        const ethCount = getWalletCount(
                           network.cryptoWallets?.ethereum
                         );
-                        const bitcoinWallets = getWalletArray(
+                        const btcCount = getWalletCount(
                           network.cryptoWallets?.bitcoin
                         );
-                        const tronWallets = getWalletArray(
+                        const tronCount = getWalletCount(
                           network.cryptoWallets?.tron
                         );
 
-                        const hasAnyWallets =
-                          ethereumWallets.length > 0 ||
-                          bitcoinWallets.length > 0 ||
-                          tronWallets.length > 0;
-
-                        // Get network summary for wallet balances
-                        const summary = networkSummaries[network._id];
-                        const getWalletBalance = (blockchain, address) => {
-                          if (!summary?.breakdown?.[blockchain]?.wallets)
-                            return null;
-                          const walletData = summary.breakdown[
-                            blockchain
-                          ].wallets.find((w) => w.address === address);
-                          return walletData?.totalUsdValue || 0;
-                        };
+                        if (
+                          ethCount === 0 &&
+                          btcCount === 0 &&
+                          tronCount === 0
+                        ) {
+                          return (
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                            >
+                              No wallets
+                            </Typography>
+                          );
+                        }
 
                         return (
                           <>
-                            {/* Ethereum Wallets */}
-                            {ethereumWallets.map((address, index) => {
-                              const balance = getWalletBalance(
-                                "ethereum",
-                                address
-                              );
-                              return (
-                                <Box
-                                  key={`eth-${index}`}
-                                  sx={{
-                                    display: "flex",
-                                    alignItems: "center",
-                                    gap: 0.5,
-                                    p: 0.5,
-                                    borderRadius: 1,
-                                    backgroundColor: "primary.50",
-                                    border: 1,
-                                    borderColor: "primary.200",
-                                    cursor: "pointer",
-                                    transition: "all 0.2s ease",
-                                    "&:hover": {
-                                      backgroundColor: "primary.100",
-                                      borderColor: "primary.300",
-                                      transform: "translateY(-1px)",
-                                      boxShadow:
-                                        "0 2px 8px rgba(33, 150, 243, 0.2)",
-                                    },
-                                  }}
-                                >
-                                  <WalletIcon
-                                    sx={{ color: "primary.main", fontSize: 16 }}
-                                  />
-                                  <Box
-                                    sx={{
-                                      display: "flex",
-                                      flexDirection: "column",
-                                      minWidth: 0,
-                                      flex: 1,
-                                    }}
-                                  >
-                                    <Typography
-                                      variant="caption"
-                                      color="primary.main"
-                                      fontWeight="bold"
-                                    >
-                                      ETH
-                                      {ethereumWallets.length > 1
-                                        ? ` ${index + 1}`
-                                        : ""}
-                                      :
-                                    </Typography>
-                                    <Typography
-                                      variant="caption"
-                                      sx={{ fontFamily: "monospace" }}
-                                    >
-                                      {address.slice(0, 6)}...
-                                      {address.slice(-4)}
-                                    </Typography>
-                                    {balance !== null && (
-                                      <Typography
-                                        variant="caption"
-                                        color="success.main"
-                                        fontWeight="bold"
-                                      >
-                                        ${balance.toFixed(2)}
-                                      </Typography>
-                                    )}
-                                  </Box>
-                                  <Button
-                                    size="small"
-                                    variant="text"
-                                    sx={{ minWidth: "auto", p: 0.5 }}
-                                    onClick={() =>
-                                      window.open(
-                                        `https://etherscan.io/address/${address}#tokentxns`,
-                                        "_blank"
-                                      )
-                                    }
-                                  >
-                                    <OpenInNewIcon fontSize="small" />
-                                  </Button>
-                                </Box>
-                              );
-                            })}
-
-                            {/* Bitcoin Wallets */}
-                            {bitcoinWallets.map((address, index) => {
-                              const balance = getWalletBalance(
-                                "bitcoin",
-                                address
-                              );
-                              return (
-                                <Box
-                                  key={`btc-${index}`}
-                                  sx={{
-                                    display: "flex",
-                                    alignItems: "center",
-                                    gap: 0.5,
-                                    p: 0.5,
-                                    borderRadius: 1,
-                                    backgroundColor: "orange.50",
-                                    border: 1,
-                                    borderColor: "orange.200",
-                                    cursor: "pointer",
-                                    transition: "all 0.2s ease",
-                                    "&:hover": {
-                                      backgroundColor: "orange.100",
-                                      borderColor: "orange.300",
-                                      transform: "translateY(-1px)",
-                                      boxShadow:
-                                        "0 2px 8px rgba(255, 152, 0, 0.2)",
-                                    },
-                                  }}
-                                >
-                                  <WalletIcon
-                                    sx={{ color: "orange.main", fontSize: 16 }}
-                                  />
-                                  <Box
-                                    sx={{
-                                      display: "flex",
-                                      flexDirection: "column",
-                                      minWidth: 0,
-                                      flex: 1,
-                                    }}
-                                  >
-                                    <Typography
-                                      variant="caption"
-                                      color="orange.main"
-                                      fontWeight="bold"
-                                    >
-                                      BTC
-                                      {bitcoinWallets.length > 1
-                                        ? ` ${index + 1}`
-                                        : ""}
-                                      :
-                                    </Typography>
-                                    <Typography
-                                      variant="caption"
-                                      sx={{ fontFamily: "monospace" }}
-                                    >
-                                      {address.slice(0, 6)}...
-                                      {address.slice(-4)}
-                                    </Typography>
-                                    {balance !== null && (
-                                      <Typography
-                                        variant="caption"
-                                        color="success.main"
-                                        fontWeight="bold"
-                                      >
-                                        ${balance.toFixed(2)}
-                                      </Typography>
-                                    )}
-                                  </Box>
-                                  <Button
-                                    size="small"
-                                    variant="text"
-                                    sx={{ minWidth: "auto", p: 0.5 }}
-                                    onClick={() =>
-                                      window.open(
-                                        `https://www.blockchain.com/explorer/addresses/btc/${address}`,
-                                        "_blank"
-                                      )
-                                    }
-                                  >
-                                    <OpenInNewIcon fontSize="small" />
-                                  </Button>
-                                </Box>
-                              );
-                            })}
-
-                            {/* TRON Wallets */}
-                            {tronWallets.map((address, index) => {
-                              const balance = getWalletBalance("tron", address);
-                              return (
-                                <Box
-                                  key={`trx-${index}`}
-                                  sx={{
-                                    display: "flex",
-                                    alignItems: "center",
-                                    gap: 0.5,
-                                    p: 0.5,
-                                    borderRadius: 1,
-                                    backgroundColor: "purple.50",
-                                    border: 1,
-                                    borderColor: "purple.200",
-                                    cursor: "pointer",
-                                    transition: "all 0.2s ease",
-                                    "&:hover": {
-                                      backgroundColor: "purple.100",
-                                      borderColor: "purple.300",
-                                      transform: "translateY(-1px)",
-                                      boxShadow:
-                                        "0 2px 8px rgba(156, 39, 176, 0.2)",
-                                    },
-                                  }}
-                                >
-                                  <WalletIcon
-                                    sx={{ color: "purple.main", fontSize: 16 }}
-                                  />
-                                  <Box
-                                    sx={{
-                                      display: "flex",
-                                      flexDirection: "column",
-                                      minWidth: 0,
-                                      flex: 1,
-                                    }}
-                                  >
-                                    <Typography
-                                      variant="caption"
-                                      color="purple.main"
-                                      fontWeight="bold"
-                                    >
-                                      TRX
-                                      {tronWallets.length > 1
-                                        ? ` ${index + 1}`
-                                        : ""}
-                                      :
-                                    </Typography>
-                                    <Typography
-                                      variant="caption"
-                                      sx={{ fontFamily: "monospace" }}
-                                    >
-                                      {address.slice(0, 6)}...
-                                      {address.slice(-4)}
-                                    </Typography>
-                                    {balance !== null && (
-                                      <Typography
-                                        variant="caption"
-                                        color="success.main"
-                                        fontWeight="bold"
-                                      >
-                                        ${balance.toFixed(2)}
-                                      </Typography>
-                                    )}
-                                  </Box>
-                                  <Button
-                                    size="small"
-                                    variant="text"
-                                    sx={{ minWidth: "auto", p: 0.5 }}
-                                    onClick={() =>
-                                      window.open(
-                                        `https://tronscan.org/#/address/${address}/transfers`,
-                                        "_blank"
-                                      )
-                                    }
-                                  >
-                                    <OpenInNewIcon fontSize="small" />
-                                  </Button>
-                                </Box>
-                              );
-                            })}
-
-                            {/* No wallets message */}
-                            {!hasAnyWallets && (
-                              <Box
-                                sx={{
-                                  display: "flex",
-                                  alignItems: "center",
-                                  gap: 0.5,
-                                  p: 0.5,
-                                  borderRadius: 1,
-                                  backgroundColor: "grey.50",
-                                  border: 1,
-                                  borderColor: "grey.200",
-                                }}
+                            {ethCount > 0 && (
+                              <Tooltip
+                                title={`${ethCount} Ethereum Wallet${
+                                  ethCount > 1 ? "s" : ""
+                                }`}
                               >
-                                <WalletIcon
-                                  sx={{ color: "grey.400", fontSize: 16 }}
+                                <Chip
+                                  icon={<WalletIcon style={{ fontSize: 16 }} />}
+                                  label={ethCount}
+                                  size="small"
+                                  color="primary"
+                                  variant="outlined"
+                                  sx={{ "& .MuiChip-label": { px: 1 } }}
                                 />
-                                <Typography
-                                  variant="caption"
-                                  color="text.secondary"
-                                >
-                                  No wallets configured
-                                </Typography>
-                              </Box>
+                              </Tooltip>
+                            )}
+                            {btcCount > 0 && (
+                              <Tooltip
+                                title={`${btcCount} Bitcoin Wallet${
+                                  btcCount > 1 ? "s" : ""
+                                }`}
+                              >
+                                <Chip
+                                  icon={<WalletIcon style={{ fontSize: 16 }} />}
+                                  label={btcCount}
+                                  size="small"
+                                  sx={{
+                                    color: "orange.main",
+                                    borderColor: "orange.main",
+                                    "& .MuiChip-icon": {
+                                      color: "orange.main",
+                                    },
+                                    "& .MuiChip-label": { px: 1 },
+                                  }}
+                                  variant="outlined"
+                                />
+                              </Tooltip>
+                            )}
+                            {tronCount > 0 && (
+                              <Tooltip
+                                title={`${tronCount} TRON Wallet${
+                                  tronCount > 1 ? "s" : ""
+                                }`}
+                              >
+                                <Chip
+                                  icon={<WalletIcon style={{ fontSize: 16 }} />}
+                                  label={tronCount}
+                                  size="small"
+                                  sx={{
+                                    color: "purple.main",
+                                    borderColor: "purple.main",
+                                    "& .MuiChip-icon": {
+                                      color: "purple.main",
+                                    },
+                                    "& .MuiChip-label": { px: 1 },
+                                  }}
+                                  variant="outlined"
+                                />
+                              </Tooltip>
                             )}
                           </>
                         );

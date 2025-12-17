@@ -221,27 +221,7 @@ const ClientNetworksPage = () => {
   }
 
   return (
-    <Box sx={{ p: isMobile ? 2 : 3 }}>
-      {/* Header */}
-      <Box
-        display="flex"
-        justifyContent="space-between"
-        alignItems="center"
-        sx={{ mb: 3 }}
-      >
-        <Typography variant={isMobile ? "h5" : "h4"}>
-          Client Networks
-        </Typography>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={() => handleOpenDialog()}
-          size={isMobile ? "small" : "medium"}
-        >
-          Add Network
-        </Button>
-      </Box>
-
+    <Box sx={{ p: isMobile ? 2 : 3, pt: 0, mt: -2 }}>
       {/* Notification */}
       {notification.message && (
         <Collapse in={!!notification.message}>
@@ -276,6 +256,16 @@ const ClientNetworksPage = () => {
             }
             label="Active only"
           />
+          <Box sx={{ ml: "auto" }}>
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={() => handleOpenDialog()}
+              size={isMobile ? "small" : "medium"}
+            >
+              Add Network
+            </Button>
+          </Box>
         </Box>
       </Paper>
 
