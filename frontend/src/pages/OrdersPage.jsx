@@ -78,125 +78,114 @@ import AssignDepositCallDialog from "../components/AssignDepositCallDialog";
 import depositCallsService from "../services/depositCallsService";
 
 const createOrderSchema = (userRole) => {
-  return yup
-    .object({
-      ftd: yup
-        .number()
-        .integer("Must be a whole number")
-        .min(0, "Cannot be negative")
-        .default(0),
-      filler: yup
-        .number()
-        .integer("Must be a whole number")
-        .min(0, "Cannot be negative")
-        .default(0),
-      cold: yup
-        .number()
-        .integer("Must be a whole number")
-        .min(0, "Cannot be negative")
-        .default(0),
-      live: yup
-        .number()
-        .integer("Must be a whole number")
-        .min(0, "Cannot be negative")
-        .default(0),
-      countryFilter: yup
-        .string()
-        .default(""),  // Country filter is only required in non-manual mode (validated in onSubmitOrder)
-      genderFilter: yup.string().oneOf(["", "male", "female"]).default(""),
-      priority: yup.string().oneOf(["low", "medium", "high"]).default("medium"),
-      notes: yup.string().default(""),
-      selectedClientNetwork:
-        userRole === "admin" || userRole === "affiliate_manager"
-          ? yup
-              .string()
-              .required("Client Network selection is required")
-              .default("")
-          : yup.string().default(""),
-      selectedOurNetwork: yup
-        .string()
-        .required("Our Network selection is required")
-        .default(""),
-      selectedCampaign: yup
-        .string()
-        .required("Campaign selection is mandatory for all orders")
-        .default(""),
-      selectedClientBrokers: yup.array().of(yup.string()).default([]),
-      agentFilter: yup.string().default(""),
-      ftdAgents: yup.array().of(yup.string()).default([]),
-      fillerAgents: yup.array().of(yup.string()).default([]),
-      plannedDate: yup
-        .date()
-        .required("Planned date is required")
-        .test(
-          "not-same-day",
-          "Cannot create order for the same day",
-          (value) => {
-            // Admin users can bypass same-day restriction
-            if (userRole === "admin") return true;
+  return yup.object({
+    ftd: yup
+      .number()
+      .integer("Must be a whole number")
+      .min(0, "Cannot be negative")
+      .default(0),
+    filler: yup
+      .number()
+      .integer("Must be a whole number")
+      .min(0, "Cannot be negative")
+      .default(0),
+    cold: yup
+      .number()
+      .integer("Must be a whole number")
+      .min(0, "Cannot be negative")
+      .default(0),
+    live: yup
+      .number()
+      .integer("Must be a whole number")
+      .min(0, "Cannot be negative")
+      .default(0),
+    countryFilter: yup.string().default(""), // Country filter is only required in non-manual mode (validated in onSubmitOrder)
+    genderFilter: yup.string().oneOf(["", "male", "female"]).default(""),
+    priority: yup.string().oneOf(["low", "medium", "high"]).default("medium"),
+    notes: yup.string().default(""),
+    selectedClientNetwork:
+      userRole === "admin" || userRole === "affiliate_manager"
+        ? yup
+            .string()
+            .required("Client Network selection is required")
+            .default("")
+        : yup.string().default(""),
+    selectedOurNetwork: yup
+      .string()
+      .required("Our Network selection is required")
+      .default(""),
+    selectedCampaign: yup
+      .string()
+      .required("Campaign selection is mandatory for all orders")
+      .default(""),
+    selectedClientBrokers: yup.array().of(yup.string()).default([]),
+    agentFilter: yup.string().default(""),
+    ftdAgents: yup.array().of(yup.string()).default([]),
+    fillerAgents: yup.array().of(yup.string()).default([]),
+    plannedDate: yup
+      .date()
+      .required("Planned date is required")
+      .test("not-same-day", "Cannot create order for the same day", (value) => {
+        // Admin users can bypass same-day restriction
+        if (userRole === "admin") return true;
 
-            if (!value) return false;
-            const today = new Date();
-            const plannedDay = new Date(value);
-            today.setHours(0, 0, 0, 0);
-            plannedDay.setHours(0, 0, 0, 0);
-            return plannedDay.getTime() !== today.getTime();
-          }
-        )
-        .test(
-          "not-tomorrow-after-7pm",
-          "Cannot create order for tomorrow after 7:00 PM today",
-          (value) => {
-            // Admin users can bypass time restriction
-            if (userRole === "admin") return true;
+        if (!value) return false;
+        const today = new Date();
+        const plannedDay = new Date(value);
+        today.setHours(0, 0, 0, 0);
+        plannedDay.setHours(0, 0, 0, 0);
+        return plannedDay.getTime() !== today.getTime();
+      })
+      .test(
+        "not-tomorrow-after-7pm",
+        "Cannot create order for tomorrow after 7:00 PM today",
+        (value) => {
+          // Admin users can bypass time restriction
+          if (userRole === "admin") return true;
 
-            if (!value) return false;
-            const now = new Date();
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            const tomorrow = new Date(today);
-            tomorrow.setDate(tomorrow.getDate() + 1);
-            const plannedDay = new Date(value);
-            plannedDay.setHours(0, 0, 0, 0);
-
-            // If planning for tomorrow and current time is after 7 PM
-            if (
-              plannedDay.getTime() === tomorrow.getTime() &&
-              now.getHours() >= 19
-            ) {
-              return false;
-            }
-            return true;
-          }
-        )
-        .test(
-          "not-past-date",
-          "Cannot create order for past dates",
-          (value) => {
-            if (!value) return false;
-            const today = new Date();
-            const plannedDay = new Date(value);
-            today.setHours(0, 0, 0, 0);
-            plannedDay.setHours(0, 0, 0, 0);
-            return plannedDay >= today;
-          }
-        )
-        .default(() => {
-          // Default to tomorrow if before 7 PM today (or if admin), otherwise day after tomorrow
+          if (!value) return false;
           const now = new Date();
-          const tomorrow = new Date();
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          const tomorrow = new Date(today);
           tomorrow.setDate(tomorrow.getDate() + 1);
-          if (userRole === "admin" || now.getHours() < 19) {
-            return tomorrow;
-          } else {
-            const dayAfterTomorrow = new Date();
-            dayAfterTomorrow.setDate(dayAfterTomorrow.getDate() + 2);
-            return dayAfterTomorrow;
+          const plannedDay = new Date(value);
+          plannedDay.setHours(0, 0, 0, 0);
+
+          // If planning for tomorrow and current time is after 7 PM
+          if (
+            plannedDay.getTime() === tomorrow.getTime() &&
+            now.getHours() >= 19
+          ) {
+            return false;
           }
-        }),
-    });
-    // Note: "at-least-one lead type" validation is done in onSubmitOrder 
-    // to support manual selection mode which doesn't use lead counts
+          return true;
+        }
+      )
+      .test("not-past-date", "Cannot create order for past dates", (value) => {
+        if (!value) return false;
+        const today = new Date();
+        const plannedDay = new Date(value);
+        today.setHours(0, 0, 0, 0);
+        plannedDay.setHours(0, 0, 0, 0);
+        return plannedDay >= today;
+      })
+      .default(() => {
+        // Default to tomorrow if before 7 PM today (or if admin), otherwise day after tomorrow
+        const now = new Date();
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        if (userRole === "admin" || now.getHours() < 19) {
+          return tomorrow;
+        } else {
+          const dayAfterTomorrow = new Date();
+          dayAfterTomorrow.setDate(dayAfterTomorrow.getDate() + 2);
+          return dayAfterTomorrow;
+        }
+      }),
+  });
+  // Note: "at-least-one lead type" validation is done in onSubmitOrder
+  // to support manual selection mode which doesn't use lead counts
 };
 const getStatusColor = (status) => {
   const colors = {
@@ -292,7 +281,7 @@ const OrdersPage = () => {
   const [insufficientAgentLeads, setInsufficientAgentLeads] = useState(null);
   const [clientBrokerManagementOpen, setClientBrokerManagementOpen] =
     useState(false);
-  
+
   // Manual Lead Selection State
   const [manualSelectionMode, setManualSelectionMode] = useState(false);
   const [manualLeadEmails, setManualLeadEmails] = useState("");
@@ -626,7 +615,9 @@ const OrdersPage = () => {
 
       if (notFoundEmails.length > 0) {
         setNotification({
-          message: `Found ${foundLeads.length} leads. Not found: ${notFoundEmails.join(", ")}`,
+          message: `Found ${
+            foundLeads.length
+          } leads. Not found: ${notFoundEmails.join(", ")}`,
           severity: "warning",
         });
       } else {
@@ -677,7 +668,9 @@ const OrdersPage = () => {
           }
 
           // Validate that all leads have agent assignments
-          const leadsWithoutAgents = manualLeads.filter((entry) => !entry.agent);
+          const leadsWithoutAgents = manualLeads.filter(
+            (entry) => !entry.agent
+          );
           if (leadsWithoutAgents.length > 0) {
             setNotification({
               message: `Please assign agents to all leads (${leadsWithoutAgents.length} unassigned)`,
@@ -706,7 +699,8 @@ const OrdersPage = () => {
           };
         } else {
           // Validate that at least one lead type is requested (non-manual mode)
-          const totalLeads = (data.ftd || 0) + (data.filler || 0) + (data.cold || 0);
+          const totalLeads =
+            (data.ftd || 0) + (data.filler || 0) + (data.cold || 0);
           if (totalLeads === 0) {
             setNotification({
               message: "At least one lead type must be requested",
@@ -1699,7 +1693,8 @@ const OrdersPage = () => {
           >
             <Typography variant="h6">Filters</Typography>
             <Box display="flex" alignItems="center" gap={1}>
-              {(user?.role === "admin" || user?.role === "affiliate_manager") && (
+              {(user?.role === "admin" ||
+                user?.role === "affiliate_manager") && (
                 <Box
                   sx={{
                     display: "flex",
@@ -3044,10 +3039,14 @@ const OrdersPage = () => {
                     alignItems: "center",
                     gap: 2,
                     p: 2,
-                    bgcolor: manualSelectionMode ? "primary.50" : "action.hover",
+                    bgcolor: manualSelectionMode
+                      ? "primary.50"
+                      : "action.hover",
                     borderRadius: 1,
                     border: manualSelectionMode ? "2px solid" : "1px solid",
-                    borderColor: manualSelectionMode ? "primary.main" : "divider",
+                    borderColor: manualSelectionMode
+                      ? "primary.main"
+                      : "divider",
                   }}
                 >
                   <FormControlLabel
@@ -3070,7 +3069,8 @@ const OrdersPage = () => {
                           Manual Lead Selection
                         </Typography>
                         <Typography variant="caption" color="text.secondary">
-                          Select specific leads by email instead of random selection
+                          Select specific leads by email instead of random
+                          selection
                         </Typography>
                       </Box>
                     }
@@ -3114,7 +3114,10 @@ const OrdersPage = () => {
                   {/* Display found leads with agent assignment */}
                   {manualLeads.length > 0 && (
                     <Grid item xs={12}>
-                      <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
+                      <Typography
+                        variant="subtitle2"
+                        sx={{ mb: 1, fontWeight: 600 }}
+                      >
                         Found Leads ({manualLeads.length})
                       </Typography>
                       <TableContainer component={Paper} variant="outlined">
@@ -3133,7 +3136,10 @@ const OrdersPage = () => {
                             {manualLeads.map((entry, index) => (
                               <TableRow key={entry.lead._id}>
                                 <TableCell>
-                                  <Typography variant="body2" sx={{ fontSize: "0.75rem" }}>
+                                  <Typography
+                                    variant="body2"
+                                    sx={{ fontSize: "0.75rem" }}
+                                  >
                                     {entry.lead.newEmail}
                                   </Typography>
                                 </TableCell>
@@ -3159,7 +3165,10 @@ const OrdersPage = () => {
                                     <Select
                                       value={entry.agent}
                                       onChange={(e) =>
-                                        updateManualLeadAgent(index, e.target.value)
+                                        updateManualLeadAgent(
+                                          index,
+                                          e.target.value
+                                        )
                                       }
                                       displayEmpty
                                       error={!entry.agent}
@@ -3168,7 +3177,10 @@ const OrdersPage = () => {
                                         <em>Select Agent</em>
                                       </MenuItem>
                                       {allAgents.map((agent) => (
-                                        <MenuItem key={agent._id} value={agent._id}>
+                                        <MenuItem
+                                          key={agent._id}
+                                          value={agent._id}
+                                        >
                                           {agent.fullName || agent.email}
                                         </MenuItem>
                                       ))}
@@ -3194,7 +3206,8 @@ const OrdersPage = () => {
                         color="text.secondary"
                         sx={{ mt: 1, display: "block" }}
                       >
-                        * All leads must have an agent assigned before creating the order
+                        * All leads must have an agent assigned before creating
+                        the order
                       </Typography>
                     </Grid>
                   )}
