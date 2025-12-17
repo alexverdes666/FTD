@@ -25,6 +25,8 @@ import {
   Checkbox,
   Chip,
   Collapse,
+  useTheme,
+  useMediaQuery,
 } from "@mui/material";
 import {
   Add as AddIcon,
@@ -33,7 +35,6 @@ import {
   Visibility as ViewIcon,
   Business as BusinessIcon,
   Save as SaveIcon,
-  Refresh as RefreshIcon,
   Search as SearchIcon,
 } from "@mui/icons-material";
 import api from "../services/api";
@@ -41,6 +42,8 @@ import { selectUser } from "../store/slices/authSlice";
 import CommentButton from "../components/CommentButton";
 
 const ClientBrokersPage = () => {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("md"));
   const user = useSelector(selectUser);
   const [clientBrokers, setClientBrokers] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -233,37 +236,7 @@ const ClientBrokersPage = () => {
   }
 
   return (
-    <Box sx={{ p: 3 }}>
-      <Box
-        sx={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          mb: 3,
-        }}
-      >
-        <Typography variant="h4" component="h1" fontWeight="bold">
-          Client Brokers
-        </Typography>
-        <Box sx={{ display: "flex", gap: 2 }}>
-          <Button
-            variant="outlined"
-            startIcon={<RefreshIcon />}
-            onClick={fetchClientBrokers}
-            disabled={loading}
-          >
-            Refresh
-          </Button>
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={handleCreateNewBroker}
-          >
-            Create New Broker
-          </Button>
-        </Box>
-      </Box>
-
+    <Box sx={{ p: isMobile ? 2 : 3, pt: 0, mt: -2 }}>
       <Collapse in={!!notification.message}>
         <Alert
           severity={notification.severity}
@@ -274,23 +247,37 @@ const ClientBrokersPage = () => {
         </Alert>
       </Collapse>
 
-      {/* Search Bar */}
+      {/* Search and Actions Bar */}
       <Paper sx={{ p: 2, mb: 2 }}>
-        <TextField
-          fullWidth
-          placeholder="Search by broker name or domain..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          InputProps={{
-            startAdornment: (
-              <Box sx={{ mr: 1, display: "flex", alignItems: "center" }}>
-                <SearchIcon color="action" />
-              </Box>
-            ),
-          }}
-          variant="outlined"
-          size="small"
-        />
+        <Grid container spacing={2} alignItems="center">
+          <Grid item xs={12} sm={8} md={9}>
+            <TextField
+              fullWidth
+              placeholder="Search by broker name or domain..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              InputProps={{
+                startAdornment: (
+                  <Box sx={{ mr: 1, display: "flex", alignItems: "center" }}>
+                    <SearchIcon color="action" />
+                  </Box>
+                ),
+              }}
+              variant="outlined"
+              size="small"
+            />
+          </Grid>
+          <Grid item xs={12} sm={4} md={3}>
+            <Button
+              fullWidth
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={handleCreateNewBroker}
+            >
+              Create New Broker
+            </Button>
+          </Grid>
+        </Grid>
       </Paper>
 
       <Paper sx={{ width: "100%", overflow: "hidden" }}>
