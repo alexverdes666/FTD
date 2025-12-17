@@ -1,5 +1,6 @@
 const cron = require('node-cron');
 const { checkSimCardCooldownAndNotify } = require('../controllers/simCards');
+const User = require('../models/User');
 
 class SchedulerService {
   constructor() {
@@ -21,6 +22,7 @@ class SchedulerService {
    */
   startAll() {
     this.startSimCardCooldownCheck();
+    this.startDailyMidnightLogout();
     console.log('[Scheduler Service] All jobs started');
   }
 
@@ -54,6 +56,99 @@ class SchedulerService {
     });
 
     console.log(`[Scheduler Service] SIM card cooldown check scheduled: ${schedule} (${process.env.TIMEZONE || 'UTC'})`);
+  }
+
+  /**
+   * Schedule daily auto-logout at midnight GMT+2 (22:00 UTC)
+   * Invalidates all user sessions, forcing everyone to log in again
+   */
+  startDailyMidnightLogout() {
+    // Schedule for 00:00 GMT+2 which is 22:00 UTC
+    // Cron format: minute hour day month weekday
+    // '0 22 * * *' means: at minute 0, hour 22 UTC (00:00 GMT+2), every day
+    const schedule = process.env.MIDNIGHT_LOGOUT_SCHEDULE || '0 22 * * *';
+    
+    const job = cron.schedule(schedule, async () => {
+      console.log('[Scheduler] 🌙 Running daily midnight logout (00:00 GMT+2)...');
+      try {
+        const result = await this.performDailyLogout();
+        console.log('[Scheduler] ✅ Daily midnight logout completed:', result);
+      } catch (error) {
+        console.error('[Scheduler] ❌ Error in daily midnight logout:', error);
+      }
+    }, {
+      scheduled: true,
+      timezone: 'UTC' // Use UTC and schedule at 22:00 to get 00:00 GMT+2
+    });
+
+    this.jobs.push({
+      name: 'dailyMidnightLogout',
+      job,
+      schedule
+    });
+
+    console.log(`[Scheduler Service] Daily midnight logout scheduled: ${schedule} UTC (00:00 GMT+2)`);
+  }
+
+  /**
+   * Perform daily logout for all users
+   * Invalidates all tokens and notifies connected users via Socket.IO
+   */
+  async performDailyLogout() {
+    const startTime = Date.now();
+    const now = new Date();
+    
+    try {
+      // Update tokenInvalidatedAt for all active users
+      // This will cause all existing tokens to be rejected on next API call
+      const result = await User.updateMany(
+        { isActive: true, status: 'approved' },
+        { 
+          $set: { 
+            tokenInvalidatedAt: now 
+          }
+        }
+      );
+
+      console.log(`[Scheduler] Invalidated tokens for ${result.modifiedCount} users`);
+
+      // Emit force logout event to all connected Socket.IO clients
+      if (this.io) {
+        this.io.emit('auth:force_logout', {
+          reason: 'midnight_logout',
+          message: 'Daily automatic logout at midnight. Please log in again.',
+          timestamp: now.toISOString()
+        });
+        console.log('[Scheduler] Sent force logout event to all connected clients');
+      }
+
+      const duration = Date.now() - startTime;
+      
+      return {
+        success: true,
+        usersAffected: result.modifiedCount,
+        timestamp: now,
+        duration: `${duration}ms`
+      };
+    } catch (error) {
+      console.error('[Scheduler] Error performing daily logout:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Manually trigger daily logout (for testing/admin purposes)
+   */
+  async triggerDailyLogout() {
+    console.log('[Scheduler] Manually triggering daily logout...');
+    try {
+      const result = await this.performDailyLogout();
+      console.log('[Scheduler] Manual daily logout completed:', result);
+      return result;
+    } catch (error) {
+      console.error('[Scheduler] Error in manual daily logout:', error);
+      throw error;
+    }
   }
 
   /**

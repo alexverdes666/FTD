@@ -8,7 +8,17 @@ import {
 import { Provider, useSelector, useDispatch } from "react-redux";
 import { PersistGate } from "redux-persist/integration/react";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
-import { CssBaseline, CircularProgress, Box } from "@mui/material";
+import {
+  CssBaseline,
+  CircularProgress,
+  Box,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Button,
+  Typography,
+} from "@mui/material";
 import toast, { Toaster } from "react-hot-toast";
 import { store, persistor } from "./store/store";
 import {
@@ -20,6 +30,7 @@ import {
 import { backgroundSyncService } from "./services/backgroundSyncService.js";
 import chatService from "./services/chatService.js";
 import notificationService from "./services/notificationService.js";
+import inactivityService from "./services/inactivityService.js";
 import ProtectedRoute from "./components/common/ProtectedRoute.jsx";
 import PublicRoute from "./components/common/PublicRoute.jsx";
 import MainLayout from "./layouts/MainLayout.jsx";
@@ -140,6 +151,8 @@ const theme = createTheme({
 function AppContent() {
   const dispatch = useDispatch();
   const [disclaimerOpen, setDisclaimerOpen] = useState(false);
+  const [inactivityWarningOpen, setInactivityWarningOpen] = useState(false);
+  const [warningSecondsRemaining, setWarningSecondsRemaining] = useState(60);
   const user = useSelector(selectUser);
   const isAuthenticated = useSelector(selectIsAuthenticated);
   
@@ -158,6 +171,73 @@ function AppContent() {
       backgroundSyncService.stop();
     };
   }, [isAuthenticated, user]);
+
+  // Initialize inactivity tracking service for auto-logout
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      // Define logout handler
+      const handleAutoLogout = (reason) => {
+        console.log(`🚪 Auto-logout triggered: ${reason}`);
+        setInactivityWarningOpen(false);
+        
+        let message = 'You have been logged out.';
+        if (reason === 'inactivity') {
+          message = 'You have been logged out due to 15 minutes of inactivity.';
+        } else if (reason === 'midnight') {
+          message = 'Daily automatic logout at midnight (00:00 GMT+2). Please log in again.';
+        }
+        
+        toast.error(message, { duration: 5000 });
+        dispatch(logout());
+        chatService.disconnect();
+      };
+
+      // Define warning handler
+      const handleInactivityWarning = (secondsRemaining) => {
+        console.log(`⚠️ Inactivity warning: ${secondsRemaining} seconds until logout`);
+        setWarningSecondsRemaining(secondsRemaining);
+        setInactivityWarningOpen(true);
+      };
+
+      // Start inactivity tracking
+      inactivityService.start(handleAutoLogout, handleInactivityWarning);
+    } else {
+      inactivityService.stop();
+      setInactivityWarningOpen(false);
+    }
+
+    // Cleanup on unmount
+    return () => {
+      inactivityService.stop();
+    };
+  }, [isAuthenticated, user, dispatch]);
+
+  // Handle dismissing inactivity warning
+  const handleDismissInactivityWarning = () => {
+    setInactivityWarningOpen(false);
+    inactivityService.dismissWarning();
+  };
+
+  // Countdown timer for warning dialog
+  useEffect(() => {
+    let countdownInterval;
+    if (inactivityWarningOpen && warningSecondsRemaining > 0) {
+      countdownInterval = setInterval(() => {
+        setWarningSecondsRemaining(prev => {
+          if (prev <= 1) {
+            clearInterval(countdownInterval);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => {
+      if (countdownInterval) {
+        clearInterval(countdownInterval);
+      }
+    };
+  }, [inactivityWarningOpen, warningSecondsRemaining]);
 
   // Initialize chat service for global notifications
   useEffect(() => {
@@ -376,6 +456,61 @@ function AppContent() {
         }}
       />
       <DisclaimerModal open={disclaimerOpen} onAgree={handleAgree} />
+      
+      {/* Inactivity Warning Dialog */}
+      <Dialog
+        open={inactivityWarningOpen}
+        onClose={handleDismissInactivityWarning}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 2,
+            boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
+          }
+        }}
+      >
+        <DialogTitle sx={{ 
+          bgcolor: 'warning.main', 
+          color: 'warning.contrastText',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1
+        }}>
+          ⚠️ Session Timeout Warning
+        </DialogTitle>
+        <DialogContent sx={{ pt: 3, pb: 2 }}>
+          <Typography variant="body1" gutterBottom>
+            You will be automatically logged out due to inactivity in:
+          </Typography>
+          <Typography 
+            variant="h2" 
+            sx={{ 
+              textAlign: 'center', 
+              my: 2, 
+              color: warningSecondsRemaining <= 30 ? 'error.main' : 'text.primary',
+              fontWeight: 'bold'
+            }}
+          >
+            {warningSecondsRemaining}s
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Click "Stay Logged In" or interact with the page to continue your session.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button 
+            onClick={handleDismissInactivityWarning}
+            variant="contained"
+            color="primary"
+            size="large"
+            fullWidth
+            sx={{ fontWeight: 'bold' }}
+          >
+            Stay Logged In
+          </Button>
+        </DialogActions>
+      </Dialog>
     </>
   );
 }
