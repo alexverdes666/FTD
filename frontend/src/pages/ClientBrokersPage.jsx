@@ -44,13 +44,27 @@ const ClientBrokersPage = () => {
   const user = useSelector(selectUser);
   const [clientBrokers, setClientBrokers] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [notification, setNotification] = useState({ message: "", severity: "info" });
+  const [notification, setNotification] = useState({
+    message: "",
+    severity: "info",
+  });
   const [searchTerm, setSearchTerm] = useState("");
 
   // Dialog states
-  const [createBrokerDialog, setCreateBrokerDialog] = useState({ open: false, loading: false });
-  const [editBrokerDialog, setEditBrokerDialog] = useState({ open: false, loading: false, broker: null });
-  const [deleteBrokerDialog, setDeleteBrokerDialog] = useState({ open: false, loading: false, broker: null });
+  const [createBrokerDialog, setCreateBrokerDialog] = useState({
+    open: false,
+    loading: false,
+  });
+  const [editBrokerDialog, setEditBrokerDialog] = useState({
+    open: false,
+    loading: false,
+    broker: null,
+  });
+  const [deleteBrokerDialog, setDeleteBrokerDialog] = useState({
+    open: false,
+    loading: false,
+    broker: null,
+  });
 
   // Fetch client brokers
   const fetchClientBrokers = useCallback(async () => {
@@ -102,7 +116,8 @@ const ClientBrokersPage = () => {
         handleCloseCreateBrokerDialog();
       } catch (err) {
         setNotification({
-          message: err.response?.data?.message || "Failed to create client broker",
+          message:
+            err.response?.data?.message || "Failed to create client broker",
           severity: "error",
         });
         setCreateBrokerDialog((prev) => ({ ...prev, loading: false }));
@@ -129,7 +144,10 @@ const ClientBrokersPage = () => {
           severity: "info",
         });
 
-        await api.put(`/client-brokers/${editBrokerDialog.broker._id}`, brokerData);
+        await api.put(
+          `/client-brokers/${editBrokerDialog.broker._id}`,
+          brokerData
+        );
 
         setNotification({
           message: `Client broker "${brokerData.name}" updated successfully!`,
@@ -140,7 +158,8 @@ const ClientBrokersPage = () => {
         handleCloseEditBrokerDialog();
       } catch (err) {
         setNotification({
-          message: err.response?.data?.message || "Failed to update client broker",
+          message:
+            err.response?.data?.message || "Failed to update client broker",
           severity: "error",
         });
         setEditBrokerDialog((prev) => ({ ...prev, loading: false }));
@@ -177,23 +196,29 @@ const ClientBrokersPage = () => {
       handleCloseDeleteBrokerDialog();
     } catch (err) {
       setNotification({
-        message: err.response?.data?.message || "Failed to delete client broker",
+        message:
+          err.response?.data?.message || "Failed to delete client broker",
         severity: "error",
       });
       setDeleteBrokerDialog((prev) => ({ ...prev, loading: false }));
     }
-  }, [deleteBrokerDialog.broker, fetchClientBrokers, handleCloseDeleteBrokerDialog]);
+  }, [
+    deleteBrokerDialog.broker,
+    fetchClientBrokers,
+    handleCloseDeleteBrokerDialog,
+  ]);
 
   // Filter brokers based on search term
   const filteredBrokers = React.useMemo(() => {
     if (!searchTerm.trim()) {
       return clientBrokers;
     }
-    
+
     const searchLower = searchTerm.toLowerCase();
-    return clientBrokers.filter(broker => 
-      broker.name?.toLowerCase().includes(searchLower) ||
-      broker.domain?.toLowerCase().includes(searchLower)
+    return clientBrokers.filter(
+      (broker) =>
+        broker.name?.toLowerCase().includes(searchLower) ||
+        broker.domain?.toLowerCase().includes(searchLower)
     );
   }, [clientBrokers, searchTerm]);
 
@@ -497,7 +522,7 @@ const EditBrokerForm = ({ broker, onSubmit, loading, onCancel }) => {
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!formData.name.trim()) return;
-    
+
     onSubmit({
       name: formData.name.trim(),
       domain: formData.domain.trim() || undefined,
@@ -571,7 +596,9 @@ const EditBrokerForm = ({ broker, onSubmit, loading, onCancel }) => {
               type="submit"
               variant="contained"
               disabled={loading || !formData.name.trim()}
-              startIcon={loading ? <CircularProgress size={16} /> : <SaveIcon />}
+              startIcon={
+                loading ? <CircularProgress size={16} /> : <SaveIcon />
+              }
             >
               {loading ? "Updating..." : "Update Broker"}
             </Button>
@@ -606,13 +633,11 @@ const BrokerManagementTable = ({
     return (
       <Box textAlign="center" py={4}>
         <Typography variant="body2" color="text.secondary">
-          {searchTerm ? (
-            `No brokers found matching "${searchTerm}"`
-          ) : isAdmin ? (
-            "No client brokers found. Create your first broker to get started."
-          ) : (
-            "No client brokers found."
-          )}
+          {searchTerm
+            ? `No brokers found matching "${searchTerm}"`
+            : isAdmin
+            ? "No client brokers found. Create your first broker to get started."
+            : "No client brokers found."}
         </Typography>
       </Box>
     );
@@ -650,7 +675,7 @@ const BrokerManagementTable = ({
             <TableRow key={broker._id}>
               <TableCell>
                 <Box display="flex" alignItems="center" gap={1}>
-                  <BusinessIcon fontSize="small" />
+                  <BusinessIcon fontSize="small" color="primary" />
                   <Typography variant="body2">{broker.name}</Typography>
                 </Box>
               </TableCell>
@@ -673,21 +698,23 @@ const BrokerManagementTable = ({
               </TableCell>
               {isAdmin && (
                 <TableCell>
-                  <IconButton 
-                    size="small" 
-                    title="Edit Broker"
-                    onClick={() => onEdit(broker)}
-                  >
-                    <EditIcon fontSize="small" />
-                  </IconButton>
-                  <IconButton
-                    size="small"
-                    title="Delete Broker"
-                    onClick={() => onDelete(broker)}
-                    color="error"
-                  >
-                    <DeleteIcon fontSize="small" />
-                  </IconButton>
+                  <Box display="flex" flexDirection="row" gap={1}>
+                    <IconButton
+                      size="small"
+                      title="Edit Broker"
+                      onClick={() => onEdit(broker)}
+                    >
+                      <EditIcon fontSize="small" />
+                    </IconButton>
+                    <IconButton
+                      size="small"
+                      title="Delete Broker"
+                      onClick={() => onDelete(broker)}
+                      color="error"
+                    >
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  </Box>
                 </TableCell>
               )}
               <TableCell>
@@ -706,4 +733,3 @@ const BrokerManagementTable = ({
 };
 
 export default ClientBrokersPage;
-

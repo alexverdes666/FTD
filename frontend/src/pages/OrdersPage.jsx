@@ -4070,7 +4070,7 @@ const OrdersPage = () => {
       <Dialog
         open={manageBrokersDialog.open}
         onClose={handleCloseManageBrokersDialog}
-        maxWidth="md"
+        maxWidth="xl"
         fullWidth
       >
         <DialogTitle>
@@ -4295,7 +4295,7 @@ const OrdersPage = () => {
       <Dialog
         open={manageBrokersDialog.open}
         onClose={handleCloseManageBrokersDialog}
-        maxWidth="md"
+        maxWidth="xl"
         fullWidth
       >
         <DialogTitle>
@@ -4897,7 +4897,7 @@ const BrokerManagementTable = ({
             <TableRow key={broker._id}>
               <TableCell>
                 <Box display="flex" alignItems="center" gap={1}>
-                  <BusinessIcon fontSize="small" />
+                  <BusinessIcon fontSize="small" color="primary" />
                   <Typography variant="body2">{broker.name}</Typography>
                 </Box>
               </TableCell>
@@ -4920,24 +4920,23 @@ const BrokerManagementTable = ({
               </TableCell>
               {isAdmin && (
                 <TableCell>
-                  <IconButton
-                    size="small"
-                    title="Edit Broker"
-                    onClick={() => onEdit(broker)}
-                  >
-                    <EditIcon fontSize="small" />
-                  </IconButton>
-                  <IconButton size="small" title="View Details">
-                    <ViewIcon fontSize="small" />
-                  </IconButton>
-                  <IconButton
-                    size="small"
-                    title="Delete Broker"
-                    onClick={() => onDelete(broker)}
-                    color="error"
-                  >
-                    <DeleteIcon fontSize="small" />
-                  </IconButton>
+                  <Box display="flex" flexDirection="row" gap={1}>
+                    <IconButton
+                      size="small"
+                      title="Edit Broker"
+                      onClick={() => onEdit(broker)}
+                    >
+                      <EditIcon fontSize="small" />
+                    </IconButton>
+                    <IconButton
+                      size="small"
+                      title="Delete Broker"
+                      onClick={() => onDelete(broker)}
+                      color="error"
+                    >
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  </Box>
                 </TableCell>
               )}
               <TableCell>
