@@ -35,6 +35,9 @@ import {
   Slide,
   SvgIcon,
   Grid,
+  Menu,
+  ListItemIcon,
+  ListItemText,
 } from "@mui/material";
 import {
   Add as AddIcon,
@@ -42,14 +45,14 @@ import {
   Delete as DeleteIcon,
   Visibility as ViewIcon,
   OpenInNew as OpenInNewIcon,
-  PlayArrow as PlayArrowIcon,
   AccountBalanceWallet as WalletIcon,
   TrendingUp as TrendingUpIcon,
   Timeline as TimelineIcon,
-  Speed as SpeedIcon,
-  FlashOn as FlashOnIcon,
   Rocket as RocketIcon,
   CurrencyBitcoin as BitcoinIcon,
+  MoreVert as MoreVertIcon,
+  ToggleOn as ToggleOnIcon,
+  ToggleOff as ToggleOffIcon,
 } from "@mui/icons-material";
 import { useForm, Controller, useFieldArray } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
@@ -183,6 +186,20 @@ const OurNetworksPage = () => {
   // Month filter state
   const [selectedMonth, setSelectedMonth] = useState(dayjs());
   const [useMonthFilter, setUseMonthFilter] = useState(false);
+
+  // Menu state
+  const [menuAnchorEl, setMenuAnchorEl] = useState(null);
+  const [menuNetwork, setMenuNetwork] = useState(null);
+
+  const handleMenuOpen = (event, network) => {
+    setMenuAnchorEl(event.currentTarget);
+    setMenuNetwork(network);
+  };
+
+  const handleMenuClose = () => {
+    setMenuAnchorEl(null);
+    setMenuNetwork(null);
+  };
 
   const {
     control,
@@ -1056,107 +1073,12 @@ const OurNetworksPage = () => {
                     </Typography>
                   </TableCell>
                   <TableCell align="right">
-                    <Box
-                      sx={{
-                        display: "flex",
-                        gap: 0.5,
-                        justifyContent: "flex-end",
-                      }}
+                    <IconButton
+                      size="small"
+                      onClick={(e) => handleMenuOpen(e, network)}
                     >
-                      <Tooltip title="View Details">
-                        <IconButton
-                          size="small"
-                          onClick={() => handleViewNetwork(network)}
-                        >
-                          <ViewIcon />
-                        </IconButton>
-                      </Tooltip>
-
-                      {/* Transaction History Button */}
-                      {hasWallets(network) && (
-                        <Tooltip title="View Transaction History">
-                          <IconButton
-                            size="small"
-                            onClick={() =>
-                              handleViewTransactionHistory(network)
-                            }
-                            color="primary"
-                          >
-                            <TimelineIcon />
-                          </IconButton>
-                        </Tooltip>
-                      )}
-
-                      {/* Run Scrapers Button */}
-                      {hasWallets(network) && (
-                        <Tooltip
-                          title={
-                            scrapingNetworks.has(network._id)
-                              ? "Scraping in progress..."
-                              : "Run Blockchain Scrapers"
-                          }
-                        >
-                          <span>
-                            <IconButton
-                              size="small"
-                              onClick={() => handleRunScrapers(network)}
-                              disabled={scrapingNetworks.has(network._id)}
-                              color="success"
-                            >
-                              {scrapingNetworks.has(network._id) ? (
-                                <Box
-                                  sx={{
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "center",
-                                  }}
-                                >
-                                  <CircularProgress
-                                    size={16}
-                                    color="inherit"
-                                    sx={{ color: "success.main" }}
-                                  />
-                                </Box>
-                              ) : (
-                                <RocketIcon />
-                              )}
-                            </IconButton>
-                          </span>
-                        </Tooltip>
-                      )}
-
-                      {user?.role === "admin" && (
-                        <>
-                          <Tooltip title="Edit">
-                            <IconButton
-                              size="small"
-                              onClick={() => handleOpenDialog(network)}
-                            >
-                              <EditIcon />
-                            </IconButton>
-                          </Tooltip>
-                          <Tooltip
-                            title={network.isActive ? "Deactivate" : "Activate"}
-                          >
-                            <IconButton
-                              size="small"
-                              onClick={() => handleToggleActive(network)}
-                            >
-                              <Switch checked={network.isActive} size="small" />
-                            </IconButton>
-                          </Tooltip>
-                          <Tooltip title="Delete">
-                            <IconButton
-                              size="small"
-                              color="error"
-                              onClick={() => handleDelete(network._id)}
-                            >
-                              <DeleteIcon />
-                            </IconButton>
-                          </Tooltip>
-                        </>
-                      )}
-                    </Box>
+                      <MoreVertIcon />
+                    </IconButton>
                   </TableCell>
                 </TableRow>
               ))
@@ -1898,6 +1820,123 @@ const OurNetworksPage = () => {
           <Button onClick={() => setOpenViewDialog(false)}>Close</Button>
         </DialogActions>
       </Dialog>
+
+      {/* Actions Menu */}
+      <Menu
+        anchorEl={menuAnchorEl}
+        open={Boolean(menuAnchorEl)}
+        onClose={handleMenuClose}
+        transformOrigin={{ horizontal: "right", vertical: "top" }}
+        anchorOrigin={{ horizontal: "right", vertical: "bottom" }}
+      >
+        {menuNetwork && [
+          <MenuItem
+            key="view"
+            onClick={() => {
+              handleViewNetwork(menuNetwork);
+              handleMenuClose();
+            }}
+          >
+            <ListItemIcon>
+              <ViewIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>View Details</ListItemText>
+          </MenuItem>,
+
+          hasWallets(menuNetwork) && (
+            <MenuItem
+              key="history"
+              onClick={() => {
+                handleViewTransactionHistory(menuNetwork);
+                handleMenuClose();
+              }}
+            >
+              <ListItemIcon>
+                <TimelineIcon fontSize="small" />
+              </ListItemIcon>
+              <ListItemText>Transaction History</ListItemText>
+            </MenuItem>
+          ),
+
+          hasWallets(menuNetwork) && (
+            <MenuItem
+              key="scrapers"
+              onClick={() => {
+                handleRunScrapers(menuNetwork);
+                handleMenuClose();
+              }}
+              disabled={scrapingNetworks.has(menuNetwork._id)}
+            >
+              <ListItemIcon>
+                {scrapingNetworks.has(menuNetwork._id) ? (
+                  <CircularProgress size={20} color="inherit" />
+                ) : (
+                  <RocketIcon fontSize="small" />
+                )}
+              </ListItemIcon>
+              <ListItemText>
+                {scrapingNetworks.has(menuNetwork._id)
+                  ? "Scraping..."
+                  : "Run Scrapers"}
+              </ListItemText>
+            </MenuItem>
+          ),
+
+          user?.role === "admin" && (
+            <MenuItem
+              key="edit"
+              onClick={() => {
+                handleOpenDialog(menuNetwork);
+                handleMenuClose();
+              }}
+            >
+              <ListItemIcon>
+                <EditIcon fontSize="small" />
+              </ListItemIcon>
+              <ListItemText>Edit</ListItemText>
+            </MenuItem>
+          ),
+
+          user?.role === "admin" && (
+            <MenuItem
+              key="toggle"
+              onClick={() => {
+                handleToggleActive(menuNetwork);
+                handleMenuClose();
+              }}
+            >
+              <ListItemIcon>
+                {menuNetwork.isActive ? (
+                  <ToggleOffIcon fontSize="small" />
+                ) : (
+                  <ToggleOnIcon fontSize="small" />
+                )}
+              </ListItemIcon>
+              <ListItemText>
+                {menuNetwork.isActive ? "Deactivate" : "Activate"}
+              </ListItemText>
+            </MenuItem>
+          ),
+
+          user?.role === "admin" && (
+            <MenuItem
+              key="delete"
+              onClick={() => {
+                handleDelete(menuNetwork._id);
+                handleMenuClose();
+              }}
+              sx={{ color: "error.main" }}
+            >
+              <ListItemIcon>
+                <DeleteIcon fontSize="small" color="error" />
+              </ListItemIcon>
+              <ListItemText primaryTypographyProps={{ color: "error" }}>
+                Delete
+              </ListItemText>
+            </MenuItem>
+          ),
+        ]}
+      </Menu>
 
       {/* Transaction History Modal */}
       <TransactionHistoryModal
