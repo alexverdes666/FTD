@@ -33,6 +33,8 @@ import {
   CircularProgress,
   Snackbar,
   Slide,
+  SvgIcon,
+  Grid,
 } from "@mui/material";
 import {
   Add as AddIcon,
@@ -47,11 +49,26 @@ import {
   Speed as SpeedIcon,
   FlashOn as FlashOnIcon,
   Rocket as RocketIcon,
+  CurrencyBitcoin as BitcoinIcon,
 } from "@mui/icons-material";
 import { useForm, Controller, useFieldArray } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
 import * as yup from "yup";
 import api from "../services/api";
+
+// Custom Ethereum Icon
+const EthereumIcon = (props) => (
+  <SvgIcon {...props}>
+    <path d="M11.944 17.97L4.58 13.62 11.943 24l7.37-10.38-7.372 4.35h.003zM12.056 0L4.69 12.223l7.365 4.354 7.365-4.35L12.056 0z" />
+  </SvgIcon>
+);
+
+// Custom Tron Icon
+const TronIcon = (props) => (
+  <SvgIcon {...props}>
+    <path d="M16.42 2.5L12 9.5 7.58 2.5h8.84zM6.43 3.09L10.5 9.5 2.5 9.5 6.43 3.09zM17.57 3.09L21.5 9.5 13.5 9.5 17.57 3.09zM12 11.25l4.16-1.5L12 21.5 7.84 9.75 12 11.25zM20.9 10.75l-3.66 1.33L12.5 21.5 22 10.75h-1.1zM3.1 10.75h-1.1L11.5 21.5 6.76 12.08 3.1 10.75z" />
+  </SvgIcon>
+);
 import { useSelector } from "react-redux";
 import { selectUser } from "../store/slices/authSlice";
 import NetworkBlockchainControl from "../components/NetworkBlockchainControl";
@@ -156,7 +173,6 @@ const OurNetworksPage = () => {
   // Scraper state management
   const [scrapingNetworks, setScrapingNetworks] = useState(new Set());
   // Removed scraperNotifications state to avoid duplication and layout shifts
-
 
   // Network summaries state
   const [networkSummaries, setNetworkSummaries] = useState({});
@@ -694,103 +710,140 @@ const OurNetworksPage = () => {
       <Box sx={{ height: 0 }} />
 
       <Paper sx={{ p: 2, mb: 3 }}>
-        <Box
-          sx={{
-            display: "flex",
-            gap: 2,
-            alignItems: "center",
-          }}
-        >
-          <TextField
-            label={
-              user?.role === "admin"
-                ? "Search our networks"
-                : "Search my networks"
-            }
-            variant="outlined"
-            size="small"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            sx={{ minWidth: 250 }}
-          />
-
-          <Box
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              gap: 1,
-              pl: 1,
-            }}
-          >
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={useMonthFilter}
-                  onChange={(e) => setUseMonthFilter(e.target.checked)}
-                />
+        <Grid container spacing={2} alignItems="center">
+          <Grid item xs={12} md={4}>
+            <TextField
+              label={
+                user?.role === "admin"
+                  ? "Search our networks"
+                  : "Search my networks"
               }
-              label="Month Filter"
-              sx={{ whiteSpace: "nowrap" }}
+              variant="outlined"
+              size="small"
+              fullWidth
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
             />
+          </Grid>
 
-            {useMonthFilter && (
-              <>
-                <MonthYearSelector
-                  selectedDate={selectedMonth}
-                  onDateChange={setSelectedMonth}
-                  showCurrentSelection={false}
-                  size="small"
-                />
+          <Grid item xs={12} md={4}>
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                gap: 1,
+                justifyContent: { xs: "flex-start", md: "center" },
+              }}
+            >
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={useMonthFilter}
+                    onChange={(e) => setUseMonthFilter(e.target.checked)}
+                  />
+                }
+                label="Month Filter"
+                sx={{ whiteSpace: "nowrap" }}
+              />
+
+              {useMonthFilter && (
+                <>
+                  <MonthYearSelector
+                    selectedDate={selectedMonth}
+                    onDateChange={setSelectedMonth}
+                    showCurrentSelection={false}
+                    size="small"
+                  />
+                  <Button
+                    variant="contained"
+                    size="small"
+                    onClick={() => {
+                      ourNetworks.forEach((network) => {
+                        if (hasWallets(network)) {
+                          fetchNetworkSummary(network._id);
+                        }
+                      });
+                    }}
+                    disabled={summariesLoading.size > 0}
+                  >
+                    Apply
+                  </Button>
+                </>
+              )}
+            </Box>
+          </Grid>
+
+          <Grid item xs={12} md={4}>
+            <Box
+              sx={{
+                display: "flex",
+                gap: 2,
+                alignItems: "center",
+                justifyContent: { xs: "flex-start", md: "flex-end" },
+              }}
+            >
+              {/* Run All Scrapers Button */}
+              <AllNetworksScraperButton
+                variant="contained"
+                size="medium"
+                onComplete={fetchOurNetworks}
+              />
+
+              {/* Add Network Button (Admin only) */}
+              {user?.role === "admin" && (
                 <Button
                   variant="contained"
-                  size="small"
-                  onClick={() => {
-                    ourNetworks.forEach((network) => {
-                      if (hasWallets(network)) {
-                        fetchNetworkSummary(network._id);
-                      }
-                    });
-                  }}
-                  disabled={summariesLoading.size > 0}
+                  startIcon={<AddIcon />}
+                  onClick={() => handleOpenDialog()}
+                  sx={{ minWidth: isMobile ? "auto" : "fit-content" }}
                 >
-                  Apply
+                  {isMobile ? "Add" : "Add Our Network"}
                 </Button>
-              </>
-            )}
-          </Box>
-
-          <Box sx={{ ml: "auto", display: "flex", gap: 2, alignItems: "center" }}>
-            {/* Run All Scrapers Button */}
-            <AllNetworksScraperButton
-              variant="contained"
-              size="medium"
-              onComplete={fetchOurNetworks}
-            />
-
-            {/* Add Network Button (Admin only) */}
-            {user?.role === "admin" && (
-              <Button
-                variant="contained"
-                startIcon={<AddIcon />}
-                onClick={() => handleOpenDialog()}
-                sx={{ minWidth: isMobile ? "auto" : "200px" }}
-              >
-                {isMobile ? "Add" : "Add Our Network"}
-              </Button>
-            )}
-          </Box>
-        </Box>
+              )}
+            </Box>
+          </Grid>
+        </Grid>
       </Paper>
 
       <TableContainer component={Paper}>
         <Table>
           <TableHead>
             <TableRow>
-              <TableCell>Name</TableCell>
-              <TableCell>Description</TableCell>
-              <TableCell>Assigned Managers</TableCell>
-              <TableCell>Crypto Wallets</TableCell>
-              <TableCell>
+              <TableCell
+                sx={{ fontWeight: "bold", backgroundColor: "grey.200" }}
+              >
+                Name
+              </TableCell>
+              <TableCell
+                sx={{ fontWeight: "bold", backgroundColor: "grey.200" }}
+              >
+                Description
+              </TableCell>
+              <TableCell
+                sx={{
+                  fontWeight: "bold",
+                  backgroundColor: "grey.200",
+                  textAlign: "center",
+                }}
+              >
+                Assigned Managers
+              </TableCell>
+              <TableCell
+                sx={{
+                  fontWeight: "bold",
+                  backgroundColor: "grey.200",
+                  textAlign: "center",
+                }}
+              >
+                Crypto Wallets
+              </TableCell>
+              <TableCell
+                sx={{
+                  fontWeight: "bold",
+                  backgroundColor: "grey.200",
+                  textAlign: "center",
+                }}
+              >
                 Total Value
                 {useMonthFilter && (
                   <Typography
@@ -802,9 +855,32 @@ const OurNetworksPage = () => {
                   </Typography>
                 )}
               </TableCell>
-              <TableCell>Status</TableCell>
-              <TableCell>Created</TableCell>
-              <TableCell align="right">
+              <TableCell
+                sx={{
+                  fontWeight: "bold",
+                  backgroundColor: "grey.200",
+                  textAlign: "center",
+                }}
+              >
+                Status
+              </TableCell>
+              <TableCell
+                sx={{
+                  fontWeight: "bold",
+                  backgroundColor: "grey.200",
+                  textAlign: "center",
+                }}
+              >
+                Created
+              </TableCell>
+              <TableCell
+                align="right"
+                sx={{
+                  fontWeight: "bold",
+                  backgroundColor: "grey.200",
+                  textAlign: "right",
+                }}
+              >
                 {user?.role === "admin" ? "Actions" : "View"}
               </TableCell>
             </TableRow>
@@ -846,7 +922,7 @@ const OurNetworksPage = () => {
                       {network.description || "No description"}
                     </Typography>
                   </TableCell>
-                  <TableCell>
+                  <TableCell align="center">
                     {network.assignedAffiliateManager ? (
                       <Chip
                         label={network.assignedAffiliateManager.fullName}
@@ -860,8 +936,16 @@ const OurNetworksPage = () => {
                       </Typography>
                     )}
                   </TableCell>
-                  <TableCell>
-                    <Box sx={{ display: "flex", gap: 1, flexWrap: "nowrap", overflowX: "auto" }}>
+                  <TableCell align="center">
+                    <Box
+                      sx={{
+                        display: "flex",
+                        gap: 1,
+                        flexWrap: "nowrap",
+                        overflowX: "auto",
+                        justifyContent: "center",
+                      }}
+                    >
                       {(() => {
                         const getWalletCount = (wallet) => {
                           if (Array.isArray(wallet))
@@ -905,12 +989,19 @@ const OurNetworksPage = () => {
                                 }`}
                               >
                                 <Chip
-                                  icon={<WalletIcon style={{ fontSize: 16 }} />}
+                                  icon={
+                                    <EthereumIcon
+                                      style={{ fontSize: 16, color: "#627EEA" }}
+                                    />
+                                  }
                                   label={ethCount}
                                   size="small"
-                                  color="primary"
                                   variant="outlined"
-                                  sx={{ "& .MuiChip-label": { px: 1 } }}
+                                  sx={{
+                                    borderColor: "#627EEA",
+                                    color: "#627EEA",
+                                    "& .MuiChip-label": { px: 1 },
+                                  }}
                                 />
                               </Tooltip>
                             )}
@@ -921,18 +1012,19 @@ const OurNetworksPage = () => {
                                 }`}
                               >
                                 <Chip
-                                  icon={<WalletIcon style={{ fontSize: 16 }} />}
+                                  icon={
+                                    <BitcoinIcon
+                                      style={{ fontSize: 16, color: "#F7931A" }}
+                                    />
+                                  }
                                   label={btcCount}
                                   size="small"
+                                  variant="outlined"
                                   sx={{
-                                    color: "orange.main",
-                                    borderColor: "orange.main",
-                                    "& .MuiChip-icon": {
-                                      color: "orange.main",
-                                    },
+                                    borderColor: "#F7931A",
+                                    color: "#F7931A",
                                     "& .MuiChip-label": { px: 1 },
                                   }}
-                                  variant="outlined"
                                 />
                               </Tooltip>
                             )}
@@ -943,18 +1035,19 @@ const OurNetworksPage = () => {
                                 }`}
                               >
                                 <Chip
-                                  icon={<WalletIcon style={{ fontSize: 16 }} />}
+                                  icon={
+                                    <TronIcon
+                                      style={{ fontSize: 16, color: "#EB0029" }}
+                                    />
+                                  }
                                   label={tronCount}
                                   size="small"
+                                  variant="outlined"
                                   sx={{
-                                    color: "purple.main",
-                                    borderColor: "purple.main",
-                                    "& .MuiChip-icon": {
-                                      color: "purple.main",
-                                    },
+                                    borderColor: "#EB0029",
+                                    color: "#EB0029",
                                     "& .MuiChip-label": { px: 1 },
                                   }}
-                                  variant="outlined"
                                 />
                               </Tooltip>
                             )}
@@ -963,7 +1056,7 @@ const OurNetworksPage = () => {
                       })()}
                     </Box>
                   </TableCell>
-                  <TableCell>
+                  <TableCell align="center">
                     {(() => {
                       const summary = networkSummaries[network._id];
                       const isLoading = summariesLoading.has(network._id);
@@ -984,6 +1077,7 @@ const OurNetworksPage = () => {
                               display: "flex",
                               alignItems: "center",
                               gap: 1,
+                              justifyContent: "center",
                             }}
                           >
                             <CircularProgress size={16} />
@@ -1001,6 +1095,7 @@ const OurNetworksPage = () => {
                               display: "flex",
                               alignItems: "center",
                               gap: 0.5,
+                              justifyContent: "center",
                             }}
                           >
                             <TrendingUpIcon
@@ -1024,20 +1119,26 @@ const OurNetworksPage = () => {
                       );
                     })()}
                   </TableCell>
-                  <TableCell>
+                  <TableCell align="center">
                     <Chip
                       label={network.isActive ? "Active" : "Inactive"}
                       color={network.isActive ? "success" : "default"}
                       size="small"
                     />
                   </TableCell>
-                  <TableCell>
+                  <TableCell align="center">
                     <Typography variant="body2" color="text.secondary">
                       {new Date(network.createdAt).toLocaleDateString()}
                     </Typography>
                   </TableCell>
                   <TableCell align="right">
-                    <Box sx={{ display: "flex", gap: 0.5 }}>
+                    <Box
+                      sx={{
+                        display: "flex",
+                        gap: 0.5,
+                        justifyContent: "flex-end",
+                      }}
+                    >
                       <Tooltip title="View Details">
                         <IconButton
                           size="small"
@@ -1597,23 +1698,23 @@ const OurNetworksPage = () => {
                                 gap: 1,
                                 p: 2,
                                 borderRadius: 2,
-                                backgroundColor: "primary.50",
+                                backgroundColor: "rgba(98, 126, 234, 0.04)",
                                 border: 1,
-                                borderColor: "primary.200",
+                                borderColor: "rgba(98, 126, 234, 0.3)",
                                 mb: 1,
                                 cursor: "pointer",
                                 transition: "all 0.2s ease",
                                 "&:hover": {
-                                  backgroundColor: "primary.100",
-                                  borderColor: "primary.300",
+                                  backgroundColor: "rgba(98, 126, 234, 0.08)",
+                                  borderColor: "#627EEA",
                                   transform: "translateY(-1px)",
                                   boxShadow:
-                                    "0 4px 12px rgba(33, 150, 243, 0.2)",
+                                    "0 4px 12px rgba(98, 126, 234, 0.2)",
                                 },
                               }}
                             >
-                              <WalletIcon
-                                sx={{ color: "primary.main", fontSize: 24 }}
+                              <EthereumIcon
+                                sx={{ color: "#627EEA", fontSize: 24 }}
                               />
                               <Box sx={{ flex: 1 }}>
                                 <Box
@@ -1699,23 +1800,23 @@ const OurNetworksPage = () => {
                                 gap: 1,
                                 p: 2,
                                 borderRadius: 2,
-                                backgroundColor: "orange.50",
+                                backgroundColor: "rgba(247, 147, 26, 0.04)",
                                 border: 1,
-                                borderColor: "orange.200",
+                                borderColor: "rgba(247, 147, 26, 0.3)",
                                 mb: 1,
                                 cursor: "pointer",
                                 transition: "all 0.2s ease",
                                 "&:hover": {
-                                  backgroundColor: "orange.100",
-                                  borderColor: "orange.300",
+                                  backgroundColor: "rgba(247, 147, 26, 0.08)",
+                                  borderColor: "#F7931A",
                                   transform: "translateY(-1px)",
                                   boxShadow:
-                                    "0 4px 12px rgba(255, 152, 0, 0.2)",
+                                    "0 4px 12px rgba(247, 147, 26, 0.2)",
                                 },
                               }}
                             >
-                              <WalletIcon
-                                sx={{ color: "orange.main", fontSize: 24 }}
+                              <BitcoinIcon
+                                sx={{ color: "#F7931A", fontSize: 24 }}
                               />
                               <Box sx={{ flex: 1 }}>
                                 <Box
@@ -1798,23 +1899,22 @@ const OurNetworksPage = () => {
                                 gap: 1,
                                 p: 2,
                                 borderRadius: 2,
-                                backgroundColor: "purple.50",
+                                backgroundColor: "rgba(235, 0, 41, 0.04)",
                                 border: 1,
-                                borderColor: "purple.200",
+                                borderColor: "rgba(235, 0, 41, 0.3)",
                                 mb: 1,
                                 cursor: "pointer",
                                 transition: "all 0.2s ease",
                                 "&:hover": {
-                                  backgroundColor: "purple.100",
-                                  borderColor: "purple.300",
+                                  backgroundColor: "rgba(235, 0, 41, 0.08)",
+                                  borderColor: "#EB0029",
                                   transform: "translateY(-1px)",
-                                  boxShadow:
-                                    "0 4px 12px rgba(156, 39, 176, 0.2)",
+                                  boxShadow: "0 4px 12px rgba(235, 0, 41, 0.2)",
                                 },
                               }}
                             >
-                              <WalletIcon
-                                sx={{ color: "purple.main", fontSize: 24 }}
+                              <TronIcon
+                                sx={{ color: "#EB0029", fontSize: 24 }}
                               />
                               <Box sx={{ flex: 1 }}>
                                 <Box
