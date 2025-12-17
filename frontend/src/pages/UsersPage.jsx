@@ -52,7 +52,9 @@ import {
   SupervisorAccount as LeadManagerIcon,
   ManageAccounts as ManagerIcon,
   Logout as LogoutIcon,
+  Search as SearchIcon,
 } from "@mui/icons-material";
+import debounce from "lodash.debounce";
 import { useForm, Controller } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
 import * as yup from "yup";
@@ -493,7 +495,30 @@ const UsersPage = () => {
     role: "",
     isActive: "true",
     status: "",
+    search: "",
   });
+  const [searchValue, setSearchValue] = useState("");
+
+  const debouncedSearch = useMemo(
+    () =>
+      debounce((value) => {
+        setFilters((prev) => ({ ...prev, search: value }));
+        setPage(0);
+      }, 500),
+    []
+  );
+
+  useEffect(() => {
+    return () => {
+      debouncedSearch.cancel();
+    };
+  }, [debouncedSearch]);
+
+  const handleSearchChange = (event) => {
+    setSearchValue(event.target.value);
+    debouncedSearch(event.target.value);
+  };
+
   const {
     control,
     handleSubmit,
@@ -743,7 +768,8 @@ const UsersPage = () => {
     []
   );
   const clearFilters = useCallback(() => {
-    setFilters({ role: "", isActive: "true", status: "" });
+    setFilters({ role: "", isActive: "true", status: "", search: "" });
+    setSearchValue("");
     setPage(0);
   }, []);
   const canManageUsers = useMemo(
@@ -838,6 +864,24 @@ const UsersPage = () => {
               Filters
             </Typography>
             <Grid container spacing={2}>
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  placeholder="Search by name or email..."
+                  value={searchValue}
+                  onChange={handleSearchChange}
+                  InputProps={{
+                    startAdornment: (
+                      <SearchIcon sx={{ color: "text.secondary", mr: 1 }} />
+                    ),
+                  }}
+                  sx={{
+                    "& .MuiOutlinedInput-root": {
+                      bgcolor: "background.paper",
+                    },
+                  }}
+                />
+              </Grid>
               <Grid item xs={12} sm={4} md={3}>
                 <FormControl fullWidth>
                   <InputLabel>Role</InputLabel>
@@ -909,17 +953,77 @@ const UsersPage = () => {
           }}
         >
           <TableContainer>
-            <Table>
+            <Table size="small">
               <TableHead>
                 <TableRow>
-                  <TableCell>User</TableCell>
-                  <TableCell>Role</TableCell>
-                  <TableCell>Status</TableCell>
-                  <TableCell>Permissions</TableCell>
-                  <TableCell>Agent Code</TableCell>
-                  <TableCell>Activity</TableCell>
-                  <TableCell>Created</TableCell>
-                  <TableCell>Actions</TableCell>
+                  <TableCell
+                    sx={{ fontWeight: "bold", backgroundColor: "grey.200" }}
+                  >
+                    User
+                  </TableCell>
+                  <TableCell
+                    sx={{
+                      fontWeight: "bold",
+                      backgroundColor: "grey.200",
+                      textAlign: "center",
+                    }}
+                  >
+                    Role
+                  </TableCell>
+                  <TableCell
+                    sx={{
+                      fontWeight: "bold",
+                      backgroundColor: "grey.200",
+                      textAlign: "center",
+                    }}
+                  >
+                    Status
+                  </TableCell>
+                  <TableCell
+                    sx={{
+                      fontWeight: "bold",
+                      backgroundColor: "grey.200",
+                      textAlign: "center",
+                    }}
+                  >
+                    Permissions
+                  </TableCell>
+                  <TableCell
+                    sx={{
+                      fontWeight: "bold",
+                      backgroundColor: "grey.200",
+                      textAlign: "center",
+                    }}
+                  >
+                    Agent Code
+                  </TableCell>
+                  <TableCell
+                    sx={{
+                      fontWeight: "bold",
+                      backgroundColor: "grey.200",
+                      textAlign: "center",
+                    }}
+                  >
+                    Activity
+                  </TableCell>
+                  <TableCell
+                    sx={{
+                      fontWeight: "bold",
+                      backgroundColor: "grey.200",
+                      textAlign: "center",
+                    }}
+                  >
+                    Created
+                  </TableCell>
+                  <TableCell
+                    sx={{
+                      fontWeight: "bold",
+                      backgroundColor: "grey.200",
+                      textAlign: "right",
+                    }}
+                  >
+                    Actions
+                  </TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -981,14 +1085,14 @@ const UsersPage = () => {
                               </Box>
                             </Stack>
                           </TableCell>
-                          <TableCell>
+                          <TableCell align="center">
                             <StyledChip
                               label={roleInfo.label}
                               color={roleInfo.color}
                               size="small"
                             />
                           </TableCell>
-                          <TableCell>
+                          <TableCell align="center">
                             <StyledChip
                               label={statusInfo.label}
                               color={statusInfo.color}
@@ -996,8 +1100,12 @@ const UsersPage = () => {
                               icon={statusInfo.icon}
                             />
                           </TableCell>
-                          <TableCell>
-                            <Stack direction="row" spacing={1}>
+                          <TableCell align="center">
+                            <Stack
+                              direction="row"
+                              spacing={1}
+                              justifyContent="center"
+                            >
                               {user.permissions?.canCreateOrders && (
                                 <StyledChip
                                   label="Orders"
@@ -1021,7 +1129,7 @@ const UsersPage = () => {
                               )}
                             </Stack>
                           </TableCell>
-                          <TableCell>
+                          <TableCell align="center">
                             {user.fourDigitCode ? (
                               <StyledChip
                                 label={user.fourDigitCode}
@@ -1032,7 +1140,7 @@ const UsersPage = () => {
                               "—"
                             )}
                           </TableCell>
-                          <TableCell>
+                          <TableCell align="center">
                             <StyledChip
                               label={user.isActive ? "Active" : "Inactive"}
                               color={user.isActive ? "success" : "error"}
@@ -1040,10 +1148,10 @@ const UsersPage = () => {
                               variant="outlined"
                             />
                           </TableCell>
-                          <TableCell>
+                          <TableCell align="center">
                             {new Date(user.createdAt).toLocaleDateString()}
                           </TableCell>
-                          <TableCell>
+                          <TableCell align="right">
                             <Stack direction="row" spacing={0.5}>
                               {user.status === "pending" && (
                                 <Tooltip title="Approve User" arrow>

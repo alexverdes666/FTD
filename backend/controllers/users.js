@@ -7,7 +7,7 @@ const AgentPerformance = require("../models/AgentPerformance");
 const externalAgentPerformanceService = require("../services/externalAgentPerformanceService");
 exports.getUsers = async (req, res, next) => {
   try {
-    const { role, isActive, status, page = 1, limit = 10 } = req.query;
+    const { role, isActive, status, search, page = 1, limit = 10 } = req.query;
     const filter = {};
     if (role) filter.role = role;
     if (status) {
@@ -15,6 +15,14 @@ exports.getUsers = async (req, res, next) => {
     } else if (isActive !== undefined) {
       filter.isActive = isActive === "true";
     }
+
+    if (search) {
+      filter.$or = [
+        { fullName: { $regex: search, $options: "i" } },
+        { email: { $regex: search, $options: "i" } },
+      ];
+    }
+
     const skip = (page - 1) * limit;
     const users = await User.find(filter)
       .select("-password")
