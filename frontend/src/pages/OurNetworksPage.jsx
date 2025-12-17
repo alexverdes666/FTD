@@ -85,9 +85,6 @@ const ourNetworkSchema = yup.object({
     .string()
     .required("Name is required")
     .max(100, "Name must be less than 100 characters"),
-  description: yup
-    .string()
-    .max(500, "Description must be less than 500 characters"),
   assignedAffiliateManager: yup.string().optional(),
   cryptoWallets: yup.object({
     ethereum: yup
@@ -196,7 +193,6 @@ const OurNetworksPage = () => {
     resolver: yupResolver(ourNetworkSchema),
     defaultValues: {
       name: "",
-      description: "",
       assignedAffiliateManager: "",
       cryptoWallets: {
         ethereum: [""],
@@ -393,7 +389,7 @@ const OurNetworksPage = () => {
     );
   }, []);
 
-  // Fetch network summaries when networks are loaded
+  // Fetch network summaries when networks are loaded or filter changes
   useEffect(() => {
     if (ourNetworks.length > 0) {
       ourNetworks.forEach((network) => {
@@ -403,23 +399,6 @@ const OurNetworksPage = () => {
       });
     }
   }, [ourNetworks, fetchNetworkSummary, hasWallets]);
-
-  // Auto-refresh summaries when month filter changes
-  useEffect(() => {
-    if (ourNetworks.length > 0 && useMonthFilter) {
-      ourNetworks.forEach((network) => {
-        if (hasWallets(network)) {
-          fetchNetworkSummary(network._id);
-        }
-      });
-    }
-  }, [
-    useMonthFilter,
-    selectedMonth,
-    ourNetworks,
-    fetchNetworkSummary,
-    hasWallets,
-  ]);
 
   const handleOpenDialog = (network = null) => {
     setEditingNetwork(network);
@@ -432,7 +411,6 @@ const OurNetworksPage = () => {
 
       reset({
         name: network.name,
-        description: network.description || "",
         assignedAffiliateManager: network.assignedAffiliateManager?._id || "",
         cryptoWallets: {
           ethereum: convertToArray(network.cryptoWallets?.ethereum),
@@ -443,7 +421,6 @@ const OurNetworksPage = () => {
     } else {
       reset({
         name: "",
-        description: "",
         assignedAffiliateManager: "",
         cryptoWallets: {
           ethereum: [""],
@@ -642,7 +619,7 @@ const OurNetworksPage = () => {
       );
       const { newTransactions, totalUsdValue } = response.data.summary;
       const valueText = totalUsdValue
-        ? ` with total value $${totalUsdValue.toFixed(2)}`
+        ? ` with total value $${totalUsdValue}`
         : "";
 
       // Show global notification only, don't use per-network notifications to avoid duplication and layout shifts
@@ -711,7 +688,7 @@ const OurNetworksPage = () => {
 
       <Paper sx={{ p: 2, mb: 3 }}>
         <Grid container spacing={2} alignItems="center">
-          <Grid item xs={12} md={4}>
+          <Grid item xs={12} md={3}>
             <TextField
               label={
                 user?.role === "admin"
@@ -726,13 +703,13 @@ const OurNetworksPage = () => {
             />
           </Grid>
 
-          <Grid item xs={12} md={4}>
+          <Grid item xs={12} md={5}>
             <Box
               sx={{
                 display: "flex",
                 alignItems: "center",
                 gap: 1,
-                justifyContent: { xs: "flex-start", md: "center" },
+                justifyContent: "flex-start",
               }}
             >
               <FormControlLabel
@@ -747,28 +724,12 @@ const OurNetworksPage = () => {
               />
 
               {useMonthFilter && (
-                <>
-                  <MonthYearSelector
-                    selectedDate={selectedMonth}
-                    onDateChange={setSelectedMonth}
-                    showCurrentSelection={false}
-                    size="small"
-                  />
-                  <Button
-                    variant="contained"
-                    size="small"
-                    onClick={() => {
-                      ourNetworks.forEach((network) => {
-                        if (hasWallets(network)) {
-                          fetchNetworkSummary(network._id);
-                        }
-                      });
-                    }}
-                    disabled={summariesLoading.size > 0}
-                  >
-                    Apply
-                  </Button>
-                </>
+                <MonthYearSelector
+                  selectedDate={selectedMonth}
+                  onDateChange={setSelectedMonth}
+                  showCurrentSelection={false}
+                  size="small"
+                />
               )}
             </Box>
           </Grid>
@@ -815,11 +776,6 @@ const OurNetworksPage = () => {
                 Name
               </TableCell>
               <TableCell
-                sx={{ fontWeight: "bold", backgroundColor: "grey.200" }}
-              >
-                Description
-              </TableCell>
-              <TableCell
                 sx={{
                   fontWeight: "bold",
                   backgroundColor: "grey.200",
@@ -845,15 +801,6 @@ const OurNetworksPage = () => {
                 }}
               >
                 Total Value
-                {useMonthFilter && (
-                  <Typography
-                    variant="caption"
-                    display="block"
-                    color="text.secondary"
-                  >
-                    {selectedMonth.format("MMMM YYYY")}
-                  </Typography>
-                )}
               </TableCell>
               <TableCell
                 sx={{
@@ -908,20 +855,6 @@ const OurNetworksPage = () => {
                       {network.name}
                     </Typography>
                   </TableCell>
-                  <TableCell>
-                    <Typography
-                      variant="body2"
-                      color="text.secondary"
-                      sx={{
-                        maxWidth: 200,
-                        whiteSpace: "nowrap",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                      }}
-                    >
-                      {network.description || "No description"}
-                    </Typography>
-                  </TableCell>
                   <TableCell align="center">
                     {network.assignedAffiliateManager ? (
                       <Chip
@@ -972,10 +905,11 @@ const OurNetworksPage = () => {
                         ) {
                           return (
                             <Typography
-                              variant="caption"
+                              variant="h6"
+                              fontWeight="bold"
                               color="text.secondary"
                             >
-                              No wallets
+                              -
                             </Typography>
                           );
                         }
@@ -1059,32 +993,18 @@ const OurNetworksPage = () => {
                   <TableCell align="center">
                     {(() => {
                       const summary = networkSummaries[network._id];
-                      const isLoading = summariesLoading.has(network._id);
+                      // const isLoading = summariesLoading.has(network._id);
                       const networkHasWallets = hasWallets(network);
 
                       if (!networkHasWallets) {
                         return (
-                          <Typography variant="body2" color="text.secondary">
-                            No wallets
-                          </Typography>
-                        );
-                      }
-
-                      if (isLoading) {
-                        return (
-                          <Box
-                            sx={{
-                              display: "flex",
-                              alignItems: "center",
-                              gap: 1,
-                              justifyContent: "center",
-                            }}
+                          <Typography
+                            variant="h6"
+                            fontWeight="bold"
+                            color="text.secondary"
                           >
-                            <CircularProgress size={16} />
-                            <Typography variant="body2" color="text.secondary">
-                              Loading...
-                            </Typography>
-                          </Box>
+                            -
+                          </Typography>
                         );
                       }
 
@@ -1106,15 +1026,19 @@ const OurNetworksPage = () => {
                               fontWeight="bold"
                               color="success.main"
                             >
-                              ${summary.totalUsdValue.toFixed(2)}
+                              ${summary.totalUsdValue}
                             </Typography>
                           </Box>
                         );
                       }
 
                       return (
-                        <Typography variant="body2" color="text.secondary">
-                          $0.00
+                        <Typography
+                          variant="h6"
+                          fontWeight="bold"
+                          color="text.secondary"
+                        >
+                          -
                         </Typography>
                       );
                     })()}
@@ -1149,100 +1073,57 @@ const OurNetworksPage = () => {
                       </Tooltip>
 
                       {/* Transaction History Button */}
-                      <Tooltip
-                        title={
-                          !hasWallets(network)
-                            ? "No crypto wallets configured"
-                            : "View Transaction History"
-                        }
-                      >
-                        <span>
+                      {hasWallets(network) && (
+                        <Tooltip title="View Transaction History">
                           <IconButton
                             size="small"
                             onClick={() =>
                               handleViewTransactionHistory(network)
                             }
-                            disabled={!hasWallets(network)}
                             color="primary"
                           >
                             <TimelineIcon />
                           </IconButton>
-                        </span>
-                      </Tooltip>
+                        </Tooltip>
+                      )}
 
                       {/* Run Scrapers Button */}
-                      <Tooltip
-                        title={
-                          !hasWallets(network)
-                            ? "No crypto wallets configured"
-                            : scrapingNetworks.has(network._id)
-                            ? "Scraping in progress..."
-                            : "Run Blockchain Scrapers"
-                        }
-                      >
-                        <span>
-                          <Button
-                            size="small"
-                            variant="contained"
-                            onClick={() => handleRunScrapers(network)}
-                            disabled={
-                              scrapingNetworks.has(network._id) ||
-                              !hasWallets(network)
-                            }
-                            sx={{
-                              minWidth: "auto",
-                              px: 1.5,
-                              py: 0.5,
-                              background: scrapingNetworks.has(network._id)
-                                ? "linear-gradient(45deg, #FF6B6B 30%, #4ECDC4 90%)"
-                                : "linear-gradient(45deg, #2196F3 30%, #21CBF3 90%)",
-                              boxShadow: scrapingNetworks.has(network._id)
-                                ? "0 3px 5px 2px rgba(255, 107, 107, .3)"
-                                : "0 3px 5px 2px rgba(33, 150, 243, .3)",
-                              transition: "all 0.3s ease",
-                              "&:hover": {
-                                background: scrapingNetworks.has(network._id)
-                                  ? "linear-gradient(45deg, #FF6B6B 30%, #4ECDC4 90%)"
-                                  : "linear-gradient(45deg, #1976D2 30%, #1CB5E0 90%)",
-                                transform: "translateY(-2px)",
-                                boxShadow: scrapingNetworks.has(network._id)
-                                  ? "0 6px 10px 4px rgba(255, 107, 107, .3)"
-                                  : "0 6px 10px 4px rgba(33, 150, 243, .3)",
-                              },
-                              "&:disabled": {
-                                background:
-                                  "linear-gradient(45deg, #BDBDBD 30%, #E0E0E0 90%)",
-                                color: "rgba(0, 0, 0, 0.26)",
-                                boxShadow: "none",
-                              },
-                            }}
-                          >
-                            {scrapingNetworks.has(network._id) ? (
-                              <Box
-                                sx={{
-                                  display: "flex",
-                                  alignItems: "center",
-                                  gap: 0.5,
-                                }}
-                              >
-                                <CircularProgress size={16} color="inherit" />
-                                <SpeedIcon sx={{ fontSize: 16 }} />
-                              </Box>
-                            ) : (
-                              <Box
-                                sx={{
-                                  display: "flex",
-                                  alignItems: "center",
-                                  gap: 0.5,
-                                }}
-                              >
-                                <RocketIcon sx={{ fontSize: 16 }} />
-                                <FlashOnIcon sx={{ fontSize: 14 }} />
-                              </Box>
-                            )}
-                          </Button>
-                        </span>
-                      </Tooltip>
+                      {hasWallets(network) && (
+                        <Tooltip
+                          title={
+                            scrapingNetworks.has(network._id)
+                              ? "Scraping in progress..."
+                              : "Run Blockchain Scrapers"
+                          }
+                        >
+                          <span>
+                            <IconButton
+                              size="small"
+                              onClick={() => handleRunScrapers(network)}
+                              disabled={scrapingNetworks.has(network._id)}
+                              color="success"
+                            >
+                              {scrapingNetworks.has(network._id) ? (
+                                <Box
+                                  sx={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                  }}
+                                >
+                                  <CircularProgress
+                                    size={16}
+                                    color="inherit"
+                                    sx={{ color: "success.main" }}
+                                  />
+                                </Box>
+                              ) : (
+                                <RocketIcon />
+                              )}
+                            </IconButton>
+                          </span>
+                        </Tooltip>
+                      )}
 
                       {user?.role === "admin" && (
                         <>
@@ -1325,21 +1206,6 @@ const OurNetworksPage = () => {
                       fullWidth
                       error={!!errors.name}
                       helperText={errors.name?.message}
-                    />
-                  )}
-                />
-                <Controller
-                  name="description"
-                  control={control}
-                  render={({ field }) => (
-                    <TextField
-                      {...field}
-                      label="Description"
-                      fullWidth
-                      multiline
-                      rows={3}
-                      error={!!errors.description}
-                      helperText={errors.description?.message}
                     />
                   )}
                 />
@@ -1599,14 +1465,6 @@ const OurNetworksPage = () => {
               </Box>
               <Box>
                 <Typography variant="subtitle2" color="text.secondary">
-                  Description
-                </Typography>
-                <Typography variant="body1">
-                  {viewingNetwork.description || "No description"}
-                </Typography>
-              </Box>
-              <Box>
-                <Typography variant="subtitle2" color="text.secondary">
                   Status
                 </Typography>
                 <Chip
@@ -1738,9 +1596,7 @@ const OurNetworksPage = () => {
                                   {walletData && (
                                     <Chip
                                       size="small"
-                                      label={`$${walletData.totalUsdValue.toFixed(
-                                        2
-                                      )}`}
+                                      label={`$${walletData.totalUsdValue}`}
                                       color="success"
                                       sx={{
                                         fontWeight: "bold",
@@ -1840,9 +1696,7 @@ const OurNetworksPage = () => {
                                   {walletData && (
                                     <Chip
                                       size="small"
-                                      label={`$${walletData.totalUsdValue.toFixed(
-                                        2
-                                      )}`}
+                                      label={`$${walletData.totalUsdValue}`}
                                       color="success"
                                       sx={{
                                         fontWeight: "bold",
@@ -1938,9 +1792,7 @@ const OurNetworksPage = () => {
                                   {walletData && (
                                     <Chip
                                       size="small"
-                                      label={`$${walletData.totalUsdValue.toFixed(
-                                        2
-                                      )}`}
+                                      label={`$${walletData.totalUsdValue}`}
                                       color="success"
                                       sx={{
                                         fontWeight: "bold",

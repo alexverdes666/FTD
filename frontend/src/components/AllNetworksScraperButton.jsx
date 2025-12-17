@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  Button,
+  IconButton,
   Box,
   Alert,
   CircularProgress,
@@ -13,18 +13,20 @@ import {
   ListItem,
   ListItemIcon,
   ListItemText,
+  Button,
   Chip,
   Divider,
-  LinearProgress
+  LinearProgress,
+  Tooltip
 } from '@mui/material';
 import {
-  PlayArrow,
   CheckCircle,
   Error as ErrorIcon,
   Pending,
   Refresh,
   AccountBalanceWallet,
-  Close
+  Close,
+  Rocket as RocketIcon
 } from '@mui/icons-material';
 import { useSelector } from 'react-redux';
 import blockchainService from '../services/blockchain';
@@ -84,13 +86,18 @@ const AllNetworksScraperButton = ({ variant = 'contained', size = 'medium', onCo
         
         if (lastResults) {
           setResults(lastResults);
-          setSuccess(`Scrapers completed successfully! Found ${lastResults.summary.newTransactions} new transactions with total value $${lastResults.summary.totalUsdValue.toFixed(2)}`);
+          setSuccess(`Scrapers completed successfully! Found ${lastResults.summary.newTransactions} new transactions with total value $${lastResults.summary.totalUsdValue}`);
           setShowResultsDialog(true);
           
           // Call onComplete callback if provided
           if (onComplete) {
             onComplete(lastResults);
           }
+
+          // Auto close dialog after 3 seconds
+          setTimeout(() => {
+            setShowResultsDialog(false);
+          }, 3000);
         }
       } else if (state === 'failed') {
         // Stop polling
@@ -166,26 +173,35 @@ const AllNetworksScraperButton = ({ variant = 'contained', size = 'medium', onCo
   return (
     <>
       <Box>
-        <Button
-          variant={variant}
-          size={size}
-          onClick={handleTriggerAllScrapers}
-          disabled={isLoading || !canTriggerScrapers}
-          startIcon={isLoading ? <CircularProgress size={20} color="inherit" /> : <Refresh />}
-          sx={{
-            minWidth: 180,
-            fontWeight: 'bold',
-            ...(variant === 'contained' && {
-              background: 'linear-gradient(45deg, #2196F3 30%, #21CBF3 90%)',
-              boxShadow: '0 3px 5px 2px rgba(33, 203, 243, .3)',
-              '&:hover': {
-                background: 'linear-gradient(45deg, #1976D2 30%, #0FA8D6 90%)',
-              }
-            })
-          }}
-        >
-          {isLoading ? 'Running All Scrapers...' : 'Run All Scrapers'}
-        </Button>
+        <Tooltip title={isLoading ? "Running Scrapers..." : "Run All Scrapers"}>
+          <span>
+            <IconButton
+              size={size === "medium" ? "medium" : "small"}
+              onClick={handleTriggerAllScrapers}
+              disabled={isLoading || !canTriggerScrapers}
+              color="success"
+              sx={{
+                ...(variant === 'contained' && {
+                  bgcolor: 'success.main',
+                  color: 'white',
+                  '&:hover': {
+                    bgcolor: 'success.dark',
+                  },
+                  '&.Mui-disabled': {
+                     bgcolor: 'action.disabledBackground',
+                     color: 'action.disabled'
+                  }
+                })
+              }}
+            >
+              {isLoading ? (
+                <CircularProgress size={24} color="inherit" />
+              ) : (
+                <RocketIcon />
+              )}
+            </IconButton>
+          </span>
+        </Tooltip>
 
         {/* Progress indicator */}
         {progress && isLoading && (
