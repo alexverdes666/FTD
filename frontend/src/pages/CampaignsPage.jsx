@@ -245,23 +245,7 @@ const CampaignsPage = () => {
     }
   };
   return (
-    <Box sx={{ p: isMobile ? 2 : 3 }}>
-      {}
-      <Box display="flex" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
-        <Typography variant={isMobile ? 'h5' : 'h4'}>Campaigns</Typography>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={() => {
-            setEditingCampaign(null);
-            reset();
-            setOpenDialog(true);
-          }}
-          size={isMobile ? 'small' : 'medium'}
-        >
-          Add Campaign
-        </Button>
-      </Box>
+    <Box sx={{ p: isMobile ? 2 : 3, pt: 0, mt: -2 }}>
       {}
       {notification.message && (
         <Alert severity={notification.severity} sx={{ mb: 2 }}>
@@ -269,7 +253,7 @@ const CampaignsPage = () => {
         </Alert>
       )}
       {}
-      <Paper sx={{ p: 2, mb: 3 }}>
+      <Paper sx={{ p: 2, mb: 1 }}>
         <Grid container spacing={2} alignItems="center">
           <Grid item xs={12} sm={6} md={3}>
             <TextField
@@ -310,16 +294,21 @@ const CampaignsPage = () => {
               label="Active only"
             />
           </Grid>
-          <Grid item xs={12} sm={6} md={2}>
-            <Button
-              variant="outlined"
-              startIcon={<FilterIcon />}
-              onClick={fetchCampaigns}
-              fullWidth
-              size="small"
-            >
-              Apply Filters
-            </Button>
+          <Grid item xs={12} sm={6} md={3} sx={{ ml: 'auto' }}>
+            <Box display="flex" justifyContent="flex-end">
+              <Button
+                variant="contained"
+                startIcon={<AddIcon />}
+                onClick={() => {
+                  setEditingCampaign(null);
+                  reset();
+                  setOpenDialog(true);
+                }}
+                size="small"
+              >
+                Add Campaign
+              </Button>
+            </Box>
           </Grid>
         </Grid>
       </Paper>
@@ -329,10 +318,10 @@ const CampaignsPage = () => {
           <Table stickyHeader>
             <TableHead>
               <TableRow>
-                <TableCell>Name</TableCell>
-                <TableCell>Status</TableCell>
-                <TableCell>Assigned Managers</TableCell>
-                <TableCell>Actions</TableCell>
+                <TableCell sx={{ fontWeight: 'bold', backgroundColor: 'grey.200' }}>Name</TableCell>
+                <TableCell sx={{ fontWeight: 'bold', backgroundColor: 'grey.200', textAlign: 'center' }}>Status</TableCell>
+                <TableCell sx={{ fontWeight: 'bold', backgroundColor: 'grey.200', textAlign: 'center' }}>Assigned Managers</TableCell>
+                <TableCell sx={{ fontWeight: 'bold', backgroundColor: 'grey.200', textAlign: 'right' }}>Actions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -365,7 +354,7 @@ const CampaignsPage = () => {
                         )}
                       </Box>
                     </TableCell>
-                    <TableCell>
+                    <TableCell align="center">
                       <Chip
                         label={campaign.status}
                         color={getStatusColor(campaign.status)}
@@ -373,13 +362,13 @@ const CampaignsPage = () => {
                         sx={{ textTransform: 'capitalize' }}
                       />
                     </TableCell>
-                    <TableCell>
+                    <TableCell align="center">
                       <Typography variant="body2">
                         {campaign.assignedManagersCount || 0}
                       </Typography>
                     </TableCell>
-                    <TableCell>
-                      <Box sx={{ display: 'flex', gap: 0.5 }}>
+                    <TableCell align="right">
+                      <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'flex-end' }}>
                         <Tooltip title="View Details">
                           <IconButton
                             size="small"

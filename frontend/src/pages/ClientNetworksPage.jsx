@@ -284,11 +284,11 @@ const ClientNetworksPage = () => {
         <Table>
           <TableHead>
             <TableRow>
-              <TableCell>Name</TableCell>
-              <TableCell>Description</TableCell>
-              <TableCell>Status</TableCell>
-              <TableCell>Created</TableCell>
-              <TableCell>Actions</TableCell>
+              <TableCell sx={{ fontWeight: 'bold', backgroundColor: 'grey.200' }}>Name</TableCell>
+              <TableCell sx={{ fontWeight: 'bold', backgroundColor: 'grey.200' }}>Description</TableCell>
+              <TableCell sx={{ fontWeight: 'bold', backgroundColor: 'grey.200', textAlign: 'center' }}>Status</TableCell>
+              <TableCell sx={{ fontWeight: 'bold', backgroundColor: 'grey.200', textAlign: 'center' }}>Created</TableCell>
+              <TableCell sx={{ fontWeight: 'bold', backgroundColor: 'grey.200', textAlign: 'right' }}>Actions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -315,20 +315,20 @@ const ClientNetworksPage = () => {
                       {network.description || "No description"}
                     </Typography>
                   </TableCell>
-                  <TableCell>
+                  <TableCell align="center">
                     <Chip
                       label={network.isActive ? "Active" : "Inactive"}
                       color={network.isActive ? "success" : "default"}
                       size="small"
                     />
                   </TableCell>
-                  <TableCell>
+                  <TableCell align="center">
                     <Typography variant="body2">
                       {new Date(network.createdAt).toLocaleDateString()}
                     </Typography>
                   </TableCell>
-                  <TableCell>
-                    <Box display="flex" gap={1}>
+                  <TableCell align="right">
+                    <Box display="flex" gap={1} justifyContent="flex-end">
                       <Tooltip title="View">
                         <IconButton
                           size="small"

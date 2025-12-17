@@ -648,25 +648,55 @@ const BrokerManagementTable = ({
       <Table size="small">
         <TableHead>
           <TableRow>
-            <TableCell>
-              <strong>Name</strong>
+            <TableCell sx={{ fontWeight: "bold", backgroundColor: "grey.200" }}>
+              Name
             </TableCell>
-            <TableCell>
-              <strong>Domain</strong>
+            <TableCell
+              sx={{
+                fontWeight: "bold",
+                backgroundColor: "grey.200",
+                textAlign: "center",
+              }}
+            >
+              Domain
             </TableCell>
-            <TableCell>
-              <strong>Status</strong>
+            <TableCell
+              sx={{
+                fontWeight: "bold",
+                backgroundColor: "grey.200",
+                textAlign: "center",
+              }}
+            >
+              Status
             </TableCell>
-            <TableCell>
-              <strong>Created</strong>
+            <TableCell
+              sx={{
+                fontWeight: "bold",
+                backgroundColor: "grey.200",
+                textAlign: "center",
+              }}
+            >
+              Created
             </TableCell>
             {isAdmin && (
-              <TableCell>
-                <strong>Actions</strong>
+              <TableCell
+                sx={{
+                  fontWeight: "bold",
+                  backgroundColor: "grey.200",
+                  textAlign: "right",
+                }}
+              >
+                Actions
               </TableCell>
             )}
-            <TableCell>
-              <strong>Comments</strong>
+            <TableCell
+              sx={{
+                fontWeight: "bold",
+                backgroundColor: "grey.200",
+                textAlign: "right",
+              }}
+            >
+              Comments
             </TableCell>
           </TableRow>
         </TableHead>
@@ -679,26 +709,31 @@ const BrokerManagementTable = ({
                   <Typography variant="body2">{broker.name}</Typography>
                 </Box>
               </TableCell>
-              <TableCell>
+              <TableCell align="center">
                 <Typography variant="body2">
                   {broker.domain || "N/A"}
                 </Typography>
               </TableCell>
-              <TableCell>
+              <TableCell align="center">
                 <Chip
                   label={broker.isActive ? "Active" : "Inactive"}
                   color={broker.isActive ? "success" : "default"}
                   size="small"
                 />
               </TableCell>
-              <TableCell>
+              <TableCell align="center">
                 <Typography variant="body2">
                   {new Date(broker.createdAt).toLocaleDateString()}
                 </Typography>
               </TableCell>
               {isAdmin && (
-                <TableCell>
-                  <Box display="flex" flexDirection="row" gap={1}>
+                <TableCell align="right">
+                  <Box
+                    display="flex"
+                    flexDirection="row"
+                    gap={1}
+                    justifyContent="flex-end"
+                  >
                     <IconButton
                       size="small"
                       title="Edit Broker"
@@ -717,12 +752,14 @@ const BrokerManagementTable = ({
                   </Box>
                 </TableCell>
               )}
-              <TableCell>
-                <CommentButton
-                  targetType="client_broker"
-                  targetId={broker._id}
-                  targetName={broker.name}
-                />
+              <TableCell align="right">
+                <Box display="flex" justifyContent="flex-end">
+                  <CommentButton
+                    targetType="client_broker"
+                    targetId={broker._id}
+                    targetName={broker.name}
+                  />
+                </Box>
               </TableCell>
             </TableRow>
           ))}

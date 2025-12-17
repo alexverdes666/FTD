@@ -29,45 +29,7 @@ const Force2FASetup = ({ children }) => {
 
   return (
     <>
-      {/* Warning Banner */}
-      <Collapse in={shouldShowBanner}>
-        <Alert 
-          severity="warning" 
-          icon={<SecurityIcon />}
-          action={
-            <Box display="flex" gap={1} alignItems="center">
-              <Button 
-                color="inherit" 
-                size="small" 
-                variant="outlined"
-                onClick={() => setShow2FASetup(true)}
-              >
-                Enable Now
-              </Button>
-              <IconButton
-                aria-label="close"
-                color="inherit"
-                size="small"
-                onClick={() => setBannerDismissed(true)}
-              >
-                <CloseIcon fontSize="inherit" />
-              </IconButton>
-            </Box>
-          }
-          sx={{ mb: 2, borderRadius: 1 }}
-        >
-          <strong>Security Notice:</strong> Enable Two-Factor Authentication to protect your admin account
-        </Alert>
-      </Collapse>
-
       {children}
-
-      {/* 2FA Setup Dialog */}
-      <TwoFactorSetup
-        open={show2FASetup}
-        onClose={() => setShow2FASetup(false)}
-        onSuccess={handle2FASuccess}
-      />
     </>
   );
 };

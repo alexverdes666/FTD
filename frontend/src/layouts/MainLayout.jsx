@@ -50,6 +50,7 @@ import {
   Announcement as AnnouncementIcon,
   TrackChanges as TargetIcon,
   PhoneCallback as DepositCallIcon,
+  Security as SecurityIcon,
 } from "@mui/icons-material";
 import { logout, selectUser } from "../store/slices/authSlice";
 import Footer from "./Footer";
@@ -599,9 +600,24 @@ const MainLayout = () => {
               onClick={handleProfileMenuOpen}
               color="inherit"
             >
-              <Avatar sx={{ width: 32, height: 32, bgcolor: "secondary.main" }}>
-                {user?.fullName?.charAt(0)?.toUpperCase()}
-              </Avatar>
+              <Box position="relative">
+                <Avatar sx={{ width: 32, height: 32, bgcolor: "secondary.main" }}>
+                  {user?.fullName?.charAt(0)?.toUpperCase()}
+                </Avatar>
+                {user?.role === 'admin' && !user?.twoFactorEnabled && (
+                  <SecurityIcon
+                    color="warning"
+                    sx={{
+                      position: 'absolute',
+                      bottom: -4,
+                      right: -4,
+                      fontSize: 16,
+                      bgcolor: 'background.paper',
+                      borderRadius: '50%'
+                    }}
+                  />
+                )}
+              </Box>
             </IconButton>
           </Box>
         </Toolbar>
