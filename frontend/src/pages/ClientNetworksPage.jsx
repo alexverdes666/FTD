@@ -274,11 +274,54 @@ const ClientNetworksPage = () => {
         <Table>
           <TableHead>
             <TableRow>
-              <TableCell sx={{ fontWeight: 'bold', backgroundColor: 'grey.200' }}>Name</TableCell>
-              <TableCell sx={{ fontWeight: 'bold', backgroundColor: 'grey.200' }}>Description</TableCell>
-              <TableCell sx={{ fontWeight: 'bold', backgroundColor: 'grey.200', textAlign: 'center' }}>Status</TableCell>
-              <TableCell sx={{ fontWeight: 'bold', backgroundColor: 'grey.200', textAlign: 'center' }}>Created</TableCell>
-              <TableCell sx={{ fontWeight: 'bold', backgroundColor: 'grey.200', textAlign: 'right' }}>Actions</TableCell>
+              <TableCell
+                sx={{
+                  fontWeight: "bold",
+                  backgroundColor: "grey.200",
+                  minWidth: 200,
+                }}
+              >
+                Name
+              </TableCell>
+              <TableCell
+                sx={{
+                  fontWeight: "bold",
+                  backgroundColor: "grey.200",
+                  minWidth: 250,
+                }}
+              >
+                Description
+              </TableCell>
+              <TableCell
+                sx={{
+                  fontWeight: "bold",
+                  backgroundColor: "grey.200",
+                  textAlign: "center",
+                  minWidth: 120,
+                }}
+              >
+                Status
+              </TableCell>
+              <TableCell
+                sx={{
+                  fontWeight: "bold",
+                  backgroundColor: "grey.200",
+                  textAlign: "center",
+                  minWidth: 120,
+                }}
+              >
+                Created
+              </TableCell>
+              <TableCell
+                sx={{
+                  fontWeight: "bold",
+                  backgroundColor: "grey.200",
+                  textAlign: "right",
+                  minWidth: 180,
+                }}
+              >
+                Actions
+              </TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -318,7 +361,7 @@ const ClientNetworksPage = () => {
                     </Typography>
                   </TableCell>
                   <TableCell align="right">
-                    <Box display="flex" gap={1} justifyContent="flex-end">
+                    <Box display="flex" gap={2} justifyContent="flex-end">
                       <Tooltip title="View">
                         <IconButton
                           size="small"

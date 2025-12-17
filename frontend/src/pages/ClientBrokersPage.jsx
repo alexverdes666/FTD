@@ -632,10 +632,16 @@ const BrokerManagementTable = ({
 
   return (
     <TableContainer component={Paper} elevation={1}>
-      <Table size="small">
+      <Table>
         <TableHead>
           <TableRow>
-            <TableCell sx={{ fontWeight: "bold", backgroundColor: "grey.200" }}>
+            <TableCell
+              sx={{
+                fontWeight: "bold",
+                backgroundColor: "grey.200",
+                minWidth: 200,
+              }}
+            >
               Name
             </TableCell>
             <TableCell
@@ -643,6 +649,7 @@ const BrokerManagementTable = ({
                 fontWeight: "bold",
                 backgroundColor: "grey.200",
                 textAlign: "center",
+                minWidth: 180,
               }}
             >
               Domain
@@ -652,6 +659,7 @@ const BrokerManagementTable = ({
                 fontWeight: "bold",
                 backgroundColor: "grey.200",
                 textAlign: "center",
+                minWidth: 120,
               }}
             >
               Status
@@ -661,6 +669,7 @@ const BrokerManagementTable = ({
                 fontWeight: "bold",
                 backgroundColor: "grey.200",
                 textAlign: "center",
+                minWidth: 120,
               }}
             >
               Created
@@ -671,6 +680,7 @@ const BrokerManagementTable = ({
                   fontWeight: "bold",
                   backgroundColor: "grey.200",
                   textAlign: "right",
+                  minWidth: 120,
                 }}
               >
                 Actions
@@ -681,6 +691,7 @@ const BrokerManagementTable = ({
                 fontWeight: "bold",
                 backgroundColor: "grey.200",
                 textAlign: "right",
+                minWidth: 100,
               }}
             >
               Comments
@@ -718,7 +729,7 @@ const BrokerManagementTable = ({
                   <Box
                     display="flex"
                     flexDirection="row"
-                    gap={1}
+                    gap={2}
                     justifyContent="flex-end"
                   >
                     <IconButton

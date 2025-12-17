@@ -788,7 +788,11 @@ const OurNetworksPage = () => {
           <TableHead>
             <TableRow>
               <TableCell
-                sx={{ fontWeight: "bold", backgroundColor: "grey.200" }}
+                sx={{
+                  fontWeight: "bold",
+                  backgroundColor: "grey.200",
+                  minWidth: 200,
+                }}
               >
                 Name
               </TableCell>
@@ -797,6 +801,7 @@ const OurNetworksPage = () => {
                   fontWeight: "bold",
                   backgroundColor: "grey.200",
                   textAlign: "center",
+                  minWidth: 180,
                 }}
               >
                 Assigned Managers
@@ -806,6 +811,7 @@ const OurNetworksPage = () => {
                   fontWeight: "bold",
                   backgroundColor: "grey.200",
                   textAlign: "center",
+                  minWidth: 250,
                 }}
               >
                 Crypto Wallets
@@ -815,6 +821,7 @@ const OurNetworksPage = () => {
                   fontWeight: "bold",
                   backgroundColor: "grey.200",
                   textAlign: "center",
+                  minWidth: 150,
                 }}
               >
                 Total Value
@@ -824,6 +831,7 @@ const OurNetworksPage = () => {
                   fontWeight: "bold",
                   backgroundColor: "grey.200",
                   textAlign: "center",
+                  minWidth: 120,
                 }}
               >
                 Status
@@ -833,6 +841,7 @@ const OurNetworksPage = () => {
                   fontWeight: "bold",
                   backgroundColor: "grey.200",
                   textAlign: "center",
+                  minWidth: 120,
                 }}
               >
                 Created
@@ -843,6 +852,7 @@ const OurNetworksPage = () => {
                   fontWeight: "bold",
                   backgroundColor: "grey.200",
                   textAlign: "right",
+                  minWidth: 100,
                 }}
               >
                 {user?.role === "admin" ? "Actions" : "View"}

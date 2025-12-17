@@ -318,10 +318,45 @@ const CampaignsPage = () => {
           <Table stickyHeader>
             <TableHead>
               <TableRow>
-                <TableCell sx={{ fontWeight: 'bold', backgroundColor: 'grey.200' }}>Name</TableCell>
-                <TableCell sx={{ fontWeight: 'bold', backgroundColor: 'grey.200', textAlign: 'center' }}>Status</TableCell>
-                <TableCell sx={{ fontWeight: 'bold', backgroundColor: 'grey.200', textAlign: 'center' }}>Assigned Managers</TableCell>
-                <TableCell sx={{ fontWeight: 'bold', backgroundColor: 'grey.200', textAlign: 'right' }}>Actions</TableCell>
+                <TableCell
+                  sx={{
+                    fontWeight: "bold",
+                    backgroundColor: "grey.200",
+                    minWidth: 250,
+                  }}
+                >
+                  Name
+                </TableCell>
+                <TableCell
+                  sx={{
+                    fontWeight: "bold",
+                    backgroundColor: "grey.200",
+                    textAlign: "center",
+                    minWidth: 120,
+                  }}
+                >
+                  Status
+                </TableCell>
+                <TableCell
+                  sx={{
+                    fontWeight: "bold",
+                    backgroundColor: "grey.200",
+                    textAlign: "center",
+                    minWidth: 150,
+                  }}
+                >
+                  Assigned Managers
+                </TableCell>
+                <TableCell
+                  sx={{
+                    fontWeight: "bold",
+                    backgroundColor: "grey.200",
+                    textAlign: "right",
+                    minWidth: 180,
+                  }}
+                >
+                  Actions
+                </TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -368,7 +403,7 @@ const CampaignsPage = () => {
                       </Typography>
                     </TableCell>
                     <TableCell align="right">
-                      <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'flex-end' }}>
+                      <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end' }}>
                         <Tooltip title="View Details">
                           <IconButton
                             size="small"
