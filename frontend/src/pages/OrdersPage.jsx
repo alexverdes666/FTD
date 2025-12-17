@@ -1671,54 +1671,7 @@ const OrdersPage = () => {
     </Typography>
   );
   return (
-    <Box sx={{ p: isSmallScreen ? 2 : 3 }}>
-      <Box
-        display="flex"
-        justifyContent="space-between"
-        alignItems="center"
-        flexDirection={isSmallScreen ? "column" : "row"}
-        sx={{ mb: 3, alignItems: isSmallScreen ? "flex-start" : "center" }}
-      >
-        <Typography
-          variant={isSmallScreen ? "h5" : "h4"}
-          gutterBottom
-          sx={{ mb: isSmallScreen ? 2 : 0 }}
-        >
-          Orders
-        </Typography>
-        {(user?.role === "admin" || user?.role === "affiliate_manager") && (
-          <Box
-            sx={{
-              display: "flex",
-              gap: 1,
-              flexDirection: isSmallScreen ? "column" : "row",
-              width: isSmallScreen ? "100%" : "auto",
-            }}
-          >
-            <Button
-              variant="contained"
-              startIcon={<AddIcon />}
-              onClick={handleOpenCreateDialog}
-              size={isSmallScreen ? "small" : "medium"}
-              sx={{ width: isSmallScreen ? "100%" : "auto" }}
-            >
-              Create Order
-            </Button>
-            {user?.role === "admin" && (
-              <Button
-                variant="outlined"
-                startIcon={<BusinessIcon />}
-                onClick={handleManageBrokers}
-                size={isSmallScreen ? "small" : "medium"}
-                sx={{ width: isSmallScreen ? "100%" : "auto" }}
-              >
-                Manage Brokers
-              </Button>
-            )}
-          </Box>
-        )}
-      </Box>
-      {}
+    <Box sx={{ p: isSmallScreen ? 2 : 3, pt: 0, mt: -2 }}>
       {notification.message && (
         <Collapse in={!!notification.message}>
           <Alert
@@ -1741,11 +1694,43 @@ const OrdersPage = () => {
             display="flex"
             justifyContent="space-between"
             alignItems="center"
+            flexWrap="wrap"
+            gap={2}
           >
             <Typography variant="h6">Filters</Typography>
-            <IconButton onClick={() => setShowFilters(!showFilters)}>
-              {showFilters ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-            </IconButton>
+            <Box display="flex" alignItems="center" gap={1}>
+              {(user?.role === "admin" || user?.role === "affiliate_manager") && (
+                <Box
+                  sx={{
+                    display: "flex",
+                    gap: 1,
+                    flexDirection: isSmallScreen ? "column" : "row",
+                  }}
+                >
+                  <Button
+                    variant="contained"
+                    startIcon={<AddIcon />}
+                    onClick={handleOpenCreateDialog}
+                    size={isSmallScreen ? "small" : "medium"}
+                  >
+                    Create Order
+                  </Button>
+                  {user?.role === "admin" && (
+                    <Button
+                      variant="outlined"
+                      startIcon={<BusinessIcon />}
+                      onClick={handleManageBrokers}
+                      size={isSmallScreen ? "small" : "medium"}
+                    >
+                      Manage Brokers
+                    </Button>
+                  )}
+                </Box>
+              )}
+              <IconButton onClick={() => setShowFilters(!showFilters)}>
+                {showFilters ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+              </IconButton>
+            </Box>
           </Box>
           <Collapse in={showFilters}>
             <Grid container spacing={2} sx={{ mt: 1 }}>
