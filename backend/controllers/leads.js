@@ -1168,11 +1168,13 @@ exports.assignClientBrokerToLead = async (req, res, next) => {
         message: "Client broker not found",
       });
     }
-    if (!["admin", "affiliate_manager"].includes(req.user.role)) {
+    if (
+      !["admin", "affiliate_manager", "lead_manager"].includes(req.user.role)
+    ) {
       return res.status(403).json({
         success: false,
         message:
-          "Access denied. Only admins and affiliate managers can assign client brokers.",
+          "Access denied. Only admins, affiliate managers, and lead managers can assign client brokers.",
       });
     }
     if (!clientBroker.isActive) {
@@ -2656,6 +2658,8 @@ exports.updateLeadSession = async (req, res, next) => {
           message: "Access denied - lead not assigned to you",
         });
       }
+    } else if (req.user.role === "lead_manager") {
+      // Lead managers can update sessions for all leads (no filtering)
     }
     let sessionToUpdate = null;
     let isCurrentSession = false;
@@ -2873,6 +2877,8 @@ exports.updateLeadCallNumber = async (req, res, next) => {
             "Affiliate managers can only update leads from their orders or leads assigned to them",
         });
       }
+    } else if (req.user.role === "lead_manager") {
+      // Lead managers can update all leads (no filtering)
     } else if (req.user.role !== "admin") {
       return res.status(403).json({
         success: false,

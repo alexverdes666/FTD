@@ -3359,15 +3359,10 @@ const LeadRow = React.memo(
     const isOwner = (() => {
       if (
         user?.role === ROLES.ADMIN ||
-        user?.role === ROLES.AFFILIATE_MANAGER
+        user?.role === ROLES.AFFILIATE_MANAGER ||
+        user?.role === ROLES.LEAD_MANAGER
       ) {
         return true;
-      }
-
-      if (user?.role === ROLES.LEAD_MANAGER) {
-        return (
-          idsMatch(lead.createdBy, userId) || idsMatch(lead.createdBy, user?.id)
-        );
       }
 
       if (user?.role === ROLES.AGENT) {
@@ -3590,8 +3585,7 @@ const LeadRow = React.memo(
             >
               <CommentIcon sx={{ fontSize: "1.25rem" }} />
             </IconButton>
-            {(user?.role === ROLES.ADMIN ||
-              (isLeadManager && lead.createdBy === user?.id)) && (
+            {(user?.role === ROLES.ADMIN || isLeadManager) && (
               <IconButton
                 size="small"
                 onClick={(e) => {
@@ -3792,8 +3786,7 @@ const LeadCard = React.memo(
               >
                 <CommentIcon />
               </IconButton>
-              {(user?.role === ROLES.ADMIN ||
-                (isLeadManager && lead.createdBy === user?.id)) && (
+              {(user?.role === ROLES.ADMIN || isLeadManager) && (
                 <IconButton
                   size="small"
                   onClick={(e) => {
