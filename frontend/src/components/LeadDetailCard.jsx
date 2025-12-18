@@ -4,15 +4,9 @@ import {
   Typography,
   Grid,
   Chip,
-  Divider,
-  Card,
-  CardContent,
+  Paper,
   Link,
   Avatar,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemIcon,
   Accordion,
   AccordionSummary,
   AccordionDetails,
@@ -141,220 +135,236 @@ const LeadDetailCard = ({ lead, onLeadUpdate }) => {
   }, [lead, selectedClientBrokerValue, onLeadUpdate]);
 
   return (
-    <Card elevation={2} sx={{ mb: 2 }}>
-      <CardContent>
-        <Grid container spacing={3}>
-          {}
-          <Grid item xs={12}>
-            <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
-              <Avatar sx={{ mr: 2, bgcolor: "primary.main" }}>
-                <PersonIcon />
-              </Avatar>
-              <Box>
-                <Typography variant="h6" component="div">
-                  {lead.firstName} {lead.lastName}
-                </Typography>
-                <Box
-                  sx={{
-                    display: "flex",
-                    gap: 1,
-                    alignItems: "center",
-                    mt: 0.5,
-                  }}
-                >
-                  <Chip
-                    label={(lead.orderedAs || lead.leadType)?.toUpperCase()}
-                    size="small"
-                    color="primary"
-                    variant="outlined"
-                  />
-                  <Chip
-                    label={lead.status || "Active"}
-                    size="small"
-                    color={getStatusColor(lead.status)}
-                  />
-                  <Chip
-                    label={`Priority: ${lead.priority || "Medium"}`}
-                    size="small"
-                    color={getPriorityColor(lead.priority)}
-                  />
+    <Box sx={{ bgcolor: "background.default", p: 2, borderRadius: 1 }}>
+      <Grid container spacing={2}>
+        {/* Header Section - Compact */}
+        <Grid item xs={12}>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, p: 1.5, bgcolor: "background.paper", borderRadius: 1, border: 1, borderColor: "divider" }}>
+            <Avatar sx={{ width: 36, height: 36, bgcolor: "primary.main" }}>
+              <PersonIcon fontSize="small" />
+            </Avatar>
+            <Box sx={{ flex: 1 }}>
+              <Typography variant="subtitle1" sx={{ fontWeight: 600, lineHeight: 1.2 }}>
+                {lead.firstName} {lead.lastName}
+              </Typography>
+              <Box sx={{ display: "flex", gap: 0.5, mt: 0.5, flexWrap: "wrap" }}>
+                <Chip
+                  label={(lead.orderedAs || lead.leadType)?.toUpperCase()}
+                  size="small"
+                  color="primary"
+                  variant="outlined"
+                  sx={{ height: "20px", fontSize: "0.7rem" }}
+                />
+                <Chip
+                  label={lead.status || "Active"}
+                  size="small"
+                  color={getStatusColor(lead.status)}
+                  sx={{ height: "20px", fontSize: "0.7rem" }}
+                />
+                <Chip
+                  label={lead.priority || "Medium"}
+                  size="small"
+                  color={getPriorityColor(lead.priority)}
+                  sx={{ height: "20px", fontSize: "0.7rem" }}
+                />
+              </Box>
+            </Box>
+          </Box>
+        </Grid>
+
+        {/* Contact & Personal Information - Compact Side by Side */}
+        <Grid item xs={12} md={6}>
+          <Paper elevation={0} sx={{ p: 1.5, border: 1, borderColor: "divider", borderRadius: 1 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1, color: "primary.main", display: "flex", alignItems: "center", gap: 0.5 }}>
+              <EmailIcon fontSize="small" /> Contact Information
+            </Typography>
+            <Box sx={{ display: "flex", flexDirection: "column", gap: 0.75 }}>
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                <EmailIcon fontSize="small" color="action" />
+                <Box sx={{ flex: 1 }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.7rem" }}>
+                    Current Email
+                  </Typography>
+                  <Typography variant="body2" sx={{ fontSize: "0.85rem", fontWeight: 500 }}>
+                    {lead.newEmail || "N/A"}
+                  </Typography>
+                </Box>
+              </Box>
+              {lead.oldEmail && (
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1, pl: 1, borderLeft: 2, borderColor: "divider" }}>
+                  <EmailIcon fontSize="small" color="disabled" />
+                  <Box sx={{ flex: 1 }}>
+                    <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.7rem" }}>
+                      Previous Email
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontSize: "0.8rem", color: "text.secondary" }}>
+                      {lead.oldEmail}
+                    </Typography>
+                  </Box>
+                </Box>
+              )}
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                <PhoneIcon fontSize="small" color="action" />
+                <Box sx={{ flex: 1 }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.7rem" }}>
+                    Current Phone
+                  </Typography>
+                  <Typography variant="body2" sx={{ fontSize: "0.85rem", fontWeight: 500 }}>
+                    {lead.prefix && lead.newPhone ? `${lead.prefix} ${lead.newPhone}` : lead.newPhone || "N/A"}
+                  </Typography>
+                </Box>
+              </Box>
+              {lead.oldPhone && (
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1, pl: 1, borderLeft: 2, borderColor: "divider" }}>
+                  <PhoneIcon fontSize="small" color="disabled" />
+                  <Box sx={{ flex: 1 }}>
+                    <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.7rem" }}>
+                      Previous Phone
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontSize: "0.8rem", color: "text.secondary" }}>
+                      {lead.prefix && lead.oldPhone ? `${lead.prefix} ${lead.oldPhone}` : lead.oldPhone}
+                    </Typography>
+                  </Box>
+                </Box>
+              )}
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                <LocationIcon fontSize="small" color="action" />
+                <Box sx={{ flex: 1 }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.7rem" }}>
+                    Country
+                  </Typography>
+                  <Typography variant="body2" sx={{ fontSize: "0.85rem", fontWeight: 500 }}>
+                    {lead.country || "N/A"}
+                  </Typography>
                 </Box>
               </Box>
             </Box>
-          </Grid>
-          {}
-          <Grid item xs={12} md={6}>
-            <Typography variant="subtitle1" gutterBottom color="primary">
-              <EmailIcon sx={{ mr: 1, verticalAlign: "middle" }} />
-              Contact Information
+          </Paper>
+        </Grid>
+
+        {/* Personal Information */}
+        <Grid item xs={12} md={6}>
+          <Paper elevation={0} sx={{ p: 1.5, border: 1, borderColor: "divider", borderRadius: 1 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1, color: "primary.main", display: "flex", alignItems: "center", gap: 0.5 }}>
+              <PersonIcon fontSize="small" /> Personal Information
             </Typography>
-            <List dense>
-              <ListItem>
-                <ListItemIcon>
-                  <EmailIcon color="action" />
-                </ListItemIcon>
-                <ListItemText
-                  primary="Current Email"
-                  secondary={lead.newEmail || "N/A"}
-                />
-              </ListItem>
-              {lead.oldEmail && (
-                <ListItem>
-                  <ListItemIcon>
-                    <EmailIcon color="disabled" />
-                  </ListItemIcon>
-                  <ListItemText
-                    primary="Previous Email"
-                    secondary={lead.oldEmail}
-                  />
-                </ListItem>
-              )}
-              <ListItem>
-                <ListItemIcon>
-                  <PhoneIcon color="action" />
-                </ListItemIcon>
-                <ListItemText
-                  primary="Current Phone"
-                  secondary={
-                    lead.prefix && lead.newPhone
-                      ? `${lead.prefix} ${lead.newPhone}`
-                      : lead.newPhone || "N/A"
-                  }
-                />
-              </ListItem>
-              {lead.oldPhone && (
-                <ListItem>
-                  <ListItemIcon>
-                    <PhoneIcon color="disabled" />
-                  </ListItemIcon>
-                  <ListItemText
-                    primary="Previous Phone"
-                    secondary={
-                      lead.prefix && lead.oldPhone
-                        ? `${lead.prefix} ${lead.oldPhone}`
-                        : lead.oldPhone
-                    }
-                  />
-                </ListItem>
-              )}
-              <ListItem>
-                <ListItemIcon>
-                  <LocationIcon color="action" />
-                </ListItemIcon>
-                <ListItemText
-                  primary="Country"
-                  secondary={lead.country || "N/A"}
-                />
-              </ListItem>
-            </List>
-          </Grid>
-          {}
-          <Grid item xs={12} md={6}>
-            <Typography variant="subtitle1" gutterBottom color="primary">
-              <PersonIcon sx={{ mr: 1, verticalAlign: "middle" }} />
-              Personal Information
-            </Typography>
-            <List dense>
-              <ListItem>
-                <ListItemIcon>
-                  <PersonIcon color="action" />
-                </ListItemIcon>
-                <ListItemText
-                  primary="Gender"
-                  secondary={lead.gender || "Not specified"}
-                />
-              </ListItem>
+            <Box sx={{ display: "flex", flexDirection: "column", gap: 0.75 }}>
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                <PersonIcon fontSize="small" color="action" />
+                <Box sx={{ flex: 1 }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.7rem" }}>
+                    Gender
+                  </Typography>
+                  <Typography variant="body2" sx={{ fontSize: "0.85rem", fontWeight: 500 }}>
+                    {lead.gender || "Not specified"}
+                  </Typography>
+                </Box>
+              </Box>
               {lead.dob && (
-                <ListItem>
-                  <ListItemIcon>
-                    <CalendarIcon color="action" />
-                  </ListItemIcon>
-                  <ListItemText
-                    primary="Date of Birth"
-                    secondary={formatDate(lead.dob)}
-                  />
-                </ListItem>
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                  <CalendarIcon fontSize="small" color="action" />
+                  <Box sx={{ flex: 1 }}>
+                    <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.7rem" }}>
+                      Date of Birth
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontSize: "0.85rem", fontWeight: 500 }}>
+                      {formatDate(lead.dob)}
+                    </Typography>
+                  </Box>
+                </Box>
               )}
               {lead.address && (
-                <ListItem>
-                  <ListItemIcon>
-                    <LocationIcon color="action" />
-                  </ListItemIcon>
-                  <ListItemText primary="Address" secondary={lead.address} />
-                </ListItem>
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                  <LocationIcon fontSize="small" color="action" />
+                  <Box sx={{ flex: 1 }}>
+                    <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.7rem" }}>
+                      Address
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontSize: "0.85rem", fontWeight: 500 }}>
+                      {lead.address}
+                    </Typography>
+                  </Box>
+                </Box>
               )}
               {lead.sin && (
-                <ListItem>
-                  <ListItemIcon>
-                    <AssignmentIcon color="action" />
-                  </ListItemIcon>
-                  <ListItemText primary="SIN" secondary={lead.sin} />
-                </ListItem>
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                  <AssignmentIcon fontSize="small" color="action" />
+                  <Box sx={{ flex: 1 }}>
+                    <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.7rem" }}>
+                      SIN
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontSize: "0.85rem", fontWeight: 500 }}>
+                      {lead.sin}
+                    </Typography>
+                  </Box>
+                </Box>
               )}
               {lead.source && (
-                <ListItem>
-                  <ListItemIcon>
-                    <AssignmentIcon color="action" />
-                  </ListItemIcon>
-                  <ListItemText primary="Source" secondary={lead.source} />
-                </ListItem>
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                  <AssignmentIcon fontSize="small" color="action" />
+                  <Box sx={{ flex: 1 }}>
+                    <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.7rem" }}>
+                      Source
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontSize: "0.85rem", fontWeight: 500 }}>
+                      {lead.source}
+                    </Typography>
+                  </Box>
+                </Box>
               )}
-            </List>
-          </Grid>
-          {}
-          {lead.client && (
-            <Grid item xs={12}>
-              <Divider sx={{ my: 2 }} />
-              <Typography variant="subtitle1" gutterBottom color="primary">
-                <BusinessIcon sx={{ mr: 1, verticalAlign: "middle" }} />
-                Business Information
+            </Box>
+          </Paper>
+        </Grid>
+        {/* Business Information */}
+        {lead.client && (
+          <Grid item xs={12} md={6}>
+            <Paper elevation={0} sx={{ p: 1.5, border: 1, borderColor: "divider", borderRadius: 1 }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1, color: "primary.main", display: "flex", alignItems: "center", gap: 0.5 }}>
+                <BusinessIcon fontSize="small" /> Business Information
               </Typography>
-              <Grid container spacing={2}>
-                <Grid item xs={12} sm={6}>
-                  <Typography variant="body2" color="text.secondary">
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                <BusinessIcon fontSize="small" color="action" />
+                <Box sx={{ flex: 1 }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.7rem" }}>
                     Client
                   </Typography>
-                  <Typography variant="body1">{lead.client}</Typography>
-                </Grid>
-              </Grid>
-            </Grid>
-          )}
-          {}
-          {(lead.assignedClientBrokers?.length > 0 || lead.clientBroker || lead.clientNetwork) && (
-            <Grid item xs={12}>
-              <Divider sx={{ my: 2 }} />
-              <Typography variant="subtitle1" gutterBottom color="primary">
-                <BusinessIcon sx={{ mr: 1, verticalAlign: "middle" }} />
-                Network Information
+                  <Typography variant="body2" sx={{ fontSize: "0.85rem", fontWeight: 500 }}>
+                    {lead.client}
+                  </Typography>
+                </Box>
+              </Box>
+            </Paper>
+          </Grid>
+        )}
+
+        {/* Network Information - Compact */}
+        {(lead.assignedClientBrokers?.length > 0 || lead.clientBroker || lead.clientNetwork) && (
+          <Grid item xs={12} md={lead.client ? 6 : 12}>
+            <Paper elevation={0} sx={{ p: 1.5, border: 1, borderColor: "divider", borderRadius: 1 }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1, color: "primary.main", display: "flex", alignItems: "center", gap: 0.5 }}>
+                <BusinessIcon fontSize="small" /> Network Information
               </Typography>
-              <Grid container spacing={2}>
-                <Grid item xs={12} sm={6}>
-                  <Box display="flex" alignItems="center" justifyContent="space-between" mb={1}>
-                    <Typography variant="body2" color="text.secondary">
+              <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                <Box>
+                  <Box display="flex" alignItems="center" justifyContent="space-between" mb={0.5}>
+                    <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.7rem", fontWeight: 600 }}>
                       Client Broker
                     </Typography>
                     {!editingClientBroker && (
-                      <IconButton
-                        size="small"
-                        onClick={handleStartEditClientBroker}
-                        sx={{ ml: 1 }}
-                      >
+                      <IconButton size="small" onClick={handleStartEditClientBroker} sx={{ ml: 1, p: 0.5 }}>
                         <EditIcon fontSize="small" />
                       </IconButton>
                     )}
                   </Box>
                   {editingClientBroker ? (
                     <Box>
-                      {/* Client Broker History */}
+                      {/* Client Broker History - More Compact */}
                       {lead.clientBrokerHistory && lead.clientBrokerHistory.length > 0 && (
-                        <Box sx={{ mb: 2, p: 2, bgcolor: "action.hover", borderRadius: 1, border: "1px solid", borderColor: "divider" }}>
-                          <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: "bold" }}>
-                            📋 Previous Client Broker Assignments
+                        <Box sx={{ mb: 1.5, p: 1, bgcolor: "warning.50", borderRadius: 1, border: "1px solid", borderColor: "warning.light" }}>
+                          <Typography variant="caption" sx={{ fontWeight: "bold", fontSize: "0.75rem", display: "block", mb: 0.5 }}>
+                            ⚠️ Previous Broker Assignments
                           </Typography>
-                          <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: "block" }}>
-                            This lead has been sent to the following brokers:
-                          </Typography>
-                          <Box sx={{ maxHeight: 150, overflowY: "auto" }}>
+                          <Box sx={{ maxHeight: 100, overflowY: "auto" }}>
                             {lead.clientBrokerHistory
                               .sort((a, b) => new Date(b.assignedAt) - new Date(a.assignedAt))
                               .map((history, index) => {
@@ -363,19 +373,17 @@ const LeadDetailCard = ({ lead, onLeadUpdate }) => {
                                 const assignedDate = new Date(history.assignedAt).toLocaleDateString();
 
                                 return (
-                                  <Box key={index} sx={{ mb: 1, p: 1, bgcolor: "background.paper", borderRadius: 0.5, border: "1px solid", borderColor: "divider" }}>
-                                    <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 0.5 }}>
-                                      <Typography variant="body2" sx={{ fontWeight: "bold" }}>
-                                        {brokerName}
-                                        {brokerDomain && (
-                                          <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 1 }}>
-                                            ({brokerDomain})
-                                          </Typography>
-                                        )}
-                                      </Typography>
-                                    </Box>
-                                    <Typography variant="caption" color="text.secondary">
-                                      Sent on {assignedDate}
+                                  <Box key={index} sx={{ mb: 0.5, p: 0.75, bgcolor: "background.paper", borderRadius: 0.5, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                    <Typography variant="caption" sx={{ fontSize: "0.7rem", fontWeight: 500 }}>
+                                      {brokerName}
+                                      {brokerDomain && (
+                                        <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 0.5, fontSize: "0.65rem" }}>
+                                          ({brokerDomain})
+                                        </Typography>
+                                      )}
+                                    </Typography>
+                                    <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.65rem" }}>
+                                      {assignedDate}
                                     </Typography>
                                   </Box>
                                 );
@@ -397,7 +405,6 @@ const LeadDetailCard = ({ lead, onLeadUpdate }) => {
                             <em>None</em>
                           </MenuItem>
                           {clientBrokers.map((broker) => {
-                            // Check if this lead has been sent to this broker before
                             const hasBeenSentBefore = lead.clientBrokerHistory?.some(
                               history => history.clientBroker?._id === broker._id
                             );
@@ -408,11 +415,7 @@ const LeadDetailCard = ({ lead, onLeadUpdate }) => {
                                   <Box sx={{ flex: 1 }}>
                                     {broker.name}
                                     {broker.description && (
-                                      <Typography
-                                        variant="caption"
-                                        color="text.secondary"
-                                        sx={{ ml: 1, fontStyle: "italic" }}
-                                      >
+                                      <Typography variant="caption" color="text.secondary" sx={{ ml: 1, fontStyle: "italic" }}>
                                         - {broker.description}
                                       </Typography>
                                     )}
@@ -423,7 +426,7 @@ const LeadDetailCard = ({ lead, onLeadUpdate }) => {
                                       size="small" 
                                       color="warning" 
                                       variant="outlined"
-                                      sx={{ ml: 1, fontSize: "0.6rem", height: 20 }}
+                                      sx={{ ml: 1, fontSize: "0.6rem", height: 18 }}
                                     />
                                   )}
                                 </Box>
@@ -438,7 +441,8 @@ const LeadDetailCard = ({ lead, onLeadUpdate }) => {
                           variant="contained"
                           onClick={handleUpdateClientBroker}
                           disabled={updatingClientBroker}
-                          startIcon={updatingClientBroker ? <CircularProgress size={16} /> : <SaveIcon />}
+                          startIcon={updatingClientBroker ? <CircularProgress size={14} /> : <SaveIcon fontSize="small" />}
+                          sx={{ fontSize: "0.75rem", px: 1.5, py: 0.5 }}
                         >
                           Save
                         </Button>
@@ -447,128 +451,109 @@ const LeadDetailCard = ({ lead, onLeadUpdate }) => {
                           variant="outlined"
                           onClick={handleCancelEditClientBroker}
                           disabled={updatingClientBroker}
+                          sx={{ fontSize: "0.75rem", px: 1.5, py: 0.5 }}
                         >
                           Cancel
                         </Button>
                       </Box>
                     </Box>
                   ) : (
-                    <Typography variant="body1">
+                    <Typography variant="body2" sx={{ fontSize: "0.85rem", fontWeight: 500 }}>
                       {lead.assignedClientBrokers?.[0]?.name || lead.clientBroker || "N/A"}
                       {lead.assignedClientBrokers?.[0]?.domain && 
-                        ` (${lead.assignedClientBrokers[0].domain})`
+                        <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 0.5 }}>
+                          ({lead.assignedClientBrokers[0].domain})
+                        </Typography>
                       }
                     </Typography>
                   )}
-                </Grid>
+                </Box>
                 {lead.clientNetwork && (
-                  <Grid item xs={12} sm={6}>
-                    <Typography variant="body2" color="text.secondary">
-                      Client Network
-                    </Typography>
-                    <Typography variant="body1">
-                      {lead.clientNetwork}
-                    </Typography>
-                  </Grid>
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                    <BusinessIcon fontSize="small" color="action" />
+                    <Box sx={{ flex: 1 }}>
+                      <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.7rem" }}>
+                        Client Network
+                      </Typography>
+                      <Typography variant="body2" sx={{ fontSize: "0.85rem", fontWeight: 500 }}>
+                        {lead.clientNetwork}
+                      </Typography>
+                    </Box>
+                  </Box>
                 )}
-              </Grid>
-            </Grid>
-          )}
-          {}
-          {lead.socialMedia &&
-            Object.values(lead.socialMedia).some((value) => value) && (
-              <Grid item xs={12}>
-                <Divider sx={{ my: 2 }} />
-                <Typography variant="subtitle1" gutterBottom color="primary">
-                  Social Media
+              </Box>
+            </Paper>
+          </Grid>
+        )}
+        {/* Social Media - Compact */}
+        {lead.socialMedia && Object.values(lead.socialMedia).some((value) => value) && (
+          <Grid item xs={12}>
+            <Paper elevation={0} sx={{ p: 1.5, border: 1, borderColor: "divider", borderRadius: 1 }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1, color: "primary.main", fontSize: "0.85rem" }}>
+                Social Media
+              </Typography>
+              <Box sx={{ display: "flex", gap: 1.5, flexWrap: "wrap" }}>
+                {Object.entries(lead.socialMedia).map(
+                  ([platform, value]) =>
+                    value && (
+                      <Box key={platform} sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                        {getSocialMediaIcon(platform)}
+                        <Link href={value} target="_blank" rel="noopener" sx={{ fontSize: "0.8rem" }}>
+                          {platform.charAt(0).toUpperCase() + platform.slice(1)}
+                        </Link>
+                      </Box>
+                    )
+                )}
+              </Box>
+            </Paper>
+          </Grid>
+        )}
+
+        {/* Documents - Compact Accordion */}
+        {lead.documents && lead.documents.length > 0 && (
+          <Grid item xs={12}>
+            <Accordion elevation={0} sx={{ border: 1, borderColor: "divider", borderRadius: 1, '&:before': { display: 'none' } }}>
+              <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ minHeight: 40, '& .MuiAccordionSummary-content': { my: 0.5 } }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 600, color: "primary.main", display: "flex", alignItems: "center", gap: 0.5, fontSize: "0.85rem" }}>
+                  <AttachFileIcon fontSize="small" />
+                  Documents ({lead.documents.length})
                 </Typography>
-                <Grid container spacing={2}>
-                  {Object.entries(lead.socialMedia).map(
-                    ([platform, value]) =>
-                      value && (
-                        <Grid item xs={12} sm={6} md={4} key={platform}>
-                          <Box
-                            sx={{
-                              display: "flex",
-                              alignItems: "center",
-                              gap: 1,
-                            }}
-                          >
-                            {getSocialMediaIcon(platform)}
-                            <Link href={value} target="_blank" rel="noopener">
-                              {platform.charAt(0).toUpperCase() +
-                                platform.slice(1)}
-                            </Link>
-                          </Box>
-                        </Grid>
-                      )
-                  )}
-                </Grid>
-              </Grid>
-            )}
-          {}
-          {lead.documents && lead.documents.length > 0 && (
-            <Grid item xs={12}>
-              <Divider sx={{ my: 2 }} />
-              <Accordion>
-                <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                  <Typography variant="subtitle1" color="primary">
-                    <AttachFileIcon sx={{ mr: 1, verticalAlign: "middle" }} />
-                    Documents ({lead.documents.length})
-                  </Typography>
-                </AccordionSummary>
-                <AccordionDetails>
-                  <List dense>
-                    {lead.documents.map((doc, index) => {
-                      const isImage =
-                        doc.url?.match(/\.(jpg|jpeg|png|gif|webp)$/i) ||
-                        doc.url?.startsWith("data:image/");
-                      return (
-                        <ListItem key={index}>
-                          <ListItemIcon>
-                            <AttachFileIcon color="action" />
-                          </ListItemIcon>
-                          <ListItemText
-                            primary={
-                              isImage ? (
-                                <DocumentPreview
-                                  url={doc.url}
-                                  type={
-                                    doc.description || `Document ${index + 1}`
-                                  }
-                                >
-                                  <Typography
-                                    color="primary"
-                                    sx={{ cursor: "pointer" }}
-                                  >
-                                    {doc.description || `Document ${index + 1}`}
-                                  </Typography>
-                                </DocumentPreview>
-                              ) : (
-                                <Link
-                                  href={doc.url}
-                                  target="_blank"
-                                  rel="noopener"
-                                >
-                                  {doc.description || `Document ${index + 1}`}
-                                </Link>
-                              )
-                            }
-                            secondary={
-                              isImage ? "Click to view image" : doc.url
-                            }
-                          />
-                        </ListItem>
-                      );
-                    })}
-                  </List>
-                </AccordionDetails>
-              </Accordion>
-            </Grid>
-          )}
-        </Grid>
-      </CardContent>
-    </Card>
+              </AccordionSummary>
+              <AccordionDetails sx={{ pt: 0, pb: 1 }}>
+                <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
+                  {lead.documents.map((doc, index) => {
+                    const isImage =
+                      doc.url?.match(/\.(jpg|jpeg|png|gif|webp)$/i) ||
+                      doc.url?.startsWith("data:image/");
+                    return (
+                      <Box key={index} sx={{ display: "flex", alignItems: "center", gap: 1, p: 0.75, bgcolor: "action.hover", borderRadius: 0.5 }}>
+                        <AttachFileIcon fontSize="small" color="action" />
+                        {isImage ? (
+                          <DocumentPreview url={doc.url} type={doc.description || `Document ${index + 1}`}>
+                            <Typography color="primary" sx={{ cursor: "pointer", fontSize: "0.85rem" }}>
+                              {doc.description || `Document ${index + 1}`}
+                            </Typography>
+                          </DocumentPreview>
+                        ) : (
+                          <Link href={doc.url} target="_blank" rel="noopener" sx={{ fontSize: "0.85rem" }}>
+                            {doc.description || `Document ${index + 1}`}
+                          </Link>
+                        )}
+                        {isImage && (
+                          <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.7rem", ml: "auto" }}>
+                            Click to view
+                          </Typography>
+                        )}
+                      </Box>
+                    );
+                  })}
+                </Box>
+              </AccordionDetails>
+            </Accordion>
+          </Grid>
+        )}
+      </Grid>
+    </Box>
   );
 };
 export default LeadDetailCard;

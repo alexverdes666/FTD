@@ -37,6 +37,8 @@ import {
   Tooltip,
   ListItemText,
   Autocomplete,
+  Popover,
+  Popper,
 } from "@mui/material";
 import {
   Add as AddIcon,
@@ -64,7 +66,7 @@ import * as yup from "yup";
 import api from "../services/api";
 import { selectUser } from "../store/slices/authSlice";
 import { getSortedCountries } from "../constants/countries";
-import LeadDetailCard from "../components/LeadDetailCard";
+import LeadQuickView from "../components/LeadQuickView";
 import ChangeFTDDialog from "../components/ChangeFTDDialog";
 import AssignLeadToAgentDialog from "../components/AssignLeadToAgentDialog";
 import SessionAccessButton from "../components/SessionAccessButton";
@@ -301,8 +303,15 @@ const OrdersPage = () => {
   const debouncedFilters = useDebounce(filters, 500);
   const [showFilters, setShowFilters] = useState(false);
   const [expandedRowData, setExpandedRowData] = useState({});
-  const [expandedLeads, setExpandedLeads] = useState({});
   const [refundAssignmentStatus, setRefundAssignmentStatus] = useState({});
+
+  // Lead Quick View Popover State
+  const [leadPopoverAnchor, setLeadPopoverAnchor] = useState(null);
+  const [hoveredLead, setHoveredLead] = useState(null);
+  const [hoveredOrderId, setHoveredOrderId] = useState(null);
+  const popoverTimerRef = React.useRef(null);
+  const closeTimerRef = React.useRef(null);
+
   const {
     control,
     handleSubmit,
@@ -1008,26 +1017,89 @@ const OrdersPage = () => {
       }
     }
   }, [selectedOrderForManagement, fetchOrders]);
-  const toggleLeadExpansion = useCallback((leadId) => {
-    setExpandedLeads((prev) => ({
-      ...prev,
-      [leadId]: !prev[leadId],
-    }));
+  const handleLeadUpdate = useCallback(
+    (updatedLead) => {
+      if (!hoveredOrderId) return;
+
+      // Update local state for immediate feedback
+      setExpandedRowData((prev) => {
+        const orderData = prev[hoveredOrderId];
+        if (!orderData) return prev;
+
+        return {
+          ...prev,
+          [hoveredOrderId]: {
+            ...orderData,
+            leads: orderData.leads.map((l) =>
+              l._id === updatedLead._id ? updatedLead : l
+            ),
+          },
+        };
+      });
+
+      // Also update hoveredLead
+      setHoveredLead(updatedLead);
+
+      // Refresh main orders list to ensure consistency
+      fetchOrders();
+    },
+    [hoveredOrderId, fetchOrders]
+  );
+
+  // Lead Quick View Popover Handlers
+  const handlePopoverClose = useCallback(() => {
+    console.log("Closing popover");
+    setLeadPopoverAnchor(null);
+    setHoveredLead(null);
+    if (popoverTimerRef.current) {
+      clearTimeout(popoverTimerRef.current);
+      popoverTimerRef.current = null;
+    }
+    if (closeTimerRef.current) {
+      clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
   }, []);
-  const expandAllLeads = useCallback((leads) => {
-    const expandedState = {};
-    leads.forEach((lead) => {
-      expandedState[lead._id] = true;
-    });
-    setExpandedLeads((prev) => ({ ...prev, ...expandedState }));
+
+  const handleLeadMouseEnter = useCallback((event, lead, orderId) => {
+    // Clear close timer if re-entering
+    if (closeTimerRef.current) {
+      clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+
+    // Clear any existing open timer
+    if (popoverTimerRef.current) {
+      clearTimeout(popoverTimerRef.current);
+    }
+
+    const target = event.currentTarget;
+
+    // Set a delay before showing the popover (1000ms)
+    popoverTimerRef.current = setTimeout(() => {
+      console.log("Showing popover for lead:", lead.firstName, lead.lastName);
+      setLeadPopoverAnchor(target);
+      setHoveredLead(lead);
+      setHoveredOrderId(orderId);
+    }, 1000);
   }, []);
-  const collapseAllLeads = useCallback((leads) => {
-    const collapsedState = {};
-    leads.forEach((lead) => {
-      collapsedState[lead._id] = false;
-    });
-    setExpandedLeads((prev) => ({ ...prev, ...collapsedState }));
-  }, []);
+
+  const handleLeadMouseLeave = useCallback(() => {
+    console.log("Mouse left lead row");
+    // Clear the open timer if user moves away before popover appears
+    if (popoverTimerRef.current) {
+      clearTimeout(popoverTimerRef.current);
+      popoverTimerRef.current = null;
+    }
+
+    // Start close timer
+    closeTimerRef.current = setTimeout(() => {
+      handlePopoverClose();
+    }, 200);
+  }, [handlePopoverClose]);
+
+  const popoverOpen = Boolean(leadPopoverAnchor);
+
   const handleExportLeads = useCallback(async (orderId) => {
     try {
       setNotification({ message: "Preparing CSV export...", severity: "info" });
@@ -1759,8 +1831,18 @@ const OrdersPage = () => {
                   size="small"
                 />
               </Grid>
-              <Grid item xs={12} md={2} sx={{ display: 'flex', alignItems: 'center' }}>
-                <Button onClick={clearFilters} variant="outlined" size="small" fullWidth>
+              <Grid
+                item
+                xs={12}
+                md={2}
+                sx={{ display: "flex", alignItems: "center" }}
+              >
+                <Button
+                  onClick={clearFilters}
+                  variant="outlined"
+                  size="small"
+                  fullWidth
+                >
                   Clear Filters
                 </Button>
               </Grid>
@@ -1985,7 +2067,9 @@ const OrdersPage = () => {
                           sx={{ display: { xs: "none", sm: "table-cell" } }}
                         >
                           <Typography variant="body2">
-                            {order.plannedDate ? new Date(order.plannedDate).toLocaleDateString() : "N/A"}
+                            {order.plannedDate
+                              ? new Date(order.plannedDate).toLocaleDateString()
+                              : "N/A"}
                           </Typography>
                         </TableCell>
                         <TableCell align="right">
@@ -2008,7 +2092,10 @@ const OrdersPage = () => {
                               <IconButton
                                 size="small"
                                 onClick={() =>
-                                  handleDeleteOrderClick(order._id, order.status)
+                                  handleDeleteOrderClick(
+                                    order._id,
+                                    order.status
+                                  )
                                 }
                                 title={
                                   order.status === "cancelled"
@@ -2120,214 +2207,262 @@ const OrdersPage = () => {
                                       </Grid>
                                     )}
 
-                                  {/* Detailed Information Row */}
-                                  <Grid item xs={12} md={6}>
-                                    <Paper
-                                      elevation={0}
-                                      sx={{
-                                        p: 2.5,
-                                        borderRadius: 2,
-                                        border: 1,
-                                        borderColor: "divider",
-                                        height: "100%",
-                                      }}
-                                    >
-                                      <Typography
-                                        variant="subtitle2"
-                                        sx={{
-                                          fontWeight: 600,
-                                          mb: 2,
-                                          color: "primary.main",
-                                        }}
-                                      >
-                                        Account Manager
-                                      </Typography>
-                                      <Box
-                                        sx={{
-                                          display: "flex",
-                                          flexDirection: "column",
-                                          gap: 1,
-                                        }}
-                                      >
-                                        <Box
-                                          sx={{
-                                            display: "flex",
-                                            justifyContent: "space-between",
-                                          }}
-                                        >
-                                          <Typography
-                                            variant="body2"
-                                            color="text.secondary"
-                                          >
-                                            Name:
-                                          </Typography>
-                                          <Typography
-                                            variant="body2"
-                                            sx={{ fontWeight: 500 }}
-                                          >
-                                            {expandedDetails.requester
-                                              ?.fullName || "N/A"}
-                                          </Typography>
-                                        </Box>
-                                        <Box
-                                          sx={{
-                                            display: "flex",
-                                            justifyContent: "space-between",
-                                          }}
-                                        >
-                                          <Typography
-                                            variant="body2"
-                                            color="text.secondary"
-                                          >
-                                            Email:
-                                          </Typography>
-                                          <Typography
-                                            variant="body2"
-                                            sx={{ fontWeight: 500 }}
-                                          >
-                                            {expandedDetails.requester?.email ||
-                                              "N/A"}
-                                          </Typography>
-                                        </Box>
-                                        <Box
-                                          sx={{
-                                            display: "flex",
-                                            justifyContent: "space-between",
-                                          }}
-                                        >
-                                          <Typography
-                                            variant="body2"
-                                            color="text.secondary"
-                                          >
-                                            Role:
-                                          </Typography>
-                                          <Typography
-                                            variant="body2"
-                                            sx={{ fontWeight: 500 }}
-                                          >
-                                            {expandedDetails.requester?.role ||
-                                              "N/A"}
-                                          </Typography>
-                                        </Box>
-                                      </Box>
-                                    </Paper>
-                                  </Grid>
-
-                                  <Grid item xs={12} md={6}>
-                                    <Paper
-                                      elevation={0}
-                                      sx={{
-                                        p: 2.5,
-                                        borderRadius: 2,
-                                        border: 1,
-                                        borderColor: "divider",
-                                        height: "100%",
-                                      }}
-                                    >
-                                      <Typography
-                                        variant="subtitle2"
-                                        sx={{
-                                          fontWeight: 600,
-                                          mb: 2,
-                                          color: "primary.main",
-                                        }}
-                                      >
-                                        Order Info & Filters
-                                      </Typography>
-                                      <Box
-                                        sx={{
-                                          display: "flex",
-                                          flexDirection: "column",
-                                          gap: 1,
-                                        }}
-                                      >
-                                        <Box
-                                          sx={{
-                                            display: "flex",
-                                            justifyContent: "space-between",
-                                          }}
-                                        >
-                                          <Typography
-                                            variant="body2"
-                                            color="text.secondary"
-                                          >
-                                            Created:
-                                          </Typography>
-                                          <Typography
-                                            variant="body2"
-                                            sx={{ fontWeight: 500 }}
-                                          >
-                                            {new Date(
-                                              expandedDetails.createdAt
-                                            ).toLocaleDateString()}
-                                          </Typography>
-                                        </Box>
-                                        <Box
-                                          sx={{
-                                            display: "flex",
-                                            justifyContent: "space-between",
-                                          }}
-                                        >
-                                          <Typography
-                                            variant="body2"
-                                            color="text.secondary"
-                                          >
-                                            Country:
-                                          </Typography>
-                                          <Typography
-                                            variant="body2"
-                                            sx={{ fontWeight: 500 }}
-                                          >
-                                            {expandedDetails.countryFilter ||
-                                              "Any"}
-                                          </Typography>
-                                        </Box>
-                                        <Box
-                                          sx={{
-                                            display: "flex",
-                                            justifyContent: "space-between",
-                                          }}
-                                        >
-                                          <Typography
-                                            variant="body2"
-                                            color="text.secondary"
-                                          >
-                                            Gender:
-                                          </Typography>
-                                          <Typography
-                                            variant="body2"
-                                            sx={{ fontWeight: 500 }}
-                                          >
-                                            {expandedDetails.genderFilter ||
-                                              "Any"}
-                                          </Typography>
-                                        </Box>
-                                        {expandedDetails.notes && (
-                                          <Box sx={{ mt: 0.5 }}>
-                                            <Typography
-                                              variant="body2"
-                                              color="text.secondary"
-                                            >
-                                              Notes:
-                                            </Typography>
-                                            <Typography
-                                              variant="body2"
-                                              sx={{ fontWeight: 500, mt: 0.5 }}
-                                            >
-                                              {expandedDetails.notes}
-                                            </Typography>
-                                          </Box>
-                                        )}
-                                      </Box>
-                                    </Paper>
-                                  </Grid>
-
-                                  {/* Network Configuration */}
+                                  {/* Detailed Information Row - Enhanced Compact Layout */}
                                   <Grid item xs={12}>
                                     <Paper
                                       elevation={0}
                                       sx={{
-                                        p: 2.5,
+                                        p: 2,
+                                        borderRadius: 2,
+                                        border: 1,
+                                        borderColor: "divider",
+                                      }}
+                                    >
+                                      <Grid container spacing={2}>
+                                        {/* Account Manager Section */}
+                                        <Grid item xs={12} md={4}>
+                                          <Typography
+                                            variant="subtitle2"
+                                            sx={{
+                                              fontWeight: 600,
+                                              mb: 1.5,
+                                              color: "primary.main",
+                                              display: "flex",
+                                              alignItems: "center",
+                                              gap: 0.5,
+                                            }}
+                                          >
+                                            👤 Account Manager
+                                          </Typography>
+                                          <Box
+                                            sx={{
+                                              display: "flex",
+                                              flexDirection: "column",
+                                              gap: 0.75,
+                                            }}
+                                          >
+                                            <Box
+                                              sx={{
+                                                display: "flex",
+                                                alignItems: "center",
+                                                gap: 1,
+                                              }}
+                                            >
+                                              <Typography
+                                                variant="caption"
+                                                color="text.secondary"
+                                                sx={{ minWidth: "50px" }}
+                                              >
+                                                Name:
+                                              </Typography>
+                                              <Typography
+                                                variant="body2"
+                                                sx={{ fontWeight: 500 }}
+                                              >
+                                                {expandedDetails.requester
+                                                  ?.fullName || "N/A"}
+                                              </Typography>
+                                            </Box>
+                                            <Box
+                                              sx={{
+                                                display: "flex",
+                                                alignItems: "center",
+                                                gap: 1,
+                                              }}
+                                            >
+                                              <Typography
+                                                variant="caption"
+                                                color="text.secondary"
+                                                sx={{ minWidth: "50px" }}
+                                              >
+                                                Email:
+                                              </Typography>
+                                              <Typography
+                                                variant="body2"
+                                                sx={{
+                                                  fontWeight: 500,
+                                                  fontSize: "0.85rem",
+                                                }}
+                                              >
+                                                {expandedDetails.requester
+                                                  ?.email || "N/A"}
+                                              </Typography>
+                                            </Box>
+                                            <Box
+                                              sx={{
+                                                display: "flex",
+                                                alignItems: "center",
+                                                gap: 1,
+                                              }}
+                                            >
+                                              <Typography
+                                                variant="caption"
+                                                color="text.secondary"
+                                                sx={{ minWidth: "50px" }}
+                                              >
+                                                Role:
+                                              </Typography>
+                                              <Chip
+                                                label={
+                                                  expandedDetails.requester
+                                                    ?.role || "N/A"
+                                                }
+                                                size="small"
+                                                color="info"
+                                                sx={{
+                                                  height: "20px",
+                                                  fontSize: "0.7rem",
+                                                }}
+                                              />
+                                            </Box>
+                                          </Box>
+                                        </Grid>
+
+                                        {/* Order Info & Filters Section */}
+                                        <Grid item xs={12} md={4}>
+                                          <Typography
+                                            variant="subtitle2"
+                                            sx={{
+                                              fontWeight: 600,
+                                              mb: 1.5,
+                                              color: "primary.main",
+                                              display: "flex",
+                                              alignItems: "center",
+                                              gap: 0.5,
+                                            }}
+                                          >
+                                            📋 Order Info & Filters
+                                          </Typography>
+                                          <Box
+                                            sx={{
+                                              display: "flex",
+                                              flexDirection: "column",
+                                              gap: 0.75,
+                                            }}
+                                          >
+                                            <Box
+                                              sx={{
+                                                display: "flex",
+                                                alignItems: "center",
+                                                gap: 1,
+                                              }}
+                                            >
+                                              <Typography
+                                                variant="caption"
+                                                color="text.secondary"
+                                                sx={{ minWidth: "60px" }}
+                                              >
+                                                Created:
+                                              </Typography>
+                                              <Typography
+                                                variant="body2"
+                                                sx={{ fontWeight: 500 }}
+                                              >
+                                                {new Date(
+                                                  expandedDetails.createdAt
+                                                ).toLocaleDateString()}
+                                              </Typography>
+                                            </Box>
+                                            <Box
+                                              sx={{
+                                                display: "flex",
+                                                alignItems: "center",
+                                                gap: 1,
+                                              }}
+                                            >
+                                              <Typography
+                                                variant="caption"
+                                                color="text.secondary"
+                                                sx={{ minWidth: "60px" }}
+                                              >
+                                                Country:
+                                              </Typography>
+                                              <Chip
+                                                label={
+                                                  expandedDetails.countryFilter ||
+                                                  "Any"
+                                                }
+                                                size="small"
+                                                variant="outlined"
+                                                sx={{
+                                                  height: "20px",
+                                                  fontSize: "0.7rem",
+                                                }}
+                                              />
+                                            </Box>
+                                            <Box
+                                              sx={{
+                                                display: "flex",
+                                                alignItems: "center",
+                                                gap: 1,
+                                              }}
+                                            >
+                                              <Typography
+                                                variant="caption"
+                                                color="text.secondary"
+                                                sx={{ minWidth: "60px" }}
+                                              >
+                                                Gender:
+                                              </Typography>
+                                              <Chip
+                                                label={
+                                                  expandedDetails.genderFilter ||
+                                                  "Any"
+                                                }
+                                                size="small"
+                                                variant="outlined"
+                                                sx={{
+                                                  height: "20px",
+                                                  fontSize: "0.7rem",
+                                                }}
+                                              />
+                                            </Box>
+                                          </Box>
+                                        </Grid>
+
+                                        {/* Notes Section */}
+                                        <Grid item xs={12} md={4}>
+                                          {expandedDetails.notes && (
+                                            <>
+                                              <Typography
+                                                variant="subtitle2"
+                                                sx={{
+                                                  fontWeight: 600,
+                                                  mb: 1.5,
+                                                  color: "primary.main",
+                                                  display: "flex",
+                                                  alignItems: "center",
+                                                  gap: 0.5,
+                                                }}
+                                              >
+                                                📝 Notes
+                                              </Typography>
+                                              <Typography
+                                                variant="body2"
+                                                sx={{
+                                                  fontWeight: 400,
+                                                  fontSize: "0.85rem",
+                                                  lineHeight: 1.5,
+                                                  bgcolor: "action.hover",
+                                                  p: 1,
+                                                  borderRadius: 1,
+                                                }}
+                                              >
+                                                {expandedDetails.notes}
+                                              </Typography>
+                                            </>
+                                          )}
+                                        </Grid>
+                                      </Grid>
+                                    </Paper>
+                                  </Grid>
+
+                                  {/* Network Configuration - Compact Layout */}
+                                  <Grid item xs={12}>
+                                    <Paper
+                                      elevation={0}
+                                      sx={{
+                                        p: 2,
                                         borderRadius: 2,
                                         border: 1,
                                         borderColor: "divider",
@@ -2337,72 +2472,122 @@ const OrdersPage = () => {
                                         variant="subtitle2"
                                         sx={{
                                           fontWeight: 600,
-                                          mb: 2,
+                                          mb: 1.5,
                                           color: "primary.main",
+                                          display: "flex",
+                                          alignItems: "center",
+                                          gap: 0.5,
                                         }}
                                       >
-                                        Network Configuration
+                                        🌐 Network Configuration
                                       </Typography>
                                       <Grid container spacing={2}>
-                                        <Grid item xs={12} sm={6} md={3}>
-                                          <Typography
-                                            variant="caption"
-                                            color="text.secondary"
-                                          >
-                                            Campaign
-                                          </Typography>
-                                          <Typography
-                                            variant="body2"
-                                            sx={{ fontWeight: 500, mt: 0.5 }}
-                                          >
-                                            {expandedDetails.selectedCampaign
-                                              ?.name || "N/A"}
-                                          </Typography>
-                                        </Grid>
-                                        <Grid item xs={12} sm={6} md={3}>
-                                          <Typography
-                                            variant="caption"
-                                            color="text.secondary"
-                                          >
-                                            Our Network
-                                          </Typography>
-                                          <Typography
-                                            variant="body2"
-                                            sx={{ fontWeight: 500, mt: 0.5 }}
-                                          >
-                                            {expandedDetails.selectedOurNetwork
-                                              ?.name || "N/A"}
-                                          </Typography>
-                                        </Grid>
-                                        <Grid item xs={12} sm={6} md={3}>
-                                          <Typography
-                                            variant="caption"
-                                            color="text.secondary"
-                                          >
-                                            Client Network
-                                          </Typography>
-                                          <Typography
-                                            variant="body2"
-                                            sx={{ fontWeight: 500, mt: 0.5 }}
-                                          >
-                                            {expandedDetails
-                                              .selectedClientNetwork?.name ||
-                                              "N/A"}
-                                          </Typography>
-                                        </Grid>
                                         <Grid item xs={12} sm={6} md={3}>
                                           <Box
                                             sx={{
                                               display: "flex",
-                                              flexDirection: "column",
+                                              alignItems: "center",
                                               gap: 1,
                                             }}
                                           >
                                             <Typography
                                               variant="caption"
                                               color="text.secondary"
+                                              sx={{ minWidth: "70px" }}
                                             >
-                                              Client Brokers
+                                              Campaign:
+                                            </Typography>
+                                            <Chip
+                                              label={
+                                                expandedDetails.selectedCampaign
+                                                  ?.name || "N/A"
+                                              }
+                                              size="small"
+                                              color="primary"
+                                              variant="outlined"
+                                              sx={{
+                                                height: "22px",
+                                                fontSize: "0.75rem",
+                                              }}
+                                            />
+                                          </Box>
+                                        </Grid>
+                                        <Grid item xs={12} sm={6} md={3}>
+                                          <Box
+                                            sx={{
+                                              display: "flex",
+                                              alignItems: "center",
+                                              gap: 1,
+                                            }}
+                                          >
+                                            <Typography
+                                              variant="caption"
+                                              color="text.secondary"
+                                              sx={{ minWidth: "80px" }}
+                                            >
+                                              Our Network:
+                                            </Typography>
+                                            <Chip
+                                              label={
+                                                expandedDetails
+                                                  .selectedOurNetwork?.name ||
+                                                "N/A"
+                                              }
+                                              size="small"
+                                              color="secondary"
+                                              variant="outlined"
+                                              sx={{
+                                                height: "22px",
+                                                fontSize: "0.75rem",
+                                              }}
+                                            />
+                                          </Box>
+                                        </Grid>
+                                        <Grid item xs={12} sm={6} md={3}>
+                                          <Box
+                                            sx={{
+                                              display: "flex",
+                                              alignItems: "center",
+                                              gap: 1,
+                                            }}
+                                          >
+                                            <Typography
+                                              variant="caption"
+                                              color="text.secondary"
+                                              sx={{ minWidth: "90px" }}
+                                            >
+                                              Client Network:
+                                            </Typography>
+                                            <Chip
+                                              label={
+                                                expandedDetails
+                                                  .selectedClientNetwork
+                                                  ?.name || "N/A"
+                                              }
+                                              size="small"
+                                              color="info"
+                                              variant="outlined"
+                                              sx={{
+                                                height: "22px",
+                                                fontSize: "0.75rem",
+                                              }}
+                                            />
+                                          </Box>
+                                        </Grid>
+                                        <Grid item xs={12} sm={6} md={3}>
+                                          <Box
+                                            sx={{
+                                              display: "flex",
+                                              alignItems: "center",
+                                              gap: 1,
+                                            }}
+                                          >
+                                            <Typography
+                                              variant="caption"
+                                              color="text.secondary"
+                                              sx={{ minWidth: "90px" }}
+                                            >
+                                              Client Brokers:
                                             </Typography>
                                             <Button
                                               size="small"
@@ -2413,7 +2598,11 @@ const OrdersPage = () => {
                                                 )
                                               }
                                               startIcon={<BusinessIcon />}
-                                              sx={{ width: "fit-content" }}
+                                              sx={{
+                                                height: "26px",
+                                                fontSize: "0.7rem",
+                                                px: 1,
+                                              }}
                                             >
                                               Manage (
                                               {expandedDetails.leads?.filter(
@@ -2573,28 +2762,6 @@ const OrdersPage = () => {
                                                       </Button>
                                                     </Tooltip>
                                                   )}
-                                                <Button
-                                                  size="small"
-                                                  onClick={() =>
-                                                    expandAllLeads(
-                                                      expandedDetails.leads
-                                                    )
-                                                  }
-                                                  variant="outlined"
-                                                >
-                                                  Expand All
-                                                </Button>
-                                                <Button
-                                                  size="small"
-                                                  onClick={() =>
-                                                    collapseAllLeads(
-                                                      expandedDetails.leads
-                                                    )
-                                                  }
-                                                  variant="outlined"
-                                                >
-                                                  Collapse All
-                                                </Button>
                                               </Box>
                                             </Box>
                                             <TableContainer
@@ -2668,13 +2835,6 @@ const OrdersPage = () => {
                                                         fontWeight: "bold",
                                                       }}
                                                     >
-                                                      Status
-                                                    </TableCell>
-                                                    <TableCell
-                                                      sx={{
-                                                        fontWeight: "bold",
-                                                      }}
-                                                    >
                                                       Actions
                                                     </TableCell>
                                                   </TableRow>
@@ -2685,7 +2845,25 @@ const OrdersPage = () => {
                                                       <React.Fragment
                                                         key={lead._id}
                                                       >
-                                                        <TableRow>
+                                                        <TableRow
+                                                          onMouseEnter={(e) =>
+                                                            handleLeadMouseEnter(
+                                                              e,
+                                                              lead,
+                                                              order._id
+                                                            )
+                                                          }
+                                                          onMouseLeave={
+                                                            handleLeadMouseLeave
+                                                          }
+                                                          sx={{
+                                                            cursor: "pointer",
+                                                            "&:hover": {
+                                                              bgcolor:
+                                                                "action.hover",
+                                                            },
+                                                          }}
+                                                        >
                                                           <TableCell>
                                                             <Box
                                                               sx={{
@@ -2943,114 +3121,7 @@ const OrdersPage = () => {
                                                               </>
                                                             )}
                                                           </TableCell>
-                                                          <TableCell>
-                                                            <IconButton
-                                                              size="small"
-                                                              onClick={() =>
-                                                                toggleLeadExpansion(
-                                                                  lead._id
-                                                                )
-                                                              }
-                                                              aria-label={
-                                                                expandedLeads[
-                                                                  lead._id
-                                                                ]
-                                                                  ? "collapse"
-                                                                  : "expand"
-                                                              }
-                                                            >
-                                                              {expandedLeads[
-                                                                lead._id
-                                                              ] ? (
-                                                                <ExpandLessIcon />
-                                                              ) : (
-                                                                <ExpandMoreIcon />
-                                                              )}
-                                                            </IconButton>
-                                                            {}
-                                                            {(lead.leadType ===
-                                                              "ftd" ||
-                                                              lead.leadType ===
-                                                                "filler") &&
-                                                              (user?.role ===
-                                                                "admin" ||
-                                                                user?.role ===
-                                                                  "affiliate_manager") &&
-                                                              (() => {
-                                                                const networkHistory =
-                                                                  lead.clientNetworkHistory?.find(
-                                                                    (history) =>
-                                                                      history.orderId?.toString() ===
-                                                                      order._id.toString()
-                                                                  );
-                                                                return null;
-                                                              })()}
-                                                          </TableCell>
                                                         </TableRow>
-                                                        {expandedLeads[
-                                                          lead._id
-                                                        ] && (
-                                                          <TableRow>
-                                                            <TableCell
-                                                              colSpan={7}
-                                                              sx={{
-                                                                py: 0,
-                                                                border: 0,
-                                                              }}
-                                                            >
-                                                              <Collapse
-                                                                in={
-                                                                  expandedLeads[
-                                                                    lead._id
-                                                                  ]
-                                                                }
-                                                                timeout="auto"
-                                                                unmountOnExit
-                                                              >
-                                                                <Box
-                                                                  sx={{ p: 2 }}
-                                                                >
-                                                                  <LeadDetailCard
-                                                                    lead={lead}
-                                                                    onLeadUpdate={(
-                                                                      updatedLead
-                                                                    ) => {
-                                                                      // Update the expanded details
-                                                                      setExpandedRowData(
-                                                                        (
-                                                                          prev
-                                                                        ) => ({
-                                                                          ...prev,
-                                                                          [expandedDetails._id]:
-                                                                            {
-                                                                              ...prev[
-                                                                                expandedDetails
-                                                                                  ._id
-                                                                              ],
-                                                                              leads:
-                                                                                prev[
-                                                                                  expandedDetails
-                                                                                    ._id
-                                                                                ].leads.map(
-                                                                                  (
-                                                                                    l
-                                                                                  ) =>
-                                                                                    l._id ===
-                                                                                    updatedLead._id
-                                                                                      ? updatedLead
-                                                                                      : l
-                                                                                ),
-                                                                            },
-                                                                        })
-                                                                      );
-                                                                      fetchOrders(); // Refresh main orders list
-                                                                    }}
-                                                                  />
-                                                                </Box>
-                                                              </Collapse>
-                                                            </TableCell>
-                                                          </TableRow>
-                                                        )}
                                                       </React.Fragment>
                                                     )
                                                   )}
@@ -4697,6 +4768,71 @@ const OrdersPage = () => {
         insufficientTypes={insufficientAgentLeads || {}}
         agents={agents}
       />
+
+      {/* Lead Quick View Popover */}
+      <Popper
+        open={popoverOpen}
+        anchorEl={leadPopoverAnchor}
+        placement="bottom-start"
+        modifiers={[
+          {
+            name: "flip",
+            enabled: true,
+            options: {
+              altBoundary: true,
+              rootBoundary: "document",
+              padding: 8,
+            },
+          },
+          {
+            name: "preventOverflow",
+            enabled: true,
+            options: {
+              altAxis: true,
+              altBoundary: true,
+              tether: true,
+              rootBoundary: "document",
+              padding: 8,
+            },
+          },
+        ]}
+        sx={{
+          zIndex: 9999,
+          pointerEvents: "none", // Allows mouse through invisible areas
+        }}
+      >
+        <Paper
+          elevation={8}
+          onMouseEnter={() => {
+            console.log("Mouse entered popover");
+            if (closeTimerRef.current) {
+              clearTimeout(closeTimerRef.current);
+              closeTimerRef.current = null;
+            }
+          }}
+          onMouseLeave={() => {
+            console.log("Mouse left popover");
+            closeTimerRef.current = setTimeout(() => {
+              handlePopoverClose();
+            }, 200);
+          }}
+          sx={{
+            pointerEvents: "auto", // Re-enable pointer events for content
+            mt: 1,
+            zIndex: 9999,
+          }}
+        >
+          {hoveredLead && (
+            <>
+              {console.log("Rendering popover for:", hoveredLead.firstName)}
+              <LeadQuickView
+                lead={hoveredLead}
+                onLeadUpdate={handleLeadUpdate}
+              />
+            </>
+          )}
+        </Paper>
+      </Popper>
     </Box>
   );
 };
