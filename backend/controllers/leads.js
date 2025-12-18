@@ -179,6 +179,8 @@ exports.getLeads = async (req, res, next) => {
           updatedAt: 1,
           createdBy: 1,
           gender: 1,
+          dob: 1,
+          socialMedia: 1,
           campaign: 1,
           assignedClientBrokers: 1,
           clientNetworkHistory: 1,
@@ -290,7 +292,7 @@ exports.getAssignedLeads = async (req, res, next) => {
 
     // Step 1: Get all unique leads assigned to this agent
     const assignedLeads = await Lead.find(filter)
-      .select('_id firstName lastName prefix newEmail newPhone country leadType status assignedAgentAt createdAt orderCallTracking orderComments clientBrokerHistory')
+      .select('_id firstName lastName prefix newEmail newPhone country leadType status assignedAgentAt createdAt orderCallTracking orderComments clientBrokerHistory dob gender address sin socialMedia')
       .populate('clientBrokerHistory.clientBroker', 'name domain isActive')
       .lean();
 
@@ -353,6 +355,11 @@ exports.getAssignedLeads = async (req, res, next) => {
           status: lead.status,
           assignedAgentAt: lead.assignedAgentAt,
           createdAt: lead.createdAt,
+          dob: lead.dob,
+          gender: lead.gender,
+          address: lead.address,
+          sin: lead.sin,
+          socialMedia: lead.socialMedia,
         },
         orders: [],
         orderCallTracking: lead.orderCallTracking || [],
@@ -1280,6 +1287,7 @@ exports.updateLead = async (req, res, next) => {
       sin,
       gender,
       address,
+      dob,
       campaign,
       clientBroker,
       clientNetwork,
@@ -1313,6 +1321,7 @@ exports.updateLead = async (req, res, next) => {
     if (leadType) lead.leadType = leadType;
     if (sin !== undefined && leadType === "ftd") lead.sin = sin;
     if (gender !== undefined) lead.gender = gender;
+    if (dob !== undefined) lead.dob = dob;
     if (
       address !== undefined &&
       (lead.leadType === "ftd" || lead.leadType === "filler")

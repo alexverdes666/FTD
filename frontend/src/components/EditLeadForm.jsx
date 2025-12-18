@@ -48,9 +48,9 @@ const schema = yup.object().shape({
   clientNetwork: yup.array().of(yup.string()).nullable(),
   campaign: yup.array().of(yup.string()).nullable(),
   ourNetwork: yup.array().of(yup.string()).nullable(),
-  dob: yup.date().nullable().transform((value, originalValue) => {
-    // Transform empty strings to null for date validation
-    return originalValue === "" ? null : value;
+  dob: yup.string().nullable().transform((value, originalValue) => {
+    // Transform empty strings to null, otherwise keep the string date format (YYYY-MM-DD)
+    return originalValue === "" ? null : originalValue;
   }),
   address: yup.string().nullable().typeError('Address must be a string type'),
   socialMedia: yup.object().shape({
@@ -74,6 +74,18 @@ const getDefaultValues = (lead) => {
       addressValue = `${street}, ${city} ${postalCode}`.trim();
     }
   }
+  
+  let dobValue = "";
+  if (lead?.dob) {
+    if (typeof lead.dob === 'string') {
+      dobValue = lead.dob.split('T')[0];
+    } else if (lead.dob instanceof Date) {
+      dobValue = lead.dob.toISOString().split('T')[0];
+    } else {
+      dobValue = new Date(lead.dob).toISOString().split('T')[0];
+    }
+  }
+  
   const defaultValues = {
     firstName: lead?.firstName ?? "",
     lastName: lead?.lastName ?? "",
@@ -90,7 +102,7 @@ const getDefaultValues = (lead) => {
     clientNetwork: extractCurrentAssignments(lead?.clientNetworkHistory, 'clientNetwork', lead?.clientNetwork),
     campaign: extractCurrentAssignments(lead?.campaignHistory, 'campaign', lead?.campaign),
     ourNetwork: extractCurrentAssignments(lead?.ourNetworkHistory, 'ourNetwork', lead?.ourNetwork),
-    dob: lead?.dob ? lead.dob : null,
+    dob: dobValue,
     address: addressValue,
     socialMedia: {
       facebook: lead?.socialMedia?.facebook ?? "",
@@ -268,6 +280,7 @@ const EditLeadForm = ({ open, onClose, lead, onLeadUpdated, sx }) => {
         leadType: data.leadType,
         sin: data.sin,
         gender: data.gender,
+        dob: data.dob || null,
         socialMedia: data.socialMedia,
         clientBroker: Array.isArray(data.clientBroker) && data.clientBroker.length > 0 ? data.clientBroker : [],
         clientNetwork: Array.isArray(data.clientNetwork) && data.clientNetwork.length > 0 ? data.clientNetwork : [],
@@ -418,6 +431,22 @@ const EditLeadForm = ({ open, onClose, lead, onLeadUpdated, sx }) => {
                   label="Old Phone"
                   error={!!errors.oldPhone}
                   helperText={errors.oldPhone?.message}
+                />
+              )}
+            />
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            <Controller
+              name="country"
+              control={control}
+              render={({ field }) => (
+                <TextField
+                  {...field}
+                  value={field.value ?? ""}
+                  fullWidth
+                  label="Country"
+                  error={!!errors.country}
+                  helperText={errors.country?.message}
                 />
               )}
             />
@@ -665,19 +694,38 @@ const EditLeadForm = ({ open, onClose, lead, onLeadUpdated, sx }) => {
             <Controller
               name="dob"
               control={control}
-              render={({ field }) => (
-                <TextField
-                  {...field}
-                  value={field.value ? (typeof field.value === 'string' ? field.value.split('T')[0] : field.value) : ""}
-                  fullWidth
-                  label="Date of Birth"
-                  type="date"
-                  disabled
-                  InputLabelProps={{
-                    shrink: true,
-                  }}
-                />
-              )}
+              render={({ field: { onChange, value, ...rest } }) => {
+                // Format the date value for display in the input
+                let displayValue = "";
+                if (value) {
+                  if (typeof value === 'string') {
+                    displayValue = value.split('T')[0];
+                  } else if (value instanceof Date) {
+                    displayValue = value.toISOString().split('T')[0];
+                  } else {
+                    displayValue = value;
+                  }
+                }
+                
+                return (
+                  <TextField
+                    {...rest}
+                    value={displayValue}
+                    onChange={(e) => {
+                      // Ensure the date is properly passed to the form
+                      onChange(e.target.value || null);
+                    }}
+                    fullWidth
+                    label="Date of Birth"
+                    type="date"
+                    InputLabelProps={{
+                      shrink: true,
+                    }}
+                    error={!!errors.dob}
+                    helperText={errors.dob?.message}
+                  />
+                );
+              }}
             />
           </Grid>
           {}
