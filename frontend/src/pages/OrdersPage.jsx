@@ -4560,71 +4560,58 @@ const OrdersPage = () => {
       <Dialog
         open={assignedLeadsModal.open}
         onClose={handleCloseAssignedLeadsModal}
-        maxWidth="md"
+        maxWidth="lg"
         fullWidth
+        PaperProps={{
+          sx: {
+            bgcolor: "transparent",
+            boxShadow: "none",
+            backgroundImage: "none",
+          },
+        }}
       >
-        <DialogTitle
-          sx={{
-            m: 0,
-            p: 2,
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-          }}
-        >
-          <Typography variant="h6">
-            Assigned Lead ({assignedLeadsModal.currentIndex + 1} of{" "}
-            {assignedLeadsModal.leads.length})
-          </Typography>
-          <IconButton
-            aria-label="close"
-            onClick={handleCloseAssignedLeadsModal}
-            sx={{
-              color: (theme) => theme.palette.grey[500],
-            }}
-          >
-            <CloseIcon />
-          </IconButton>
-        </DialogTitle>
-        <DialogContent dividers>
+        <DialogContent sx={{ p: 0, overflow: "visible" }}>
           <Box
             sx={{
               display: "flex",
-              alignItems: "center",
               justifyContent: "center",
-              minHeight: "300px",
               position: "relative",
             }}
           >
             <IconButton
-              onClick={handlePrevLead}
-              disabled={assignedLeadsModal.currentIndex === 0}
-              sx={{ position: "absolute", left: 8, zIndex: 1 }}
+              aria-label="close"
+              onClick={handleCloseAssignedLeadsModal}
+              sx={{
+                position: "absolute",
+                top: -40,
+                right: 0,
+                color: "white",
+                bgcolor: "rgba(0,0,0,0.5)",
+                "&:hover": {
+                  bgcolor: "rgba(0,0,0,0.7)",
+                },
+              }}
             >
-              <ChevronLeftIcon fontSize="large" />
+              <CloseIcon />
             </IconButton>
 
-            <Box sx={{ width: "100%", px: 8 }}>
-              {assignedLeadsModal.leads[assignedLeadsModal.currentIndex] && (
-                <LeadQuickView
-                  lead={
-                    assignedLeadsModal.leads[assignedLeadsModal.currentIndex]
-                  }
-                  onLeadUpdate={handleLeadUpdate}
-                />
-              )}
-            </Box>
-
-            <IconButton
-              onClick={handleNextLead}
-              disabled={
-                assignedLeadsModal.currentIndex ===
-                assignedLeadsModal.leads.length - 1
-              }
-              sx={{ position: "absolute", right: 8, zIndex: 1 }}
-            >
-              <ChevronRightIcon fontSize="large" />
-            </IconButton>
+            {assignedLeadsModal.leads[assignedLeadsModal.currentIndex] && (
+              <LeadQuickView
+                lead={assignedLeadsModal.leads[assignedLeadsModal.currentIndex]}
+                onLeadUpdate={handleLeadUpdate}
+                titleExtra={
+                  <Typography
+                    component="div"
+                    variant="subtitle1"
+                    color="text.secondary"
+                    sx={{ fontWeight: "bold" }}
+                  >
+                    {assignedLeadsModal.currentIndex + 1} /{" "}
+                    {assignedLeadsModal.leads.length}
+                  </Typography>
+                }
+              />
+            )}
           </Box>
         </DialogContent>
       </Dialog>

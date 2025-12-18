@@ -36,7 +36,7 @@ import DocumentPreview from "./DocumentPreview";
  * LeadQuickView - A compact popover component that displays key lead information on hover
  * This replaces the need to click and expand each lead individually
  */
-const LeadQuickView = ({ lead, onLeadUpdate }) => {
+const LeadQuickView = ({ lead, onLeadUpdate, titleExtra }) => {
   const [editingClientBroker, setEditingClientBroker] = useState(false);
   const [clientBrokers, setClientBrokers] = useState([]);
   const [loadingClientBrokers, setLoadingClientBrokers] = useState(false);
@@ -121,7 +121,8 @@ const LeadQuickView = ({ lead, onLeadUpdate }) => {
     <Paper
       elevation={8}
       sx={{
-        minWidth: 800,
+        width: 1000,
+        minHeight: 500,
         maxWidth: "95vw",
         p: 2,
         bgcolor: "background.paper",
@@ -132,26 +133,35 @@ const LeadQuickView = ({ lead, onLeadUpdate }) => {
     >
       {/* Header - Full Width */}
       <Box sx={{ mb: 1.5 }}>
-        <Typography variant="h6" sx={{ fontWeight: 600, mb: 0.5 }}>
-          {lead.firstName} {lead.lastName}
-        </Typography>
-        <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap" }}>
-          <Chip
-            label={(lead.orderedAs || lead.leadType)?.toUpperCase() || "UNKNOWN"}
-            size="small"
-            color="primary"
-            variant="outlined"
-          />
-          <Chip
-            label={lead.status || "Active"}
-            size="small"
-            color={getStatusColor(lead.status)}
-          />
-          <Chip
-            label={lead.priority || "Medium"}
-            size="small"
-            color={getPriorityColor(lead.priority)}
-          />
+        <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+          <Box>
+            <Typography variant="h6" sx={{ fontWeight: 600, mb: 0.5 }}>
+              {lead.firstName} {lead.lastName}
+            </Typography>
+            <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap" }}>
+              <Chip
+                label={(lead.orderedAs || lead.leadType)?.toUpperCase() || "UNKNOWN"}
+                size="small"
+                color="primary"
+                variant="outlined"
+              />
+              <Chip
+                label={lead.status || "Active"}
+                size="small"
+                color={getStatusColor(lead.status)}
+              />
+              <Chip
+                label={lead.priority || "Medium"}
+                size="small"
+                color={getPriorityColor(lead.priority)}
+              />
+            </Box>
+          </Box>
+          {titleExtra && (
+            <Box sx={{ ml: 2 }}>
+              {titleExtra}
+            </Box>
+          )}
         </Box>
       </Box>
 
@@ -261,7 +271,7 @@ const LeadQuickView = ({ lead, onLeadUpdate }) => {
 
         {/* Business/Network Information */}
         {(lead.client || lead.assignedClientBrokers?.length > 0 || lead.clientBroker || lead.clientNetwork) && (
-          <Box sx={{ flex: "1 1 250px", minWidth: 250 }}>
+          <Box sx={{ flex: "1 1 250px", minWidth: 250, maxWidth: "100%" }}>
             <Typography
               variant="subtitle2"
               sx={{ fontWeight: 600, mb: 1, color: "primary.main" }}
@@ -272,11 +282,11 @@ const LeadQuickView = ({ lead, onLeadUpdate }) => {
               {lead.client && (
                 <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                   <BusinessIcon fontSize="small" color="action" />
-                  <Box>
+                  <Box sx={{ minWidth: 0 }}>
                     <Typography variant="caption" color="text.secondary" display="block">
                       Client
                     </Typography>
-                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                    <Typography variant="body2" sx={{ fontWeight: 500, wordBreak: "break-word" }}>
                       {lead.client}
                     </Typography>
                   </Box>
@@ -302,7 +312,7 @@ const LeadQuickView = ({ lead, onLeadUpdate }) => {
                     )}
                   </Box>
                   {!editingClientBroker ? (
-                    <Typography variant="body2" sx={{ fontWeight: 500, pl: 3.5 }}>
+                    <Typography variant="body2" sx={{ fontWeight: 500, pl: 3.5, wordBreak: "break-word" }}>
                       {lead.assignedClientBrokers?.[0]?.name ||
                         lead.clientBroker ||
                         "N/A"}
@@ -323,11 +333,11 @@ const LeadQuickView = ({ lead, onLeadUpdate }) => {
               {lead.clientNetwork && (
                 <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                   <BusinessIcon fontSize="small" color="action" />
-                  <Box>
+                  <Box sx={{ minWidth: 0 }}>
                     <Typography variant="caption" color="text.secondary" display="block">
                       Client Network
                     </Typography>
-                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                    <Typography variant="body2" sx={{ fontWeight: 500, wordBreak: "break-word" }}>
                       {lead.clientNetwork}
                     </Typography>
                   </Box>
