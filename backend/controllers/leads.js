@@ -69,7 +69,7 @@ exports.getLeads = async (req, res, next) => {
     if (req.user.role === "affiliate_manager") {
       // Affiliate managers can see all leads (no filtering)
     } else if (req.user.role === "lead_manager") {
-      filter.createdBy = new mongoose.Types.ObjectId(req.user.id);
+      // Lead managers can see all leads (no filtering)
     }
     if (status) {
       filter.status = status;
@@ -588,13 +588,7 @@ exports.getLeadById = async (req, res, next) => {
     } else if (req.user.role === "affiliate_manager") {
       // Affiliate managers can access all leads (no filtering)
     } else if (req.user.role === "lead_manager") {
-      // Lead managers can only access leads they created
-      if (lead.createdBy.toString() !== req.user.id) {
-        return res.status(403).json({
-          success: false,
-          message: "Not authorized to access this lead",
-        });
-      }
+      // Lead managers can access all leads (no filtering)
     } else {
       // Other roles (agents) can only access leads assigned to them
       if (
@@ -688,13 +682,7 @@ exports.addComment = async (req, res, next) => {
         });
       }
     } else if (req.user.role === "lead_manager") {
-      // Lead managers can only comment on leads they created
-      if (lead.createdBy && lead.createdBy.toString() !== req.user.id) {
-        return res.status(403).json({
-          success: false,
-          message: "Lead managers can only comment on leads they created",
-        });
-      }
+      // Lead managers can comment on all leads (no filtering)
     } else if (req.user.role === "agent") {
       // Agents can only comment on leads assigned to them
       if (
@@ -775,13 +763,7 @@ exports.updateLeadStatus = async (req, res, next) => {
         });
       }
     } else if (req.user.role === "lead_manager") {
-      // Lead managers can only update leads they created
-      if (lead.createdBy && lead.createdBy.toString() !== req.user.id) {
-        return res.status(403).json({
-          success: false,
-          message: "Lead managers can only update leads they created",
-        });
-      }
+      // Lead managers can update all leads (no filtering)
     } else {
       // Other roles (agents) can only update leads assigned to them
       if (
@@ -839,12 +821,7 @@ exports.getLeadStats = async (req, res, next) => {
         }
       );
     } else if (req.user.role === "lead_manager") {
-      // Lead managers can only see leads they created
-      pipeline.push({
-        $match: {
-          createdBy: new mongoose.Types.ObjectId(req.user.id),
-        },
-      });
+      // Lead managers can see all leads (no filtering)
     }
 
     pipeline.push({
@@ -912,11 +889,10 @@ exports.getLeadStats = async (req, res, next) => {
         }
       );
     } else if (req.user.role === "lead_manager") {
-      // Lead managers can only see FTD leads they created
+      // Lead managers can see all FTD leads (no filtering)
       documentStatsPipeline.push({
         $match: {
           leadType: "ftd",
-          createdBy: new mongoose.Types.ObjectId(req.user.id),
         },
       });
     } else {
@@ -1438,17 +1414,7 @@ exports.updateLead = async (req, res, next) => {
       });
     }
 
-    // Access control - expand for client broker updates
-    if (
-      req.user.role === "lead_manager" &&
-      lead.createdBy &&
-      lead.createdBy.toString() !== req.user.id
-    ) {
-      return res.status(403).json({
-        success: false,
-        message: "You can only edit leads that you created",
-      });
-    }
+    // Access control - lead managers can edit all leads (no filtering)
     // Note: affiliate_manager validation removed - they can update any lead
 
     if (firstName) lead.firstName = firstName;
