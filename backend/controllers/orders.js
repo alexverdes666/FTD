@@ -2872,26 +2872,141 @@ exports.getOrders = async (req, res, next) => {
     const {
       page = 1,
       limit = 10,
-      status,
-      priority,
       startDate,
       endDate,
+      search,
     } = req.query;
     let query = {};
     if (req.user.role !== "admin") {
       query.requester = req.user._id;
     }
-    if (status) query.status = status;
-    if (priority) query.priority = priority;
     if (startDate || endDate) {
       query.plannedDate = {};
       if (startDate) query.plannedDate.$gte = new Date(startDate);
       if (endDate) query.plannedDate.$lte = new Date(endDate + "T23:59:59.999Z");
     }
+    
+    // Handle search - we'll need to do a more complex query if search is present
+    let orders;
     const pageNum = parseInt(page);
     const limitNum = parseInt(limit);
     const skip = (pageNum - 1) * limitNum;
-    const orders = await Order.find(query)
+    
+    if (search && search.trim()) {
+      // First, get all orders matching the base query
+      const baseOrders = await Order.find(query)
+        .populate("requester", "fullName email role")
+        .populate("selectedCampaign", "name description")
+        .populate("selectedOurNetwork", "name description")
+        .populate("selectedClientNetwork", "name description")
+        .populate("selectedClientBrokers", "name domain description")
+        .populate({
+          path: "leads",
+          select:
+            "leadType firstName lastName country email phone orderId assignedClientBrokers clientBrokerHistory assignedAgent assignedAgentAt",
+          populate: [
+            {
+              path: "assignedAgent",
+              select: "fullName email fourDigitCode",
+            },
+            {
+              path: "comments.author",
+              select: "fullName",
+            },
+            {
+              path: "assignedClientBrokers",
+              select: "name domain description",
+            },
+            {
+              path: "clientBrokerHistory.clientBroker",
+              select: "name domain description",
+            },
+          ],
+        })
+        .sort({ createdAt: -1 });
+      
+      // Filter orders based on search term
+      // Split search into multiple keywords and trim each
+      const searchKeywords = search.toLowerCase().trim().split(/\s+/).filter(k => k.length > 0);
+      
+      const filteredOrders = baseOrders.filter((order) => {
+        // Helper function to check if a keyword matches any field in the order
+        const matchesKeyword = (keyword) => {
+          // Search in order ID
+          if (order._id.toString().toLowerCase().includes(keyword)) return true;
+          
+          // Search in requester name/email
+          if (order.requester?.fullName?.toLowerCase().includes(keyword)) return true;
+          if (order.requester?.email?.toLowerCase().includes(keyword)) return true;
+          
+          // Search in status
+          if (order.status?.toLowerCase().includes(keyword)) return true;
+          
+          // Search in priority
+          if (order.priority?.toLowerCase().includes(keyword)) return true;
+          
+          // Search in country filter
+          if (order.countryFilter?.toLowerCase().includes(keyword)) return true;
+          
+          // Search in notes
+          if (order.notes?.toLowerCase().includes(keyword)) return true;
+          
+          // Search in campaign
+          if (order.selectedCampaign?.name?.toLowerCase().includes(keyword)) return true;
+          
+          // Search in our network
+          if (order.selectedOurNetwork?.name?.toLowerCase().includes(keyword)) return true;
+          
+          // Search in client network
+          if (order.selectedClientNetwork?.name?.toLowerCase().includes(keyword)) return true;
+          
+          // Search in client brokers
+          if (order.selectedClientBrokers?.some(broker => 
+            broker?.name?.toLowerCase().includes(keyword) || 
+            broker?.domain?.toLowerCase().includes(keyword)
+          )) return true;
+          
+          // Search in leads
+          if (order.leads?.some(lead => 
+            lead?.firstName?.toLowerCase().includes(keyword) ||
+            lead?.lastName?.toLowerCase().includes(keyword) ||
+            lead?.email?.toLowerCase().includes(keyword) ||
+            lead?.phone?.toLowerCase().includes(keyword) ||
+            lead?.country?.toLowerCase().includes(keyword) ||
+            lead?.assignedAgent?.fullName?.toLowerCase().includes(keyword) ||
+            lead?.assignedAgent?.email?.toLowerCase().includes(keyword)
+          )) return true;
+          
+          return false;
+        };
+        
+        // Order must match ALL keywords (AND logic)
+        return searchKeywords.every(keyword => matchesKeyword(keyword));
+      });
+      
+      // Apply pagination to filtered results
+      const total = filteredOrders.length;
+      orders = filteredOrders.slice(skip, skip + limitNum);
+      
+      // Merge leadsMetadata with each order's leads
+      const ordersWithMetadata = orders.map((order) =>
+        mergeLeadsWithMetadata(order)
+      );
+      
+      return res.status(200).json({
+        success: true,
+        data: ordersWithMetadata,
+        pagination: {
+          page: pageNum,
+          limit: limitNum,
+          total,
+          totalPages: Math.ceil(total / limitNum),
+        },
+      });
+    }
+    
+    // No search - use regular query
+    orders = await Order.find(query)
       .populate("requester", "fullName email role")
       .populate("selectedCampaign", "name description")
       .populate("selectedOurNetwork", "name description")

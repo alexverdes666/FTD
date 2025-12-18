@@ -294,10 +294,9 @@ const OrdersPage = () => {
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [totalOrders, setTotalOrders] = useState(0);
   const [filters, setFilters] = useState({
-    status: "",
-    priority: "",
     startDate: "",
     endDate: "",
+    search: "",
   });
   const debouncedFilters = useDebounce(filters, 500);
   const [showFilters, setShowFilters] = useState(false);
@@ -1691,8 +1690,7 @@ const OrdersPage = () => {
             flexWrap="wrap"
             gap={2}
           >
-            <Typography variant="h6">Filters</Typography>
-            <Box display="flex" alignItems="center" gap={1}>
+            <Box display="flex" alignItems="center" gap={1} flex={1}>
               {(user?.role === "admin" ||
                 user?.role === "affiliate_manager") && (
                 <Box
@@ -1729,38 +1727,17 @@ const OrdersPage = () => {
           </Box>
           <Collapse in={showFilters}>
             <Grid container spacing={2} sx={{ mt: 1 }}>
-              <Grid item xs={12} sm={6} md={3}>
-                <FormControl fullWidth size="small">
-                  <InputLabel>Status</InputLabel>
-                  <Select
-                    value={filters.status}
-                    label="Status"
-                    onChange={handleFilterChange("status")}
-                  >
-                    <MenuItem value="">All</MenuItem>
-                    <MenuItem value="pending">Pending</MenuItem>
-                    <MenuItem value="fulfilled">Fulfilled</MenuItem>
-                    <MenuItem value="partial">Partial</MenuItem>
-                    <MenuItem value="cancelled">Cancelled</MenuItem>
-                  </Select>
-                </FormControl>
+              <Grid item xs={12} md={5}>
+                <TextField
+                  fullWidth
+                  label="Search by keyword"
+                  placeholder="Type to search (e.g., 'armenia admin' to find orders with both keywords)"
+                  value={filters.search}
+                  onChange={handleFilterChange("search")}
+                  size="small"
+                />
               </Grid>
-              <Grid item xs={12} sm={6} md={3}>
-                <FormControl fullWidth size="small">
-                  <InputLabel>Priority</InputLabel>
-                  <Select
-                    value={filters.priority}
-                    label="Priority"
-                    onChange={handleFilterChange("priority")}
-                  >
-                    <MenuItem value="">All</MenuItem>
-                    <MenuItem value="low">Low</MenuItem>
-                    <MenuItem value="medium">Medium</MenuItem>
-                    <MenuItem value="high">High</MenuItem>
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid item xs={12} sm={6} md={3}>
+              <Grid item xs={12} sm={6} md={2.5}>
                 <TextField
                   fullWidth
                   label="Planned Date (From)"
@@ -1771,7 +1748,7 @@ const OrdersPage = () => {
                   size="small"
                 />
               </Grid>
-              <Grid item xs={12} sm={6} md={3}>
+              <Grid item xs={12} sm={6} md={2.5}>
                 <TextField
                   fullWidth
                   label="Planned Date (To)"
@@ -1782,8 +1759,8 @@ const OrdersPage = () => {
                   size="small"
                 />
               </Grid>
-              <Grid item xs={12}>
-                <Button onClick={clearFilters} variant="outlined" size="small">
+              <Grid item xs={12} md={2} sx={{ display: 'flex', alignItems: 'center' }}>
+                <Button onClick={clearFilters} variant="outlined" size="small" fullWidth>
                   Clear Filters
                 </Button>
               </Grid>

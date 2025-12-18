@@ -25,6 +25,7 @@ exports.getLeads = async (req, res, next) => {
       nameSearch,
       emailSearch,
       phoneSearch,
+      search, // New unified search parameter
       includeConverted = "true",
       order = "newest",
       orderId,
@@ -76,20 +77,31 @@ exports.getLeads = async (req, res, next) => {
       filter.status = { $ne: "converted" };
     }
     if (documentStatus) filter["documents.status"] = documentStatus;
-    // Handle separate search filters
-    if (nameSearch) {
+    
+    // Handle unified search - searches across name, email, and phone
+    if (search) {
       filter.$or = [
-        { firstName: new RegExp(nameSearch, "i") },
-        { lastName: new RegExp(nameSearch, "i") },
+        { firstName: new RegExp(search, "i") },
+        { lastName: new RegExp(search, "i") },
+        { newEmail: new RegExp(search, "i") },
+        { newPhone: new RegExp(search, "i") },
       ];
-    }
+    } else {
+      // Handle separate search filters (for backward compatibility)
+      if (nameSearch) {
+        filter.$or = [
+          { firstName: new RegExp(nameSearch, "i") },
+          { lastName: new RegExp(nameSearch, "i") },
+        ];
+      }
 
-    if (emailSearch) {
-      filter.newEmail = new RegExp(emailSearch, "i");
-    }
+      if (emailSearch) {
+        filter.newEmail = new RegExp(emailSearch, "i");
+      }
 
-    if (phoneSearch) {
-      filter.newPhone = new RegExp(phoneSearch, "i");
+      if (phoneSearch) {
+        filter.newPhone = new RegExp(phoneSearch, "i");
+      }
     }
     const skip = (page - 1) * limit;
     const limitNum = parseInt(limit);

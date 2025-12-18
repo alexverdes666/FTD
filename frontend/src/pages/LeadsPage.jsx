@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useSelector } from "react-redux";
 import { useForm, Controller } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
@@ -1129,6 +1129,7 @@ const LeadsPage = () => {
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [totalLeads, setTotalLeads] = useState(0);
   const [filters, setFilters] = useState({
+    search: "", // Unified search field for name, email, and phone
     nameSearch: "",
     emailSearch: "",
     phoneSearch: "",
@@ -1150,6 +1151,11 @@ const LeadsPage = () => {
   const [showFilters, setShowFilters] = useState(false);
   const [expandedRows, setExpandedRows] = useState(new Set());
   const [pendingRequests, setPendingRequests] = useState(new Map()); // Map<"leadId-orderId", pendingRequest>
+  
+  // Local search input state for instant UI updates
+  const [searchInput, setSearchInput] = useState("");
+  const searchDebounceTimer = useRef(null);
+  
   const isAdminOrManager = useMemo(
     () => user?.role === ROLES.ADMIN || user?.role === ROLES.AFFILIATE_MANAGER,
     [user?.role]
@@ -1591,8 +1597,36 @@ const LeadsPage = () => {
     setFilters((prev) => ({ ...prev, [field]: value }));
     setPage(0);
   }, []);
+  
+  // Debounced search handler for instant typing without API lag
+  const handleSearchChange = useCallback((value) => {
+    // Update local state immediately for instant UI feedback
+    setSearchInput(value);
+    
+    // Clear existing timer
+    if (searchDebounceTimer.current) {
+      clearTimeout(searchDebounceTimer.current);
+    }
+    
+    // Set new timer to update filter state (which triggers API call)
+    searchDebounceTimer.current = setTimeout(() => {
+      setFilters((prev) => ({ ...prev, search: value }));
+      setPage(0);
+    }, 300); // 300ms debounce delay
+  }, []);
+  
+  // Cleanup debounce timer on unmount
+  useEffect(() => {
+    return () => {
+      if (searchDebounceTimer.current) {
+        clearTimeout(searchDebounceTimer.current);
+      }
+    };
+  }, []);
+  
   const clearFilters = useCallback(() => {
     setFilters({
+      search: "",
       nameSearch: "",
       emailSearch: "",
       phoneSearch: "",
@@ -1606,6 +1640,7 @@ const LeadsPage = () => {
       order: "newest",
       orderId: "",
     });
+    setSearchInput(""); // Also clear the local search input
     setPage(0);
   }, []);
   const handleSelectAll = useCallback(
@@ -1879,57 +1914,15 @@ const LeadsPage = () => {
         </Button>
         <Collapse in={showFilters}>
           <Grid container spacing={2}>
-            <Grid item xs={12} sm={6} md={2}>
+            <Grid item xs={12} sm={6} md={3}>
               <TextField
                 fullWidth
-                label="Search by Name"
-                value={filters.nameSearch}
+                label="Search"
+                value={searchInput}
                 onChange={(e) =>
-                  handleFilterChange("nameSearch", e.target.value)
+                  handleSearchChange(e.target.value)
                 }
-                placeholder="First or last name..."
-                InputProps={{
-                  startAdornment: (
-                    <SearchIcon sx={{ mr: 1, color: "action.active" }} />
-                  ),
-                }}
-                sx={{
-                  "& .MuiOutlinedInput-root": {
-                    borderRadius: 2,
-                  },
-                }}
-              />
-            </Grid>
-            <Grid item xs={12} sm={6} md={2}>
-              <TextField
-                fullWidth
-                label="Search by Email"
-                value={filters.emailSearch}
-                onChange={(e) =>
-                  handleFilterChange("emailSearch", e.target.value)
-                }
-                placeholder="email@domain.com..."
-                InputProps={{
-                  startAdornment: (
-                    <SearchIcon sx={{ mr: 1, color: "action.active" }} />
-                  ),
-                }}
-                sx={{
-                  "& .MuiOutlinedInput-root": {
-                    borderRadius: 2,
-                  },
-                }}
-              />
-            </Grid>
-            <Grid item xs={12} sm={6} md={2}>
-              <TextField
-                fullWidth
-                label="Search by Phone"
-                value={filters.phoneSearch}
-                onChange={(e) =>
-                  handleFilterChange("phoneSearch", e.target.value)
-                }
-                placeholder="Phone number..."
+                placeholder="Search by name, email, or phone..."
                 InputProps={{
                   startAdornment: (
                     <SearchIcon sx={{ mr: 1, color: "action.active" }} />
