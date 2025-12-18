@@ -1797,25 +1797,100 @@ const OrdersPage = () => {
           <Table size={isSmallScreen ? "small" : "medium"}>
             <TableHead>
               <TableRow>
-                <TableCell>Order ID</TableCell>
-                <TableCell sx={{ display: { xs: "none", md: "table-cell" } }}>
+                <TableCell
+                  sx={{
+                    fontWeight: "bold",
+                    backgroundColor: "grey.200",
+                    minWidth: 100,
+                  }}
+                >
+                  Order ID
+                </TableCell>
+                <TableCell
+                  sx={{
+                    display: { xs: "none", md: "table-cell" },
+                    fontWeight: "bold",
+                    backgroundColor: "grey.200",
+                    textAlign: "center",
+                    minWidth: 150,
+                  }}
+                >
                   Requester
                 </TableCell>
-                <TableCell>Requests (F/Fi/C/L)</TableCell>
-                <TableCell sx={{ display: { xs: "none", md: "table-cell" } }}>
+                <TableCell
+                  sx={{
+                    fontWeight: "bold",
+                    backgroundColor: "grey.200",
+                    textAlign: "center",
+                    minWidth: 160,
+                  }}
+                >
+                  Requests (F/Fi/C/L)
+                </TableCell>
+                <TableCell
+                  sx={{
+                    display: { xs: "none", md: "table-cell" },
+                    fontWeight: "bold",
+                    backgroundColor: "grey.200",
+                    textAlign: "center",
+                    minWidth: 160,
+                  }}
+                >
                   Fulfilled (F/Fi/C/L)
                 </TableCell>
-                <TableCell>Status</TableCell>
-                <TableCell sx={{ display: { xs: "none", sm: "table-cell" } }}>
+                <TableCell
+                  sx={{
+                    fontWeight: "bold",
+                    backgroundColor: "grey.200",
+                    textAlign: "center",
+                    minWidth: 120,
+                  }}
+                >
+                  Status
+                </TableCell>
+                <TableCell
+                  sx={{
+                    display: { xs: "none", sm: "table-cell" },
+                    fontWeight: "bold",
+                    backgroundColor: "grey.200",
+                    textAlign: "center",
+                    minWidth: 100,
+                  }}
+                >
                   GEO
                 </TableCell>
-                <TableCell sx={{ display: { xs: "none", sm: "table-cell" } }}>
+                <TableCell
+                  sx={{
+                    display: { xs: "none", sm: "table-cell" },
+                    fontWeight: "bold",
+                    backgroundColor: "grey.200",
+                    textAlign: "center",
+                    minWidth: 100,
+                  }}
+                >
                   Priority
                 </TableCell>
-                <TableCell sx={{ display: { xs: "none", sm: "table-cell" } }}>
-                  Created
+                <TableCell
+                  sx={{
+                    display: { xs: "none", sm: "table-cell" },
+                    fontWeight: "bold",
+                    backgroundColor: "grey.200",
+                    textAlign: "center",
+                    minWidth: 130,
+                  }}
+                >
+                  Planned Date
                 </TableCell>
-                <TableCell>Actions</TableCell>
+                <TableCell
+                  sx={{
+                    fontWeight: "bold",
+                    backgroundColor: "grey.200",
+                    textAlign: "right",
+                    minWidth: 150,
+                  }}
+                >
+                  Actions
+                </TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -1838,21 +1913,37 @@ const OrdersPage = () => {
                   return (
                     <React.Fragment key={order._id}>
                       <TableRow hover>
-                        <TableCell>{order._id.slice(-8)}</TableCell>
+                        <TableCell>
+                          <Typography variant="body2">
+                            {order._id.slice(-8)}
+                          </Typography>
+                        </TableCell>
                         <TableCell
+                          align="center"
                           sx={{ display: { xs: "none", md: "table-cell" } }}
                         >
-                          {order.requester?.fullName}
+                          <Typography variant="body2">
+                            {order.requester?.fullName}
+                          </Typography>
                         </TableCell>
-                        <TableCell>{`${order.requests?.ftd || 0}/${
-                          order.requests?.filler || 0
-                        }/${order.requests?.cold || 0}`}</TableCell>
+                        <TableCell align="center">
+                          <Typography variant="body2">
+                            {`${order.requests?.ftd || 0}/${
+                              order.requests?.filler || 0
+                            }/${order.requests?.cold || 0}`}
+                          </Typography>
+                        </TableCell>
                         <TableCell
+                          align="center"
                           sx={{ display: { xs: "none", md: "table-cell" } }}
-                        >{`${order.fulfilled?.ftd || 0}/${
-                          order.fulfilled?.filler || 0
-                        }/${order.fulfilled?.cold || 0}`}</TableCell>
-                        <TableCell>
+                        >
+                          <Typography variant="body2">
+                            {`${order.fulfilled?.ftd || 0}/${
+                              order.fulfilled?.filler || 0
+                            }/${order.fulfilled?.cold || 0}`}
+                          </Typography>
+                        </TableCell>
+                        <TableCell align="center">
                           <Tooltip
                             title={
                               order.status === "cancelled" &&
@@ -1895,11 +1986,15 @@ const OrdersPage = () => {
                           </Tooltip>
                         </TableCell>
                         <TableCell
+                          align="center"
                           sx={{ display: { xs: "none", sm: "table-cell" } }}
                         >
-                          {order.countryFilter || "Any"}
+                          <Typography variant="body2">
+                            {order.countryFilter || "Any"}
+                          </Typography>
                         </TableCell>
                         <TableCell
+                          align="center"
                           sx={{ display: { xs: "none", sm: "table-cell" } }}
                         >
                           <Chip
@@ -1909,53 +2004,63 @@ const OrdersPage = () => {
                           />
                         </TableCell>
                         <TableCell
+                          align="center"
                           sx={{ display: { xs: "none", sm: "table-cell" } }}
                         >
-                          {new Date(order.createdAt).toLocaleDateString()}
+                          <Typography variant="body2">
+                            {order.plannedDate ? new Date(order.plannedDate).toLocaleDateString() : "N/A"}
+                          </Typography>
                         </TableCell>
-                        <TableCell>
-                          <IconButton
-                            size="small"
-                            onClick={() => handleExportLeads(order._id)}
-                            title="Export Leads as CSV"
+                        <TableCell align="right">
+                          <Box
+                            display="flex"
+                            flexDirection="row"
+                            gap={1}
+                            justifyContent="flex-end"
                           >
-                            <DownloadIcon fontSize="small" />
-                          </IconButton>
-
-                          {(user?.role === "admin" ||
-                            user?.role === "affiliate_manager") && (
                             <IconButton
                               size="small"
-                              onClick={() =>
-                                handleDeleteOrderClick(order._id, order.status)
-                              }
-                              title={
-                                order.status === "cancelled"
-                                  ? "Permanently Delete Order"
-                                  : "Cancel Order"
-                              }
-                              color="error"
-                              sx={{
-                                "&:hover": {
-                                  backgroundColor: "error.light",
-                                  color: "error.contrastText",
-                                },
-                              }}
+                              onClick={() => handleExportLeads(order._id)}
+                              title="Export Leads as CSV"
                             >
-                              <DeleteIcon fontSize="small" />
+                              <DownloadIcon fontSize="small" />
                             </IconButton>
-                          )}
-                          <IconButton
-                            size="small"
-                            onClick={() => toggleRowExpansion(order._id)}
-                            title={isExpanded ? "Collapse" : "Expand"}
-                          >
-                            {isExpanded ? (
-                              <ExpandLessIcon />
-                            ) : (
-                              <ExpandMoreIcon />
+
+                            {(user?.role === "admin" ||
+                              user?.role === "affiliate_manager") && (
+                              <IconButton
+                                size="small"
+                                onClick={() =>
+                                  handleDeleteOrderClick(order._id, order.status)
+                                }
+                                title={
+                                  order.status === "cancelled"
+                                    ? "Permanently Delete Order"
+                                    : "Cancel Order"
+                                }
+                                color="error"
+                                sx={{
+                                  "&:hover": {
+                                    backgroundColor: "error.light",
+                                    color: "error.contrastText",
+                                  },
+                                }}
+                              >
+                                <DeleteIcon fontSize="small" />
+                              </IconButton>
                             )}
-                          </IconButton>
+                            <IconButton
+                              size="small"
+                              onClick={() => toggleRowExpansion(order._id)}
+                              title={isExpanded ? "Collapse" : "Expand"}
+                            >
+                              {isExpanded ? (
+                                <ExpandLessIcon />
+                              ) : (
+                                <ExpandMoreIcon />
+                              )}
+                            </IconButton>
+                          </Box>
                         </TableCell>
                       </TableRow>
                       {}

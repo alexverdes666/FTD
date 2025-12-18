@@ -1661,7 +1661,7 @@ const LeadsPage = () => {
         display="flex"
         justifyContent="space-between"
         alignItems="center"
-        mb={3}
+        mb={0}
         sx={{
           "& .MuiButton-root": {
             transition: "all 0.2s ease-in-out",
@@ -1672,77 +1672,7 @@ const LeadsPage = () => {
           },
         }}
       >
-        <Typography
-          variant="h4"
-          gutterBottom
-          sx={{
-            position: "relative",
-            fontWeight: "bold",
-            color: "primary.main",
-            mb: 4,
-            "&::after": {
-              content: '""',
-              position: "absolute",
-              bottom: -8,
-              left: 0,
-              width: "60px",
-              height: "4px",
-              backgroundColor: "primary.main",
-              borderRadius: "2px",
-              transition: "width 0.3s ease-in-out",
-            },
-            "&:hover::after": {
-              width: "100%",
-            },
-          }}
-        >
-          {isAgent ? "My Assigned Leads" : "Lead Management"}
-        </Typography>
-        <Box display="flex" gap={2} alignItems="center">
-          {(isLeadManager || user?.role === ROLES.ADMIN) && (
-            <Button
-              variant="contained"
-              color="primary"
-              startIcon={<PersonAddIcon />}
-              onClick={() => setAddLeadDialogOpen(true)}
-              sx={{
-                borderRadius: 2,
-                px: 3,
-                py: 1,
-                transition: "all 0.3s ease-in-out",
-                bgcolor: "rgba(255, 255, 255, 0.15)",
-                backdropFilter: "blur(10px)",
-                border: "1px solid rgba(255, 255, 255, 0.3)",
-                color: "text.primary",
-                "&:hover": {
-                  transform: "translateY(-2px)",
-                  boxShadow: "0 4px 16px rgba(0, 0, 0, 0.1)",
-                  bgcolor: "rgba(255, 255, 255, 0.25)",
-                },
-              }}
-            >
-              Add New Lead
-            </Button>
-          )}
-          {isAdminOrManager && (
-            <Button
-              variant="outlined"
-              startIcon={<ImportIcon />}
-              onClick={() => setImportDialogOpen(true)}
-              sx={{
-                borderRadius: 2,
-                px: 3,
-                py: 1,
-                transition: "all 0.2s",
-                "&:hover": {
-                  transform: "translateY(-2px)",
-                  boxShadow: 2,
-                },
-              }}
-            >
-              Import Leads
-            </Button>
-          )}
+        <Box display="flex" gap={2} alignItems="center" ml="auto">
           {canAssignLeads && numSelected > 0 && numAssignableSelected === 0 && (
             <Alert severity="info" sx={{ py: 0.5, px: 2 }}>
               Cold leads cannot be assigned to agents. Only FTD and Filler leads can be assigned.
@@ -1768,17 +1698,6 @@ const LeadsPage = () => {
               Assign to Agent (Permanent)
             </Button>
           )}
-          {canDeleteLeads && (
-            <Button
-              variant="contained"
-              color="error"
-              startIcon={<DeleteIcon />}
-              onClick={() => setBulkDeleteDialogOpen(true)}
-              sx={{ ml: 1 }}
-            >
-              Bulk Delete
-            </Button>
-          )}
         </Box>
       </Box>
       {success && (
@@ -1797,13 +1716,13 @@ const LeadsPage = () => {
       )}
       {}
       {leadStats && (
-        <Box sx={{ mb: 4 }}>
-          <Grid container spacing={3}>
+        <Box sx={{ mb: 2 }}>
+          <Grid container spacing={2}>
             <Grid item xs={12} sm={6} md={3}>
               <Paper
                 elevation={0}
                 sx={{
-                  p: 3,
+                  p: 2,
                   bgcolor: "rgba(255, 255, 255, 0.85)",
                   backdropFilter: "blur(10px)",
                   borderRadius: 2,
@@ -1824,10 +1743,10 @@ const LeadsPage = () => {
                   },
                 }}
               >
-                <Typography variant="h4" fontWeight="bold" sx={{ mb: 1 }}>
+                <Typography variant="h5" fontWeight="bold" sx={{ mb: 0.5 }}>
                   {leadStats.leads.overall.total}
                 </Typography>
-                <Typography variant="subtitle2" color="text.secondary">
+                <Typography variant="body2" color="text.secondary">
                   Total Leads
                 </Typography>
               </Paper>
@@ -1836,7 +1755,7 @@ const LeadsPage = () => {
               <Paper
                 elevation={0}
                 sx={{
-                  p: 3,
+                  p: 2,
                   bgcolor: "rgba(255, 255, 255, 0.85)",
                   backdropFilter: "blur(10px)",
                   borderRadius: 2,
@@ -1857,10 +1776,10 @@ const LeadsPage = () => {
                   },
                 }}
               >
-                <Typography variant="h4" fontWeight="bold" sx={{ mb: 1 }}>
+                <Typography variant="h5" fontWeight="bold" sx={{ mb: 0.5 }}>
                   {leadStats.leads.overall.assigned}
                 </Typography>
-                <Typography variant="subtitle2" color="text.secondary">
+                <Typography variant="body2" color="text.secondary">
                   Assigned Leads
                 </Typography>
               </Paper>
@@ -1869,7 +1788,7 @@ const LeadsPage = () => {
               <Paper
                 elevation={0}
                 sx={{
-                  p: 3,
+                  p: 2,
                   bgcolor: "rgba(255, 255, 255, 0.85)",
                   backdropFilter: "blur(10px)",
                   borderRadius: 2,
@@ -1890,10 +1809,10 @@ const LeadsPage = () => {
                   },
                 }}
               >
-                <Typography variant="h4" fontWeight="bold" sx={{ mb: 1 }}>
+                <Typography variant="h5" fontWeight="bold" sx={{ mb: 0.5 }}>
                   {leadStats.leads.overall.available}
                 </Typography>
-                <Typography variant="subtitle2" color="text.secondary">
+                <Typography variant="body2" color="text.secondary">
                   Available Leads
                 </Typography>
               </Paper>
@@ -1902,7 +1821,7 @@ const LeadsPage = () => {
               <Paper
                 elevation={0}
                 sx={{
-                  p: 3,
+                  p: 2,
                   bgcolor: "rgba(255, 255, 255, 0.85)",
                   backdropFilter: "blur(10px)",
                   borderRadius: 2,
@@ -1923,10 +1842,10 @@ const LeadsPage = () => {
                   },
                 }}
               >
-                <Typography variant="h4" fontWeight="bold" sx={{ mb: 1 }}>
+                <Typography variant="h5" fontWeight="bold" sx={{ mb: 0.5 }}>
                   {leadStats.leads.ftd.total}
                 </Typography>
-                <Typography variant="subtitle2" color="text.secondary">
+                <Typography variant="body2" color="text.secondary">
                   FTD Leads
                 </Typography>
               </Paper>
@@ -2351,6 +2270,66 @@ const LeadsPage = () => {
                   },
                 }}
               />
+            </Grid>
+            {/* Action Buttons */}
+            <Grid item xs={12}>
+              <Box display="flex" gap={2} alignItems="center" mt={2}>
+                {(isLeadManager || user?.role === ROLES.ADMIN) && (
+                  <Button
+                    variant="contained"
+                    color="primary"
+                    startIcon={<PersonAddIcon />}
+                    onClick={() => setAddLeadDialogOpen(true)}
+                    sx={{
+                      borderRadius: 2,
+                      px: 3,
+                      py: 1,
+                      transition: "all 0.3s ease-in-out",
+                      bgcolor: "rgba(255, 255, 255, 0.15)",
+                      backdropFilter: "blur(10px)",
+                      border: "1px solid rgba(255, 255, 255, 0.3)",
+                      color: "text.primary",
+                      "&:hover": {
+                        transform: "translateY(-2px)",
+                        boxShadow: "0 4px 16px rgba(0, 0, 0, 0.1)",
+                        bgcolor: "rgba(255, 255, 255, 0.25)",
+                      },
+                    }}
+                  >
+                    Add New Lead
+                  </Button>
+                )}
+                {isAdminOrManager && (
+                  <Button
+                    variant="outlined"
+                    startIcon={<ImportIcon />}
+                    onClick={() => setImportDialogOpen(true)}
+                    sx={{
+                      borderRadius: 2,
+                      px: 3,
+                      py: 1,
+                      transition: "all 0.2s",
+                      "&:hover": {
+                        transform: "translateY(-2px)",
+                        boxShadow: 2,
+                      },
+                    }}
+                  >
+                    Import Leads
+                  </Button>
+                )}
+                {canDeleteLeads && (
+                  <Button
+                    variant="contained"
+                    color="error"
+                    startIcon={<DeleteIcon />}
+                    onClick={() => setBulkDeleteDialogOpen(true)}
+                    sx={{ ml: 1 }}
+                  >
+                    Bulk Delete
+                  </Button>
+                )}
+              </Box>
             </Grid>
           </Grid>
         </Collapse>
