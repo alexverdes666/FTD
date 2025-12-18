@@ -1567,12 +1567,14 @@ const LeadsPage = () => {
     fetchLeads();
   }, [fetchLeads]);
   useEffect(() => {
+    if (isAdminOrManager || isLeadManager) {
+      fetchLeadStats();
+    }
     if (isAdminOrManager) {
       fetchAgents();
       fetchOrders();
-      fetchLeadStats();
     }
-  }, [isAdminOrManager, fetchAgents, fetchOrders, fetchLeadStats]);
+  }, [isAdminOrManager, isLeadManager, fetchAgents, fetchOrders, fetchLeadStats]);
   useEffect(() => {
     if (success) {
       const timer = setTimeout(() => setSuccess(null), 4000);

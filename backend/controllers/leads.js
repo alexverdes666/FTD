@@ -37,7 +37,7 @@ exports.getLeads = async (req, res, next) => {
     } = req.query;
     const filter = {};
     if (leadType) filter.leadType = leadType;
-    
+
     // Handle isAssigned filter - use agent assignment system only
     if (isAssigned !== undefined && isAssigned !== "") {
       if (isAssigned === "true") {
@@ -69,7 +69,7 @@ exports.getLeads = async (req, res, next) => {
     if (req.user.role === "affiliate_manager") {
       // Affiliate managers can see all leads (no filtering)
     } else if (req.user.role === "lead_manager") {
-      filter.createdBy = req.user.id;
+      filter.createdBy = new mongoose.Types.ObjectId(req.user.id);
     }
     if (status) {
       filter.status = status;
@@ -77,14 +77,18 @@ exports.getLeads = async (req, res, next) => {
       filter.status = { $ne: "converted" };
     }
     if (documentStatus) filter["documents.status"] = documentStatus;
-    
+
     // Store search keywords for use in aggregation pipeline (for assignedAgent search)
     let searchKeywords = [];
-    
+
     // Handle unified search - multi-keyword search with AND logic
     // Split search into multiple keywords and trim each (similar to Orders page)
     if (search) {
-      searchKeywords = search.toLowerCase().trim().split(/\s+/).filter(k => k.length > 0);
+      searchKeywords = search
+        .toLowerCase()
+        .trim()
+        .split(/\s+/)
+        .filter((k) => k.length > 0);
       // Note: Search filtering will be applied in aggregation pipeline after $lookup
       // to include assignedAgent name/email in the search
     } else {
@@ -155,7 +159,7 @@ exports.getLeads = async (req, res, next) => {
         ? [
             {
               $match: {
-                $and: searchKeywords.map(keyword => ({
+                $and: searchKeywords.map((keyword) => ({
                   $or: [
                     { firstName: new RegExp(keyword, "i") },
                     { lastName: new RegExp(keyword, "i") },
@@ -167,10 +171,10 @@ exports.getLeads = async (req, res, next) => {
                     { gender: new RegExp(keyword, "i") },
                     { "assignedAgentInfo.fullName": new RegExp(keyword, "i") },
                     { "assignedAgentInfo.email": new RegExp(keyword, "i") },
-                  ]
-                }))
-              }
-            }
+                  ],
+                })),
+              },
+            },
           ]
         : []),
       // Affiliate managers can now see all leads (no filtering needed)
@@ -226,10 +230,12 @@ exports.getLeads = async (req, res, next) => {
           address: 1,
           sin: 1,
           // Only include callNumber and callHistory for agents
-          ...(req.user.role === 'agent' ? {
-            callNumber: 1,
-            callHistory: 1,
-          } : {}),
+          ...(req.user.role === "agent"
+            ? {
+                callNumber: 1,
+                callHistory: 1,
+              }
+            : {}),
           "order._id": 1,
           "order.status": 1,
           "order.priority": 1,
@@ -281,7 +287,7 @@ exports.getLeads = async (req, res, next) => {
         ? [
             {
               $match: {
-                $and: searchKeywords.map(keyword => ({
+                $and: searchKeywords.map((keyword) => ({
                   $or: [
                     { firstName: new RegExp(keyword, "i") },
                     { lastName: new RegExp(keyword, "i") },
@@ -293,10 +299,10 @@ exports.getLeads = async (req, res, next) => {
                     { gender: new RegExp(keyword, "i") },
                     { "assignedAgentInfo.fullName": new RegExp(keyword, "i") },
                     { "assignedAgentInfo.email": new RegExp(keyword, "i") },
-                  ]
-                }))
-              }
-            }
+                  ],
+                })),
+              },
+            },
           ]
         : []),
       // Affiliate managers can now see all leads (no filtering for count)
@@ -348,7 +354,7 @@ exports.getAssignedLeads = async (req, res, next) => {
     const pageNum = parseInt(page, 10);
     const limitNum = parseInt(limit, 10);
     const skip = (pageNum - 1) * limitNum;
-    
+
     const filter = {
       assignedAgent: new mongoose.Types.ObjectId(req.user.id),
     };
@@ -357,8 +363,10 @@ exports.getAssignedLeads = async (req, res, next) => {
 
     // Step 1: Get all unique leads assigned to this agent
     const assignedLeads = await Lead.find(filter)
-      .select('_id firstName lastName prefix newEmail newPhone country leadType status assignedAgentAt createdAt orderCallTracking orderComments clientBrokerHistory dob gender address sin socialMedia')
-      .populate('clientBrokerHistory.clientBroker', 'name domain isActive')
+      .select(
+        "_id firstName lastName prefix newEmail newPhone country leadType status assignedAgentAt createdAt orderCallTracking orderComments clientBrokerHistory dob gender address sin socialMedia"
+      )
+      .populate("clientBrokerHistory.clientBroker", "name domain isActive")
       .lean();
 
     if (assignedLeads.length === 0) {
@@ -376,12 +384,12 @@ exports.getAssignedLeads = async (req, res, next) => {
     }
 
     // Get all lead IDs
-    const leadIds = assignedLeads.map(lead => lead._id);
+    const leadIds = assignedLeads.map((lead) => lead._id);
 
     // Step 2: Find all orders that contain these leads
-    const Order = require('../models/Order');
+    const Order = require("../models/Order");
     const orderMatchStage = { leads: { $in: leadIds } };
-    
+
     // Apply order filters if provided
     if (orderStatus) orderMatchStage.status = orderStatus;
     if (orderPriority) orderMatchStage.priority = orderPriority;
@@ -391,7 +399,9 @@ exports.getAssignedLeads = async (req, res, next) => {
         orderMatchStage.createdAt.$gte = new Date(orderCreatedStart);
       }
       if (orderCreatedEnd) {
-        orderMatchStage.createdAt.$lte = new Date(orderCreatedEnd + "T23:59:59.999Z");
+        orderMatchStage.createdAt.$lte = new Date(
+          orderCreatedEnd + "T23:59:59.999Z"
+        );
       }
     }
     if (orderId) {
@@ -399,14 +409,14 @@ exports.getAssignedLeads = async (req, res, next) => {
     }
 
     const orders = await Order.find(orderMatchStage)
-      .select('_id createdAt status priority leads leadsMetadata')
+      .select("_id createdAt status priority leads leadsMetadata")
       .lean();
 
     // Step 3: Group leads with their orders
     const leadMap = new Map();
-    
+
     // Initialize map with all assigned leads
-    assignedLeads.forEach(lead => {
+    assignedLeads.forEach((lead) => {
       leadMap.set(lead._id.toString(), {
         leadId: lead._id,
         leadInfo: {
@@ -434,38 +444,46 @@ exports.getAssignedLeads = async (req, res, next) => {
     });
 
     // Associate orders with leads and include call numbers, comments, and lead-level brokers per order
-    orders.forEach(order => {
-      order.leads.forEach(leadIdInOrder => {
+    orders.forEach((order) => {
+      order.leads.forEach((leadIdInOrder) => {
         const leadIdStr = leadIdInOrder.toString();
         if (leadMap.has(leadIdStr)) {
           const leadData = leadMap.get(leadIdStr);
-          
+
           // Find call number for this specific order
           const callTracking = leadData.orderCallTracking.find(
-            (tracking) => tracking.orderId && tracking.orderId.toString() === order._id.toString()
+            (tracking) =>
+              tracking.orderId &&
+              tracking.orderId.toString() === order._id.toString()
           );
-          
+
           // Find comments for this specific order
           const orderComments = (leadData.orderComments || []).filter(
-            (comment) => comment.orderId && comment.orderId.toString() === order._id.toString()
+            (comment) =>
+              comment.orderId &&
+              comment.orderId.toString() === order._id.toString()
           );
-          
+
           // Find lead-level client brokers assigned for this specific order
           const leadLevelBrokers = (leadData.clientBrokerHistory || [])
-            .filter((history) => history.orderId && history.orderId.toString() === order._id.toString())
+            .filter(
+              (history) =>
+                history.orderId &&
+                history.orderId.toString() === order._id.toString()
+            )
             .map((history) => ({
               _id: history.clientBroker?._id,
-              name: history.clientBroker?.name || 'Unknown Broker',
+              name: history.clientBroker?.name || "Unknown Broker",
               domain: history.clientBroker?.domain,
               isActive: history.clientBroker?.isActive,
               assignedAt: history.assignedAt,
             }));
-          
+
           // Find orderedAs from order's leadsMetadata
           const metadata = order.leadsMetadata?.find(
-            meta => meta.leadId && meta.leadId.toString() === leadIdStr
+            (meta) => meta.leadId && meta.leadId.toString() === leadIdStr
           );
-          
+
           leadData.orders.push({
             orderId: order._id,
             orderCreatedAt: order.createdAt,
@@ -482,42 +500,53 @@ exports.getAssignedLeads = async (req, res, next) => {
     });
 
     // Convert map to array and sort by assignedAgentAt
-    let groupedLeads = Array.from(leadMap.values())
-      .sort((a, b) => {
-        const dateA = a.leadInfo.assignedAgentAt || a.leadInfo.createdAt;
-        const dateB = b.leadInfo.assignedAgentAt || b.leadInfo.createdAt;
-        return new Date(dateB) - new Date(dateA);
-      });
+    let groupedLeads = Array.from(leadMap.values()).sort((a, b) => {
+      const dateA = a.leadInfo.assignedAgentAt || a.leadInfo.createdAt;
+      const dateB = b.leadInfo.assignedAgentAt || b.leadInfo.createdAt;
+      return new Date(dateB) - new Date(dateA);
+    });
 
     // Apply filters if orders are required but none found
-    if (orderId || orderStatus || orderPriority || orderCreatedStart || orderCreatedEnd) {
-      groupedLeads = groupedLeads.filter(lead => lead.orders.length > 0);
+    if (
+      orderId ||
+      orderStatus ||
+      orderPriority ||
+      orderCreatedStart ||
+      orderCreatedEnd
+    ) {
+      groupedLeads = groupedLeads.filter((lead) => lead.orders.length > 0);
     }
 
     // Sort orders within each lead by creation date (newest first)
-    groupedLeads.forEach(lead => {
-      lead.orders.sort((a, b) => new Date(b.orderCreatedAt) - new Date(a.orderCreatedAt));
+    groupedLeads.forEach((lead) => {
+      lead.orders.sort(
+        (a, b) => new Date(b.orderCreatedAt) - new Date(a.orderCreatedAt)
+      );
     });
 
     const totalCount = groupedLeads.length;
-    
+
     // Apply pagination
     const paginatedLeads = groupedLeads.slice(skip, skip + limitNum);
 
     // Populate orderComments.author for display
-    const leadIdsForPopulate = paginatedLeads.map(gl => gl.leadId);
+    const leadIdsForPopulate = paginatedLeads.map((gl) => gl.leadId);
     const populatedLeads = await Lead.find({ _id: { $in: leadIdsForPopulate } })
-      .populate('orderComments.author', 'fullName fourDigitCode')
+      .populate("orderComments.author", "fullName fourDigitCode")
       .lean();
 
     // Merge populated order comments back
-    paginatedLeads.forEach(groupedLead => {
-      const populated = populatedLeads.find(pl => pl._id.toString() === groupedLead.leadId.toString());
+    paginatedLeads.forEach((groupedLead) => {
+      const populated = populatedLeads.find(
+        (pl) => pl._id.toString() === groupedLead.leadId.toString()
+      );
       if (populated && populated.orderComments) {
         // Update each order with its populated comments
-        groupedLead.orders.forEach(order => {
+        groupedLead.orders.forEach((order) => {
           const populatedComments = populated.orderComments.filter(
-            (comment) => comment.orderId && comment.orderId.toString() === order.orderId.toString()
+            (comment) =>
+              comment.orderId &&
+              comment.orderId.toString() === order.orderId.toString()
           );
           order.comments = populatedComments;
         });
@@ -558,25 +587,36 @@ exports.getLeadById = async (req, res, next) => {
       // Admins can access any lead
     } else if (req.user.role === "affiliate_manager") {
       // Affiliate managers can access all leads (no filtering)
+    } else if (req.user.role === "lead_manager") {
+      // Lead managers can only access leads they created
+      if (lead.createdBy.toString() !== req.user.id) {
+        return res.status(403).json({
+          success: false,
+          message: "Not authorized to access this lead",
+        });
+      }
     } else {
       // Other roles (agents) can only access leads assigned to them
-      if (!lead.assignedAgent || lead.assignedAgent._id.toString() !== req.user.id) {
+      if (
+        !lead.assignedAgent ||
+        lead.assignedAgent._id.toString() !== req.user.id
+      ) {
         return res.status(403).json({
           success: false,
           message: "Not authorized to access this lead",
         });
       }
     }
-    
+
     // Create a clean version of the lead data
     let leadData = lead.toObject ? lead.toObject() : lead;
-    
+
     // Only include call number data for agents
-    if (req.user.role !== 'agent') {
+    if (req.user.role !== "agent") {
       delete leadData.callNumber;
       delete leadData.callHistory;
     }
-    
+
     res.status(200).json({
       success: true,
       data: leadData,
@@ -596,14 +636,14 @@ exports.addComment = async (req, res, next) => {
       });
     }
     const { text, orderId } = req.body;
-    
+
     if (!orderId) {
       return res.status(400).json({
         success: false,
         message: "Order ID is required for comments",
       });
     }
-    
+
     const lead = await Lead.findById(req.params.id);
     if (!lead) {
       return res.status(404).json({
@@ -611,9 +651,9 @@ exports.addComment = async (req, res, next) => {
         message: "Lead not found",
       });
     }
-    
+
     // Verify the order exists and contains this lead
-    const Order = require('../models/Order');
+    const Order = require("../models/Order");
     const order = await Order.findById(orderId);
     if (!order) {
       return res.status(404).json({
@@ -621,7 +661,7 @@ exports.addComment = async (req, res, next) => {
         message: "Order not found",
       });
     }
-    
+
     const leadExistsInOrder = order.leads.some(
       (leadId) => leadId.toString() === lead._id.toString()
     );
@@ -631,7 +671,7 @@ exports.addComment = async (req, res, next) => {
         message: "This lead is not part of the specified order",
       });
     }
-    
+
     // Check permissions based on user role
     if (req.user.role === "admin") {
       // Admins can comment on any lead
@@ -657,7 +697,10 @@ exports.addComment = async (req, res, next) => {
       }
     } else if (req.user.role === "agent") {
       // Agents can only comment on leads assigned to them
-      if (!lead.assignedAgent || lead.assignedAgent.toString() !== req.user.id) {
+      if (
+        !lead.assignedAgent ||
+        lead.assignedAgent.toString() !== req.user.id
+      ) {
         return res.status(403).json({
           success: false,
           message: "Agents can only comment on leads assigned to them",
@@ -669,15 +712,15 @@ exports.addComment = async (req, res, next) => {
         message: "Not authorized to comment on this lead",
       });
     }
-    
+
     // Add order-specific comment
     lead.addOrderComment(orderId, text, req.user.id);
     await lead.save();
-    
+
     // Populate and return the order-specific comments
     await lead.populate("orderComments.author", "fullName fourDigitCode");
     const orderComments = lead.getOrderComments(orderId);
-    
+
     res.status(200).json({
       success: true,
       message: "Comment added successfully",
@@ -731,9 +774,20 @@ exports.updateLeadStatus = async (req, res, next) => {
             "Affiliate managers can only update leads from their orders or leads assigned to them",
         });
       }
+    } else if (req.user.role === "lead_manager") {
+      // Lead managers can only update leads they created
+      if (lead.createdBy && lead.createdBy.toString() !== req.user.id) {
+        return res.status(403).json({
+          success: false,
+          message: "Lead managers can only update leads they created",
+        });
+      }
     } else {
       // Other roles (agents) can only update leads assigned to them
-      if (!lead.assignedAgent || lead.assignedAgent.toString() !== req.user.id) {
+      if (
+        !lead.assignedAgent ||
+        lead.assignedAgent.toString() !== req.user.id
+      ) {
         return res.status(403).json({
           success: false,
           message: "Not authorized to update this lead",
@@ -784,13 +838,22 @@ exports.getLeadStats = async (req, res, next) => {
           },
         }
       );
+    } else if (req.user.role === "lead_manager") {
+      // Lead managers can only see leads they created
+      pipeline.push({
+        $match: {
+          createdBy: new mongoose.Types.ObjectId(req.user.id),
+        },
+      });
     }
 
     pipeline.push({
       $group: {
         _id: {
           leadType: "$leadType",
-          isAssigned: { $cond: [{ $ne: ["$assignedAgent", null] }, true, false] },
+          isAssigned: {
+            $cond: [{ $ne: ["$assignedAgent", null] }, true, false],
+          },
         },
         count: { $sum: 1 },
       },
@@ -848,6 +911,14 @@ exports.getLeadStats = async (req, res, next) => {
           },
         }
       );
+    } else if (req.user.role === "lead_manager") {
+      // Lead managers can only see FTD leads they created
+      documentStatsPipeline.push({
+        $match: {
+          leadType: "ftd",
+          createdBy: new mongoose.Types.ObjectId(req.user.id),
+        },
+      });
     } else {
       documentStatsPipeline.push({
         $match: {
@@ -895,7 +966,7 @@ exports.assignLeads = async (req, res, next) => {
       });
     }
     const { leadIds, agentId } = req.body;
-    
+
     // Verify agent exists and is valid
     const agent = await User.findById(agentId);
     if (
@@ -909,24 +980,25 @@ exports.assignLeads = async (req, res, next) => {
         message: "Invalid or inactive/unapproved agent selected.",
       });
     }
-    
+
     // Check if any of the leads are cold leads (cold leads cannot be assigned)
     const leadsToCheck = await Lead.find({ _id: { $in: leadIds } });
-    const coldLeads = leadsToCheck.filter(lead => lead.leadType === 'cold');
+    const coldLeads = leadsToCheck.filter((lead) => lead.leadType === "cold");
     if (coldLeads.length > 0) {
       return res.status(400).json({
         success: false,
-        message: "Cold leads cannot be assigned to agents. Only FTD and Filler leads can be assigned.",
+        message:
+          "Cold leads cannot be assigned to agents. Only FTD and Filler leads can be assigned.",
         data: {
-          coldLeadIds: coldLeads.map(lead => lead._id),
-          coldLeadCount: coldLeads.length
-        }
+          coldLeadIds: coldLeads.map((lead) => lead._id),
+          coldLeadCount: coldLeads.length,
+        },
       });
     }
-    
+
     let updateCondition = {
       _id: { $in: leadIds },
-      leadType: { $in: ['ftd', 'filler'] }, // Only allow FTD and Filler to be assigned
+      leadType: { $in: ["ftd", "filler"] }, // Only allow FTD and Filler to be assigned
     };
 
     // For affiliate managers, ensure they can only assign leads from their orders
@@ -1365,9 +1437,13 @@ exports.updateLead = async (req, res, next) => {
         message: "Lead not found",
       });
     }
-    
+
     // Access control - expand for client broker updates
-    if (req.user.role === "lead_manager" && lead.createdBy && lead.createdBy.toString() !== req.user.id) {
+    if (
+      req.user.role === "lead_manager" &&
+      lead.createdBy &&
+      lead.createdBy.toString() !== req.user.id
+    ) {
       return res.status(403).json({
         success: false,
         message: "You can only edit leads that you created",
@@ -1402,100 +1478,126 @@ exports.updateLead = async (req, res, next) => {
     if (documents) {
       lead.documents = documents;
     }
-    
+
     // Handle campaign assignments
     if (campaign !== undefined) {
       if (Array.isArray(campaign) && campaign.length > 0) {
         // Clear existing campaign history for this lead/order
-        lead.campaignHistory = lead.campaignHistory.filter(history => 
-          history.orderId && history.orderId.toString() !== lead.orderId?.toString()
+        lead.campaignHistory = lead.campaignHistory.filter(
+          (history) =>
+            history.orderId &&
+            history.orderId.toString() !== lead.orderId?.toString()
         );
-        
+
         // Add new campaign assignments
         for (const campaignId of campaign) {
-          if (campaignId && !lead.isAssignedToCampaign(campaignId, lead.orderId)) {
+          if (
+            campaignId &&
+            !lead.isAssignedToCampaign(campaignId, lead.orderId)
+          ) {
             lead.addCampaignAssignment(campaignId, req.user._id, lead.orderId);
           }
         }
       } else if (Array.isArray(campaign) && campaign.length === 0) {
         // Clear campaign assignments for this order
-        lead.campaignHistory = lead.campaignHistory.filter(history => 
-          history.orderId && history.orderId.toString() !== lead.orderId?.toString()
+        lead.campaignHistory = lead.campaignHistory.filter(
+          (history) =>
+            history.orderId &&
+            history.orderId.toString() !== lead.orderId?.toString()
         );
       } else {
         // Handle legacy single campaign assignment
         lead.campaign = campaign;
       }
     }
-    
+
     // Handle client network assignments
     if (clientNetwork !== undefined) {
       if (Array.isArray(clientNetwork) && clientNetwork.length > 0) {
         // Clear existing client network history for this lead/order
-        lead.clientNetworkHistory = lead.clientNetworkHistory.filter(history => 
-          history.orderId && history.orderId.toString() !== lead.orderId?.toString()
+        lead.clientNetworkHistory = lead.clientNetworkHistory.filter(
+          (history) =>
+            history.orderId &&
+            history.orderId.toString() !== lead.orderId?.toString()
         );
-        
+
         // Add new client network assignments
         for (const networkId of clientNetwork) {
-          if (networkId && !lead.isAssignedToClientNetwork(networkId, lead.orderId)) {
-            lead.addClientNetworkAssignment(networkId, req.user._id, lead.orderId);
+          if (
+            networkId &&
+            !lead.isAssignedToClientNetwork(networkId, lead.orderId)
+          ) {
+            lead.addClientNetworkAssignment(
+              networkId,
+              req.user._id,
+              lead.orderId
+            );
           }
         }
       } else if (Array.isArray(clientNetwork) && clientNetwork.length === 0) {
         // Clear client network assignments for this order
-        lead.clientNetworkHistory = lead.clientNetworkHistory.filter(history => 
-          history.orderId && history.orderId.toString() !== lead.orderId?.toString()
+        lead.clientNetworkHistory = lead.clientNetworkHistory.filter(
+          (history) =>
+            history.orderId &&
+            history.orderId.toString() !== lead.orderId?.toString()
         );
       } else {
         // Handle legacy single client network assignment
         lead.clientNetwork = clientNetwork;
       }
     }
-    
+
     // Handle our network assignments
     if (ourNetwork !== undefined) {
       if (Array.isArray(ourNetwork) && ourNetwork.length > 0) {
         // Clear existing our network history for this lead/order
-        lead.ourNetworkHistory = lead.ourNetworkHistory.filter(history => 
-          history.orderId && history.orderId.toString() !== lead.orderId?.toString()
+        lead.ourNetworkHistory = lead.ourNetworkHistory.filter(
+          (history) =>
+            history.orderId &&
+            history.orderId.toString() !== lead.orderId?.toString()
         );
-        
+
         // Add new our network assignments
         for (const networkId of ourNetwork) {
-          if (networkId && !lead.isAssignedToOurNetwork(networkId, lead.orderId)) {
+          if (
+            networkId &&
+            !lead.isAssignedToOurNetwork(networkId, lead.orderId)
+          ) {
             lead.addOurNetworkAssignment(networkId, req.user._id, lead.orderId);
           }
         }
       } else if (Array.isArray(ourNetwork) && ourNetwork.length === 0) {
         // Clear our network assignments for this order
-        lead.ourNetworkHistory = lead.ourNetworkHistory.filter(history => 
-          history.orderId && history.orderId.toString() !== lead.orderId?.toString()
+        lead.ourNetworkHistory = lead.ourNetworkHistory.filter(
+          (history) =>
+            history.orderId &&
+            history.orderId.toString() !== lead.orderId?.toString()
         );
       } else {
         // Handle legacy single our network assignment
         lead.ourNetwork = ourNetwork;
       }
     }
-    
+
     // Handle client broker updates
     if (clientBroker !== undefined) {
       if (Array.isArray(clientBroker) && clientBroker.length > 0) {
         const ClientBroker = require("../models/ClientBroker");
-        
+
         // Validate all client brokers exist and are active
         const brokerDocs = await ClientBroker.find({
           _id: { $in: clientBroker },
           isActive: true,
         });
-        
+
         if (brokerDocs.length !== clientBroker.length) {
           return res.status(400).json({
             success: false,
-            message: "One or more selected client brokers not found or inactive",
+            message:
+              "One or more selected client brokers not found or inactive",
           });
         }
-        
+
         // Add new brokers to existing assignments (additive, not replacement)
         // This ensures we never "forget" that a lead was sent to a broker
         for (const brokerId of clientBroker) {
@@ -1520,7 +1622,7 @@ exports.updateLead = async (req, res, next) => {
             message: "Selected client broker not found or inactive",
           });
         }
-        
+
         // Add broker to assignments (additive, not replacement)
         if (!lead.isAssignedToClientBroker(clientBroker)) {
           lead.assignClientBroker(clientBroker, req.user._id, lead.orderId);
@@ -1530,13 +1632,16 @@ exports.updateLead = async (req, res, next) => {
         // of all brokers this lead has been sent to (used for order filtering)
       }
     }
-    
+
     await lead.save();
     await lead.populate("assignedAgent", "fullName fourDigitCode");
     await lead.populate("comments.author", "fullName");
     await lead.populate("assignedClientBrokers", "name domain description");
-    await lead.populate("clientBrokerHistory.clientBroker", "name domain description");
-    
+    await lead.populate(
+      "clientBrokerHistory.clientBroker",
+      "name domain description"
+    );
+
     res.status(200).json({
       success: true,
       message: "Lead updated successfully",
@@ -1576,8 +1681,7 @@ exports.createLead = async (req, res, next) => {
       gender,
       documents,
     } = req.body;
-    
-    
+
     const existingLead = await Lead.findOne({
       newEmail: newEmail.toLowerCase(),
     });
@@ -1615,16 +1719,16 @@ exports.createLead = async (req, res, next) => {
     };
 
     // Handle legacy single field assignments for backward compatibility
-    if (typeof campaign === 'string' && campaign) {
+    if (typeof campaign === "string" && campaign) {
       leadData.campaign = campaign;
     }
-    if (typeof clientBroker === 'string' && clientBroker) {
+    if (typeof clientBroker === "string" && clientBroker) {
       leadData.clientBroker = clientBroker;
     }
-    if (typeof clientNetwork === 'string' && clientNetwork) {
+    if (typeof clientNetwork === "string" && clientNetwork) {
       leadData.clientNetwork = clientNetwork;
     }
-    if (typeof ourNetwork === 'string' && ourNetwork) {
+    if (typeof ourNetwork === "string" && ourNetwork) {
       leadData.ourNetwork = ourNetwork;
     }
     if (leadType === "ftd") {
@@ -1643,8 +1747,8 @@ exports.createLead = async (req, res, next) => {
 
     // Handle array assignments for multiple selections
     // Note: For standalone leads, we use null as orderId since they're not part of an order yet
-    
-    // Handle campaign assignments  
+
+    // Handle campaign assignments
     if (Array.isArray(campaign) && campaign.length > 0) {
       for (const campaignId of campaign) {
         if (campaignId && !lead.isAssignedToCampaign(campaignId, null)) {
@@ -1681,10 +1785,12 @@ exports.createLead = async (req, res, next) => {
     }
 
     // Save the lead again if any assignments were made
-    if ((Array.isArray(campaign) && campaign.length > 0) ||
-        (Array.isArray(clientNetwork) && clientNetwork.length > 0) ||
-        (Array.isArray(ourNetwork) && ourNetwork.length > 0) ||
-        (Array.isArray(clientBroker) && clientBroker.length > 0)) {
+    if (
+      (Array.isArray(campaign) && campaign.length > 0) ||
+      (Array.isArray(clientNetwork) && clientNetwork.length > 0) ||
+      (Array.isArray(ourNetwork) && ourNetwork.length > 0) ||
+      (Array.isArray(clientBroker) && clientBroker.length > 0)
+    ) {
       await lead.save();
     }
 
@@ -1946,21 +2052,24 @@ exports.importLeads = async (req, res, next) => {
         const existingEmails = await Lead.distinct("newEmail", {
           newEmail: { $in: emails },
         });
-        
+
         // Check for existing leads with matching first name and last name
         const nameChecks = batch.map((lead) => ({
           firstName: lead.firstName,
-          lastName: lead.lastName
+          lastName: lead.lastName,
         }));
-        
+
         const existingNameCombinations = await Lead.find({
-          $or: nameChecks
-        }).select('firstName lastName newEmail');
-        
+          $or: nameChecks,
+        }).select("firstName lastName newEmail");
+
         const existingNamePairs = new Set(
-          existingNameCombinations.map(lead => `${lead.firstName.toLowerCase()}|${lead.lastName.toLowerCase()}`)
+          existingNameCombinations.map(
+            (lead) =>
+              `${lead.firstName.toLowerCase()}|${lead.lastName.toLowerCase()}`
+          )
         );
-        
+
         console.log(`Batch processing: ${batch.length} leads in batch`);
         console.log(
           `Found ${existingEmails.length} existing emails:`,
@@ -1970,18 +2079,22 @@ exports.importLeads = async (req, res, next) => {
           `Found ${existingNamePairs.size} existing name combinations:`,
           Array.from(existingNamePairs).slice(0, 5)
         );
-        
+
         const newLeads = batch.filter((lead) => {
           const emailExists = existingEmails.includes(lead.newEmail);
-          const nameExists = existingNamePairs.has(`${lead.firstName.toLowerCase()}|${lead.lastName.toLowerCase()}`);
-          
+          const nameExists = existingNamePairs.has(
+            `${lead.firstName.toLowerCase()}|${lead.lastName.toLowerCase()}`
+          );
+
           if (emailExists) {
             console.log(`Skipping lead with duplicate email: ${lead.newEmail}`);
           }
           if (nameExists) {
-            console.log(`Skipping lead with duplicate name: ${lead.firstName} ${lead.lastName}`);
+            console.log(
+              `Skipping lead with duplicate name: ${lead.firstName} ${lead.lastName}`
+            );
           }
-          
+
           return !emailExists && !nameExists;
         });
         console.log(
@@ -1998,7 +2111,7 @@ exports.importLeads = async (req, res, next) => {
             rawResult: true,
           });
           console.log("Insert result:", result);
-          
+
           // Handle validation errors
           if (
             result.mongoose &&
@@ -2013,17 +2126,23 @@ exports.importLeads = async (req, res, next) => {
                 console.log("Error details:", error);
               });
           }
-          
+
           return result;
         } catch (error) {
           // Handle bulk write errors (including duplicates)
-          if (error.name === 'BulkWriteError' || error.code === 11000) {
-            console.log(`Bulk write completed with ${error.result?.nInserted || 0} successful insertions`);
-            console.log(`${error.writeErrors?.length || 0} duplicates were skipped`);
-            
+          if (error.name === "BulkWriteError" || error.code === 11000) {
+            console.log(
+              `Bulk write completed with ${
+                error.result?.nInserted || 0
+              } successful insertions`
+            );
+            console.log(
+              `${error.writeErrors?.length || 0} duplicates were skipped`
+            );
+
             return {
               insertedCount: error.result?.nInserted || 0,
-              writeErrors: error.writeErrors || []
+              writeErrors: error.writeErrors || [],
             };
           }
           throw error; // Re-throw other errors
@@ -2032,32 +2151,34 @@ exports.importLeads = async (req, res, next) => {
     );
     let importCount = 0;
     let duplicateCount = 0;
-    
+
     savedLeads.forEach((result) => {
       if (result.insertedCount) {
         importCount += result.insertedCount;
       }
       // Handle any duplicates that were caught at the database level
       if (result.writeErrors) {
-        result.writeErrors.forEach(error => {
+        result.writeErrors.forEach((error) => {
           if (error.code === 11000) {
             duplicateCount++;
           }
         });
       }
     });
-    
+
     const totalProcessed = validLeads.length;
     const skippedCount = totalProcessed - importCount - duplicateCount;
-    
+
     res.status(200).json({
-      success: true, 
-      message: `${importCount} leads imported successfully. ${skippedCount + duplicateCount} duplicates were skipped.`,
+      success: true,
+      message: `${importCount} leads imported successfully. ${
+        skippedCount + duplicateCount
+      } duplicates were skipped.`,
       stats: {
         imported: importCount,
         duplicatesSkipped: skippedCount + duplicateCount,
-        totalProcessed: totalProcessed
-      }
+        totalProcessed: totalProcessed,
+      },
     });
   } catch (error) {
     // Only return error for actual system errors, not duplicates
@@ -2069,8 +2190,8 @@ exports.importLeads = async (req, res, next) => {
         stats: {
           imported: 0,
           duplicatesSkipped: validLeads.length,
-          totalProcessed: validLeads.length
-        }
+          totalProcessed: validLeads.length,
+        },
       });
     }
     next(error);
@@ -2744,10 +2865,10 @@ exports.updateLeadCallNumber = async (req, res, next) => {
         errors: errors.array(),
       });
     }
-    
+
     const { callNumber, notes, orderId, verified } = req.body;
     const leadId = req.params.id;
-    
+
     const lead = await Lead.findById(leadId);
     if (!lead) {
       return res.status(404).json({
@@ -2755,10 +2876,13 @@ exports.updateLeadCallNumber = async (req, res, next) => {
         message: "Lead not found",
       });
     }
-    
+
     // Access control - agents can only update leads assigned to them
     if (req.user.role === "agent") {
-      if (!lead.assignedAgent || lead.assignedAgent.toString() !== req.user.id) {
+      if (
+        !lead.assignedAgent ||
+        lead.assignedAgent.toString() !== req.user.id
+      ) {
         return res.status(403).json({
           success: false,
           message: "Not authorized to update this lead",
@@ -2789,7 +2913,7 @@ exports.updateLeadCallNumber = async (req, res, next) => {
         message: "Not authorized to update leads",
       });
     }
-    
+
     // Update call number per order
     if (!orderId) {
       return res.status(400).json({
@@ -2801,13 +2925,15 @@ exports.updateLeadCallNumber = async (req, res, next) => {
     // Get current call number and verification status for this order
     const currentCallNumber = lead.getOrderCallNumber(orderId);
     const currentVerified = lead.getOrderVerified(orderId);
-    
+
     // For agents, validate that call changes are reasonable (can go forward or backward, but not skip multiple steps)
     if (req.user.role === "agent" && callNumber) {
       const callSequence = ["1st", "2nd", "3rd", "4th", "5th"];
-      const currentIndex = currentCallNumber ? callSequence.indexOf(currentCallNumber) : -1;
+      const currentIndex = currentCallNumber
+        ? callSequence.indexOf(currentCallNumber)
+        : -1;
       const newIndex = callSequence.indexOf(callNumber);
-      
+
       // Allow moving to adjacent calls (previous, current, or next)
       // or setting first call when no call exists
       if (currentIndex === -1) {
@@ -2822,14 +2948,16 @@ exports.updateLeadCallNumber = async (req, res, next) => {
         // Has a current call - can move to previous, stay at current, or move to next
         const allowedIndexes = [
           currentIndex - 1, // previous
-          currentIndex,     // current (no change)
-          currentIndex + 1  // next
-        ].filter(idx => idx >= 0 && idx < callSequence.length);
-        
+          currentIndex, // current (no change)
+          currentIndex + 1, // next
+        ].filter((idx) => idx >= 0 && idx < callSequence.length);
+
         if (!allowedIndexes.includes(newIndex)) {
           return res.status(400).json({
             success: false,
-            message: `You can only move one step at a time. Current call: ${currentCallNumber}. You can choose: ${allowedIndexes.map(i => callSequence[i]).join(", ")} or None.`,
+            message: `You can only move one step at a time. Current call: ${currentCallNumber}. You can choose: ${allowedIndexes
+              .map((i) => callSequence[i])
+              .join(", ")} or None.`,
           });
         }
       }
@@ -2847,7 +2975,8 @@ exports.updateLeadCallNumber = async (req, res, next) => {
       if (existingRequest) {
         return res.status(400).json({
           success: false,
-          message: "There is already a pending call change request for this lead and order.",
+          message:
+            "There is already a pending call change request for this lead and order.",
         });
       }
 
@@ -2857,7 +2986,8 @@ exports.updateLeadCallNumber = async (req, res, next) => {
         orderId: orderId,
         requestedBy: req.user.id,
         currentCallNumber: currentCallNumber,
-        requestedCallNumber: callNumber !== undefined ? (callNumber || null) : currentCallNumber,
+        requestedCallNumber:
+          callNumber !== undefined ? callNumber || null : currentCallNumber,
         currentVerified: currentVerified,
         requestedVerified: verified !== undefined ? verified : currentVerified,
       });
@@ -2866,7 +2996,8 @@ exports.updateLeadCallNumber = async (req, res, next) => {
 
       return res.status(200).json({
         success: true,
-        message: "Call change request submitted successfully. Waiting for approval.",
+        message:
+          "Call change request submitted successfully. Waiting for approval.",
         isPending: true,
         data: {
           requestId: callChangeRequest._id,
@@ -2875,15 +3006,21 @@ exports.updateLeadCallNumber = async (req, res, next) => {
           currentCallNumber: currentCallNumber,
           requestedCallNumber: callNumber || null,
           currentVerified: currentVerified,
-          requestedVerified: verified !== undefined ? verified : currentVerified,
+          requestedVerified:
+            verified !== undefined ? verified : currentVerified,
         },
       });
     }
 
     // For admin and affiliate_manager, directly update
-    lead.updateOrderCallNumber(orderId, callNumber || null, req.user.id, verified);
+    lead.updateOrderCallNumber(
+      orderId,
+      callNumber || null,
+      req.user.id,
+      verified
+    );
     await lead.save();
-    
+
     res.status(200).json({
       success: true,
       message: "Call number updated successfully for order",
@@ -3367,7 +3504,7 @@ exports.assignLeadsToAgent = async (req, res, next) => {
 
     // Check if this is an unassignment request (agentId is null)
     const isUnassigning = agentId === null || agentId === undefined;
-    
+
     let agent = null;
     if (!isUnassigning) {
       // Verify agent exists and has agent role
@@ -3379,7 +3516,7 @@ exports.assignLeadsToAgent = async (req, res, next) => {
         });
       }
 
-      if (agent.role !== 'agent') {
+      if (agent.role !== "agent") {
         return res.status(400).json({
           success: false,
           message: "User is not an agent",
@@ -3395,8 +3532,11 @@ exports.assignLeadsToAgent = async (req, res, next) => {
 
     for (const leadId of leadIds) {
       try {
-        const lead = await Lead.findById(leadId).populate('assignedAgent', 'fullName fourDigitCode');
-        
+        const lead = await Lead.findById(leadId).populate(
+          "assignedAgent",
+          "fullName fourDigitCode"
+        );
+
         if (!lead) {
           results.failed.push({
             leadId,
@@ -3405,7 +3545,7 @@ exports.assignLeadsToAgent = async (req, res, next) => {
           continue;
         }
 
-        if (lead.leadType !== 'ftd' && lead.leadType !== 'filler') {
+        if (lead.leadType !== "ftd" && lead.leadType !== "filler") {
           results.failed.push({
             leadId,
             reason: "Only FTD and Filler leads can be assigned to agents",
@@ -3447,7 +3587,10 @@ exports.assignLeadsToAgent = async (req, res, next) => {
         } else {
           // Handle assignment
           // Check if this is already assigned to the same agent
-          if (lead.assignedAgent && lead.assignedAgent._id.toString() === agentId) {
+          if (
+            lead.assignedAgent &&
+            lead.assignedAgent._id.toString() === agentId
+          ) {
             results.success.push({
               leadId,
               leadType: lead.leadType,
@@ -3458,11 +3601,13 @@ exports.assignLeadsToAgent = async (req, res, next) => {
           }
 
           // Store previous agent info for reassignment tracking
-          const previousAgentInfo = lead.assignedAgent ? {
-            id: lead.assignedAgent._id,
-            name: lead.assignedAgent.fullName,
-            code: lead.assignedAgent.fourDigitCode,
-          } : null;
+          const previousAgentInfo = lead.assignedAgent
+            ? {
+                id: lead.assignedAgent._id,
+                name: lead.assignedAgent.fullName,
+                code: lead.assignedAgent.fourDigitCode,
+              }
+            : null;
 
           // Assign to new agent (reassignment allowed)
           const assignmentResult = lead.assignToAgent(agentId, true);
@@ -3492,7 +3637,7 @@ exports.assignLeadsToAgent = async (req, res, next) => {
 
     const totalSuccess = results.success.length + results.reassigned.length;
     const reassignedCount = results.reassigned.length;
-    
+
     let message;
     if (isUnassigning) {
       message = `Unassigned ${totalSuccess} lead(s) from their agents.`;
@@ -3505,7 +3650,7 @@ exports.assignLeadsToAgent = async (req, res, next) => {
     if (results.failed.length > 0) {
       message += ` ${results.failed.length} failed.`;
     }
-    
+
     res.status(200).json({
       success: true,
       message,
@@ -3537,7 +3682,7 @@ exports.unassignLeadsFromAgent = async (req, res, next) => {
     for (const leadId of leadIds) {
       try {
         const lead = await Lead.findById(leadId);
-        
+
         if (!lead) {
           results.failed.push({
             leadId,
@@ -3602,11 +3747,11 @@ exports.getLeadsByAgent = async (req, res, next) => {
     }
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
-    
+
     const leads = await Lead.find(filter)
       .skip(skip)
       .limit(parseInt(limit))
-      .populate('assignedAgent', 'fullName email')
+      .populate("assignedAgent", "fullName email")
       .sort({ assignedAgentAt: -1 });
 
     const total = await Lead.countDocuments(filter);
@@ -3642,12 +3787,12 @@ exports.searchLeadsByEmails = async (req, res, next) => {
     }
 
     // Normalize emails to lowercase and trim
-    const normalizedEmails = emails.map(e => e.trim().toLowerCase());
+    const normalizedEmails = emails.map((e) => e.trim().toLowerCase());
 
     // Search for leads with matching emails
     const leads = await Lead.find({
-      newEmail: { $in: normalizedEmails }
-    }).populate('assignedAgent', 'fullName email');
+      newEmail: { $in: normalizedEmails },
+    }).populate("assignedAgent", "fullName email");
 
     res.status(200).json({
       success: true,
