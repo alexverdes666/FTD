@@ -1129,22 +1129,17 @@ const LeadsPage = () => {
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [totalLeads, setTotalLeads] = useState(0);
   const [filters, setFilters] = useState({
-    search: "", // Unified search field for name, email, and phone
+    search: "", // Unified search field for name, email, phone, country, gender, status, lead type, order status, order priority
     nameSearch: "",
     emailSearch: "",
     phoneSearch: "",
-    leadType: "",
     isAssigned: "",
-    country: "",
     gender: "",
-    status: "",
     documentStatus: "",
     includeConverted: true,
     order: "newest",
     orderId: "",
     assignedToMe: false,
-    orderStatus: "",
-    orderPriority: "",
     orderCreatedStart: "",
     orderCreatedEnd: "",
   });
@@ -1632,15 +1627,15 @@ const LeadsPage = () => {
       nameSearch: "",
       emailSearch: "",
       phoneSearch: "",
-      leadType: "",
       isAssigned: "",
-      country: "",
       gender: "",
-      status: "",
       documentStatus: "",
       includeConverted: true,
       order: "newest",
       orderId: "",
+      assignedToMe: false,
+      orderCreatedStart: "",
+      orderCreatedEnd: "",
     });
     setSearchInput(""); // Also clear the local search input
     setPage(0);
@@ -1916,7 +1911,7 @@ const LeadsPage = () => {
         </Button>
         <Collapse in={showFilters}>
           <Grid container spacing={2}>
-            <Grid item xs={12} sm={6} md={3}>
+            <Grid item xs={12} sm={6} md={4}>
               <TextField
                 fullWidth
                 label="Search"
@@ -1924,7 +1919,7 @@ const LeadsPage = () => {
                 onChange={(e) =>
                   handleSearchChange(e.target.value)
                 }
-                placeholder="Search by name, email, phone, country, gender, status, type, or agent..."
+                placeholder="Search by name, email, phone, country, gender, status, lead type, order status, order priority, or agent..."
                 InputProps={{
                   startAdornment: (
                     <SearchIcon sx={{ mr: 1, color: "action.active" }} />
@@ -1937,41 +1932,8 @@ const LeadsPage = () => {
                 }}
               />
             </Grid>
-            <Grid item xs={12} sm={6} md={1.5}>
-              <FormControl fullWidth>
-                <InputLabel>Lead Type</InputLabel>
-                <Select
-                  value={filters.leadType}
-                  label="Lead Type"
-                  onChange={(e) =>
-                    handleFilterChange("leadType", e.target.value)
-                  }
-                  sx={{ borderRadius: 2 }}
-                >
-                  <MenuItem value="">All Types</MenuItem>
-                  {Object.values(LEAD_TYPES).map((type) => (
-                    <MenuItem key={type} value={type}>
-                      <Box
-                        sx={{ display: "flex", alignItems: "center", gap: 1 }}
-                      >
-                        <Box
-                          sx={{
-                            width: 8,
-                            height: 8,
-                            borderRadius: "50%",
-                            bgcolor: (theme) =>
-                              theme.palette[getLeadTypeColor(type)]?.main,
-                          }}
-                        />
-                        {type.toUpperCase()}
-                      </Box>
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
             {isAdminOrManager && (
-              <Grid item xs={12} sm={6} md={1.5}>
+              <Grid item xs={12} sm={6} md={2}>
                 <FormControl fullWidth>
                   <InputLabel>Assignment</InputLabel>
                   <Select
@@ -1989,57 +1951,6 @@ const LeadsPage = () => {
                 </FormControl>
               </Grid>
             )}
-            <Grid item xs={12} sm={6} md={1.5}>
-              <FormControl fullWidth>
-                <InputLabel>Status</InputLabel>
-                <Select
-                  value={filters.status}
-                  label="Status"
-                  onChange={(e) => handleFilterChange("status", e.target.value)}
-                  sx={{ borderRadius: 2 }}
-                >
-                  <MenuItem value="">All Statuses</MenuItem>
-                  {Object.values(LEAD_STATUSES).map((status) => (
-                    <MenuItem key={status} value={status}>
-                      <Box
-                        sx={{ display: "flex", alignItems: "center", gap: 1 }}
-                      >
-                        <Box
-                          sx={{
-                            width: 8,
-                            height: 8,
-                            borderRadius: "50%",
-                            bgcolor: (theme) =>
-                              theme.palette[getStatusColor(status)]?.main,
-                          }}
-                        />
-                        {status.charAt(0).toUpperCase() + status.slice(1)}
-                      </Box>
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
-            <Grid item xs={12} sm={6} md={2}>
-              <FormControl fullWidth>
-                <InputLabel>Country</InputLabel>
-                <Select
-                  value={filters.country}
-                  label="Country"
-                  onChange={(e) =>
-                    handleFilterChange("country", e.target.value)
-                  }
-                  sx={{ borderRadius: 2 }}
-                >
-                  <MenuItem value="">All Countries</MenuItem>
-                  {getSortedCountries().map((country) => (
-                    <MenuItem key={country.code} value={country.name}>
-                      {country.name}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
             {isAdminOrManager && (
               <Grid item xs={12} sm={6} md={2}>
                 <FormControlLabel
@@ -2108,127 +2019,6 @@ const LeadsPage = () => {
                       </Box>
                     </MenuItem>
                   ))}
-                </Select>
-              </FormControl>
-            </Grid>
-            <Grid item xs={12} sm={6} md={2}>
-              <FormControl fullWidth>
-                <InputLabel>Order Status</InputLabel>
-                <Select
-                  value={filters.orderStatus}
-                  label="Order Status"
-                  onChange={(e) =>
-                    handleFilterChange("orderStatus", e.target.value)
-                  }
-                  sx={{ borderRadius: 2 }}
-                >
-                  <MenuItem value="">All Status</MenuItem>
-                  <MenuItem value="pending">
-                    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                      <Box
-                        sx={{
-                          width: 8,
-                          height: 8,
-                          borderRadius: "50%",
-                          bgcolor: "warning.main",
-                        }}
-                      />
-                      Pending
-                    </Box>
-                  </MenuItem>
-                  <MenuItem value="fulfilled">
-                    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                      <Box
-                        sx={{
-                          width: 8,
-                          height: 8,
-                          borderRadius: "50%",
-                          bgcolor: "success.main",
-                        }}
-                      />
-                      Fulfilled
-                    </Box>
-                  </MenuItem>
-                  <MenuItem value="partial">
-                    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                      <Box
-                        sx={{
-                          width: 8,
-                          height: 8,
-                          borderRadius: "50%",
-                          bgcolor: "info.main",
-                        }}
-                      />
-                      Partial
-                    </Box>
-                  </MenuItem>
-                  <MenuItem value="cancelled">
-                    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                      <Box
-                        sx={{
-                          width: 8,
-                          height: 8,
-                          borderRadius: "50%",
-                          bgcolor: "error.main",
-                        }}
-                      />
-                      Cancelled
-                    </Box>
-                  </MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
-            <Grid item xs={12} sm={6} md={2}>
-              <FormControl fullWidth>
-                <InputLabel>Order Priority</InputLabel>
-                <Select
-                  value={filters.orderPriority}
-                  label="Order Priority"
-                  onChange={(e) =>
-                    handleFilterChange("orderPriority", e.target.value)
-                  }
-                  sx={{ borderRadius: 2 }}
-                >
-                  <MenuItem value="">All Priorities</MenuItem>
-                  <MenuItem value="low">
-                    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                      <Box
-                        sx={{
-                          width: 8,
-                          height: 8,
-                          borderRadius: "50%",
-                          bgcolor: "success.main",
-                        }}
-                      />
-                      Low
-                    </Box>
-                  </MenuItem>
-                  <MenuItem value="medium">
-                    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                      <Box
-                        sx={{
-                          width: 8,
-                          height: 8,
-                          borderRadius: "50%",
-                          bgcolor: "warning.main",
-                        }}
-                      />
-                      Medium
-                    </Box>
-                  </MenuItem>
-                  <MenuItem value="high">
-                    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                      <Box
-                        sx={{
-                          width: 8,
-                          height: 8,
-                          borderRadius: "50%",
-                          bgcolor: "error.main",
-                        }}
-                      />
-                      High
-                    </Box>
-                  </MenuItem>
                 </Select>
               </FormControl>
             </Grid>
