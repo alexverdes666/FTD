@@ -59,6 +59,9 @@ import {
   Person as PersonIcon,
   Visibility as ViewIcon,
   PhoneInTalk as PhoneIcon,
+  Close as CloseIcon,
+  ChevronLeft as ChevronLeftIcon,
+  ChevronRight as ChevronRightIcon,
 } from "@mui/icons-material";
 import { useForm, Controller } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
@@ -311,6 +314,14 @@ const OrdersPage = () => {
   const [hoveredOrderId, setHoveredOrderId] = useState(null);
   const popoverTimerRef = React.useRef(null);
   const closeTimerRef = React.useRef(null);
+
+  // Assigned Leads Modal State
+  const [assignedLeadsModal, setAssignedLeadsModal] = useState({
+    open: false,
+    leads: [],
+    currentIndex: 0,
+    orderId: null,
+  });
 
   const {
     control,
@@ -1097,6 +1108,62 @@ const OrdersPage = () => {
       handlePopoverClose();
     }, 200);
   }, [handlePopoverClose]);
+
+  const handleOpenAssignedLeadsModal = useCallback((leads, orderId) => {
+    setAssignedLeadsModal({
+      open: true,
+      leads: leads || [],
+      currentIndex: 0,
+      orderId,
+    });
+  }, []);
+
+  const handleCloseAssignedLeadsModal = useCallback(() => {
+    setAssignedLeadsModal((prev) => ({ ...prev, open: false }));
+  }, []);
+
+  const handleNextLead = useCallback(() => {
+    setAssignedLeadsModal((prev) => {
+      if (prev.currentIndex < prev.leads.length - 1) {
+        return { ...prev, currentIndex: prev.currentIndex + 1 };
+      }
+      return prev;
+    });
+  }, []);
+
+  const handlePrevLead = useCallback(() => {
+    setAssignedLeadsModal((prev) => {
+      if (prev.currentIndex > 0) {
+        return { ...prev, currentIndex: prev.currentIndex - 1 };
+      }
+      return prev;
+    });
+  }, []);
+
+  // Keyboard navigation for Assigned Leads Modal
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (!assignedLeadsModal.open) return;
+
+      if (event.key === "ArrowRight") {
+        handleNextLead();
+      } else if (event.key === "ArrowLeft") {
+        handlePrevLead();
+      } else if (event.key === "Escape") {
+        handleCloseAssignedLeadsModal();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [
+    assignedLeadsModal.open,
+    handleNextLead,
+    handlePrevLead,
+    handleCloseAssignedLeadsModal,
+  ]);
 
   const popoverOpen = Boolean(leadPopoverAnchor);
 
@@ -2764,370 +2831,19 @@ const OrdersPage = () => {
                                                   )}
                                               </Box>
                                             </Box>
-                                            <TableContainer
-                                              component={Paper}
-                                              elevation={1}
-                                              sx={{
-                                                maxHeight: 400,
-                                                borderRadius: 1,
-                                              }}
-                                            >
-                                              <Table size="small">
-                                                <TableHead>
-                                                  <TableRow
-                                                    sx={{
-                                                      bgcolor: "action.hover",
-                                                    }}
-                                                  >
-                                                    <TableCell
-                                                      sx={{
-                                                        fontWeight: "bold",
-                                                      }}
-                                                    >
-                                                      Type
-                                                    </TableCell>
-                                                    <TableCell
-                                                      sx={{
-                                                        fontWeight: "bold",
-                                                      }}
-                                                    >
-                                                      Name
-                                                    </TableCell>
-                                                    <TableCell
-                                                      sx={{
-                                                        display: {
-                                                          xs: "none",
-                                                          sm: "table-cell",
-                                                        },
-                                                        fontWeight: "bold",
-                                                      }}
-                                                    >
-                                                      Country
-                                                    </TableCell>
-                                                    <TableCell
-                                                      sx={{
-                                                        display: {
-                                                          xs: "none",
-                                                          sm: "table-cell",
-                                                        },
-                                                        fontWeight: "bold",
-                                                      }}
-                                                    >
-                                                      Email
-                                                    </TableCell>
-                                                    <TableCell
-                                                      sx={{
-                                                        display: {
-                                                          xs: "none",
-                                                          md: "table-cell",
-                                                        },
-                                                        fontWeight: "bold",
-                                                      }}
-                                                    >
-                                                      Phone
-                                                    </TableCell>
-                                                    <TableCell
-                                                      sx={{
-                                                        display: {
-                                                          xs: "none",
-                                                          md: "table-cell",
-                                                        },
-                                                        fontWeight: "bold",
-                                                      }}
-                                                    >
-                                                      Actions
-                                                    </TableCell>
-                                                  </TableRow>
-                                                </TableHead>
-                                                <TableBody>
-                                                  {expandedDetails.leads.map(
-                                                    (lead) => (
-                                                      <React.Fragment
-                                                        key={lead._id}
-                                                      >
-                                                        <TableRow
-                                                          onMouseEnter={(e) =>
-                                                            handleLeadMouseEnter(
-                                                              e,
-                                                              lead,
-                                                              order._id
-                                                            )
-                                                          }
-                                                          onMouseLeave={
-                                                            handleLeadMouseLeave
-                                                          }
-                                                          sx={{
-                                                            cursor: "pointer",
-                                                            "&:hover": {
-                                                              bgcolor:
-                                                                "action.hover",
-                                                            },
-                                                          }}
-                                                        >
-                                                          <TableCell>
-                                                            <Box
-                                                              sx={{
-                                                                display: "flex",
-                                                                flexDirection:
-                                                                  "column",
-                                                                gap: 0.5,
-                                                              }}
-                                                            >
-                                                              <Chip
-                                                                label={
-                                                                  getDisplayLeadType(
-                                                                    lead
-                                                                  )?.toUpperCase() ||
-                                                                  "UNKNOWN"
-                                                                }
-                                                                size="small"
-                                                              />
-                                                              {(() => {
-                                                                const cooldownStatus =
-                                                                  getFTDCooldownStatus(
-                                                                    lead
-                                                                  );
-                                                                if (
-                                                                  cooldownStatus?.inCooldown
-                                                                ) {
-                                                                  return (
-                                                                    <Tooltip
-                                                                      title={`Last used on ${cooldownStatus.lastUsedDate.toLocaleDateString()}. FTD leads cannot be reused for 10 days.`}
-                                                                    >
-                                                                      <Chip
-                                                                        label={`Cooldown: ${cooldownStatus.daysRemaining}d`}
-                                                                        size="small"
-                                                                        color="warning"
-                                                                        variant="outlined"
-                                                                      />
-                                                                    </Tooltip>
-                                                                  );
-                                                                }
-                                                                return null;
-                                                              })()}
-                                                            </Box>
-                                                          </TableCell>
-                                                          <TableCell>
-                                                            <Box>
-                                                              <Typography variant="body2">
-                                                                {lead.firstName}{" "}
-                                                                {lead.lastName}
-                                                              </Typography>
-                                                              {lead.assignedAgent && (
-                                                                <Chip
-                                                                  icon={
-                                                                    <PersonIcon />
-                                                                  }
-                                                                  label={
-                                                                    typeof lead.assignedAgent ===
-                                                                      "object" &&
-                                                                    lead
-                                                                      .assignedAgent
-                                                                      .fullName
-                                                                      ? `Agent: ${lead.assignedAgent.fullName}`
-                                                                      : "Assigned to Agent"
-                                                                  }
-                                                                  size="small"
-                                                                  color="success"
-                                                                  variant="outlined"
-                                                                  sx={{
-                                                                    mt: 0.5,
-                                                                  }}
-                                                                  title={
-                                                                    typeof lead.assignedAgent ===
-                                                                      "object" &&
-                                                                    lead
-                                                                      .assignedAgent
-                                                                      .email
-                                                                      ? lead
-                                                                          .assignedAgent
-                                                                          .email
-                                                                      : undefined
-                                                                  }
-                                                                />
-                                                              )}
-                                                            </Box>
-                                                          </TableCell>
-                                                          <TableCell
-                                                            sx={{
-                                                              display: {
-                                                                xs: "none",
-                                                                sm: "table-cell",
-                                                              },
-                                                            }}
-                                                          >
-                                                            {lead.country}
-                                                          </TableCell>
-                                                          <TableCell
-                                                            sx={{
-                                                              display: {
-                                                                xs: "none",
-                                                                sm: "table-cell",
-                                                              },
-                                                            }}
-                                                          >
-                                                            {lead.newEmail}
-                                                          </TableCell>
-                                                          <TableCell
-                                                            sx={{
-                                                              display: {
-                                                                xs: "none",
-                                                                md: "table-cell",
-                                                              },
-                                                            }}
-                                                          >
-                                                            {lead.newPhone ||
-                                                              "N/A"}
-                                                          </TableCell>
-                                                          <TableCell
-                                                            sx={{
-                                                              display: {
-                                                                xs: "none",
-                                                                md: "table-cell",
-                                                              },
-                                                            }}
-                                                          >
-                                                            {(() => {
-                                                              const networkHistory =
-                                                                lead.clientNetworkHistory?.find(
-                                                                  (history) =>
-                                                                    history.orderId?.toString() ===
-                                                                    order._id.toString()
-                                                                );
-                                                              return null;
-                                                            })()}
-                                                            {/* Cancel lead button for admin and affiliate managers */}
-                                                            {(user?.role ===
-                                                              "admin" ||
-                                                              user?.role ===
-                                                                "affiliate_manager") && (
-                                                              <>
-                                                                <IconButton
-                                                                  size="small"
-                                                                  onClick={() =>
-                                                                    handleCancelLead(
-                                                                      order._id,
-                                                                      lead._id,
-                                                                      `${lead.firstName} ${lead.lastName}`
-                                                                    )
-                                                                  }
-                                                                  title={`Cancel lead ${lead.firstName} ${lead.lastName} from this order`}
-                                                                  color="error"
-                                                                  sx={{ ml: 1 }}
-                                                                >
-                                                                  <DeleteIcon fontSize="small" />
-                                                                </IconButton>
-                                                                {/* Change FTD/Filler button - for FTD leads (includes fillers) */}
-                                                                {lead.leadType ===
-                                                                  "ftd" &&
-                                                                  (() => {
-                                                                    const leadMetadata =
-                                                                      order.leadsMetadata?.find(
-                                                                        (m) =>
-                                                                          m.leadId?.toString() ===
-                                                                          lead._id?.toString()
-                                                                      );
-                                                                    const isFillerOrder =
-                                                                      leadMetadata?.orderedAs ===
-                                                                      "filler";
-                                                                    const leadLabel =
-                                                                      isFillerOrder
-                                                                        ? "Filler"
-                                                                        : "FTD";
-                                                                    const convertToLabel =
-                                                                      isFillerOrder
-                                                                        ? "FTD"
-                                                                        : "Filler";
-                                                                    return (
-                                                                      <>
-                                                                        <IconButton
-                                                                          size="small"
-                                                                          onClick={() =>
-                                                                            handleOpenChangeFTDDialog(
-                                                                              order,
-                                                                              lead
-                                                                            )
-                                                                          }
-                                                                          title={`Change ${leadLabel} lead ${lead.firstName} ${lead.lastName}`}
-                                                                          color="primary"
-                                                                          sx={{
-                                                                            ml: 1,
-                                                                          }}
-                                                                        >
-                                                                          <SwapIcon fontSize="small" />
-                                                                        </IconButton>
-                                                                        <IconButton
-                                                                          size="small"
-                                                                          onClick={() =>
-                                                                            handleConvertLeadType(
-                                                                              order,
-                                                                              lead
-                                                                            )
-                                                                          }
-                                                                          title={`Convert to ${convertToLabel}`}
-                                                                          color="secondary"
-                                                                          sx={{
-                                                                            ml: 0.5,
-                                                                          }}
-                                                                        >
-                                                                          <ConvertIcon fontSize="small" />
-                                                                        </IconButton>
-                                                                      </>
-                                                                    );
-                                                                  })()}
-                                                                {/* Assign to Agent button - only if not already assigned */}
-                                                                {!lead.assignedAgent && (
-                                                                  <IconButton
-                                                                    size="small"
-                                                                    onClick={() =>
-                                                                      handleOpenAssignLeadDialog(
-                                                                        lead
-                                                                      )
-                                                                    }
-                                                                    title={`Assign ${lead.firstName} ${lead.lastName} to agent`}
-                                                                    color="success"
-                                                                    sx={{
-                                                                      ml: 1,
-                                                                    }}
-                                                                  >
-                                                                    <AssignIcon fontSize="small" />
-                                                                  </IconButton>
-                                                                )}
-                                                                {/* Assign Deposit Call button - for FTD leads */}
-                                                                {(lead.leadType ===
-                                                                  "ftd" ||
-                                                                  getDisplayLeadType(
-                                                                    lead
-                                                                  ) ===
-                                                                    "ftd") && (
-                                                                  <Tooltip title="Assign deposit call to agent">
-                                                                    <IconButton
-                                                                      size="small"
-                                                                      onClick={() =>
-                                                                        handleOpenAssignDepositCallDialog(
-                                                                          order,
-                                                                          lead
-                                                                        )
-                                                                      }
-                                                                      color="info"
-                                                                      sx={{
-                                                                        ml: 1,
-                                                                      }}
-                                                                    >
-                                                                      <PhoneIcon fontSize="small" />
-                                                                    </IconButton>
-                                                                  </Tooltip>
-                                                                )}
-                                                              </>
-                                                            )}
-                                                          </TableCell>
-                                                        </TableRow>
-                                                      </React.Fragment>
-                                                    )
-                                                  )}
-                                                </TableBody>
-                                              </Table>
-                                            </TableContainer>
+                                            <Box sx={{ mt: 2 }}>
+                                              <Button
+                                                variant="contained"
+                                                onClick={() =>
+                                                  handleOpenAssignedLeadsModal(
+                                                    expandedDetails.leads,
+                                                    order._id
+                                                  )
+                                                }
+                                              >
+                                                See Leads
+                                              </Button>
+                                            </Box>
                                           </>
                                         )}
                                       </Box>
@@ -4773,7 +4489,7 @@ const OrdersPage = () => {
       <Popper
         open={popoverOpen}
         anchorEl={leadPopoverAnchor}
-        placement="bottom-start"
+        placement="top"
         modifiers={[
           {
             name: "flip",
@@ -4793,6 +4509,12 @@ const OrdersPage = () => {
               tether: true,
               rootBoundary: "document",
               padding: 8,
+            },
+          },
+          {
+            name: "offset",
+            options: {
+              offset: [0, 8],
             },
           },
         ]}
@@ -4818,7 +4540,7 @@ const OrdersPage = () => {
           }}
           sx={{
             pointerEvents: "auto", // Re-enable pointer events for content
-            mt: 1,
+            mb: 1,
             zIndex: 9999,
           }}
         >
@@ -4833,6 +4555,79 @@ const OrdersPage = () => {
           )}
         </Paper>
       </Popper>
+
+      {/* Assigned Leads Modal */}
+      <Dialog
+        open={assignedLeadsModal.open}
+        onClose={handleCloseAssignedLeadsModal}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle
+          sx={{
+            m: 0,
+            p: 2,
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
+          <Typography variant="h6">
+            Assigned Lead ({assignedLeadsModal.currentIndex + 1} of{" "}
+            {assignedLeadsModal.leads.length})
+          </Typography>
+          <IconButton
+            aria-label="close"
+            onClick={handleCloseAssignedLeadsModal}
+            sx={{
+              color: (theme) => theme.palette.grey[500],
+            }}
+          >
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent dividers>
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              minHeight: "300px",
+              position: "relative",
+            }}
+          >
+            <IconButton
+              onClick={handlePrevLead}
+              disabled={assignedLeadsModal.currentIndex === 0}
+              sx={{ position: "absolute", left: 8, zIndex: 1 }}
+            >
+              <ChevronLeftIcon fontSize="large" />
+            </IconButton>
+
+            <Box sx={{ width: "100%", px: 8 }}>
+              {assignedLeadsModal.leads[assignedLeadsModal.currentIndex] && (
+                <LeadQuickView
+                  lead={
+                    assignedLeadsModal.leads[assignedLeadsModal.currentIndex]
+                  }
+                  onLeadUpdate={handleLeadUpdate}
+                />
+              )}
+            </Box>
+
+            <IconButton
+              onClick={handleNextLead}
+              disabled={
+                assignedLeadsModal.currentIndex ===
+                assignedLeadsModal.leads.length - 1
+              }
+              sx={{ position: "absolute", right: 8, zIndex: 1 }}
+            >
+              <ChevronRightIcon fontSize="large" />
+            </IconButton>
+          </Box>
+        </DialogContent>
+      </Dialog>
     </Box>
   );
 };
