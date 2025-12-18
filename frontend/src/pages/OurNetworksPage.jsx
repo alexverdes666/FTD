@@ -75,6 +75,20 @@ const TronIcon = (props) => (
 import { useSelector } from "react-redux";
 import { selectUser } from "../store/slices/authSlice";
 import NetworkBlockchainControl from "../components/NetworkBlockchainControl";
+
+// Debounce hook for search
+const useDebounce = (value, delay) => {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value);
+    }, delay);
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [value, delay]);
+  return debouncedValue;
+};
 import TransactionHistoryModal from "../components/TransactionHistoryModal";
 import AllNetworksScraperButton from "../components/AllNetworksScraperButton";
 import blockchainService from "../services/blockchain";
@@ -159,6 +173,7 @@ const OurNetworksPage = () => {
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [totalCount, setTotalCount] = useState(0);
   const [searchTerm, setSearchTerm] = useState("");
+  const debouncedSearchTerm = useDebounce(searchTerm, 500); // Debounce search for 500ms
   const [showActiveOnly, setShowActiveOnly] = useState(true);
   const [openDialog, setOpenDialog] = useState(false);
   const [editingNetwork, setEditingNetwork] = useState(null);
@@ -276,7 +291,7 @@ const OurNetworksPage = () => {
       } else {
         params.append("page", page + 1);
         params.append("limit", rowsPerPage);
-        if (searchTerm) params.append("search", searchTerm);
+        if (debouncedSearchTerm) params.append("search", debouncedSearchTerm);
         if (showActiveOnly) params.append("isActive", "true");
       }
 
@@ -285,19 +300,57 @@ const OurNetworksPage = () => {
       const response = await api.get(url);
 
       if (user?.role === "affiliate_manager") {
-        // For affiliate managers, apply search and filter on frontend
+        // For affiliate managers, apply multi-keyword search on frontend
         let filteredNetworks = response.data.data || [];
 
-        // Apply search filter
-        if (searchTerm) {
-          filteredNetworks = filteredNetworks.filter(
-            (network) =>
-              network.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-              (network.description &&
-                network.description
-                  .toLowerCase()
-                  .includes(searchTerm.toLowerCase()))
-          );
+        // Apply multi-keyword search filter with AND logic
+        if (debouncedSearchTerm) {
+          const searchKeywords = debouncedSearchTerm.toLowerCase().trim().split(/\s+/).filter(k => k.length > 0);
+          
+          filteredNetworks = filteredNetworks.filter((network) => {
+            const matchesKeyword = (keyword) => {
+              // Search in name
+              if (network.name?.toLowerCase().includes(keyword)) return true;
+              
+              // Search in description
+              if (network.description?.toLowerCase().includes(keyword)) return true;
+              
+              // Search in assigned affiliate manager
+              if (network.assignedAffiliateManager?.fullName?.toLowerCase().includes(keyword)) return true;
+              if (network.assignedAffiliateManager?.email?.toLowerCase().includes(keyword)) return true;
+              
+              // Search in crypto wallet addresses
+              if (network.cryptoWallets?.ethereum) {
+                const ethereumAddresses = Array.isArray(network.cryptoWallets.ethereum)
+                  ? network.cryptoWallets.ethereum
+                  : [network.cryptoWallets.ethereum];
+                if (ethereumAddresses.some(addr => addr?.toLowerCase().includes(keyword))) return true;
+              }
+
+              if (network.cryptoWallets?.bitcoin) {
+                const bitcoinAddresses = Array.isArray(network.cryptoWallets.bitcoin)
+                  ? network.cryptoWallets.bitcoin
+                  : [network.cryptoWallets.bitcoin];
+                if (bitcoinAddresses.some(addr => addr?.toLowerCase().includes(keyword))) return true;
+              }
+
+              if (network.cryptoWallets?.tron) {
+                const tronAddresses = Array.isArray(network.cryptoWallets.tron)
+                  ? network.cryptoWallets.tron
+                  : [network.cryptoWallets.tron];
+                if (tronAddresses.some(addr => addr?.toLowerCase().includes(keyword))) return true;
+              }
+              
+              // Search in active status
+              if (network.isActive && keyword === "active") return true;
+              if (!network.isActive && keyword === "inactive") return true;
+              
+              return false;
+            };
+            
+            // Network must match ALL keywords (AND logic)
+            return searchKeywords.every(keyword => matchesKeyword(keyword));
+          });
         }
 
         // Apply active filter (though backend already returns only active networks)
@@ -322,7 +375,7 @@ const OurNetworksPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [page, rowsPerPage, searchTerm, showActiveOnly, user?.role]);
+  }, [page, rowsPerPage, debouncedSearchTerm, showActiveOnly, user?.role]);
 
   const fetchNetworkSummary = useCallback(
     async (networkId) => {
@@ -712,6 +765,7 @@ const OurNetworksPage = () => {
                   ? "Search our networks"
                   : "Search my networks"
               }
+              placeholder="Type to search (e.g., 'ethereum admin' for both keywords)"
               variant="outlined"
               size="small"
               fullWidth

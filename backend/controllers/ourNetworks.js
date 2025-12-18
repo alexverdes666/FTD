@@ -10,13 +10,6 @@ exports.getOurNetworks = async (req, res, next) => {
     const { page = 1, limit = 10, search, isActive } = req.query;
     const filter = {};
 
-    if (search) {
-      filter.$or = [
-        { name: new RegExp(search, "i") },
-        { description: new RegExp(search, "i") },
-      ];
-    }
-
     if (isActive !== undefined) {
       filter.isActive = isActive === "true";
     }
@@ -26,12 +19,96 @@ exports.getOurNetworks = async (req, res, next) => {
     }
 
     const skip = (page - 1) * limit;
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+
+    // If search is provided, use multi-keyword search with AND logic
+    if (search) {
+      // Fetch all networks matching the base filter (without search)
+      const baseNetworks = await OurNetwork.find(filter)
+        .populate("assignedAffiliateManager", "fullName email")
+        .populate("createdBy", "fullName email")
+        .sort({ createdAt: -1 });
+
+      // Split search into multiple keywords and filter with AND logic
+      const searchKeywords = search.toLowerCase().trim().split(/\s+/).filter(k => k.length > 0);
+
+      const filteredNetworks = baseNetworks.filter((network) => {
+        // Helper function to check if a keyword matches any field in the network
+        const matchesKeyword = (keyword) => {
+          // Search in network ID
+          if (network._id.toString().toLowerCase().includes(keyword)) return true;
+
+          // Search in name
+          if (network.name?.toLowerCase().includes(keyword)) return true;
+
+          // Search in description
+          if (network.description?.toLowerCase().includes(keyword)) return true;
+
+          // Search in assigned affiliate manager
+          if (network.assignedAffiliateManager?.fullName?.toLowerCase().includes(keyword)) return true;
+          if (network.assignedAffiliateManager?.email?.toLowerCase().includes(keyword)) return true;
+
+          // Search in created by user
+          if (network.createdBy?.fullName?.toLowerCase().includes(keyword)) return true;
+          if (network.createdBy?.email?.toLowerCase().includes(keyword)) return true;
+
+          // Search in crypto wallet addresses
+          if (network.cryptoWallets?.ethereum) {
+            const ethereumAddresses = Array.isArray(network.cryptoWallets.ethereum)
+              ? network.cryptoWallets.ethereum
+              : [network.cryptoWallets.ethereum];
+            if (ethereumAddresses.some(addr => addr?.toLowerCase().includes(keyword))) return true;
+          }
+
+          if (network.cryptoWallets?.bitcoin) {
+            const bitcoinAddresses = Array.isArray(network.cryptoWallets.bitcoin)
+              ? network.cryptoWallets.bitcoin
+              : [network.cryptoWallets.bitcoin];
+            if (bitcoinAddresses.some(addr => addr?.toLowerCase().includes(keyword))) return true;
+          }
+
+          if (network.cryptoWallets?.tron) {
+            const tronAddresses = Array.isArray(network.cryptoWallets.tron)
+              ? network.cryptoWallets.tron
+              : [network.cryptoWallets.tron];
+            if (tronAddresses.some(addr => addr?.toLowerCase().includes(keyword))) return true;
+          }
+
+          // Search in active status
+          if (network.isActive && keyword === "active") return true;
+          if (!network.isActive && keyword === "inactive") return true;
+
+          return false;
+        };
+
+        // Network must match ALL keywords (AND logic)
+        return searchKeywords.every(keyword => matchesKeyword(keyword));
+      });
+
+      // Apply pagination to filtered results
+      const total = filteredNetworks.length;
+      const paginatedNetworks = filteredNetworks.slice(skip, skip + limitNum);
+
+      return res.status(200).json({
+        success: true,
+        data: paginatedNetworks,
+        pagination: {
+          current: pageNum,
+          pages: Math.ceil(total / limitNum),
+          total,
+          limit: limitNum,
+        },
+      });
+    }
+
+    // No search - use regular query
     const [ourNetworks, total] = await Promise.all([
       OurNetwork.find(filter)
         .populate("assignedAffiliateManager", "fullName email")
         .populate("createdBy", "fullName email")
         .skip(skip)
-        .limit(parseInt(limit))
+        .limit(limitNum)
         .sort({ createdAt: -1 }),
       OurNetwork.countDocuments(filter),
     ]);
@@ -40,10 +117,10 @@ exports.getOurNetworks = async (req, res, next) => {
       success: true,
       data: ourNetworks,
       pagination: {
-        current: parseInt(page),
-        pages: Math.ceil(total / limit),
+        current: pageNum,
+        pages: Math.ceil(total / limitNum),
         total,
-        limit: parseInt(limit),
+        limit: limitNum,
       },
     });
   } catch (error) {
