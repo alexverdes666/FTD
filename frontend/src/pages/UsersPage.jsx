@@ -37,6 +37,7 @@ import {
   Grow,
   useTheme,
   alpha,
+  useMediaQuery,
 } from "@mui/material";
 import { styled } from "@mui/material/styles";
 import {
@@ -54,7 +55,6 @@ import {
   Logout as LogoutIcon,
   Search as SearchIcon,
 } from "@mui/icons-material";
-import debounce from "lodash.debounce";
 import { useForm, Controller } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
 import * as yup from "yup";
@@ -65,11 +65,6 @@ import SensitiveActionModal from "../components/SensitiveActionModal";
 const StyledCard = styled(Card)(({ theme }) => ({
   background: alpha(theme.palette.background.paper, 0.8),
   backdropFilter: "blur(10px)",
-  transition: "all 0.3s ease-in-out",
-  "&:hover": {
-    transform: "translateY(-2px)",
-    boxShadow: theme.shadows[8],
-  },
 }));
 const StyledTableRow = styled(TableRow)(({ theme }) => ({
   transition: "all 0.2s ease-in-out",
@@ -480,6 +475,7 @@ const UserDialog = React.memo(
 );
 const UsersPage = () => {
   const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("md"));
   const currentUser = useSelector(selectUser);
   const { executeSensitiveAction, sensitiveActionState, resetSensitiveAction } =
     useSensitiveAction();
@@ -488,36 +484,13 @@ const UsersPage = () => {
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
   const [dialogState, setDialogState] = useState({ type: null, user: null });
-  const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(10);
   const [totalUsers, setTotalUsers] = useState(0);
   const [filters, setFilters] = useState({
     role: "",
     isActive: "true",
     status: "",
-    search: "",
   });
   const [searchValue, setSearchValue] = useState("");
-
-  const debouncedSearch = useMemo(
-    () =>
-      debounce((value) => {
-        setFilters((prev) => ({ ...prev, search: value }));
-        setPage(0);
-      }, 500),
-    []
-  );
-
-  useEffect(() => {
-    return () => {
-      debouncedSearch.cancel();
-    };
-  }, [debouncedSearch]);
-
-  const handleSearchChange = (event) => {
-    setSearchValue(event.target.value);
-    debouncedSearch(event.target.value);
-  };
 
   const {
     control,
@@ -556,7 +529,7 @@ const UsersPage = () => {
     setLoading(true);
     clearMessages();
     try {
-      const queryParams = { page: page + 1, limit: rowsPerPage, ...filters };
+      const queryParams = { limit: 10000, ...filters };
       const activeParams = Object.fromEntries(
         Object.entries(queryParams).filter(([, v]) => v !== "")
       );
@@ -568,7 +541,7 @@ const UsersPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [page, rowsPerPage, filters]);
+  }, [filters]);
   useEffect(() => {
     fetchUsers();
   }, [fetchUsers]);
@@ -755,27 +728,35 @@ const UsersPage = () => {
     },
     [dialogState.user, fetchUsers, handleDialogClose]
   );
-  const handleChangePage = useCallback((_, newPage) => setPage(newPage), []);
-  const handleChangeRowsPerPage = useCallback((event) => {
-    setRowsPerPage(parseInt(event.target.value, 10));
-    setPage(0);
-  }, []);
   const handleFilterChange = useCallback(
     (field) => (event) => {
       setFilters((prev) => ({ ...prev, [field]: event.target.value }));
-      setPage(0);
     },
     []
   );
+  const handleSearchChange = (event) => {
+    setSearchValue(event.target.value);
+  };
+
   const clearFilters = useCallback(() => {
-    setFilters({ role: "", isActive: "true", status: "", search: "" });
+    setFilters({ role: "", isActive: "true", status: "" });
     setSearchValue("");
-    setPage(0);
   }, []);
   const canManageUsers = useMemo(
     () => currentUser?.role === "admin",
     [currentUser]
   );
+
+  // Client-side filtering for search to avoid re-fetching on every keystroke
+  const filteredUsers = useMemo(() => {
+    if (!searchValue.trim()) return users;
+    
+    const searchLower = searchValue.toLowerCase();
+    return users.filter(user => 
+      user.fullName?.toLowerCase().includes(searchLower) ||
+      user.email?.toLowerCase().includes(searchLower)
+    );
+  }, [users, searchValue]);
   if (!canManageUsers) {
     return (
       <Box p={3}>
@@ -786,85 +767,25 @@ const UsersPage = () => {
     );
   }
   return (
-    <Box p={3}>
-      <Fade in timeout={800}>
-        <Stack
-          direction="row"
-          justifyContent="space-between"
-          alignItems="center"
-          mb={3}
-        >
-          <Typography
-            variant="h4"
-            sx={{
-              position: "relative",
-              "&::after": {
-                content: '""',
-                position: "absolute",
-                bottom: -4,
-                left: 0,
-                width: "50%",
-                height: 2,
-                backgroundColor: theme.palette.primary.main,
-                transition: "width 0.3s ease-in-out",
-              },
-              "&:hover::after": {
-                width: "100%",
-              },
-            }}
-          >
-            User Management
-          </Typography>
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={() => setDialogState({ type: "user", user: null })}
-            sx={{
-              background: `linear-gradient(45deg, ${theme.palette.primary.main}, ${theme.palette.primary.dark})`,
-              transition: "all 0.3s ease-in-out",
-              "&:hover": {
-                transform: "translateY(-2px)",
-                boxShadow: theme.shadows[8],
-              },
-            }}
-          >
-            Add User
-          </Button>
-        </Stack>
-      </Fade>
+    <Box sx={{ p: isMobile ? 2 : 3, pt: 0, mt: -2 }}>
       {success && (
-        <Grow in timeout={500}>
-          <Alert
-            severity="success"
-            sx={{
-              mb: 2,
-              animation: "slideIn 0.5s ease-out",
-              "@keyframes slideIn": {
-                from: { transform: "translateX(-100%)" },
-                to: { transform: "translateX(0)" },
-              },
-            }}
-            onClose={() => setSuccess(null)}
-          >
-            {success}
-          </Alert>
-        </Grow>
+        <Alert
+          severity="success"
+          sx={{ mb: 2 }}
+          onClose={() => setSuccess(null)}
+        >
+          {success}
+        </Alert>
       )}
       {error && (
-        <Grow in timeout={500}>
-          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
-            {error}
-          </Alert>
-        </Grow>
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
+          {error}
+        </Alert>
       )}
-      <Fade in timeout={1000}>
-        <StyledCard sx={{ mb: 3 }}>
-          <CardContent>
-            <Typography variant="h6" gutterBottom>
-              Filters
-            </Typography>
-            <Grid container spacing={2}>
-              <Grid item xs={12}>
+      <StyledCard sx={{ mb: 2 }}>
+        <CardContent>
+          <Grid container spacing={2} alignItems="center">
+              <Grid item xs={12} sm={6} md={3}>
                 <TextField
                   fullWidth
                   placeholder="Search by name or email..."
@@ -875,6 +796,7 @@ const UsersPage = () => {
                       <SearchIcon sx={{ color: "text.secondary", mr: 1 }} />
                     ),
                   }}
+                  size="small"
                   sx={{
                     "& .MuiOutlinedInput-root": {
                       bgcolor: "background.paper",
@@ -882,8 +804,8 @@ const UsersPage = () => {
                   }}
                 />
               </Grid>
-              <Grid item xs={12} sm={4} md={3}>
-                <FormControl fullWidth>
+              <Grid item xs={6} sm={3} md={2}>
+                <FormControl fullWidth size="small">
                   <InputLabel>Role</InputLabel>
                   <Select
                     value={filters.role}
@@ -899,8 +821,8 @@ const UsersPage = () => {
                   </Select>
                 </FormControl>
               </Grid>
-              <Grid item xs={12} sm={4} md={3}>
-                <FormControl fullWidth>
+              <Grid item xs={6} sm={3} md={2}>
+                <FormControl fullWidth size="small">
                   <InputLabel>Status</InputLabel>
                   <Select
                     value={filters.status}
@@ -916,8 +838,8 @@ const UsersPage = () => {
                   </Select>
                 </FormControl>
               </Grid>
-              <Grid item xs={12} sm={4} md={3}>
-                <FormControl fullWidth>
+              <Grid item xs={6} sm={3} md={1.5}>
+                <FormControl fullWidth size="small">
                   <InputLabel>Activity</InputLabel>
                   <Select
                     value={filters.isActive}
@@ -930,34 +852,57 @@ const UsersPage = () => {
                   </Select>
                 </FormControl>
               </Grid>
-              <Grid item xs={12} sm={12} md={3}>
+              <Grid item xs={6} sm={3} md={1.5}>
                 <Button
                   onClick={clearFilters}
                   variant="outlined"
                   fullWidth
-                  sx={{ height: "100%" }}
+                  size="small"
+                  sx={{ height: "40px" }}
                 >
-                  Clear Filters
+                  Clear
+                </Button>
+              </Grid>
+              <Grid item xs={12} sm={6} md={2}>
+                <Button
+                  variant="contained"
+                  fullWidth
+                  size="small"
+                  startIcon={<AddIcon />}
+                  onClick={() => setDialogState({ type: "user", user: null })}
+                  sx={{
+                    height: "40px",
+                    background: `linear-gradient(45deg, ${theme.palette.primary.main}, ${theme.palette.primary.dark})`,
+                    transition: "all 0.3s ease-in-out",
+                    "&:hover": {
+                      transform: "translateY(-2px)",
+                      boxShadow: theme.shadows[8],
+                    },
+                  }}
+                >
+                  Add User
                 </Button>
               </Grid>
             </Grid>
           </CardContent>
         </StyledCard>
-      </Fade>
-      <Fade in timeout={1200}>
-        <Paper
-          elevation={3}
-          sx={{
-            background: alpha(theme.palette.background.paper, 0.8),
-            backdropFilter: "blur(10px)",
-          }}
-        >
+      <Paper
+        elevation={3}
+        sx={{
+          background: alpha(theme.palette.background.paper, 0.8),
+          backdropFilter: "blur(10px)",
+        }}
+      >
           <TableContainer>
-            <Table size="small">
+            <Table size="small" sx={{ tableLayout: "fixed", width: "100%" }}>
               <TableHead>
                 <TableRow>
                   <TableCell
-                    sx={{ fontWeight: "bold", backgroundColor: "grey.200" }}
+                    sx={{ 
+                      fontWeight: "bold", 
+                      backgroundColor: "grey.200",
+                      width: "20%",
+                    }}
                   >
                     User
                   </TableCell>
@@ -966,6 +911,7 @@ const UsersPage = () => {
                       fontWeight: "bold",
                       backgroundColor: "grey.200",
                       textAlign: "center",
+                      width: "10%",
                     }}
                   >
                     Role
@@ -975,6 +921,7 @@ const UsersPage = () => {
                       fontWeight: "bold",
                       backgroundColor: "grey.200",
                       textAlign: "center",
+                      width: "10%",
                     }}
                   >
                     Status
@@ -984,6 +931,7 @@ const UsersPage = () => {
                       fontWeight: "bold",
                       backgroundColor: "grey.200",
                       textAlign: "center",
+                      width: "15%",
                     }}
                   >
                     Permissions
@@ -993,6 +941,7 @@ const UsersPage = () => {
                       fontWeight: "bold",
                       backgroundColor: "grey.200",
                       textAlign: "center",
+                      width: "10%",
                     }}
                   >
                     Agent Code
@@ -1002,6 +951,7 @@ const UsersPage = () => {
                       fontWeight: "bold",
                       backgroundColor: "grey.200",
                       textAlign: "center",
+                      width: "10%",
                     }}
                   >
                     Activity
@@ -1011,6 +961,7 @@ const UsersPage = () => {
                       fontWeight: "bold",
                       backgroundColor: "grey.200",
                       textAlign: "center",
+                      width: "10%",
                     }}
                   >
                     Created
@@ -1020,6 +971,7 @@ const UsersPage = () => {
                       fontWeight: "bold",
                       backgroundColor: "grey.200",
                       textAlign: "right",
+                      width: "15%",
                     }}
                   >
                     Actions
@@ -1042,22 +994,21 @@ const UsersPage = () => {
                       />
                     </TableCell>
                   </TableRow>
-                ) : users.length === 0 ? (
+                ) : filteredUsers.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={8} align="center" sx={{ py: 5 }}>
                       <Typography variant="body1" color="text.secondary">
-                        No users found.
+                        {searchValue ? "No users match your search." : "No users found."}
                       </Typography>
                     </TableCell>
                   </TableRow>
                 ) : (
-                  users.map((user, index) => {
+                  filteredUsers.map((user, index) => {
                     const roleInfo = ROLES[user.role] || ROLES.pending_approval;
                     const statusInfo =
                       STATUSES[user.status] || STATUSES.pending;
                     return (
-                      <Grow in timeout={500 + index * 100} key={user._id}>
-                        <StyledTableRow hover>
+                      <StyledTableRow hover key={user._id}>
                           <TableCell>
                             <Stack
                               direction="row"
@@ -1152,7 +1103,7 @@ const UsersPage = () => {
                             {new Date(user.createdAt).toLocaleDateString()}
                           </TableCell>
                           <TableCell align="right">
-                            <Stack direction="row" spacing={0.5}>
+                            <Stack direction="row" spacing={0.5} justifyContent="flex-end">
                               {user.status === "pending" && (
                                 <Tooltip title="Approve User" arrow>
                                   <AnimatedIconButton
@@ -1210,24 +1161,13 @@ const UsersPage = () => {
                             </Stack>
                           </TableCell>
                         </StyledTableRow>
-                      </Grow>
                     );
                   })
                 )}
               </TableBody>
             </Table>
           </TableContainer>
-          <TablePagination
-            rowsPerPageOptions={[5, 10, 25]}
-            component="div"
-            count={totalUsers}
-            rowsPerPage={rowsPerPage}
-            page={page}
-            onPageChange={handleChangePage}
-            onRowsPerPageChange={handleChangeRowsPerPage}
-          />
         </Paper>
-      </Fade>
       {}
       <UserDialog
         open={dialogState.type === "user"}

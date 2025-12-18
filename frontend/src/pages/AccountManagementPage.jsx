@@ -26,7 +26,10 @@ import {
   CircularProgress,
   Autocomplete,
   Stack,
-  Tooltip
+  Tooltip,
+  useTheme,
+  useMediaQuery,
+  Popover
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -44,12 +47,123 @@ import { selectUser } from '../store/slices/authSlice';
 import api from '../services/api';
 import toast from 'react-hot-toast';
 
+  const getRoleColor = (role) => {
+    const colorMap = {
+      admin: 'error',
+      affiliate_manager: 'primary',
+      agent: 'success',
+      lead_manager: 'info',
+      refunds_manager: 'warning',
+      inventory_manager: 'secondary',
+      pending_approval: 'default'
+    };
+    return colorMap[role] || 'default';
+  };
+
+  const getRoleDisplayName = (role) => {
+    const roleMap = {
+      admin: 'Admin',
+      affiliate_manager: 'Affiliate Manager',
+      agent: 'Agent',
+      lead_manager: 'Lead Manager',
+      refunds_manager: 'Refunds Manager',
+      inventory_manager: 'Inventory Manager',
+      pending_approval: 'Pending Approval'
+    };
+    return roleMap[role] || role;
+  };
+
+const LinkedUsersCell = ({ users }) => {
+  const [anchorEl, setAnchorEl] = useState(null);
+
+  const handleClick = (event) => {
+    event.stopPropagation(); // Prevent row selection if enabled
+    setAnchorEl(event.currentTarget);
+  };
+
+  const handleClose = (event) => {
+    event?.stopPropagation();
+    setAnchorEl(null);
+  };
+
+  const open = Boolean(anchorEl);
+
+  if (!users || users.length === 0) {
+    return (
+      <Typography variant="caption" color="text.secondary">
+        No linked accounts
+      </Typography>
+    );
+  }
+
+  const remaining = users.length - 1;
+
+  return (
+    <>
+      <Stack direction="row" spacing={0.5} alignItems="center">
+        <Chip
+          label={`${users[0].fullName}`}
+          size="small"
+          color={getRoleColor(users[0].role)}
+          variant="outlined"
+          onClick={handleClick}
+          sx={{ cursor: 'pointer' }}
+        />
+        {remaining > 0 && (
+          <Chip
+            label={`+${remaining}`}
+            size="small"
+            variant="outlined"
+            onClick={handleClick}
+            sx={{ cursor: 'pointer' }}
+          />
+        )}
+      </Stack>
+      <Popover
+        open={open}
+        anchorEl={anchorEl}
+        onClose={handleClose}
+        anchorOrigin={{
+          vertical: 'bottom',
+          horizontal: 'left',
+        }}
+        transformOrigin={{
+          vertical: 'top',
+          horizontal: 'left',
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <Box sx={{ p: 2, maxWidth: 350 }}>
+          <Typography variant="subtitle2" sx={{ mb: 1.5, fontWeight: 'bold' }}>
+            Linked Users ({users.length})
+          </Typography>
+          <Stack spacing={1}>
+            {users.map((user) => (
+              <Chip
+                key={user._id}
+                avatar={<Avatar sx={{ width: 24, height: 24, fontSize: '0.75rem' }}>{user.fullName.charAt(0).toUpperCase()}</Avatar>}
+                label={`${user.fullName} (${getRoleDisplayName(user.role)})`}
+                size="small"
+                color={getRoleColor(user.role)}
+                variant="outlined"
+                sx={{ width: '100%', justifyContent: 'flex-start', height: 'auto', py: 0.5 }}
+              />
+            ))}
+          </Stack>
+        </Box>
+      </Popover>
+    </>
+  );
+};
+
 const AccountManagementPage = () => {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("md"));
   const user = useSelector(selectUser);
   const [users, setUsers] = useState([]);
   const [availableUsers, setAvailableUsers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [pagination, setPagination] = useState({ page: 0, pageSize: 10 });
+  const [pagination, setPagination] = useState({ page: 0, pageSize: 100 });
   const [totalRows, setTotalRows] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
@@ -188,43 +302,22 @@ const AccountManagementPage = () => {
     }
   };
 
-  const getRoleColor = (role) => {
-    const colorMap = {
-      admin: 'error',
-      affiliate_manager: 'primary',
-      agent: 'success',
-      lead_manager: 'info',
-      refunds_manager: 'warning',
-      inventory_manager: 'secondary',
-      pending_approval: 'default'
-    };
-    return colorMap[role] || 'default';
-  };
-
-  const getRoleDisplayName = (role) => {
-    const roleMap = {
-      admin: 'Admin',
-      affiliate_manager: 'Affiliate Manager',
-      agent: 'Agent',
-      lead_manager: 'Lead Manager',
-      refunds_manager: 'Refunds Manager',
-      inventory_manager: 'Inventory Manager',
-      pending_approval: 'Pending Approval'
-    };
-    return roleMap[role] || role;
-  };
-
   const columns = [
     {
       field: 'index',
       headerName: '#',
-      width: 60,
-      sortable: false
+      minWidth: 60,
+      flex: 0.5,
+      sortable: false,
+      filterable: false,
     },
     {
       field: 'fullName',
       headerName: 'Full Name',
-      width: 200,
+      minWidth: 150,
+      flex: 1.5,
+      sortable: false,
+      filterable: false,
       renderCell: (params) => (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <Avatar sx={{ width: 32, height: 32, fontSize: '0.875rem' }}>
@@ -237,12 +330,22 @@ const AccountManagementPage = () => {
     {
       field: 'email',
       headerName: 'Email',
-      width: 250
+      minWidth: 180,
+      flex: 2,
+      sortable: false,
+      filterable: false,
+      align: 'center',
+      headerAlign: 'center',
     },
     {
       field: 'role',
       headerName: 'Role',
-      width: 150,
+      minWidth: 130,
+      flex: 1,
+      sortable: false,
+      filterable: false,
+      align: 'center',
+      headerAlign: 'center',
       renderCell: (params) => (
         <Chip
           label={getRoleDisplayName(params.value)}
@@ -253,62 +356,27 @@ const AccountManagementPage = () => {
       )
     },
     {
-      field: 'totalAccounts',
-      headerName: 'Linked Accounts',
-      width: 120,
-      align: 'center',
-      headerAlign: 'center',
-      renderCell: (params) => (
-        <Chip
-          icon={<GroupIcon fontSize="small" />}
-          label={params.value > 1 ? `${params.value} accounts` : 'No links'}
-          size="small"
-          color={params.value > 1 ? 'primary' : 'default'}
-          variant={params.value > 1 ? 'filled' : 'outlined'}
-        />
-      )
-    },
-    {
       field: 'linkedAccounts',
       headerName: 'Linked Users',
-      width: 300,
+      minWidth: 200,
+      flex: 2,
       sortable: false,
-      renderCell: (params) => (
-        <Box sx={{ py: 1 }}>
-          {params.value && params.value.length > 0 ? (
-            <Stack direction="row" spacing={0.5} flexWrap="wrap">
-              {params.value.slice(0, 3).map((linkedUser) => (
-                <Chip
-                  key={linkedUser._id}
-                  label={`${linkedUser.fullName} (${getRoleDisplayName(linkedUser.role)})`}
-                  size="small"
-                  color={getRoleColor(linkedUser.role)}
-                  variant="outlined"
-                />
-              ))}
-              {params.value.length > 3 && (
-                <Chip
-                  label={`+${params.value.length - 3} more`}
-                  size="small"
-                  variant="outlined"
-                />
-              )}
-            </Stack>
-          ) : (
-            <Typography variant="caption" color="text.secondary">
-              No linked accounts
-            </Typography>
-          )}
-        </Box>
-      )
+      filterable: false,
+      align: 'center',
+      headerAlign: 'center',
+      renderCell: (params) => <LinkedUsersCell users={params.value} />
     },
     {
       field: 'actions',
       headerName: 'Actions',
-      width: 120,
+      minWidth: 120,
+      flex: 1,
       sortable: false,
+      filterable: false,
+      align: 'right',
+      headerAlign: 'right',
       renderCell: (params) => (
-        <Box>
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
           <Tooltip title="Manage Links">
             <IconButton
               size="small"
@@ -334,20 +402,10 @@ const AccountManagementPage = () => {
   ];
 
   return (
-    <Box sx={{ p: 3 }}>
-      <Typography variant="h4" gutterBottom>
-        Account Management
-      </Typography>
-      
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-        Manage user account relationships for account switching functionality.
-        Users can only switch between accounts that you link together here.
-      </Typography>
-
+    <Box sx={{ p: isMobile ? 2 : 3, pt: 0, mt: -2 }}>
       {/* Controls */}
-      <Card sx={{ mb: 3 }}>
-        <CardContent>
-          <Grid container spacing={2} alignItems="center">
+      <Paper sx={{ p: 2, mb: 2 }}>
+        <Grid container spacing={2} alignItems="center">
             <Grid item xs={12} md={4}>
               <TextField
                 fullWidth
@@ -392,11 +450,10 @@ const AccountManagementPage = () => {
               </Box>
             </Grid>
           </Grid>
-        </CardContent>
-      </Card>
+      </Paper>
 
       {/* Data Grid */}
-      <Card>
+      <Paper sx={{ width: "100%", overflow: "hidden" }}>
         <DataGrid
           rows={users}
           columns={columns}
@@ -406,17 +463,22 @@ const AccountManagementPage = () => {
           paginationModel={pagination}
           onPaginationModelChange={setPagination}
           rowCount={totalRows}
-          pageSizeOptions={[10, 25, 50]}
+          pageSizeOptions={[100]}
           disableRowSelectionOnClick
+          disableColumnMenu
           autoHeight
           sx={{
             '& .MuiDataGrid-cell': {
               borderBottom: '1px solid',
               borderColor: 'divider',
             },
+            '& .MuiDataGrid-columnHeaders': {
+              backgroundColor: '#eeeeee',
+            },
+            border: 'none',
           }}
         />
-      </Card>
+      </Paper>
 
       {/* Link Accounts Dialog */}
       <Dialog
