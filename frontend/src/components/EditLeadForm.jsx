@@ -19,6 +19,7 @@ import {
   CircularProgress,
   Chip,
   Box,
+  Autocomplete,
 } from "@mui/material";
 import api from "../services/api";
 const LEAD_STATUSES = {
@@ -168,6 +169,12 @@ const EditLeadForm = ({ open, onClose, lead, onLeadUpdated, sx }) => {
   const [loadingClientNetworks, setLoadingClientNetworks] = useState(false);
   const [loadingCampaigns, setLoadingCampaigns] = useState(false);
   const [loadingOurNetworks, setLoadingOurNetworks] = useState(false);
+  
+  // Input value states for controlling dropdown visibility
+  const [clientBrokerInputValue, setClientBrokerInputValue] = useState('');
+  const [clientNetworkInputValue, setClientNetworkInputValue] = useState('');
+  const [campaignInputValue, setCampaignInputValue] = useState('');
+  const [ourNetworkInputValue, setOurNetworkInputValue] = useState('');
   const {
     control,
     handleSubmit,
@@ -543,152 +550,260 @@ const EditLeadForm = ({ open, onClose, lead, onLeadUpdated, sx }) => {
             </Typography>
           </Grid>
           <Grid item xs={12} sm={6}>
-            <FormControl fullWidth error={!!errors.clientBroker}>
-              <InputLabel>Client Brokers</InputLabel>
-              <Controller
-                name="clientBroker"
-                control={control}
-                render={({ field }) => (
-                  <Select 
-                    {...field}
-                    value={field.value || []}
-                    multiple
-                    label="Client Brokers" 
-                    disabled={loadingClientBrokers}
-                    renderValue={(selected) => (
-                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                        {selected.map((value) => {
-                          const broker = clientBrokers.find(b => b._id === value);
-                          return (
-                            <Chip key={value} label={broker?.name || value} size="small" />
-                          );
-                        })}
-                      </Box>
-                    )}
-                  >
-                    {clientBrokers.map((broker) => (
-                      <MenuItem key={broker._id} value={broker._id}>
-                        {broker.name}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                )}
-              />
-              {errors.clientBroker && (
-                <Alert severity="error">{errors.clientBroker.message}</Alert>
+            <Controller
+              name="clientBroker"
+              control={control}
+              render={({ field: { onChange, value } }) => (
+                <Autocomplete
+                  multiple
+                  open={clientBrokerInputValue.length > 0}
+                  options={clientBrokers.map(b => b._id)}
+                  getOptionLabel={(option) => {
+                    const broker = clientBrokers.find(b => b._id === option);
+                    return broker?.name || option;
+                  }}
+                  value={value || []}
+                  onChange={(event, newValue) => {
+                    onChange(newValue);
+                  }}
+                  onInputChange={(event, newInputValue) => {
+                    setClientBrokerInputValue(newInputValue);
+                  }}
+                  disabled={loadingClientBrokers}
+                  noOptionsText=""
+                  ListboxProps={{
+                    style: { maxHeight: '250px' }
+                  }}
+                  componentsProps={{
+                    popper: {
+                      placement: 'bottom-start'
+                    }
+                  }}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Client Brokers"
+                      placeholder="Type to search..."
+                      error={!!errors.clientBroker}
+                      helperText={errors.clientBroker?.message}
+                    />
+                  )}
+                  renderTags={(tagValue, getTagProps) =>
+                    tagValue.map((option, index) => {
+                      const broker = clientBrokers.find(b => b._id === option);
+                      return (
+                        <Chip
+                          label={broker?.name || option}
+                          {...getTagProps({ index })}
+                          size="small"
+                          key={option}
+                        />
+                      );
+                    })
+                  }
+                  isOptionEqualToValue={(option, value) => option === value}
+                  filterOptions={(options, { inputValue }) => {
+                    if (!inputValue) return [];
+                    return options.filter(option => {
+                      const broker = clientBrokers.find(b => b._id === option);
+                      return broker?.name?.toLowerCase().includes(inputValue.toLowerCase());
+                    });
+                  }}
+                />
               )}
-            </FormControl>
+            />
           </Grid>
           <Grid item xs={12} sm={6}>
-            <FormControl fullWidth error={!!errors.clientNetwork}>
-              <InputLabel>Client Networks</InputLabel>
-              <Controller
-                name="clientNetwork"
-                control={control}
-                render={({ field }) => (
-                  <Select 
-                    {...field}
-                    value={field.value || []}
-                    multiple
-                    label="Client Networks" 
-                    disabled={loadingClientNetworks}
-                    renderValue={(selected) => (
-                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                        {selected.map((value) => {
-                          const network = clientNetworks.find(n => n._id === value);
-                          return (
-                            <Chip key={value} label={network?.name || value} size="small" />
-                          );
-                        })}
-                      </Box>
-                    )}
-                  >
-                    {clientNetworks.map((network) => (
-                      <MenuItem key={network._id} value={network._id}>
-                        {network.name}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                )}
-              />
-              {errors.clientNetwork && (
-                <Alert severity="error">{errors.clientNetwork.message}</Alert>
+            <Controller
+              name="clientNetwork"
+              control={control}
+              render={({ field: { onChange, value } }) => (
+                <Autocomplete
+                  multiple
+                  open={clientNetworkInputValue.length > 0}
+                  options={clientNetworks.map(n => n._id)}
+                  getOptionLabel={(option) => {
+                    const network = clientNetworks.find(n => n._id === option);
+                    return network?.name || option;
+                  }}
+                  value={value || []}
+                  onChange={(event, newValue) => {
+                    onChange(newValue);
+                  }}
+                  onInputChange={(event, newInputValue) => {
+                    setClientNetworkInputValue(newInputValue);
+                  }}
+                  disabled={loadingClientNetworks}
+                  noOptionsText=""
+                  ListboxProps={{
+                    style: { maxHeight: '250px' }
+                  }}
+                  componentsProps={{
+                    popper: {
+                      placement: 'bottom-start'
+                    }
+                  }}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Client Networks"
+                      placeholder="Type to search..."
+                      error={!!errors.clientNetwork}
+                      helperText={errors.clientNetwork?.message}
+                    />
+                  )}
+                  renderTags={(tagValue, getTagProps) =>
+                    tagValue.map((option, index) => {
+                      const network = clientNetworks.find(n => n._id === option);
+                      return (
+                        <Chip
+                          label={network?.name || option}
+                          {...getTagProps({ index })}
+                          size="small"
+                          key={option}
+                        />
+                      );
+                    })
+                  }
+                  isOptionEqualToValue={(option, value) => option === value}
+                  filterOptions={(options, { inputValue }) => {
+                    if (!inputValue) return [];
+                    return options.filter(option => {
+                      const network = clientNetworks.find(n => n._id === option);
+                      return network?.name?.toLowerCase().includes(inputValue.toLowerCase());
+                    });
+                  }}
+                />
               )}
-            </FormControl>
+            />
           </Grid>
           <Grid item xs={12} sm={6}>
-            <FormControl fullWidth error={!!errors.campaign}>
-              <InputLabel>Campaigns</InputLabel>
-              <Controller
-                name="campaign"
-                control={control}
-                render={({ field }) => (
-                  <Select 
-                    {...field}
-                    value={field.value || []}
-                    multiple
-                    label="Campaigns" 
-                    disabled={loadingCampaigns}
-                    renderValue={(selected) => (
-                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                        {selected.map((value) => {
-                          const campaign = campaigns.find(c => c._id === value);
-                          return (
-                            <Chip key={value} label={campaign?.name || value} size="small" />
-                          );
-                        })}
-                      </Box>
-                    )}
-                  >
-                    {campaigns.map((campaign) => (
-                      <MenuItem key={campaign._id} value={campaign._id}>
-                        {campaign.name}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                )}
-              />
-              {errors.campaign && (
-                <Alert severity="error">{errors.campaign.message}</Alert>
+            <Controller
+              name="campaign"
+              control={control}
+              render={({ field: { onChange, value } }) => (
+                <Autocomplete
+                  multiple
+                  open={campaignInputValue.length > 0}
+                  options={campaigns.map(c => c._id)}
+                  getOptionLabel={(option) => {
+                    const campaign = campaigns.find(c => c._id === option);
+                    return campaign?.name || option;
+                  }}
+                  value={value || []}
+                  onChange={(event, newValue) => {
+                    onChange(newValue);
+                  }}
+                  onInputChange={(event, newInputValue) => {
+                    setCampaignInputValue(newInputValue);
+                  }}
+                  disabled={loadingCampaigns}
+                  noOptionsText=""
+                  ListboxProps={{
+                    style: { maxHeight: '250px' }
+                  }}
+                  componentsProps={{
+                    popper: {
+                      placement: 'bottom-start'
+                    }
+                  }}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Campaigns"
+                      placeholder="Type to search..."
+                      error={!!errors.campaign}
+                      helperText={errors.campaign?.message}
+                    />
+                  )}
+                  renderTags={(tagValue, getTagProps) =>
+                    tagValue.map((option, index) => {
+                      const campaign = campaigns.find(c => c._id === option);
+                      return (
+                        <Chip
+                          label={campaign?.name || option}
+                          {...getTagProps({ index })}
+                          size="small"
+                          key={option}
+                        />
+                      );
+                    })
+                  }
+                  isOptionEqualToValue={(option, value) => option === value}
+                  filterOptions={(options, { inputValue }) => {
+                    if (!inputValue) return [];
+                    return options.filter(option => {
+                      const campaign = campaigns.find(c => c._id === option);
+                      return campaign?.name?.toLowerCase().includes(inputValue.toLowerCase());
+                    });
+                  }}
+                />
               )}
-            </FormControl>
+            />
           </Grid>
           <Grid item xs={12} sm={6}>
-            <FormControl fullWidth error={!!errors.ourNetwork}>
-              <InputLabel>Our Networks</InputLabel>
-              <Controller
-                name="ourNetwork"
-                control={control}
-                render={({ field }) => (
-                  <Select 
-                    {...field}
-                    value={field.value || []}
-                    multiple
-                    label="Our Networks" 
-                    disabled={loadingOurNetworks}
-                    renderValue={(selected) => (
-                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                        {selected.map((value) => {
-                          const network = ourNetworks.find(n => n._id === value);
-                          return (
-                            <Chip key={value} label={network?.name || value} size="small" />
-                          );
-                        })}
-                      </Box>
-                    )}
-                  >
-                    {ourNetworks.map((network) => (
-                      <MenuItem key={network._id} value={network._id}>
-                        {network.name}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                )}
-              />
-              {errors.ourNetwork && (
-                <Alert severity="error">{errors.ourNetwork.message}</Alert>
+            <Controller
+              name="ourNetwork"
+              control={control}
+              render={({ field: { onChange, value } }) => (
+                <Autocomplete
+                  multiple
+                  open={ourNetworkInputValue.length > 0}
+                  options={ourNetworks.map(n => n._id)}
+                  getOptionLabel={(option) => {
+                    const network = ourNetworks.find(n => n._id === option);
+                    return network?.name || option;
+                  }}
+                  value={value || []}
+                  onChange={(event, newValue) => {
+                    onChange(newValue);
+                  }}
+                  onInputChange={(event, newInputValue) => {
+                    setOurNetworkInputValue(newInputValue);
+                  }}
+                  disabled={loadingOurNetworks}
+                  noOptionsText=""
+                  ListboxProps={{
+                    style: { maxHeight: '250px' }
+                  }}
+                  componentsProps={{
+                    popper: {
+                      placement: 'bottom-start'
+                    }
+                  }}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Our Networks"
+                      placeholder="Type to search..."
+                      error={!!errors.ourNetwork}
+                      helperText={errors.ourNetwork?.message}
+                    />
+                  )}
+                  renderTags={(tagValue, getTagProps) =>
+                    tagValue.map((option, index) => {
+                      const network = ourNetworks.find(n => n._id === option);
+                      return (
+                        <Chip
+                          label={network?.name || option}
+                          {...getTagProps({ index })}
+                          size="small"
+                          key={option}
+                        />
+                      );
+                    })
+                  }
+                  isOptionEqualToValue={(option, value) => option === value}
+                  filterOptions={(options, { inputValue }) => {
+                    if (!inputValue) return [];
+                    return options.filter(option => {
+                      const network = ourNetworks.find(n => n._id === option);
+                      return network?.name?.toLowerCase().includes(inputValue.toLowerCase());
+                    });
+                  }}
+                />
               )}
-            </FormControl>
+            />
           </Grid>
           <Grid item xs={12} sm={6}>
             <Controller
