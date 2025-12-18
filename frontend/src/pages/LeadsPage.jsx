@@ -1922,7 +1922,7 @@ const LeadsPage = () => {
                 onChange={(e) =>
                   handleSearchChange(e.target.value)
                 }
-                placeholder="Search by name, email, or phone..."
+                placeholder="Search by name, email, phone, country, gender, status, type, or agent..."
                 InputProps={{
                   startAdornment: (
                     <SearchIcon sx={{ mr: 1, color: "action.active" }} />

@@ -78,14 +78,15 @@ exports.getLeads = async (req, res, next) => {
     }
     if (documentStatus) filter["documents.status"] = documentStatus;
     
-    // Handle unified search - searches across name, email, and phone
+    // Store search keywords for use in aggregation pipeline (for assignedAgent search)
+    let searchKeywords = [];
+    
+    // Handle unified search - multi-keyword search with AND logic
+    // Split search into multiple keywords and trim each (similar to Orders page)
     if (search) {
-      filter.$or = [
-        { firstName: new RegExp(search, "i") },
-        { lastName: new RegExp(search, "i") },
-        { newEmail: new RegExp(search, "i") },
-        { newPhone: new RegExp(search, "i") },
-      ];
+      searchKeywords = search.toLowerCase().trim().split(/\s+/).filter(k => k.length > 0);
+      // Note: Search filtering will be applied in aggregation pipeline after $lookup
+      // to include assignedAgent name/email in the search
     } else {
       // Handle separate search filters (for backward compatibility)
       if (nameSearch) {
@@ -129,6 +130,14 @@ exports.getLeads = async (req, res, next) => {
       { $match: filter },
       {
         $lookup: {
+          from: "users",
+          localField: "assignedAgent",
+          foreignField: "_id",
+          as: "assignedAgentDetails",
+        },
+      },
+      {
+        $lookup: {
           from: "orders",
           localField: "orderId",
           foreignField: "_id",
@@ -138,8 +147,32 @@ exports.getLeads = async (req, res, next) => {
       {
         $addFields: {
           order: { $arrayElemAt: ["$orderDetails", 0] },
+          assignedAgentInfo: { $arrayElemAt: ["$assignedAgentDetails", 0] },
         },
       },
+      // Filter by assignedAgent name if search keywords are provided
+      ...(searchKeywords.length > 0
+        ? [
+            {
+              $match: {
+                $and: searchKeywords.map(keyword => ({
+                  $or: [
+                    { firstName: new RegExp(keyword, "i") },
+                    { lastName: new RegExp(keyword, "i") },
+                    { newEmail: new RegExp(keyword, "i") },
+                    { newPhone: new RegExp(keyword, "i") },
+                    { country: new RegExp(keyword, "i") },
+                    { status: new RegExp(keyword, "i") },
+                    { leadType: new RegExp(keyword, "i") },
+                    { gender: new RegExp(keyword, "i") },
+                    { "assignedAgentInfo.fullName": new RegExp(keyword, "i") },
+                    { "assignedAgentInfo.email": new RegExp(keyword, "i") },
+                  ]
+                }))
+              }
+            }
+          ]
+        : []),
       // Affiliate managers can now see all leads (no filtering needed)
       // Only filter if assignedToMe is explicitly requested
       ...(req.user.role === "affiliate_manager" && assignedToMe === "true"
@@ -223,6 +256,14 @@ exports.getLeads = async (req, res, next) => {
       { $match: filter },
       {
         $lookup: {
+          from: "users",
+          localField: "assignedAgent",
+          foreignField: "_id",
+          as: "assignedAgentDetails",
+        },
+      },
+      {
+        $lookup: {
           from: "orders",
           localField: "orderId",
           foreignField: "_id",
@@ -232,8 +273,32 @@ exports.getLeads = async (req, res, next) => {
       {
         $addFields: {
           order: { $arrayElemAt: ["$orderDetails", 0] },
+          assignedAgentInfo: { $arrayElemAt: ["$assignedAgentDetails", 0] },
         },
       },
+      // Filter by assignedAgent name if search keywords are provided
+      ...(searchKeywords.length > 0
+        ? [
+            {
+              $match: {
+                $and: searchKeywords.map(keyword => ({
+                  $or: [
+                    { firstName: new RegExp(keyword, "i") },
+                    { lastName: new RegExp(keyword, "i") },
+                    { newEmail: new RegExp(keyword, "i") },
+                    { newPhone: new RegExp(keyword, "i") },
+                    { country: new RegExp(keyword, "i") },
+                    { status: new RegExp(keyword, "i") },
+                    { leadType: new RegExp(keyword, "i") },
+                    { gender: new RegExp(keyword, "i") },
+                    { "assignedAgentInfo.fullName": new RegExp(keyword, "i") },
+                    { "assignedAgentInfo.email": new RegExp(keyword, "i") },
+                  ]
+                }))
+              }
+            }
+          ]
+        : []),
       // Affiliate managers can now see all leads (no filtering for count)
       ...(req.user.role === "affiliate_manager" && assignedToMe === "true"
         ? [
