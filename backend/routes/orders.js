@@ -22,8 +22,23 @@ const {
   cancelLeadFromOrder,
   changeFTDInOrder,
   convertLeadTypeInOrder,
+  checkOrderFulfillment,
 } = require("../controllers/orders");
 const router = express.Router();
+
+// Check fulfillment status
+router.post(
+  "/check-fulfillment",
+  [
+    protect,
+    isManager,
+    body("requests.ftd").optional().isInt({ min: 0 }),
+    body("requests.filler").optional().isInt({ min: 0 }),
+    body("requests.cold").optional().isInt({ min: 0 }),
+  ],
+  checkOrderFulfillment
+);
+
 router.post(
   "/",
   [

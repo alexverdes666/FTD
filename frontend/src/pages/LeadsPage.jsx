@@ -3211,7 +3211,7 @@ const LeadRow = React.memo(
               title={lead.leadType === 'cold' ? "Cold leads cannot be assigned to agents" : ""}
               arrow
             >
-              <span>
+              <span onClick={(e) => e.stopPropagation()}>
                 <Checkbox
                   checked={selectedLeads.has(lead._id)}
                   onChange={onSelectLead(lead._id)}
@@ -3355,6 +3355,7 @@ const LeadRow = React.memo(
                 sx={{
                   "& .MuiSelect-select": { py: 0.5, fontSize: "0.875rem" },
                 }}
+                onClick={(e) => e.stopPropagation()}
               >
                 {Object.values(LEAD_STATUSES).map((status) => (
                   <MenuItem
@@ -3370,7 +3371,10 @@ const LeadRow = React.memo(
             {}
             <IconButton
               size="small"
-              onClick={() => onComment(lead)}
+              onClick={(e) => {
+                e.stopPropagation();
+                onComment(lead);
+              }}
               disabled={!isOwner}
             >
               <CommentIcon sx={{ fontSize: "1.25rem" }} />
@@ -3403,19 +3407,6 @@ const LeadRow = React.memo(
                 <DeleteIcon sx={{ fontSize: "1.25rem" }} />
               </IconButton>
             )}
-            <IconButton
-              size="small"
-              onClick={(e) => {
-                e.stopPropagation();
-                onToggleExpansion(lead._id);
-              }}
-            >
-              {expandedRows.has(lead._id) ? (
-                <ExpandLessIcon sx={{ fontSize: "1.25rem" }} />
-              ) : (
-                <ExpandMoreIcon sx={{ fontSize: "1.25rem" }} />
-              )}
-            </IconButton>
           </Stack>
         </TableCell>
       </TableRow>

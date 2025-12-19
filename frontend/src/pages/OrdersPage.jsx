@@ -292,6 +292,8 @@ const OrdersPage = () => {
   const [manualLeadEmails, setManualLeadEmails] = useState("");
   const [manualLeads, setManualLeads] = useState([]); // [{lead, agent, leadType}]
   const [searchingLeads, setSearchingLeads] = useState(false);
+  const [fulfillmentSummary, setFulfillmentSummary] = useState(null);
+  const [checkingFulfillment, setCheckingFulfillment] = useState(false);
   const [allAgents, setAllAgents] = useState([]);
   const [selectedOrderForManagement, setSelectedOrderForManagement] =
     useState(null);
@@ -393,6 +395,19 @@ const OrdersPage = () => {
     order: null,
     lead: null,
   });
+
+  // Autocomplete states for Create Order Dialog
+  const [clientNetworkInput, setClientNetworkInput] = useState("");
+  const [clientNetworkOpen, setClientNetworkOpen] = useState(false);
+  
+  const [ourNetworkInput, setOurNetworkInput] = useState("");
+  const [ourNetworkOpen, setOurNetworkOpen] = useState(false);
+  
+  const [campaignInput, setCampaignInput] = useState("");
+  const [campaignOpen, setCampaignOpen] = useState(false);
+  
+  const [clientBrokersInput, setClientBrokersInput] = useState("");
+  const [clientBrokersOpen, setClientBrokersOpen] = useState(false);
 
   const fetchOrders = useCallback(async () => {
     setLoading(true);
@@ -669,6 +684,101 @@ const OrdersPage = () => {
   const removeManualLead = useCallback((index) => {
     setManualLeads((prev) => prev.filter((_, i) => i !== index));
   }, []);
+
+  const checkFulfillment = useCallback(async (data) => {
+    // Skip if manual mode or required fields missing
+    if (manualSelectionMode || !data) return;
+    
+    // Minimal validation to avoid spamming empty checks
+    const hasLeads = (data.ftd > 0 || data.filler > 0 || data.cold > 0);
+    if (!hasLeads) {
+        setFulfillmentSummary(null);
+        return;
+    }
+
+    setCheckingFulfillment(true);
+    try {
+        // Build agent assignments
+        const agentAssignments = [];
+        if (data.ftdAgents && data.ftdAgents.length > 0) {
+            data.ftdAgents.forEach((agentId, index) => {
+                if (agentId) agentAssignments.push({ leadType: "ftd", agentId, index });
+            });
+        }
+        if (data.fillerAgents && data.fillerAgents.length > 0) {
+            data.fillerAgents.forEach((agentId, index) => {
+                if (agentId) agentAssignments.push({ leadType: "filler", agentId, index });
+            });
+        }
+
+        const checkData = {
+            requests: {
+                ftd: Number(data.ftd) || 0,
+                filler: Number(data.filler) || 0,
+                cold: Number(data.cold) || 0,
+            },
+            country: data.countryFilter,
+            gender: data.genderFilter,
+            selectedClientNetwork: data.selectedClientNetwork,
+            selectedClientBrokers: data.selectedClientBrokers,
+            agentFilter: data.agentFilter || null,
+            agentAssignments
+        };
+
+        const response = await api.post("/orders/check-fulfillment", checkData);
+        setFulfillmentSummary(response.data.summary);
+    } catch (err) {
+        console.error("Fulfillment check failed:", err);
+        // Don't show error notification for background check
+    } finally {
+        setCheckingFulfillment(false);
+    }
+  }, [manualSelectionMode]);
+
+  // Watch specific fields to avoid infinite loop with full form watch
+  const watchedValues = watch([
+      "ftd", "filler", "cold", 
+      "countryFilter", "genderFilter", 
+      "selectedClientNetwork", "selectedClientBrokers", 
+      "agentFilter", "ftdAgents", "fillerAgents"
+  ]);
+  
+  // Create a stable object for debounce
+  const stableWatchedValues = useMemo(() => {
+    return {
+        ftd: watchedValues[0],
+        filler: watchedValues[1],
+        cold: watchedValues[2],
+        countryFilter: watchedValues[3],
+        genderFilter: watchedValues[4],
+        selectedClientNetwork: watchedValues[5],
+        selectedClientBrokers: watchedValues[6],
+        agentFilter: watchedValues[7],
+        ftdAgents: watchedValues[8],
+        fillerAgents: watchedValues[9],
+    };
+  }, [
+    watchedValues[0],
+    watchedValues[1],
+    watchedValues[2],
+    watchedValues[3],
+    watchedValues[4],
+    watchedValues[5],
+    watchedValues[6],
+    watchedValues[7],
+    watchedValues[8],
+    watchedValues[9]
+  ]);
+
+  const debouncedFormValues = useDebounce(stableWatchedValues, 1000);
+
+  useEffect(() => {
+    if (createDialogOpen && !manualSelectionMode) {
+        checkFulfillment(debouncedFormValues);
+    } else {
+        setFulfillmentSummary(null);
+    }
+  }, [debouncedFormValues, createDialogOpen, manualSelectionMode, checkFulfillment]);
 
   const onSubmitOrder = useCallback(
     async (data) => {
@@ -2038,7 +2148,11 @@ const OrdersPage = () => {
                   const expandedDetails = expandedRowData[order._id];
                   return (
                     <React.Fragment key={order._id}>
-                      <TableRow hover>
+                      <TableRow
+                        hover
+                        onClick={() => toggleRowExpansion(order._id)}
+                        sx={{ cursor: "pointer" }}
+                      >
                         <TableCell>
                           <Typography variant="body2">
                             {order._id.slice(-8)}
@@ -2148,7 +2262,10 @@ const OrdersPage = () => {
                           >
                             <IconButton
                               size="small"
-                              onClick={() => handleExportLeads(order._id)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleExportLeads(order._id);
+                              }}
                               title="Export Leads as CSV"
                             >
                               <DownloadIcon fontSize="small" />
@@ -2158,12 +2275,13 @@ const OrdersPage = () => {
                               user?.role === "affiliate_manager") && (
                               <IconButton
                                 size="small"
-                                onClick={() =>
+                                onClick={(e) => {
+                                  e.stopPropagation();
                                   handleDeleteOrderClick(
                                     order._id,
                                     order.status
-                                  )
-                                }
+                                  );
+                                }}
                                 title={
                                   order.status === "cancelled"
                                     ? "Permanently Delete Order"
@@ -2180,17 +2298,6 @@ const OrdersPage = () => {
                                 <DeleteIcon fontSize="small" />
                               </IconButton>
                             )}
-                            <IconButton
-                              size="small"
-                              onClick={() => toggleRowExpansion(order._id)}
-                              title={isExpanded ? "Collapse" : "Expand"}
-                            >
-                              {isExpanded ? (
-                                <ExpandLessIcon />
-                              ) : (
-                                <ExpandMoreIcon />
-                              )}
-                            </IconButton>
                           </Box>
                         </TableCell>
                       </TableRow>
@@ -2734,13 +2841,27 @@ const OrdersPage = () => {
                                                 gap: 1,
                                               }}
                                             >
-                                              <Typography
-                                                variant="subtitle1"
-                                                sx={{ fontWeight: "bold" }}
-                                              >
-                                                Assigned Leads (
-                                                {expandedDetails.leads.length})
-                                              </Typography>
+                                              <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+                                                <Typography
+                                                  variant="subtitle1"
+                                                  sx={{ fontWeight: "bold" }}
+                                                >
+                                                  Assigned Leads (
+                                                  {expandedDetails.leads.length})
+                                                </Typography>
+                                                <Button
+                                                  variant="contained"
+                                                  size="small"
+                                                  onClick={() =>
+                                                    handleOpenAssignedLeadsModal(
+                                                      expandedDetails.leads,
+                                                      order._id
+                                                    )
+                                                  }
+                                                >
+                                                  See Leads
+                                                </Button>
+                                              </Box>
                                               <Box
                                                 sx={{
                                                   display: "flex",
@@ -2831,19 +2952,6 @@ const OrdersPage = () => {
                                                   )}
                                               </Box>
                                             </Box>
-                                            <Box sx={{ mt: 2 }}>
-                                              <Button
-                                                variant="contained"
-                                                onClick={() =>
-                                                  handleOpenAssignedLeadsModal(
-                                                    expandedDetails.leads,
-                                                    order._id
-                                                  )
-                                                }
-                                              >
-                                                See Leads
-                                              </Button>
-                                            </Box>
                                           </>
                                         )}
                                       </Box>
@@ -2892,6 +3000,14 @@ const OrdersPage = () => {
           setManualSelectionMode(false);
           setManualLeadEmails("");
           setManualLeads([]);
+          setClientNetworkInput("");
+          setClientNetworkOpen(false);
+          setOurNetworkInput("");
+          setOurNetworkOpen(false);
+          setCampaignInput("");
+          setCampaignOpen(false);
+          setClientBrokersInput("");
+          setClientBrokersOpen(false);
         }}
         maxWidth="lg"
         fullWidth
@@ -3244,6 +3360,20 @@ const OrdersPage = () => {
                     render={({ field: { onChange, value } }) => (
                       <Box>
                         <Autocomplete
+                          open={clientNetworkOpen}
+                          onOpen={() => {
+                            if (clientNetworkInput.length > 0) setClientNetworkOpen(true);
+                          }}
+                          onClose={() => setClientNetworkOpen(false)}
+                          inputValue={clientNetworkInput}
+                          onInputChange={(event, newInputValue, reason) => {
+                            setClientNetworkInput(newInputValue);
+                            if (reason === 'input' && newInputValue.length > 0) {
+                              setClientNetworkOpen(true);
+                            } else if (reason === 'clear' || newInputValue.length === 0) {
+                              setClientNetworkOpen(false);
+                            }
+                          }}
                           options={clientNetworks}
                           getOptionLabel={(option) => option.name || ""}
                           value={
@@ -3322,6 +3452,20 @@ const OrdersPage = () => {
                   render={({ field: { onChange, value } }) => (
                     <Box>
                       <Autocomplete
+                        open={ourNetworkOpen}
+                        onOpen={() => {
+                          if (ourNetworkInput.length > 0) setOurNetworkOpen(true);
+                        }}
+                        onClose={() => setOurNetworkOpen(false)}
+                        inputValue={ourNetworkInput}
+                        onInputChange={(event, newInputValue, reason) => {
+                          setOurNetworkInput(newInputValue);
+                          if (reason === 'input' && newInputValue.length > 0) {
+                            setOurNetworkOpen(true);
+                          } else if (reason === 'clear' || newInputValue.length === 0) {
+                            setOurNetworkOpen(false);
+                          }
+                        }}
                         options={ourNetworks}
                         getOptionLabel={(option) => option.name || ""}
                         value={ourNetworks.find((n) => n._id === value) || null}
@@ -3388,48 +3532,62 @@ const OrdersPage = () => {
                 <Controller
                   name="selectedCampaign"
                   control={control}
-                  render={({ field }) => (
-                    <FormControl
-                      fullWidth
-                      size="small"
-                      error={!!errors.selectedCampaign}
-                    >
-                      <InputLabel>Campaign *</InputLabel>
-                      <Select
-                        {...field}
-                        label="Campaign *"
-                        value={field.value || ""}
+                  render={({ field: { onChange, value } }) => (
+                    <Box>
+                      <Autocomplete
+                        open={campaignOpen}
+                        onOpen={() => {
+                          if (campaignInput.length > 0) setCampaignOpen(true);
+                        }}
+                        onClose={() => setCampaignOpen(false)}
+                        inputValue={campaignInput}
+                        onInputChange={(event, newInputValue, reason) => {
+                          setCampaignInput(newInputValue);
+                          if (reason === 'input' && newInputValue.length > 0) {
+                            setCampaignOpen(true);
+                          } else if (reason === 'clear' || newInputValue.length === 0) {
+                            setCampaignOpen(false);
+                          }
+                        }}
+                        options={campaigns}
+                        getOptionLabel={(option) => option.name || ""}
+                        value={campaigns.find((c) => c._id === value) || null}
+                        onChange={(event, newValue) => {
+                          onChange(newValue ? newValue._id : "");
+                        }}
                         disabled={loadingCampaigns}
-                      >
-                        <MenuItem value="" disabled>
-                          <em>Select a Campaign</em>
-                        </MenuItem>
-                        {campaigns.map((campaign) => (
-                          <MenuItem key={campaign._id} value={campaign._id}>
-                            {campaign.name}
-                            {campaign.description && (
-                              <Typography
-                                variant="caption"
-                                sx={{
-                                  display: "block",
-                                  color: "text.secondary",
-                                }}
-                              >
-                                {campaign.description}
-                              </Typography>
-                            )}
-                          </MenuItem>
-                        ))}
-                      </Select>
-                      {errors.selectedCampaign?.message && (
-                        <Typography
-                          variant="caption"
-                          color="error"
-                          sx={{ mt: 0.5, ml: 1.5 }}
-                        >
-                          {errors.selectedCampaign.message}
-                        </Typography>
-                      )}
+                        size="small"
+                        renderInput={(params) => (
+                          <TextField
+                            {...params}
+                            label="Campaign *"
+                            error={!!errors.selectedCampaign}
+                            helperText={errors.selectedCampaign?.message}
+                            placeholder="Search campaigns..."
+                          />
+                        )}
+                        renderOption={(props, option) => (
+                          <li {...props} key={option._id}>
+                            <Box>
+                              <Typography variant="body2">{option.name}</Typography>
+                              {option.description && (
+                                <Typography
+                                  variant="caption"
+                                  sx={{
+                                    display: "block",
+                                    color: "text.secondary",
+                                  }}
+                                >
+                                  {option.description}
+                                </Typography>
+                              )}
+                            </Box>
+                          </li>
+                        )}
+                        isOptionEqualToValue={(option, value) =>
+                          option._id === value._id
+                        }
+                      />
                       {!errors.selectedCampaign?.message && (
                         <Typography
                           variant="caption"
@@ -3441,7 +3599,7 @@ const OrdersPage = () => {
                             : `${campaigns.length} campaign(s) available`}
                         </Typography>
                       )}
-                    </FormControl>
+                    </Box>
                   )}
                 />
               </Grid>
@@ -3450,96 +3608,141 @@ const OrdersPage = () => {
                 <Controller
                   name="selectedClientBrokers"
                   control={control}
-                  render={({ field: { onChange, value } }) => (
-                    <Box>
-                      <Autocomplete
-                        multiple
-                        options={clientBrokers}
-                        getOptionLabel={(option) => option.name || ""}
-                        value={clientBrokers.filter((broker) =>
-                          (value || []).includes(broker._id)
-                        )}
-                        onChange={(event, newValue) => {
-                          onChange(newValue.map((broker) => broker._id));
-                          // Reset filtered agents when client brokers change
+                  render={({ field: { onChange, value } }) => {
+                    const [suggestion, setSuggestion] = React.useState("");
+                    
+                    const handleInputChange = (e) => {
+                      const inputValue = e.target.value;
+                      setClientBrokersInput(inputValue);
+
+                      if (!inputValue.trim()) {
+                        setSuggestion("");
+                        return;
+                      }
+
+                      // Find matching broker (starts with input)
+                      const lowerValue = inputValue.toLowerCase();
+                      const match = clientBrokers.find(
+                        (broker) =>
+                          broker.name.toLowerCase().startsWith(lowerValue) &&
+                          !(value || []).includes(broker._id) // Don't suggest already selected
+                      );
+
+                      if (match) {
+                        setSuggestion(match.name);
+                      } else {
+                        setSuggestion("");
+                      }
+                    };
+
+                    const handleKeyDown = (e) => {
+                      if (
+                        e.key === "Tab" &&
+                        suggestion &&
+                        suggestion !== clientBrokersInput
+                      ) {
+                        e.preventDefault();
+                        const match = clientBrokers.find(
+                          (broker) =>
+                            broker.name.toLowerCase() ===
+                            suggestion.toLowerCase()
+                        );
+                        if (match) {
+                          const currentValues = value || [];
+                          onChange([...currentValues, match._id]);
+                          setClientBrokersInput("");
+                          setSuggestion("");
                           setFilteredAgents([]);
                           setUnassignedLeadsStats({ ftd: null, filler: null });
-                        }}
-                        disabled={loadingClientBrokers}
-                        size="small"
-                        renderInput={(params) => (
+                        }
+                      } else if (e.key === "Escape") {
+                        setSuggestion("");
+                        setClientBrokersInput("");
+                      }
+                    };
+
+                    return (
+                      <Box>
+                        <Box sx={{ position: "relative" }}>
                           <TextField
-                            {...params}
+                            size="small"
+                            fullWidth
                             label="Client Brokers (optional - to exclude leads)"
+                            placeholder="Type to search and press Tab..."
+                            value={clientBrokersInput}
+                            onChange={handleInputChange}
+                            onKeyDown={handleKeyDown}
+                            disabled={loadingClientBrokers}
                             error={!!errors.selectedClientBrokers}
-                            placeholder="Search client brokers..."
+                            helperText={
+                              errors.selectedClientBrokers?.message ||
+                              "Type to search, press Tab to add. These leads will be excluded from the order."
+                            }
+                            InputProps={{
+                              endAdornment: loadingClientBrokers ? (
+                                <CircularProgress color="inherit" size={20} />
+                              ) : null,
+                            }}
+                            autoComplete="off"
                           />
+                          {suggestion &&
+                            suggestion !== clientBrokersInput &&
+                            clientBrokersInput && (
+                              <Box
+                                sx={{
+                                  position: "absolute",
+                                  left: 14,
+                                  top: "19px",
+                                  pointerEvents: "none",
+                                  fontSize: "0.875rem",
+                                  color: "text.disabled",
+                                }}
+                              >
+                                <span style={{ visibility: "hidden" }}>
+                                  {clientBrokersInput}
+                                </span>
+                                <span style={{ color: "#999" }}>
+                                  {suggestion.slice(clientBrokersInput.length)}
+                                </span>
+                              </Box>
+                            )}
+                        </Box>
+
+                        {/* Selected Brokers */}
+                        {value && value.length > 0 && (
+                          <Box
+                            sx={{
+                              mt: 1,
+                              display: "flex",
+                              gap: 0.5,
+                              flexWrap: "wrap",
+                            }}
+                          >
+                            {clientBrokers
+                              .filter((broker) => value.includes(broker._id))
+                              .map((broker) => (
+                                <Chip
+                                  key={broker._id}
+                                  label={broker.name}
+                                  size="small"
+                                  onDelete={() => {
+                                    onChange(
+                                      value.filter((id) => id !== broker._id)
+                                    );
+                                    setFilteredAgents([]);
+                                    setUnassignedLeadsStats({
+                                      ftd: null,
+                                      filler: null,
+                                    });
+                                  }}
+                                  sx={{ height: "auto" }}
+                                />
+                              ))}
+                          </Box>
                         )}
-                        renderOption={(props, option) => (
-                          <li {...props} key={option._id}>
-                            <Checkbox
-                              checked={(value || []).includes(option._id)}
-                              size="small"
-                              sx={{ mr: 1 }}
-                            />
-                            <Box>
-                              <Typography variant="body2">
-                                {option.name}
-                              </Typography>
-                              {option.description && (
-                                <Typography
-                                  variant="caption"
-                                  sx={{ color: "text.secondary" }}
-                                >
-                                  {option.description}
-                                </Typography>
-                              )}
-                            </Box>
-                          </li>
-                        )}
-                        renderTags={(tagValue, getTagProps) =>
-                          tagValue.map((option, index) => (
-                            <Chip
-                              {...getTagProps({ index })}
-                              key={option._id}
-                              label={option.name}
-                              size="small"
-                              sx={{ height: "auto" }}
-                            />
-                          ))
-                        }
-                        isOptionEqualToValue={(option, value) =>
-                          option._id === value._id
-                        }
-                        disableCloseOnSelect
-                      />
-                      {errors.selectedClientBrokers?.message && (
-                        <Typography
-                          variant="caption"
-                          color="error"
-                          sx={{ mt: 0.5, ml: 1.5, display: "block" }}
-                        >
-                          {errors.selectedClientBrokers.message}
-                        </Typography>
-                      )}
-                      {!errors.selectedClientBrokers?.message && (
-                        <Typography
-                          variant="caption"
-                          color="text.secondary"
-                          sx={{
-                            mt: 1,
-                            ml: 1.5,
-                            display: "block",
-                            lineHeight: 1.2,
-                          }}
-                        >
-                          {loadingClientBrokers
-                            ? "Loading client brokers..."
-                            : `${clientBrokers.length} broker(s) available. Select to exclude leads that have been sent to these brokers.`}
-                        </Typography>
-                      )}
-                    </Box>
-                  )}
+                      </Box>
+                    );
+                  }}
                 />
               </Grid>
 
@@ -3884,12 +4087,75 @@ const OrdersPage = () => {
 
               {}
             </Grid>
-            {errors[""] && (
-              <Alert severity="error" sx={{ mt: 2 }}>
-                {errors[""]?.message}
-              </Alert>
-            )}
-          </DialogContent>
+              {errors[""] && (
+                <Alert severity="error" sx={{ mt: 2 }}>
+                  {errors[""]?.message}
+                </Alert>
+              )}
+              
+              {/* Fulfillment Summary */}
+              {!manualSelectionMode && (
+                  <Box sx={{ mt: 2, p: 2, bgcolor: 'background.default', borderRadius: 1, border: '1px solid', borderColor: 'divider' }}>
+                      <Typography variant="subtitle2" gutterBottom display="flex" alignItems="center" gap={1}>
+                          Order Fulfillment Estimate
+                          {checkingFulfillment && <CircularProgress size={16} />}
+                      </Typography>
+                      
+                      {!checkingFulfillment && fulfillmentSummary ? (
+                          <>
+                              <Box display="flex" alignItems="center" gap={1} mb={1}>
+                                  <Chip 
+                                      label={fulfillmentSummary.status === 'fulfilled' ? 'Can be Fulfilled' : fulfillmentSummary.status === 'partial' ? 'Partially Fulfilled' : 'Not Fulfilled'} 
+                                      color={fulfillmentSummary.status === 'fulfilled' ? 'success' : fulfillmentSummary.status === 'partial' ? 'warning' : 'error'}
+                                      size="small"
+                                  />
+                                  <Typography variant="body2">{fulfillmentSummary.message}</Typography>
+                              </Box>
+                              
+                              {fulfillmentSummary.details && fulfillmentSummary.details.length > 0 && (
+                                  <Box mt={1}>
+                                      {fulfillmentSummary.details.map((detail, idx) => (
+                                          <Typography key={idx} variant="caption" display="block" color="text.secondary">
+                                              • {detail}
+                                          </Typography>
+                                      ))}
+                                  </Box>
+                              )}
+                              
+                              <Box mt={1} display="flex" gap={2}>
+                                  {Object.entries(fulfillmentSummary.breakdown || {}).map(([type, stats]) => (
+                                      stats.requested > 0 && (
+                                          <Box key={type}>
+                                              <Typography variant="caption" fontWeight="bold" display="block">
+                                                  {type.toUpperCase()}
+                                              </Typography>
+                                              <Typography variant="caption" color={stats.available < stats.requested ? 'error.main' : 'success.main'}>
+                                                  {stats.available} / {stats.requested}
+                                              </Typography>
+                                          </Box>
+                                      )
+                                  ))}
+                              </Box>
+                          </>
+                      ) : !checkingFulfillment && !fulfillmentSummary && (watch("ftd") > 0 || watch("filler") > 0 || watch("cold") > 0) ? (
+                           <Typography variant="caption" color="text.secondary">Enter lead details to see fulfillment estimate...</Typography>
+                      ) : (checkingFulfillment && fulfillmentSummary) ? (
+                         // Keep showing old summary while loading new one
+                         <Box sx={{ opacity: 0.5 }}>
+                              <Box display="flex" alignItems="center" gap={1} mb={1}>
+                                  <Chip 
+                                      label={fulfillmentSummary.status === 'fulfilled' ? 'Can be Fulfilled' : fulfillmentSummary.status === 'partial' ? 'Partially Fulfilled' : 'Not Fulfilled'} 
+                                      color={fulfillmentSummary.status === 'fulfilled' ? 'success' : fulfillmentSummary.status === 'partial' ? 'warning' : 'error'}
+                                      size="small"
+                                  />
+                                  <Typography variant="body2">{fulfillmentSummary.message}</Typography>
+                              </Box>
+                         </Box>
+                      ) : null}
+                  </Box>
+              )}
+
+            </DialogContent>
           <DialogActions>
             <Button
               onClick={() => {

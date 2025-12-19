@@ -4671,3 +4671,219 @@ exports.convertLeadTypeInOrder = async (req, res, next) => {
     next(error);
   }
 };
+
+exports.checkOrderFulfillment = async (req, res, next) => {
+  try {
+    const {
+      requests,
+      country,
+      gender,
+      selectedClientNetwork,
+      selectedOurNetwork,
+      selectedCampaign,
+      selectedClientBrokers,
+      agentFilter,
+      agentAssignments = [], // Array of {leadType, agentId, index}
+      manualSelection = false,
+      manualLeads = [],
+    } = req.body;
+
+    if (manualSelection && manualLeads.length > 0) {
+      return res.status(200).json({
+        success: true,
+        summary: {
+          status: "fulfilled",
+          message: "Manual selection - specific leads will be used",
+          details: [],
+          breakdown: {}
+        }
+      });
+    }
+
+    const { ftd = 0, filler = 0, cold = 0 } = requests || {};
+
+    if (ftd + filler + cold === 0) {
+      return res.status(200).json({
+        success: true,
+        summary: {
+          status: "not_fulfilled",
+          message: "No leads requested",
+          details: ["No leads requested"],
+          breakdown: {}
+        }
+      });
+    }
+
+    const countryFilter = country ? { country: new RegExp(country, "i") } : {};
+    const genderFilter = gender ? { gender } : {};
+
+    // Helper to check availability
+    const checkAvailability = async (leadType, count) => {
+      if (count <= 0) return { insufficient: false, available: 0, requested: 0, details: [] };
+
+      let baseQuery = {
+        leadType,
+        ...countryFilter,
+        ...genderFilter
+      };
+
+      // Cooldown check for FTD and Filler
+      if (leadType === 'ftd' || leadType === 'filler') {
+        const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
+        baseQuery.$or = [
+          { lastUsedInOrder: null },
+          { lastUsedInOrder: { $lt: tenDaysAgo } }
+        ];
+      }
+
+      // Client Network Exclusion
+      if (selectedClientNetwork) {
+        baseQuery["clientNetworkHistory.clientNetwork"] = { $ne: selectedClientNetwork };
+      }
+
+      // Client Broker Exclusion
+      if (selectedClientBrokers && selectedClientBrokers.length > 0) {
+        baseQuery["clientBrokerHistory.clientBroker"] = { $nin: selectedClientBrokers };
+      }
+
+      let insufficient = false;
+      let details = [];
+      let totalAvailable = 0;
+
+      // Check specific agent assignments
+      const specificAssignments = agentAssignments.filter(a => a.leadType === leadType);
+      
+      // Group assignments by agent
+      const assignmentsByAgent = {};
+      let unassignedCount = 0; // Number of leads requested without specific agent assignment
+      
+      // Initialize with unassigned count based on total requested - specific assignments
+      if (specificAssignments.length > 0) {
+        specificAssignments.forEach(a => {
+            if (a.agentId) {
+                assignmentsByAgent[a.agentId] = (assignmentsByAgent[a.agentId] || 0) + 1;
+            } else {
+                unassignedCount++;
+            }
+        });
+        
+        // Also add any leads not covered by assignments array (e.g. if array length < count)
+        if (specificAssignments.length < count) {
+            unassignedCount += (count - specificAssignments.length);
+        }
+      } else {
+          // No individual assignments used
+          if (agentFilter) {
+               // Global agent filter applied to all
+               assignmentsByAgent[agentFilter] = count;
+          } else {
+               unassignedCount = count;
+          }
+      }
+
+      // Check availability for each agent
+      for (const [agentId, requestedForAgent] of Object.entries(assignmentsByAgent)) {
+           // Check agent assigned leads
+           const agentQuery = { ...baseQuery, assignedAgent: agentId };
+           const agentAvailable = await Lead.countDocuments(agentQuery);
+           
+           if (agentAvailable < requestedForAgent) {
+               insufficient = true;
+               details.push(`Agent ${agentId} has only ${agentAvailable} assigned ${leadType} leads (requested ${requestedForAgent}). Fallback to unassigned may be required.`);
+               totalAvailable += agentAvailable; 
+           } else {
+               totalAvailable += requestedForAgent;
+           }
+      }
+
+      // Check availability for unassigned requests
+      if (unassignedCount > 0) {
+           const unassignedQuery = { ...baseQuery, assignedAgent: null };
+           const unassignedAvailable = await Lead.countDocuments(unassignedQuery);
+           
+           if (unassignedAvailable < unassignedCount) {
+               insufficient = true;
+               details.push(`Insufficient unassigned ${leadType} leads (Available: ${unassignedAvailable}, Requested: ${unassignedCount})`);
+               totalAvailable += unassignedAvailable;
+           } else {
+               totalAvailable += unassignedCount;
+           }
+      }
+      
+      // Simplified Aggregate Check
+      let guaranteedLeads = 0;
+      let unassignedNeeded = 0;
+      
+      // 1. Check specific agents
+      for (const [agentId, requestedForAgent] of Object.entries(assignmentsByAgent)) {
+           const agentQuery = { ...baseQuery, assignedAgent: agentId };
+           const agentAvailable = await Lead.countDocuments(agentQuery);
+           const takenFromAgent = Math.min(agentAvailable, requestedForAgent);
+           guaranteedLeads += takenFromAgent;
+           unassignedNeeded += (requestedForAgent - takenFromAgent);
+      }
+      
+      // 2. Check unassigned needs (direct unassigned requests + fallback from agents)
+      unassignedNeeded += unassignedCount;
+      
+      if (unassignedNeeded > 0) {
+           const unassignedQuery = { ...baseQuery, assignedAgent: null };
+           const unassignedAvailable = await Lead.countDocuments(unassignedQuery);
+           guaranteedLeads += Math.min(unassignedAvailable, unassignedNeeded);
+           
+           if (unassignedAvailable < unassignedNeeded) {
+               insufficient = true;
+           }
+      }
+      
+      if (guaranteedLeads < count) {
+          insufficient = true;
+          // Only add general message if no specific ones added (to avoid clutter)
+          if (details.length === 0) {
+              details.push(`Total available ${leadType} leads (${guaranteedLeads}) is less than requested (${count})`);
+          }
+      }
+
+      return { insufficient, details, available: guaranteedLeads, requested: count };
+    };
+
+    const ftdCheck = ftd > 0 ? await checkAvailability('ftd', ftd) : { insufficient: false };
+    const fillerCheck = filler > 0 ? await checkAvailability('filler', filler) : { insufficient: false };
+    const coldCheck = cold > 0 ? await checkAvailability('cold', cold) : { insufficient: false };
+
+    let status = "fulfilled";
+    let message = "Order can be fulfilled";
+    let allDetails = [...(ftdCheck.details || []), ...(fillerCheck.details || []), ...(coldCheck.details || [])];
+
+    if (ftdCheck.insufficient || fillerCheck.insufficient || coldCheck.insufficient) {
+      status = "partial";
+      message = "Order will be partially fulfilled";
+      
+      const totalRequested = ftd + filler + cold;
+      const totalAvailable = (ftdCheck.available || 0) + (fillerCheck.available || 0) + (coldCheck.available || 0);
+      
+      if (totalAvailable === 0) {
+          status = "not_fulfilled";
+          message = "Order cannot be fulfilled";
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      summary: {
+        status,
+        message,
+        details: allDetails,
+        breakdown: {
+          ftd: ftdCheck,
+          filler: fillerCheck,
+          cold: coldCheck
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error("Check fulfillment error:", error);
+    next(error);
+  }
+};

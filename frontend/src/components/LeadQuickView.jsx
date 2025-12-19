@@ -17,6 +17,8 @@ import {
   AccordionSummary,
   AccordionDetails,
   Tooltip,
+  Autocomplete,
+  TextField,
 } from "@mui/material";
 import {
   Person as PersonIcon,
@@ -56,6 +58,8 @@ const LeadQuickView = ({
   const [selectedClientBrokerValue, setSelectedClientBrokerValue] =
     useState("");
   const [updatingClientBroker, setUpdatingClientBroker] = useState(false);
+  const [inputValue, setInputValue] = useState("");
+  const [suggestion, setSuggestion] = useState("");
 
   const formatDate = (date) => {
     return date ? new Date(date).toLocaleDateString() : "N/A";
@@ -99,15 +103,19 @@ const LeadQuickView = ({
       fetchClientBrokers();
     }
     // Set current value from lead's assigned client brokers
-    const currentBroker = lead.assignedClientBrokers?.[0]?._id || "";
+    const currentBroker = lead.assignedClientBrokers?.[0] || null;
     setSelectedClientBrokerValue(currentBroker);
+    setInputValue(currentBroker?.name || "");
+    setSuggestion("");
     setEditingClientBroker(true);
   }, [clientBrokers.length, fetchClientBrokers, lead.assignedClientBrokers]);
 
   const handleCancelEditClientBroker = useCallback(() => {
     setEditingClientBroker(false);
-    const currentBroker = lead.assignedClientBrokers?.[0]?._id || "";
+    const currentBroker = lead.assignedClientBrokers?.[0] || null;
     setSelectedClientBrokerValue(currentBroker);
+    setInputValue("");
+    setSuggestion("");
   }, [lead.assignedClientBrokers]);
 
   const handleUpdateClientBroker = useCallback(async () => {
@@ -116,7 +124,7 @@ const LeadQuickView = ({
     setUpdatingClientBroker(true);
     try {
       const updateData = {
-        clientBroker: selectedClientBrokerValue || null,
+        clientBroker: selectedClientBrokerValue?._id || null,
       };
 
       const response = await api.put(`/leads/${lead._id}`, updateData);
@@ -126,12 +134,60 @@ const LeadQuickView = ({
       }
 
       setEditingClientBroker(false);
+      setInputValue("");
+      setSuggestion("");
     } catch (err) {
       console.error("Failed to update client broker:", err);
     } finally {
       setUpdatingClientBroker(false);
     }
   }, [lead, selectedClientBrokerValue, onLeadUpdate]);
+
+  const handleInputChange = useCallback(
+    (e) => {
+      const value = e.target.value;
+      setInputValue(value);
+
+      if (!value.trim()) {
+        setSuggestion("");
+        setSelectedClientBrokerValue(null);
+        return;
+      }
+
+      // Find matching broker
+      const lowerValue = value.toLowerCase();
+      const match = clientBrokers.find((broker) =>
+        broker.name.toLowerCase().startsWith(lowerValue)
+      );
+
+      if (match) {
+        setSuggestion(match.name);
+      } else {
+        setSuggestion("");
+        setSelectedClientBrokerValue(null);
+      }
+    },
+    [clientBrokers]
+  );
+
+  const handleKeyDown = useCallback(
+    (e) => {
+      if (e.key === "Tab" && suggestion && suggestion !== inputValue) {
+        e.preventDefault();
+        const match = clientBrokers.find(
+          (broker) => broker.name.toLowerCase() === suggestion.toLowerCase()
+        );
+        if (match) {
+          setInputValue(match.name);
+          setSelectedClientBrokerValue(match);
+          setSuggestion("");
+        }
+      } else if (e.key === "Escape") {
+        setSuggestion("");
+      }
+    },
+    [suggestion, inputValue, clientBrokers]
+  );
 
   const leadType = (lead.orderedAs || lead.leadType || "").toLowerCase();
   const isFtdOrFiller = ["ftd", "filler"].includes(leadType);
@@ -603,59 +659,73 @@ const LeadQuickView = ({
                 </Box>
               )}
 
-            <FormControl size="small" fullWidth sx={{ mb: 1 }}>
-              <InputLabel>Client Broker</InputLabel>
-              <Select
-                value={selectedClientBrokerValue}
-                onChange={(e) => setSelectedClientBrokerValue(e.target.value)}
+            <Box sx={{ position: "relative", mb: 1 }}>
+              <TextField
+                size="small"
+                fullWidth
                 label="Client Broker"
+                placeholder="Type to search..."
+                value={inputValue}
+                onChange={handleInputChange}
+                onKeyDown={handleKeyDown}
                 disabled={updatingClientBroker || loadingClientBrokers}
-                displayEmpty
+                InputProps={{
+                  endAdornment: loadingClientBrokers ? (
+                    <CircularProgress color="inherit" size={20} />
+                  ) : null,
+                }}
+                autoComplete="off"
+              />
+              {suggestion && suggestion !== inputValue && (
+                <Box
+                  sx={{
+                    position: "absolute",
+                    left: 14,
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    pointerEvents: "none",
+                    color: "text.disabled",
+                    fontSize: "0.875rem",
+                  }}
+                >
+                  <span style={{ visibility: "hidden" }}>{inputValue}</span>
+                  <span style={{ color: "#999" }}>
+                    {suggestion.slice(inputValue.length)}
+                  </span>
+                </Box>
+              )}
+            </Box>
+            {selectedClientBrokerValue && (
+              <Box
+                sx={{ mb: 1, p: 1, bgcolor: "action.hover", borderRadius: 1 }}
               >
-                <MenuItem value="">
-                  <em>None</em>
-                </MenuItem>
-                {clientBrokers.map((broker) => {
-                  const hasBeenSentBefore = lead.clientBrokerHistory?.some(
-                    (history) => history.clientBroker?._id === broker._id
-                  );
-
-                  return (
-                    <MenuItem key={broker._id} value={broker._id}>
-                      <Box
-                        sx={{
-                          display: "flex",
-                          alignItems: "center",
-                          width: "100%",
-                        }}
-                      >
-                        <Box sx={{ flex: 1 }}>
-                          {broker.name}
-                          {broker.description && (
-                            <Typography
-                              variant="caption"
-                              color="text.secondary"
-                              sx={{ ml: 1, fontStyle: "italic" }}
-                            >
-                              - {broker.description}
-                            </Typography>
-                          )}
-                        </Box>
-                        {hasBeenSentBefore && (
-                          <Chip
-                            label="Previously sent"
-                            size="small"
-                            color="warning"
-                            variant="outlined"
-                            sx={{ ml: 1, fontSize: "0.6rem", height: 18 }}
-                          />
-                        )}
-                      </Box>
-                    </MenuItem>
-                  );
-                })}
-              </Select>
-            </FormControl>
+                <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                  Selected: {selectedClientBrokerValue.name}
+                  {selectedClientBrokerValue.description && (
+                    <Typography
+                      component="span"
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{ ml: 1, fontStyle: "italic" }}
+                    >
+                      - {selectedClientBrokerValue.description}
+                    </Typography>
+                  )}
+                </Typography>
+                {lead.clientBrokerHistory?.some(
+                  (history) =>
+                    history.clientBroker?._id === selectedClientBrokerValue._id
+                ) && (
+                  <Chip
+                    label="Previously sent"
+                    size="small"
+                    color="warning"
+                    variant="outlined"
+                    sx={{ mt: 0.5, fontSize: "0.6rem", height: 18 }}
+                  />
+                )}
+              </Box>
+            )}
             <Box display="flex" gap={1}>
               <Button
                 size="small"
