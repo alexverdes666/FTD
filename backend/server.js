@@ -540,6 +540,7 @@ app.use("/api/video", videoRoutes);
 app.use("/api/announcements", announcementRoutes);
 app.use("/api/am-targets", amTargetRoutes);
 app.use("/api/deposit-calls", depositCallsRoutes);
+app.use("/api/sticky-notes", require("./routes/stickyNotes"));
 
 app.use("/api/system-config", systemConfigurationRoutes);
 app.use("/api/security-audit", securityAuditRoutes);

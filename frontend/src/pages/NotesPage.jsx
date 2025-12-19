@@ -14,6 +14,8 @@ import {
   NoteAdd as NoteAddIcon,
 } from "@mui/icons-material";
 import { motion, AnimatePresence } from "framer-motion";
+import api from "../services/api";
+import { toast } from "react-hot-toast";
 
 const NOTE_COLORS = [
   "#FFF740", // Classic Yellow
@@ -25,10 +27,7 @@ const NOTE_COLORS = [
 ];
 
 const NotesPage = () => {
-  const [notes, setNotes] = useState(() => {
-    const savedNotes = localStorage.getItem("sticky_notes");
-    return savedNotes ? JSON.parse(savedNotes) : [];
-  });
+  const [notes, setNotes] = useState([]);
   const [contextMenu, setContextMenu] = useState(null);
   const [activeNoteId, setActiveNoteId] = useState(null); // Track which note is being interacted with
 
@@ -38,9 +37,21 @@ const NotesPage = () => {
   const dragStart = useRef({ x: 0, y: 0 });
   const containerRef = useRef(null);
 
+  // Fetch notes on mount
   useEffect(() => {
-    localStorage.setItem("sticky_notes", JSON.stringify(notes));
-  }, [notes]);
+    const fetchNotes = async () => {
+      try {
+        const response = await api.get("/sticky-notes");
+        if (response.data.success) {
+          setNotes(response.data.data);
+        }
+      } catch (error) {
+        console.error("Failed to fetch notes", error);
+        toast.error("Failed to load notes");
+      }
+    };
+    fetchNotes();
+  }, []);
 
   // Handle paste event for images
   useEffect(() => {
@@ -64,15 +75,14 @@ const NotesPage = () => {
 
             // Create temporary image to get natural dimensions
             const img = new Image();
-            img.onload = () => {
+            img.onload = async () => {
               const aspectRatio = img.naturalWidth / img.naturalHeight;
               const maxWidth = 400;
               let width = Math.min(maxWidth, img.naturalWidth);
               let height = width / aspectRatio;
 
               // Create a new image note with proper aspect ratio
-              const newNote = {
-                id: Date.now(),
+              const newNoteData = {
                 type: "image",
                 imageData: imageData,
                 width: width,
@@ -84,7 +94,15 @@ const NotesPage = () => {
                 },
               };
 
-              setNotes((prevNotes) => [...prevNotes, newNote]);
+              try {
+                const response = await api.post("/sticky-notes", newNoteData);
+                if (response.data.success) {
+                  setNotes((prevNotes) => [...prevNotes, response.data.data]);
+                }
+              } catch (error) {
+                console.error("Failed to save image note", error);
+                toast.error("Failed to save image note");
+              }
             };
             img.src = imageData;
           };
@@ -118,8 +136,6 @@ const NotesPage = () => {
   // Pan / Zoom Logic
   const handleMouseDown = (e) => {
     // Only pan if clicking on the background (not on a note)
-    // We check if the target is the container or one of its direct children that isn't a note
-    // Or simpler: check if the click target has a specific class or id, or if it's NOT inside a note
     if (e.target.closest(".sticky-note")) return;
 
     if (e.button === 0) {
@@ -172,9 +188,8 @@ const NotesPage = () => {
     });
   };
 
-  const addNote = () => {
-    const newNote = {
-      id: Date.now(),
+  const addNote = async () => {
+    const newNoteData = {
       type: "text",
       text: "",
       color: NOTE_COLORS[0],
@@ -185,18 +200,43 @@ const NotesPage = () => {
         y: 100 + notes.length * 30,
       },
     };
-    setNotes([...notes, newNote]);
-    handleCloseContextMenu();
+
+    try {
+      const response = await api.post("/sticky-notes", newNoteData);
+      if (response.data.success) {
+        setNotes([...notes, response.data.data]);
+        handleCloseContextMenu();
+      }
+    } catch (error) {
+      console.error("Failed to create note", error);
+      toast.error("Failed to create note");
+    }
   };
 
+  // Updates local state immediately for UI responsiveness
   const updateNote = (id, updates) => {
     setNotes(
       notes.map((note) => (note.id === id ? { ...note, ...updates } : note))
     );
   };
 
-  const deleteNote = (id) => {
-    setNotes(notes.filter((note) => note.id !== id));
+  // Persists changes to the database
+  const saveNote = async (id, updates) => {
+    try {
+      await api.put(`/sticky-notes/${id}`, updates);
+    } catch (error) {
+      console.error("Failed to save note", error);
+    }
+  };
+
+  const deleteNote = async (id) => {
+    try {
+      await api.delete(`/sticky-notes/${id}`);
+      setNotes(notes.filter((note) => note.id !== id));
+    } catch (error) {
+      console.error("Failed to delete note", error);
+      toast.error("Failed to delete note");
+    }
   };
 
   const bringToFront = (id) => {
@@ -252,6 +292,7 @@ const NotesPage = () => {
                 note={note}
                 scale={view.scale}
                 onUpdate={updateNote}
+                onSave={saveNote}
                 onDelete={deleteNote}
                 onBringToFront={bringToFront}
                 isActive={activeNoteId === note.id}
@@ -293,6 +334,7 @@ const StickyNote = ({
   note,
   scale,
   onUpdate,
+  onSave,
   onDelete,
   onBringToFront,
   isActive,
@@ -312,22 +354,21 @@ const StickyNote = ({
   const dragStartPos = useRef({ x: 0, y: 0 });
   const dragStartNotePos = useRef({ x: 0, y: 0 });
   const resizeDimensions = useRef({ width: note.width, height: note.height });
-  const justFinishedResizing = useRef(false);
 
   // Sync dimensions from props when not resizing
   useEffect(() => {
-    if (!isResizing && !justFinishedResizing.current) {
+    if (!isResizing) {
       setDimensions({ width: note.width, height: note.height });
       resizeDimensions.current = { width: note.width, height: note.height };
     }
-    // Reset the flag after a frame to allow future syncs
-    if (justFinishedResizing.current) {
-      const timeout = setTimeout(() => {
-        justFinishedResizing.current = false;
-      }, 100);
-      return () => clearTimeout(timeout);
-    }
   }, [note.width, note.height, isResizing]);
+
+  // Sync position from props when not dragging
+  useEffect(() => {
+    if (!isDraggingNote) {
+      setPosition(note.position || { x: 0, y: 0 });
+    }
+  }, [note.position]); // Removed isDraggingNote dependency to prevent snap-back on drag end
 
   const handleColorClick = (event) => {
     event.stopPropagation();
@@ -338,6 +379,7 @@ const StickyNote = ({
     setAnchorEl(null);
     if (color) {
       onUpdate(note.id, { color });
+      onSave(note.id, { color });
     }
   };
 
@@ -376,12 +418,24 @@ const StickyNote = ({
       };
 
       setPosition(newPosition);
-      onUpdate(note.id, { position: newPosition });
+      // Remove onUpdate from here to avoid flooding updates during drag
+      // onUpdate(note.id, { position: newPosition });
     };
 
     const handleMouseUp = (e) => {
       e.preventDefault();
       setIsDraggingNote(false);
+
+      // Update parent state and save to DB on drag end
+      const deltaX = (e.clientX - dragStartPos.current.x) / scale;
+      const deltaY = (e.clientY - dragStartPos.current.y) / scale;
+      const finalPosition = {
+        x: dragStartNotePos.current.x + deltaX,
+        y: dragStartNotePos.current.y + deltaY,
+      };
+
+      onUpdate(note.id, { position: finalPosition });
+      onSave(note.id, { position: finalPosition });
     };
 
     // Also handle mouse leaving the window to prevent stuck drag state
@@ -389,6 +443,16 @@ const StickyNote = ({
       // Only end drag if mouse actually leaves the document
       if (e.relatedTarget === null) {
         setIsDraggingNote(false);
+        // We should also save here if we were dragging
+        // Recalculate position as in mouseup
+        const deltaX = (e.clientX - dragStartPos.current.x) / scale;
+        const deltaY = (e.clientY - dragStartPos.current.y) / scale;
+        const finalPosition = {
+          x: dragStartNotePos.current.x + deltaX,
+          y: dragStartNotePos.current.y + deltaY,
+        };
+        onUpdate(note.id, { position: finalPosition });
+        onSave(note.id, { position: finalPosition });
       }
     };
 
@@ -401,7 +465,7 @@ const StickyNote = ({
       window.removeEventListener("mouseup", handleMouseUp);
       document.removeEventListener("mouseleave", handleMouseLeave);
     };
-  }, [isDraggingNote, scale, note.id, onUpdate, position]);
+  }, [isDraggingNote, scale, note.id, onUpdate, onSave, position]);
 
   // Resize logic with scale correction
   const handleResizeStart = (e) => {
@@ -456,14 +520,16 @@ const StickyNote = ({
     const handleMouseUp = (upEvent) => {
       upEvent.preventDefault();
 
-      // Update parent state first
-      onUpdate(note.id, {
+      const finalUpdates = {
         width: resizeDimensions.current.width,
         height: resizeDimensions.current.height,
-      });
+      };
 
-      // Set flag to prevent sync effect from overwriting
-      justFinishedResizing.current = true;
+      // Update parent state first
+      onUpdate(note.id, finalUpdates);
+      // Save to DB
+      onSave(note.id, finalUpdates);
+
       setIsResizing(false);
 
       window.removeEventListener("mousemove", handleMouseMove);
@@ -474,14 +540,16 @@ const StickyNote = ({
     const handleMouseLeave = (leaveEvent) => {
       // Only end resize if mouse actually leaves the document
       if (leaveEvent.relatedTarget === null) {
-        // Update parent state first
-        onUpdate(note.id, {
+        const finalUpdates = {
           width: resizeDimensions.current.width,
           height: resizeDimensions.current.height,
-        });
+        };
 
-        // Set flag to prevent sync effect from overwriting
-        justFinishedResizing.current = true;
+        // Update parent state first
+        onUpdate(note.id, finalUpdates);
+        // Save to DB
+        onSave(note.id, finalUpdates);
+
         setIsResizing(false);
 
         window.removeEventListener("mousemove", handleMouseMove);
@@ -532,6 +600,7 @@ const StickyNote = ({
           e.stopPropagation();
           e.preventDefault();
           setIsDraggingNote(false);
+          // Handled in useEffect, but good to have fallback if event listener fails
         }
       }}
     >
@@ -686,6 +755,7 @@ const StickyNote = ({
             placeholder="Type something..."
             value={note.text}
             onChange={(e) => onUpdate(note.id, { text: e.target.value })}
+            onBlur={() => onSave(note.id, { text: note.text })}
             InputProps={{
               disableUnderline: true,
             }}
