@@ -4599,6 +4599,25 @@ const OrdersPage = () => {
               <LeadQuickView
                 lead={assignedLeadsModal.leads[assignedLeadsModal.currentIndex]}
                 onLeadUpdate={handleLeadUpdate}
+                onConvertLeadType={(lead) =>
+                  handleConvertLeadType(
+                    orders.find((o) => o._id === assignedLeadsModal.orderId),
+                    lead
+                  )
+                }
+                onChangeFTDLead={(lead) =>
+                  handleOpenChangeFTDDialog(
+                    orders.find((o) => o._id === assignedLeadsModal.orderId),
+                    lead
+                  )
+                }
+                onAssignLeadToAgent={handleOpenAssignLeadDialog}
+                onAssignDepositCall={(lead) =>
+                  handleOpenAssignDepositCallDialog(
+                    orders.find((o) => o._id === assignedLeadsModal.orderId),
+                    lead
+                  )
+                }
                 titleExtra={
                   <Typography
                     component="div"

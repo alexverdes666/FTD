@@ -16,6 +16,7 @@ import {
   Accordion,
   AccordionSummary,
   AccordionDetails,
+  Tooltip,
 } from "@mui/material";
 import {
   Person as PersonIcon,
@@ -28,6 +29,10 @@ import {
   Save as SaveIcon,
   AttachFile as AttachFileIcon,
   ExpandMore as ExpandMoreIcon,
+  SwapVert as ConvertIcon,
+  AssignmentInd as AssignIcon,
+  Cached as ChangeIcon,
+  Call as CallIcon,
 } from "@mui/icons-material";
 import api from "../services/api";
 import DocumentPreview from "./DocumentPreview";
@@ -36,11 +41,20 @@ import DocumentPreview from "./DocumentPreview";
  * LeadQuickView - A compact popover component that displays key lead information on hover
  * This replaces the need to click and expand each lead individually
  */
-const LeadQuickView = ({ lead, onLeadUpdate, titleExtra }) => {
+const LeadQuickView = ({
+  lead,
+  onLeadUpdate,
+  titleExtra,
+  onConvertLeadType,
+  onChangeFTDLead,
+  onAssignLeadToAgent,
+  onAssignDepositCall,
+}) => {
   const [editingClientBroker, setEditingClientBroker] = useState(false);
   const [clientBrokers, setClientBrokers] = useState([]);
   const [loadingClientBrokers, setLoadingClientBrokers] = useState(false);
-  const [selectedClientBrokerValue, setSelectedClientBrokerValue] = useState("");
+  const [selectedClientBrokerValue, setSelectedClientBrokerValue] =
+    useState("");
   const [updatingClientBroker, setUpdatingClientBroker] = useState(false);
 
   const formatDate = (date) => {
@@ -69,7 +83,9 @@ const LeadQuickView = ({ lead, onLeadUpdate, titleExtra }) => {
   const fetchClientBrokers = useCallback(async () => {
     setLoadingClientBrokers(true);
     try {
-      const response = await api.get("/client-brokers?isActive=true&limit=1000");
+      const response = await api.get(
+        "/client-brokers?isActive=true&limit=1000"
+      );
       setClientBrokers(response.data.data || []);
     } catch (err) {
       console.error("Failed to fetch client brokers:", err);
@@ -117,6 +133,9 @@ const LeadQuickView = ({ lead, onLeadUpdate, titleExtra }) => {
     }
   }, [lead, selectedClientBrokerValue, onLeadUpdate]);
 
+  const leadType = (lead.orderedAs || lead.leadType || "").toLowerCase();
+  const isFtdOrFiller = ["ftd", "filler"].includes(leadType);
+
   return (
     <Paper
       elevation={8}
@@ -133,14 +152,22 @@ const LeadQuickView = ({ lead, onLeadUpdate, titleExtra }) => {
     >
       {/* Header - Full Width */}
       <Box sx={{ mb: 1.5 }}>
-        <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+        <Box
+          sx={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "flex-start",
+          }}
+        >
           <Box>
             <Typography variant="h6" sx={{ fontWeight: 600, mb: 0.5 }}>
               {lead.firstName} {lead.lastName}
             </Typography>
             <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap" }}>
               <Chip
-                label={(lead.orderedAs || lead.leadType)?.toUpperCase() || "UNKNOWN"}
+                label={
+                  (lead.orderedAs || lead.leadType)?.toUpperCase() || "UNKNOWN"
+                }
                 size="small"
                 color="primary"
                 variant="outlined"
@@ -157,10 +184,57 @@ const LeadQuickView = ({ lead, onLeadUpdate, titleExtra }) => {
               />
             </Box>
           </Box>
-          {titleExtra && (
-            <Box sx={{ ml: 2 }}>
-              {titleExtra}
-            </Box>
+          {titleExtra && <Box sx={{ ml: 2 }}>{titleExtra}</Box>}
+        </Box>
+
+        {/* Action Buttons */}
+        <Box sx={{ display: "flex", gap: 1, mt: 2, flexWrap: "wrap" }}>
+          {onConvertLeadType && isFtdOrFiller && (
+            <Button
+              size="small"
+              startIcon={<ConvertIcon />}
+              onClick={() => onConvertLeadType(lead)}
+              variant="outlined"
+              color="primary"
+            >
+              Convert to {leadType === "ftd" ? "Filler" : "FTD"}
+            </Button>
+          )}
+
+          {onChangeFTDLead && isFtdOrFiller && (
+            <Button
+              size="small"
+              startIcon={<ChangeIcon />}
+              onClick={() => onChangeFTDLead(lead)}
+              variant="outlined"
+              color="warning"
+            >
+              Change {leadType === "filler" ? "Filler" : "FTD"} Lead
+            </Button>
+          )}
+
+          {onAssignLeadToAgent && (
+            <Button
+              size="small"
+              startIcon={<AssignIcon />}
+              onClick={() => onAssignLeadToAgent(lead)}
+              variant="outlined"
+              color="info"
+            >
+              Assign to Agent
+            </Button>
+          )}
+
+          {onAssignDepositCall && isFtdOrFiller && (
+            <Button
+              size="small"
+              startIcon={<CallIcon />}
+              onClick={() => onAssignDepositCall(lead)}
+              variant="outlined"
+              color="success"
+            >
+              Assign Deposit Call
+            </Button>
           )}
         </Box>
       </Box>
@@ -181,7 +255,11 @@ const LeadQuickView = ({ lead, onLeadUpdate, titleExtra }) => {
             <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
               <EmailIcon fontSize="small" color="action" />
               <Box>
-                <Typography variant="caption" color="text.secondary" display="block">
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  display="block"
+                >
                   Email
                 </Typography>
                 <Typography variant="body2" sx={{ fontWeight: 500 }}>
@@ -192,7 +270,11 @@ const LeadQuickView = ({ lead, onLeadUpdate, titleExtra }) => {
             <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
               <PhoneIcon fontSize="small" color="action" />
               <Box>
-                <Typography variant="caption" color="text.secondary" display="block">
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  display="block"
+                >
                   Phone
                 </Typography>
                 <Typography variant="body2" sx={{ fontWeight: 500 }}>
@@ -205,7 +287,11 @@ const LeadQuickView = ({ lead, onLeadUpdate, titleExtra }) => {
             <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
               <LocationIcon fontSize="small" color="action" />
               <Box>
-                <Typography variant="caption" color="text.secondary" display="block">
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  display="block"
+                >
                   Country
                 </Typography>
                 <Typography variant="body2" sx={{ fontWeight: 500 }}>
@@ -230,7 +316,11 @@ const LeadQuickView = ({ lead, onLeadUpdate, titleExtra }) => {
                 <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                   <PersonIcon fontSize="small" color="action" />
                   <Box>
-                    <Typography variant="caption" color="text.secondary" display="block">
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      display="block"
+                    >
                       Gender
                     </Typography>
                     <Typography variant="body2" sx={{ fontWeight: 500 }}>
@@ -243,7 +333,11 @@ const LeadQuickView = ({ lead, onLeadUpdate, titleExtra }) => {
                 <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                   <CalendarIcon fontSize="small" color="action" />
                   <Box>
-                    <Typography variant="caption" color="text.secondary" display="block">
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      display="block"
+                    >
                       Date of Birth
                     </Typography>
                     <Typography variant="body2" sx={{ fontWeight: 500 }}>
@@ -254,9 +348,17 @@ const LeadQuickView = ({ lead, onLeadUpdate, titleExtra }) => {
               )}
               {lead.address && (
                 <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1 }}>
-                  <LocationIcon fontSize="small" color="action" sx={{ mt: 0.5 }} />
+                  <LocationIcon
+                    fontSize="small"
+                    color="action"
+                    sx={{ mt: 0.5 }}
+                  />
                   <Box>
-                    <Typography variant="caption" color="text.secondary" display="block">
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      display="block"
+                    >
                       Address
                     </Typography>
                     <Typography variant="body2" sx={{ fontWeight: 500 }}>
@@ -270,7 +372,10 @@ const LeadQuickView = ({ lead, onLeadUpdate, titleExtra }) => {
         )}
 
         {/* Business/Network Information */}
-        {(lead.client || lead.assignedClientBrokers?.length > 0 || lead.clientBroker || lead.clientNetwork) && (
+        {(lead.client ||
+          lead.assignedClientBrokers?.length > 0 ||
+          lead.clientBroker ||
+          lead.clientNetwork) && (
           <Box sx={{ flex: "1 1 250px", minWidth: 250, maxWidth: "100%" }}>
             <Typography
               variant="subtitle2"
@@ -283,21 +388,39 @@ const LeadQuickView = ({ lead, onLeadUpdate, titleExtra }) => {
                 <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                   <BusinessIcon fontSize="small" color="action" />
                   <Box sx={{ minWidth: 0 }}>
-                    <Typography variant="caption" color="text.secondary" display="block">
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      display="block"
+                    >
                       Client
                     </Typography>
-                    <Typography variant="body2" sx={{ fontWeight: 500, wordBreak: "break-word" }}>
+                    <Typography
+                      variant="body2"
+                      sx={{ fontWeight: 500, wordBreak: "break-word" }}
+                    >
                       {lead.client}
                     </Typography>
                   </Box>
                 </Box>
               )}
-              {(lead.assignedClientBrokers?.length > 0 || lead.clientBroker || true) && (
+              {(lead.assignedClientBrokers?.length > 0 ||
+                lead.clientBroker ||
+                true) && (
                 <Box>
-                  <Box display="flex" alignItems="center" justifyContent="space-between" mb={0.5}>
+                  <Box
+                    display="flex"
+                    alignItems="center"
+                    justifyContent="space-between"
+                    mb={0.5}
+                  >
                     <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                       <BusinessIcon fontSize="small" color="action" />
-                      <Typography variant="caption" color="text.secondary" display="block">
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        display="block"
+                      >
                         Client Broker
                       </Typography>
                     </Box>
@@ -312,7 +435,10 @@ const LeadQuickView = ({ lead, onLeadUpdate, titleExtra }) => {
                     )}
                   </Box>
                   {!editingClientBroker ? (
-                    <Typography variant="body2" sx={{ fontWeight: 500, pl: 3.5, wordBreak: "break-word" }}>
+                    <Typography
+                      variant="body2"
+                      sx={{ fontWeight: 500, pl: 3.5, wordBreak: "break-word" }}
+                    >
                       {lead.assignedClientBrokers?.[0]?.name ||
                         lead.clientBroker ||
                         "N/A"}
@@ -334,10 +460,17 @@ const LeadQuickView = ({ lead, onLeadUpdate, titleExtra }) => {
                 <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                   <BusinessIcon fontSize="small" color="action" />
                   <Box sx={{ minWidth: 0 }}>
-                    <Typography variant="caption" color="text.secondary" display="block">
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      display="block"
+                    >
                       Client Network
                     </Typography>
-                    <Typography variant="body2" sx={{ fontWeight: 500, wordBreak: "break-word" }}>
+                    <Typography
+                      variant="body2"
+                      sx={{ fontWeight: 500, wordBreak: "break-word" }}
+                    >
                       {lead.clientNetwork}
                     </Typography>
                   </Box>
@@ -359,19 +492,25 @@ const LeadQuickView = ({ lead, onLeadUpdate, titleExtra }) => {
             <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
               <PersonIcon fontSize="small" color="success" />
               <Box>
-                <Typography variant="caption" color="text.secondary" display="block">
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  display="block"
+                >
                   Assigned Agent
                 </Typography>
                 <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                  {typeof lead.assignedAgent === "object" && lead.assignedAgent.fullName
+                  {typeof lead.assignedAgent === "object" &&
+                  lead.assignedAgent.fullName
                     ? lead.assignedAgent.fullName
                     : "Assigned"}
                 </Typography>
-                {typeof lead.assignedAgent === "object" && lead.assignedAgent.email && (
-                  <Typography variant="caption" color="text.secondary">
-                    {lead.assignedAgent.email}
-                  </Typography>
-                )}
+                {typeof lead.assignedAgent === "object" &&
+                  lead.assignedAgent.email && (
+                    <Typography variant="caption" color="text.secondary">
+                      {lead.assignedAgent.email}
+                    </Typography>
+                  )}
               </Box>
             </Box>
           </Box>
@@ -384,81 +523,85 @@ const LeadQuickView = ({ lead, onLeadUpdate, titleExtra }) => {
           <Divider sx={{ my: 1.5 }} />
           <Box>
             {/* Client Broker History - More Compact */}
-            {lead.clientBrokerHistory && lead.clientBrokerHistory.length > 0 && (
-              <Box
-                sx={{
-                  mb: 1.5,
-                  p: 1,
-                  bgcolor: "warning.50",
-                  borderRadius: 1,
-                  border: "1px solid",
-                  borderColor: "warning.light",
-                }}
-              >
-                <Typography
-                  variant="caption"
+            {lead.clientBrokerHistory &&
+              lead.clientBrokerHistory.length > 0 && (
+                <Box
                   sx={{
-                    fontWeight: "bold",
-                    fontSize: "0.75rem",
-                    display: "block",
-                    mb: 0.5,
+                    mb: 1.5,
+                    p: 1,
+                    bgcolor: "warning.50",
+                    borderRadius: 1,
+                    border: "1px solid",
+                    borderColor: "warning.light",
                   }}
                 >
-                  ⚠️ Previous Broker Assignments
-                </Typography>
-                <Box sx={{ maxHeight: 100, overflowY: "auto" }}>
-                  {lead.clientBrokerHistory
-                    .sort((a, b) => new Date(b.assignedAt) - new Date(a.assignedAt))
-                    .map((history, index) => {
-                      const brokerName =
-                        history.clientBroker?.name || "Unknown Broker";
-                      const brokerDomain = history.clientBroker?.domain;
-                      const assignedDate = new Date(
-                        history.assignedAt
-                      ).toLocaleDateString();
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      fontWeight: "bold",
+                      fontSize: "0.75rem",
+                      display: "block",
+                      mb: 0.5,
+                    }}
+                  >
+                    ⚠️ Previous Broker Assignments
+                  </Typography>
+                  <Box sx={{ maxHeight: 100, overflowY: "auto" }}>
+                    {lead.clientBrokerHistory
+                      .sort(
+                        (a, b) =>
+                          new Date(b.assignedAt) - new Date(a.assignedAt)
+                      )
+                      .map((history, index) => {
+                        const brokerName =
+                          history.clientBroker?.name || "Unknown Broker";
+                        const brokerDomain = history.clientBroker?.domain;
+                        const assignedDate = new Date(
+                          history.assignedAt
+                        ).toLocaleDateString();
 
-                      return (
-                        <Box
-                          key={index}
-                          sx={{
-                            mb: 0.5,
-                            p: 0.75,
-                            bgcolor: "background.paper",
-                            borderRadius: 0.5,
-                            display: "flex",
-                            justifyContent: "space-between",
-                            alignItems: "center",
-                          }}
-                        >
-                          <Typography
-                            variant="caption"
-                            sx={{ fontSize: "0.7rem", fontWeight: 500 }}
+                        return (
+                          <Box
+                            key={index}
+                            sx={{
+                              mb: 0.5,
+                              p: 0.75,
+                              bgcolor: "background.paper",
+                              borderRadius: 0.5,
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                            }}
                           >
-                            {brokerName}
-                            {brokerDomain && (
-                              <Typography
-                                component="span"
-                                variant="caption"
-                                color="text.secondary"
-                                sx={{ ml: 0.5, fontSize: "0.65rem" }}
-                              >
-                                ({brokerDomain})
-                              </Typography>
-                            )}
-                          </Typography>
-                          <Typography
-                            variant="caption"
-                            color="text.secondary"
-                            sx={{ fontSize: "0.65rem" }}
-                          >
-                            {assignedDate}
-                          </Typography>
-                        </Box>
-                      );
-                    })}
+                            <Typography
+                              variant="caption"
+                              sx={{ fontSize: "0.7rem", fontWeight: 500 }}
+                            >
+                              {brokerName}
+                              {brokerDomain && (
+                                <Typography
+                                  component="span"
+                                  variant="caption"
+                                  color="text.secondary"
+                                  sx={{ ml: 0.5, fontSize: "0.65rem" }}
+                                >
+                                  ({brokerDomain})
+                                </Typography>
+                              )}
+                            </Typography>
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                              sx={{ fontSize: "0.65rem" }}
+                            >
+                              {assignedDate}
+                            </Typography>
+                          </Box>
+                        );
+                      })}
+                  </Box>
                 </Box>
-              </Box>
-            )}
+              )}
 
             <FormControl size="small" fullWidth sx={{ mb: 1 }}>
               <InputLabel>Client Broker</InputLabel>
@@ -559,7 +702,10 @@ const LeadQuickView = ({ lead, onLeadUpdate, titleExtra }) => {
           >
             <AccordionSummary
               expandIcon={<ExpandMoreIcon />}
-              sx={{ minHeight: 40, "& .MuiAccordionSummary-content": { my: 0.5 } }}
+              sx={{
+                minHeight: 40,
+                "& .MuiAccordionSummary-content": { my: 0.5 },
+              }}
             >
               <Typography
                 variant="subtitle2"
@@ -636,7 +782,6 @@ const LeadQuickView = ({ lead, onLeadUpdate, titleExtra }) => {
       )}
 
       {/* Assigned Agent - Removed as it's now in horizontal layout */}
-
     </Paper>
   );
 };
