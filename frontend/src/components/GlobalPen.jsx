@@ -1,8 +1,15 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Box, Paper, MenuItem, ListItemIcon, ListItemText, Portal } from '@mui/material';
-import CreateIcon from '@mui/icons-material/Create';
-import html2canvas from 'html2canvas';
-import toast from 'react-hot-toast';
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import {
+  Box,
+  Paper,
+  MenuItem,
+  ListItemIcon,
+  ListItemText,
+  Portal,
+} from "@mui/material";
+import CreateIcon from "@mui/icons-material/Create";
+import html2canvas from "html2canvas";
+import toast from "react-hot-toast";
 
 const GlobalPen = () => {
   const [contextMenu, setContextMenu] = useState(null);
@@ -16,27 +23,65 @@ const GlobalPen = () => {
   const handleCopy = useCallback(async () => {
     // Note: checking isProcessing here inside useCallback might use stale closure if not in deps,
     // but ref is better for lock.
-    if (document.body.getAttribute('data-is-processing') === 'true') return;
-    document.body.setAttribute('data-is-processing', 'true');
+    if (document.body.getAttribute("data-is-processing") === "true") return;
+    document.body.setAttribute("data-is-processing", "true");
     setIsProcessing(true);
 
     try {
-      // Capture only the viewport
-      const canvas = await html2canvas(document.body, {
+      // Get viewport dimensions
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+
+      // Capture the entire viewport, ignoring the dark overlay
+      const screenshotCanvas = await html2canvas(document.body, {
         useCORS: true,
         allowTaint: true,
         backgroundColor: null,
         logging: false,
         x: window.scrollX,
         y: window.scrollY,
-        width: window.innerWidth,
-        height: window.innerHeight,
+        width: viewportWidth,
+        height: viewportHeight,
+        windowWidth: viewportWidth,
+        windowHeight: viewportHeight,
+        ignoreElements: (element) => {
+          // Skip the dark overlay element during capture
+          return element.getAttribute("data-globalpen-overlay") === "true";
+        },
       });
 
-      const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+      // Create a new canvas to composite all layers (screenshot + drawings)
+      const compositeCanvas = document.createElement("canvas");
+      compositeCanvas.width = viewportWidth;
+      compositeCanvas.height = viewportHeight;
+      const compositeCtx = compositeCanvas.getContext("2d");
+
+      // 1. Draw the screenshot first (the page content), ensuring it fills the entire viewport
+      compositeCtx.drawImage(
+        screenshotCanvas,
+        0,
+        0,
+        viewportWidth,
+        viewportHeight
+      );
+
+      // 2. Overlay the drawing canvas on top (without the dark background)
+      if (canvasRef.current) {
+        compositeCtx.drawImage(
+          canvasRef.current,
+          0,
+          0,
+          viewportWidth,
+          viewportHeight
+        );
+      }
+
+      const blob = await new Promise((resolve) =>
+        compositeCanvas.toBlob(resolve, "image/png")
+      );
 
       if (!blob) {
-        toast.error('Failed to generate image');
+        toast.error("Failed to generate image");
         return;
       }
 
@@ -47,34 +92,33 @@ const GlobalPen = () => {
 
       try {
         await navigator.clipboard.write([
-            new ClipboardItem({
-                [blob.type]: blob
-            })
+          new ClipboardItem({
+            [blob.type]: blob,
+          }),
         ]);
-        toast.success('Copied to clipboard!');
+        toast.success("Copied to clipboard!");
       } catch (err) {
-        console.error('Clipboard write failed:', err);
+        console.error("Clipboard write failed:", err);
         // Fallback for NotAllowedError (focus issue)
-        if (err.name === 'NotAllowedError') {
-             toast.error('Please click on the page and try again.');
+        if (err.name === "NotAllowedError") {
+          toast.error("Please click on the page and try again.");
         } else {
-             toast.error('Failed to copy to clipboard');
+          toast.error("Failed to copy to clipboard");
         }
       }
-
     } catch (error) {
-      console.error('Screenshot failed:', error);
-      toast.error('Failed to capture screen');
+      console.error("Screenshot failed:", error);
+      toast.error("Failed to capture screen");
     } finally {
       setIsProcessing(false);
-      document.body.removeAttribute('data-is-processing');
+      document.body.removeAttribute("data-is-processing");
     }
-  }, []);
+  }, [isDrawingMode]);
 
   // Handle right-click to show menu
   useEffect(() => {
     const handleContextMenu = (event) => {
-      if (isDrawingMode) return; 
+      if (isDrawingMode) return;
 
       event.preventDefault();
       setContextMenu(
@@ -83,36 +127,39 @@ const GlobalPen = () => {
               mouseX: event.clientX + 2,
               mouseY: event.clientY - 6,
             }
-          : null,
+          : null
       );
     };
 
-    window.addEventListener('contextmenu', handleContextMenu);
+    window.addEventListener("contextmenu", handleContextMenu);
     return () => {
-      window.removeEventListener('contextmenu', handleContextMenu);
+      window.removeEventListener("contextmenu", handleContextMenu);
     };
   }, [contextMenu, isDrawingMode]);
 
   // Handle Keyboard Shortcuts (ESC and Ctrl+C)
   useEffect(() => {
     const handleKeyDown = (event) => {
-      if (event.key === 'Escape') {
+      if (event.key === "Escape") {
         if (isDrawingMode) {
-            setIsDrawingMode(false);
-            setContextMenu(null);
+          setIsDrawingMode(false);
+          setContextMenu(null);
         } else if (contextMenu) {
-            setContextMenu(null);
+          setContextMenu(null);
         }
-      } else if ((event.ctrlKey || event.metaKey) && (event.key === 'c' || event.key === 'C')) {
-          if (isDrawingMode) {
-              event.preventDefault(); // Prevent default copy behavior
-              handleCopy();
-          }
+      } else if (
+        (event.ctrlKey || event.metaKey) &&
+        (event.key === "c" || event.key === "C")
+      ) {
+        if (isDrawingMode) {
+          event.preventDefault(); // Prevent default copy behavior
+          handleCopy();
+        }
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isDrawingMode, contextMenu, handleCopy]);
 
   // Close menu on click elsewhere
@@ -122,45 +169,45 @@ const GlobalPen = () => {
         setContextMenu(null);
       }
     };
-    window.addEventListener('click', handleClick);
-    return () => window.removeEventListener('click', handleClick);
+    window.addEventListener("click", handleClick);
+    return () => window.removeEventListener("click", handleClick);
   }, [contextMenu]);
 
   // Initialize Canvas
   useEffect(() => {
     if (isDrawingMode) {
       // Disable scrolling
-      document.body.style.overflow = 'hidden';
+      document.body.style.overflow = "hidden";
 
       if (canvasRef.current) {
         const canvas = canvasRef.current;
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
-        
-        const ctx = canvas.getContext('2d');
-        ctx.lineCap = 'round';
-        ctx.strokeStyle = 'red'; // Default color
+
+        const ctx = canvas.getContext("2d");
+        ctx.lineCap = "round";
+        ctx.strokeStyle = "red"; // Default color
         ctx.lineWidth = 3;
         contextRef.current = ctx;
 
         const handleResize = () => {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-            ctx.lineCap = 'round';
-            ctx.strokeStyle = 'red';
-            ctx.lineWidth = 3;
+          canvas.width = window.innerWidth;
+          canvas.height = window.innerHeight;
+          ctx.lineCap = "round";
+          ctx.strokeStyle = "red";
+          ctx.lineWidth = 3;
         };
-        
-        window.addEventListener('resize', handleResize);
+
+        window.addEventListener("resize", handleResize);
         return () => {
-            window.removeEventListener('resize', handleResize);
-            // Re-enable scrolling when cleaning up (unmount or mode change)
-            document.body.style.overflow = '';
+          window.removeEventListener("resize", handleResize);
+          // Re-enable scrolling when cleaning up (unmount or mode change)
+          document.body.style.overflow = "";
         };
       }
     } else {
-        // Ensure scrolling is re-enabled if mode is false
-        document.body.style.overflow = '';
+      // Ensure scrolling is re-enabled if mode is false
+      document.body.style.overflow = "";
     }
   }, [isDrawingMode]);
 
@@ -194,56 +241,57 @@ const GlobalPen = () => {
 
   return (
     <Portal>
-        {/* Context Menu */}
-        {contextMenu && (
-            <Paper
-                sx={{
-                    position: 'fixed',
-                    top: contextMenu.mouseY,
-                    left: contextMenu.mouseX,
-                    zIndex: 9999,
-                    width: 200,
-                }}
-                elevation={3}
-            >
-                <MenuItem onClick={handleEnableDrawing}>
-                    <ListItemIcon>
-                        <CreateIcon fontSize="small" />
-                    </ListItemIcon>
-                    <ListItemText>Draw on Screen</ListItemText>
-                </MenuItem>
-            </Paper>
-        )}
+      {/* Context Menu */}
+      {contextMenu && (
+        <Paper
+          sx={{
+            position: "fixed",
+            top: contextMenu.mouseY,
+            left: contextMenu.mouseX,
+            zIndex: 9999,
+            width: 200,
+          }}
+          elevation={3}
+        >
+          <MenuItem onClick={handleEnableDrawing}>
+            <ListItemIcon>
+              <CreateIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>Draw on Screen</ListItemText>
+          </MenuItem>
+        </Paper>
+      )}
 
-        {/* Drawing Canvas Overlay */}
-        {isDrawingMode && (
-            <Box
-                sx={{
-                    position: 'fixed',
-                    top: 0,
-                    left: 0,
-                    width: '100vw',
-                    height: '100vh',
-                    zIndex: 9998,
-                    cursor: 'crosshair',
-                    pointerEvents: 'auto',
-                    backgroundColor: 'rgba(0, 0, 0, 0.2)', // Darken screen slightly
-                }}
-            >
-                <canvas
-                    ref={canvasRef}
-                    onMouseDown={startDrawing}
-                    onMouseUp={finishDrawing}
-                    onMouseMove={draw}
-                    onMouseLeave={finishDrawing}
-                    style={{
-                        display: 'block',
-                        width: '100%',
-                        height: '100%',
-                    }}
-                />
-            </Box>
-        )}
+      {/* Drawing Canvas Overlay */}
+      {isDrawingMode && (
+        <Box
+          data-globalpen-overlay="true"
+          sx={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            width: "100vw",
+            height: "100vh",
+            zIndex: 9998,
+            cursor: "crosshair",
+            pointerEvents: "auto",
+            backgroundColor: "rgba(0, 0, 0, 0.2)", // Darken screen slightly
+          }}
+        >
+          <canvas
+            ref={canvasRef}
+            onMouseDown={startDrawing}
+            onMouseUp={finishDrawing}
+            onMouseMove={draw}
+            onMouseLeave={finishDrawing}
+            style={{
+              display: "block",
+              width: "100%",
+              height: "100%",
+            }}
+          />
+        </Box>
+      )}
     </Portal>
   );
 };
