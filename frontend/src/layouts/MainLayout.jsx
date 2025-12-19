@@ -754,7 +754,7 @@ const MainLayout = () => {
         component="main"
         sx={{
           flexGrow: 1,
-          p: 3,
+          p: location.pathname === "/notes" ? 0 : 3,
           width: { md: desktopOpen ? `calc(100% - ${drawerWidth}px)` : "100%" },
           transition: theme.transitions.create(["width", "margin"], {
             easing: theme.transitions.easing.sharp,
@@ -763,15 +763,25 @@ const MainLayout = () => {
           display: "flex",
           flexDirection: "column",
           minHeight: "100vh",
+          overflow: location.pathname === "/notes" ? "hidden" : "auto",
+          height: location.pathname === "/notes" ? "100vh" : "auto",
         }}
       >
         <Toolbar />
-        <Box component="div" sx={{ flexGrow: 1 }}>
+        <Box
+          component="div"
+          sx={{
+            flexGrow: 1,
+            overflow: location.pathname === "/notes" ? "hidden" : "auto",
+            display: "flex",
+            flexDirection: "column",
+          }}
+        >
           <Force2FASetup>
             <Outlet />
           </Force2FASetup>
         </Box>
-        <Footer />
+        {location.pathname !== "/notes" && <Footer />}
       </Box>
 
       {/* Floating Chat Button */}
