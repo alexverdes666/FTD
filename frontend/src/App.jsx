@@ -69,6 +69,7 @@ import ApproveAMCallsPage from "./pages/ApproveAMCallsPage.jsx";
 import AnnouncementsPage from "./pages/AnnouncementsPage.jsx";
 import AMTargetsPage from "./pages/AMTargetsPage.jsx";
 import DepositCallsPage from "./pages/DepositCallsPage.jsx";
+import NotesPage from "./pages/NotesPage.jsx";
 
 // Component to handle role-based default routing
 const RoleBasedRedirect = () => {
@@ -431,6 +432,7 @@ function AppContent() {
                 </ProtectedRoute>
               } 
             />
+            <Route path="notes" element={<NotesPage />} />
 
           </Route>
           {}

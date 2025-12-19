@@ -51,6 +51,7 @@ import {
   TrackChanges as TargetIcon,
   PhoneCallback as DepositCallIcon,
   Security as SecurityIcon,
+  Note as NoteIcon,
 } from "@mui/icons-material";
 import { logout, selectUser } from "../store/slices/authSlice";
 import Footer from "./Footer";
@@ -143,6 +144,7 @@ const MainLayout = () => {
   const getNavigationItems = () => {
     const commonItems = [
       { text: "Dashboard", icon: <DashboardIcon />, path: "/" },
+      { text: "Notes", icon: <NoteIcon />, path: "/notes" },
     ];
     if (user?.role === "admin") {
       return [
@@ -394,6 +396,7 @@ const MainLayout = () => {
     } else if (user?.role === "agent") {
       return [
         { text: "My Leads", icon: <LeadsIcon />, path: "/leads" },
+        { text: "Notes", icon: <NoteIcon />, path: "/notes" },
         {
           text: "Agents",
           icon: <CalendarIcon />,
