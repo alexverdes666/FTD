@@ -126,32 +126,29 @@ class InactivityService {
       clearTimeout(this.midnightTimer);
     }
     
-    // Calculate time until midnight GMT+2 (EET - Eastern European Time)
+    // Calculate time until midnight GMT+2 (22:00 UTC)
     const now = new Date();
+    const midnightUTC = new Date(now);
+    midnightUTC.setUTCHours(22, 0, 0, 0); // Set to 22:00 UTC today
     
-    // Get the current time in GMT+2
-    // GMT+2 offset in minutes is -120 (negative because it's east of UTC)
-    const gmtPlus2Offset = 2 * 60; // 120 minutes
-    const localOffset = now.getTimezoneOffset(); // Local timezone offset in minutes (negative if ahead of UTC)
-    
-    // Create a date object for midnight GMT+2 today
-    const midnightGMT2 = new Date(now);
-    midnightGMT2.setHours(0, 0, 0, 0);
-    
-    // Adjust for GMT+2 from local time
-    // If local is UTC, we need to trigger at 22:00 UTC (which is 00:00 GMT+2)
-    // The adjustment is: UTC time = GMT+2 time - 2 hours
-    const adjustmentMinutes = gmtPlus2Offset + localOffset;
-    midnightGMT2.setMinutes(midnightGMT2.getMinutes() - adjustmentMinutes);
-    
-    // If midnight GMT+2 has already passed today, schedule for tomorrow
-    if (midnightGMT2 <= now) {
-      midnightGMT2.setDate(midnightGMT2.getDate() + 1);
+    // If 22:00 UTC has already passed today, schedule for tomorrow
+    if (midnightUTC <= now) {
+      midnightUTC.setUTCDate(midnightUTC.getUTCDate() + 1);
     }
     
-    const timeUntilMidnight = midnightGMT2.getTime() - now.getTime();
+    const timeUntilMidnight = midnightUTC.getTime() - now.getTime();
     
-    console.log(`[InactivityService] Midnight GMT+2 logout scheduled in ${Math.round(timeUntilMidnight / 1000 / 60)} minutes`);
+    // Safety check for invalid time
+    if (isNaN(timeUntilMidnight) || timeUntilMidnight < 0) {
+      console.error('[InactivityService] Invalid time calculation for midnight logout', {
+        now: now.toISOString(),
+        target: midnightUTC.toISOString(),
+        diff: timeUntilMidnight
+      });
+      return;
+    }
+    
+    console.log(`[InactivityService] Midnight GMT+2 logout scheduled in ${Math.round(timeUntilMidnight / 1000 / 60)} minutes (${midnightUTC.toISOString()})`);
     
     this.midnightTimer = setTimeout(() => {
       console.log('[InactivityService] Midnight GMT+2 reached, triggering logout');
