@@ -81,6 +81,12 @@ const ftdHandlingSchema = new Schema(
 const orderSchema = new Schema(
   {
     requester: { type: SchemaTypes.ObjectId, ref: "User", required: true },
+    requesterHistory: [{
+      previousRequester: { type: SchemaTypes.ObjectId, ref: "User" },
+      newRequester: { type: SchemaTypes.ObjectId, ref: "User" },
+      changedBy: { type: SchemaTypes.ObjectId, ref: "User" },
+      changedAt: { type: Date, default: Date.now }
+    }],
     status: { type: String, enum: ENUMS.ORDER_STATUS, default: "pending" },
     requests: { type: leadCountSchema, default: () => ({}) },
     leads: [{ type: SchemaTypes.ObjectId, ref: "Lead" }],

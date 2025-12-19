@@ -23,8 +23,16 @@ const {
   changeFTDInOrder,
   convertLeadTypeInOrder,
   checkOrderFulfillment,
+  changeRequester,
 } = require("../controllers/orders");
 const router = express.Router();
+
+// Change order requester (Admin only)
+router.put(
+  "/:orderId/change-requester",
+  [protect, authorize("admin")],
+  changeRequester
+);
 
 // Check fulfillment status
 router.post(

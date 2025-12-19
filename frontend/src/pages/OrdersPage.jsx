@@ -46,6 +46,7 @@ import {
   ExpandLess as ExpandLessIcon,
   Download as DownloadIcon,
   Edit as EditIcon,
+  History as HistoryIcon,
   Delete as DeleteIcon,
   Send as SendIcon,
   SwapHorizontalCircle as SwapIcon,
@@ -359,6 +360,68 @@ const OrdersPage = () => {
     open: false,
     loading: false,
   });
+
+  // Change Requester State
+  const [changeRequesterOpen, setChangeRequesterOpen] = useState(false);
+  const [requesterHistoryOpen, setRequesterHistoryOpen] = useState(false);
+  const [selectedOrderForRequester, setSelectedOrderForRequester] = useState(null);
+  const [potentialRequesters, setPotentialRequesters] = useState([]);
+  const [loadingRequesters, setLoadingRequesters] = useState(false);
+  const [selectedNewRequester, setSelectedNewRequester] = useState(null);
+
+  const fetchPotentialRequesters = useCallback(async () => {
+    try {
+      setLoadingRequesters(true);
+      const response = await api.get('/users?isActive=true&limit=1000');
+      setPotentialRequesters(response.data.data);
+    } catch (error) {
+      console.error("Error fetching potential requesters:", error);
+      setNotification({
+        message: "Failed to fetch users list",
+        severity: "error"
+      });
+    } finally {
+      setLoadingRequesters(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (changeRequesterOpen) {
+      fetchPotentialRequesters();
+    }
+  }, [changeRequesterOpen, fetchPotentialRequesters]);
+
+  const handleOpenChangeRequester = (order) => {
+    setSelectedOrderForRequester(order);
+    setSelectedNewRequester(null);
+    setChangeRequesterOpen(true);
+  };
+
+  const handleOpenRequesterHistory = (order) => {
+    setSelectedOrderForRequester(order);
+    setRequesterHistoryOpen(true);
+  };
+
+  const handleSubmitChangeRequester = async () => {
+    if (!selectedOrderForRequester || !selectedNewRequester) return;
+    
+    try {
+      await api.put(`/orders/${selectedOrderForRequester._id}/change-requester`, {
+        newRequesterId: selectedNewRequester._id
+      });
+      setChangeRequesterOpen(false);
+      setNotification({
+        message: "Requester changed successfully",
+        severity: "success"
+      });
+      fetchOrders();
+    } catch (err) {
+      setNotification({
+        message: err.response?.data?.message || "Failed to change requester",
+        severity: "error"
+      });
+    }
+  };
 
   // Delete Broker Confirmation State
   const [deleteBrokerDialog, setDeleteBrokerDialog] = useState({
@@ -2162,9 +2225,35 @@ const OrdersPage = () => {
                           align="center"
                           sx={{ display: { xs: "none", md: "table-cell" } }}
                         >
-                          <Typography variant="body2">
-                            {order.requester?.fullName}
-                          </Typography>
+                          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5 }}>
+                            <Typography variant="body2">
+                              {order.requester?.fullName}
+                            </Typography>
+                             {user?.role === 'admin' && order.requester?.role !== 'admin' && (
+                              <IconButton
+                                size="small"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenChangeRequester(order);
+                                }}
+                                title="Change Requester"
+                              >
+                                <EditIcon sx={{ fontSize: 14 }} />
+                              </IconButton>
+                            )}
+                             {user?.role === 'admin' && order.requesterHistory?.length > 0 && (
+                              <IconButton
+                                size="small"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenRequesterHistory(order);
+                                }}
+                                title="Requester History"
+                              >
+                                <HistoryIcon sx={{ fontSize: 14 }} />
+                              </IconButton>
+                            )}
+                          </Box>
                         </TableCell>
                         <TableCell align="center">
                           <Typography variant="body2">
@@ -4392,6 +4481,24 @@ const OrdersPage = () => {
         onConfirm={handleGenderFallbackSelect}
       />
 
+      {/* Change Requester Dialog */}
+      <ChangeRequesterDialog
+        open={changeRequesterOpen}
+        onClose={() => setChangeRequesterOpen(false)}
+        onSubmit={handleSubmitChangeRequester}
+        requesters={potentialRequesters}
+        loading={loadingRequesters}
+        selectedRequester={selectedNewRequester}
+        onSelectRequester={setSelectedNewRequester}
+      />
+
+      {/* Requester History Dialog */}
+      <RequesterHistoryDialog
+        open={requesterHistoryOpen}
+        onClose={() => setRequesterHistoryOpen(false)}
+        order={selectedOrderForRequester}
+      />
+
       {/* Copy Notification */}
       <Snackbar
         open={copyNotification.open}
@@ -4903,6 +5010,75 @@ const OrdersPage = () => {
     </Box>
   );
 };
+
+// Change Requester Dialog Component
+const ChangeRequesterDialog = ({ open, onClose, onSubmit, requesters, loading, selectedRequester, onSelectRequester }) => (
+  <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+    <DialogTitle>Change Order Requester</DialogTitle>
+    <DialogContent sx={{ pt: 2 }}>
+      <Autocomplete
+        options={requesters}
+        getOptionLabel={(option) => `${option.fullName} (${option.role})`}
+        loading={loading}
+        value={selectedRequester}
+        onChange={(event, newValue) => onSelectRequester(newValue)}
+        renderInput={(params) => <TextField {...params} label="Select New Requester" variant="outlined" margin="normal" />}
+        renderOption={(props, option) => (
+          <li {...props}>
+            <ListItemText primary={option.fullName} secondary={option.role} />
+          </li>
+        )}
+      />
+      <Alert severity="warning" sx={{ mt: 2 }}>
+        Changing the requester will relink all connections (leads, etc.) to the new requester.
+      </Alert>
+    </DialogContent>
+    <DialogActions>
+      <Button onClick={onClose}>Cancel</Button>
+      <Button onClick={onSubmit} variant="contained" disabled={!selectedRequester}>
+        Change Requester
+      </Button>
+    </DialogActions>
+  </Dialog>
+);
+
+// Requester History Dialog Component
+const RequesterHistoryDialog = ({ open, onClose, order }) => (
+  <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
+    <DialogTitle>Requester History</DialogTitle>
+    <DialogContent>
+      {order?.requesterHistory && order.requesterHistory.length > 0 ? (
+        <TableContainer component={Paper} variant="outlined">
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Previous Requester</TableCell>
+                <TableCell>New Requester</TableCell>
+                <TableCell>Changed By</TableCell>
+                <TableCell>Date</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {order.requesterHistory.map((history, index) => (
+                <TableRow key={index}>
+                  <TableCell>{history.previousRequester?.fullName || 'Unknown'}</TableCell>
+                  <TableCell>{history.newRequester?.fullName || 'Unknown'}</TableCell>
+                  <TableCell>{history.changedBy?.fullName || 'Unknown'}</TableCell>
+                  <TableCell>{new Date(history.changedAt).toLocaleString()}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      ) : (
+        <Typography color="textSecondary" align="center" sx={{ py: 3 }}>No history available.</Typography>
+      )}
+    </DialogContent>
+    <DialogActions>
+      <Button onClick={onClose}>Close</Button>
+    </DialogActions>
+  </Dialog>
+);
 
 // Create Broker Form Component
 const CreateBrokerForm = ({ onSubmit, loading, onCancel }) => {

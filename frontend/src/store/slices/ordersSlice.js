@@ -57,6 +57,21 @@ export const getOrderById = createAsyncThunk(
     }
   }
 );
+
+export const changeOrderRequester = createAsyncThunk(
+  'orders/changeRequester',
+  async ({ orderId, newRequesterId }, { rejectWithValue }) => {
+    try {
+      const response = await api.put(`/orders/${orderId}/change-requester`, { newRequesterId });
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(
+        error.response?.data?.message || 'Failed to change requester'
+      );
+    }
+  }
+);
+
 const ordersSlice = createSlice({
   name: 'orders',
   initialState,
@@ -113,6 +128,27 @@ const ordersSlice = createSlice({
         state.error = null;
       })
       .addCase(getOrderById.rejected, (state, action) => {
+        state.isLoading = false;
+        state.error = action.payload;
+      })
+      .addCase(changeOrderRequester.pending, (state) => {
+        state.isLoading = true;
+        state.error = null;
+      })
+      .addCase(changeOrderRequester.fulfilled, (state, action) => {
+        state.isLoading = false;
+        // Update in orders list
+        const index = state.orders.findIndex(o => o._id === action.payload.order._id);
+        if (index !== -1) {
+          state.orders[index] = action.payload.order;
+        }
+        // Update currentOrder if it matches
+        if (state.currentOrder && state.currentOrder._id === action.payload.order._id) {
+          state.currentOrder = action.payload.order;
+        }
+        state.error = null;
+      })
+      .addCase(changeOrderRequester.rejected, (state, action) => {
         state.isLoading = false;
         state.error = action.payload;
       });

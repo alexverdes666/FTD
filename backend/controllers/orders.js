@@ -2896,6 +2896,9 @@ exports.getOrders = async (req, res, next) => {
       // First, get all orders matching the base query
       const baseOrders = await Order.find(query)
         .populate("requester", "fullName email role")
+        .populate("requesterHistory.previousRequester", "fullName email")
+        .populate("requesterHistory.newRequester", "fullName email")
+        .populate("requesterHistory.changedBy", "fullName email")
         .populate("selectedCampaign", "name description")
         .populate("selectedOurNetwork", "name description")
         .populate("selectedClientNetwork", "name description")
@@ -3008,6 +3011,9 @@ exports.getOrders = async (req, res, next) => {
     // No search - use regular query
     orders = await Order.find(query)
       .populate("requester", "fullName email role")
+      .populate("requesterHistory.previousRequester", "fullName email")
+      .populate("requesterHistory.newRequester", "fullName email")
+      .populate("requesterHistory.changedBy", "fullName email")
       .populate("selectedCampaign", "name description")
       .populate("selectedOurNetwork", "name description")
       .populate("selectedClientNetwork", "name description")
@@ -3066,6 +3072,9 @@ exports.getOrderById = async (req, res, next) => {
     
     let query = Order.findById(req.params.id)
       .populate("requester", "fullName email role")
+      .populate("requesterHistory.previousRequester", "fullName email")
+      .populate("requesterHistory.newRequester", "fullName email")
+      .populate("requesterHistory.changedBy", "fullName email")
       .populate("selectedCampaign", "name description")
       .populate("selectedOurNetwork", "name description")
       .populate("selectedClientNetwork", "name description")
@@ -4884,6 +4893,99 @@ exports.checkOrderFulfillment = async (req, res, next) => {
 
   } catch (error) {
     console.error("Check fulfillment error:", error);
+    next(error);
+  }
+};
+
+// Change order requester (Admin only)
+exports.changeRequester = async (req, res, next) => {
+  try {
+    const { orderId } = req.params;
+    const { newRequesterId } = req.body;
+
+    if (!newRequesterId) {
+      return res.status(400).json({
+        success: false,
+        message: "New requester ID is required",
+      });
+    }
+
+    const order = await Order.findById(orderId).populate("requester");
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found",
+      });
+    }
+
+    // Check if current requester is admin
+    // Prompt: "admin cannot change if another admin is requester"
+    if (order.requester.role === "admin") {
+      return res.status(403).json({
+        success: false,
+        message: "Cannot change requester when the current requester is an admin",
+      });
+    }
+
+    const oldRequesterId = order.requester._id;
+
+    // Update history
+    if (!order.requesterHistory) {
+      order.requesterHistory = [];
+    }
+    
+    order.requesterHistory.push({
+      previousRequester: oldRequesterId,
+      newRequester: newRequesterId,
+      changedBy: req.user._id,
+      changedAt: new Date()
+    });
+
+    // Update requester
+    order.requester = newRequesterId;
+
+    // Update agent assignments in order schema if they matched the old requester
+    if (order.agentAssignments && order.agentAssignments.length > 0) {
+      let assignmentsUpdated = false;
+      order.agentAssignments.forEach((assignment) => {
+        if (assignment.agentId.toString() === oldRequesterId.toString()) {
+          assignment.agentId = newRequesterId;
+          assignmentsUpdated = true;
+        }
+      });
+      if (assignmentsUpdated) {
+        order.markModified('agentAssignments');
+      }
+    }
+
+    await order.save();
+
+    // Update leads: "all the current connections connected to the current requester will be relinked to the new assigned requester"
+    if (order.leads && order.leads.length > 0) {
+      // Update assignedAgent for leads in this order that were assigned to the old requester
+      const updateResult = await Lead.updateMany(
+        {
+          _id: { $in: order.leads },
+          assignedAgent: oldRequesterId,
+        },
+        {
+          $set: {
+            assignedAgent: newRequesterId,
+            assignedAgentAt: new Date(),
+          },
+        }
+      );
+      
+      console.log(`[ORDER-REQUESTER-CHANGE] Updated ${updateResult.modifiedCount} leads from ${oldRequesterId} to ${newRequesterId}`);
+    }
+
+    res.json({
+      success: true,
+      message: "Requester changed successfully",
+      order,
+    });
+  } catch (error) {
+    console.error("Error changing requester:", error);
     next(error);
   }
 };
