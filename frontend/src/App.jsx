@@ -71,6 +71,8 @@ import AMTargetsPage from "./pages/AMTargetsPage.jsx";
 import DepositCallsPage from "./pages/DepositCallsPage.jsx";
 import NotesPage from "./pages/NotesPage.jsx";
 
+import GlobalPen from "./components/GlobalPen.jsx";
+
 // Component to handle role-based default routing
 const RoleBasedRedirect = () => {
   const user = useSelector(selectUser);
@@ -457,6 +459,7 @@ function AppContent() {
           },
         }}
       />
+      <GlobalPen />
       <DisclaimerModal open={disclaimerOpen} onAgree={handleAgree} />
       
       {/* Inactivity Warning Dialog */}
