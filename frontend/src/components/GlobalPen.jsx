@@ -1,7 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Box, Paper, MenuItem, ListItemIcon, ListItemText, Portal, Typography, IconButton, Tooltip } from '@mui/material';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Box, Paper, MenuItem, ListItemIcon, ListItemText, Portal } from '@mui/material';
 import CreateIcon from '@mui/icons-material/Create';
-import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import html2canvas from 'html2canvas';
 import toast from 'react-hot-toast';
 
@@ -13,12 +12,68 @@ const GlobalPen = () => {
   const [isDrawing, setIsDrawing] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
+  // Define handleCopy with useCallback so it can be used in useEffect
+  const handleCopy = useCallback(async () => {
+    // Note: checking isProcessing here inside useCallback might use stale closure if not in deps,
+    // but ref is better for lock.
+    if (document.body.getAttribute('data-is-processing') === 'true') return;
+    document.body.setAttribute('data-is-processing', 'true');
+    setIsProcessing(true);
+
+    try {
+      // Capture only the viewport
+      const canvas = await html2canvas(document.body, {
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: null,
+        logging: false,
+        x: window.scrollX,
+        y: window.scrollY,
+        width: window.innerWidth,
+        height: window.innerHeight,
+      });
+
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+
+      if (!blob) {
+        toast.error('Failed to generate image');
+        return;
+      }
+
+      // Ensure document has focus before writing to clipboard
+      if (!document.hasFocus()) {
+        window.focus();
+      }
+
+      try {
+        await navigator.clipboard.write([
+            new ClipboardItem({
+                [blob.type]: blob
+            })
+        ]);
+        toast.success('Copied to clipboard!');
+      } catch (err) {
+        console.error('Clipboard write failed:', err);
+        // Fallback for NotAllowedError (focus issue)
+        if (err.name === 'NotAllowedError') {
+             toast.error('Please click on the page and try again.');
+        } else {
+             toast.error('Failed to copy to clipboard');
+        }
+      }
+
+    } catch (error) {
+      console.error('Screenshot failed:', error);
+      toast.error('Failed to capture screen');
+    } finally {
+      setIsProcessing(false);
+      document.body.removeAttribute('data-is-processing');
+    }
+  }, []);
+
   // Handle right-click to show menu
   useEffect(() => {
     const handleContextMenu = (event) => {
-      // If we are already in drawing mode, maybe we don't want the menu?
-      // Or maybe right click exits drawing mode?
-      
       if (isDrawingMode) return; 
 
       event.preventDefault();
@@ -32,17 +87,15 @@ const GlobalPen = () => {
       );
     };
 
-    // We attach to window to catch it everywhere
     window.addEventListener('contextmenu', handleContextMenu);
-    
     return () => {
       window.removeEventListener('contextmenu', handleContextMenu);
     };
   }, [contextMenu, isDrawingMode]);
 
-  // Handle Esc to cancel
+  // Handle Keyboard Shortcuts (ESC and Ctrl+C)
   useEffect(() => {
-    const handleEsc = (event) => {
+    const handleKeyDown = (event) => {
       if (event.key === 'Escape') {
         if (isDrawingMode) {
             setIsDrawingMode(false);
@@ -50,12 +103,17 @@ const GlobalPen = () => {
         } else if (contextMenu) {
             setContextMenu(null);
         }
+      } else if ((event.ctrlKey || event.metaKey) && (event.key === 'c' || event.key === 'C')) {
+          if (isDrawingMode) {
+              event.preventDefault(); // Prevent default copy behavior
+              handleCopy();
+          }
       }
     };
 
-    window.addEventListener('keydown', handleEsc);
-    return () => window.removeEventListener('keydown', handleEsc);
-  }, [isDrawingMode, contextMenu]);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isDrawingMode, contextMenu, handleCopy]);
 
   // Close menu on click elsewhere
   useEffect(() => {
@@ -70,28 +128,39 @@ const GlobalPen = () => {
 
   // Initialize Canvas
   useEffect(() => {
-    if (isDrawingMode && canvasRef.current) {
-      const canvas = canvasRef.current;
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-      
-      const ctx = canvas.getContext('2d');
-      ctx.lineCap = 'round';
-      ctx.strokeStyle = 'red'; // Default color
-      ctx.lineWidth = 3;
-      contextRef.current = ctx;
+    if (isDrawingMode) {
+      // Disable scrolling
+      document.body.style.overflow = 'hidden';
 
-      // Handle resize
-      const handleResize = () => {
-          canvas.width = window.innerWidth;
-          canvas.height = window.innerHeight;
-          ctx.lineCap = 'round';
-          ctx.strokeStyle = 'red';
-          ctx.lineWidth = 3;
-      };
-      
-      window.addEventListener('resize', handleResize);
-      return () => window.removeEventListener('resize', handleResize);
+      if (canvasRef.current) {
+        const canvas = canvasRef.current;
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        
+        const ctx = canvas.getContext('2d');
+        ctx.lineCap = 'round';
+        ctx.strokeStyle = 'red'; // Default color
+        ctx.lineWidth = 3;
+        contextRef.current = ctx;
+
+        const handleResize = () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            ctx.lineCap = 'round';
+            ctx.strokeStyle = 'red';
+            ctx.lineWidth = 3;
+        };
+        
+        window.addEventListener('resize', handleResize);
+        return () => {
+            window.removeEventListener('resize', handleResize);
+            // Re-enable scrolling when cleaning up (unmount or mode change)
+            document.body.style.overflow = '';
+        };
+      }
+    } else {
+        // Ensure scrolling is re-enabled if mode is false
+        document.body.style.overflow = '';
     }
   }, [isDrawingMode]);
 
@@ -119,55 +188,6 @@ const GlobalPen = () => {
   const handleEnableDrawing = () => {
     setIsDrawingMode(true);
     setContextMenu(null);
-  };
-
-  const handleCopy = async () => {
-    if (isProcessing) return;
-    setIsProcessing(true);
-    
-    // Hide controls
-    const controls = document.getElementById('global-pen-controls');
-    if (controls) controls.style.visibility = 'hidden';
-
-    try {
-      // Capture the entire body
-      const canvas = await html2canvas(document.body, {
-        useCORS: true,
-        allowTaint: true,
-        backgroundColor: null, // Transparent background if possible, or default
-        logging: false,
-      });
-
-      canvas.toBlob(async (blob) => {
-        if (!blob) {
-            toast.error('Failed to generate image');
-            setIsProcessing(false);
-            if (controls) controls.style.visibility = 'visible';
-            return;
-        }
-
-        try {
-            await navigator.clipboard.write([
-                new ClipboardItem({
-                    [blob.type]: blob
-                })
-            ]);
-            toast.success('Copied to clipboard!');
-        } catch (err) {
-            console.error('Clipboard write failed:', err);
-            toast.error('Failed to copy to clipboard');
-        } finally {
-            setIsProcessing(false);
-            if (controls) controls.style.visibility = 'visible';
-        }
-      }, 'image/png');
-
-    } catch (error) {
-      console.error('Screenshot failed:', error);
-      toast.error('Failed to capture screen');
-      setIsProcessing(false);
-      if (controls) controls.style.visibility = 'visible';
-    }
   };
 
   if (!contextMenu && !isDrawingMode) return null;
@@ -206,7 +226,8 @@ const GlobalPen = () => {
                     height: '100vh',
                     zIndex: 9998,
                     cursor: 'crosshair',
-                    pointerEvents: 'auto', 
+                    pointerEvents: 'auto',
+                    backgroundColor: 'rgba(0, 0, 0, 0.2)', // Darken screen slightly
                 }}
             >
                 <canvas
@@ -221,41 +242,6 @@ const GlobalPen = () => {
                         height: '100%',
                     }}
                 />
-                
-                {/* Controls Overlay */}
-                <Paper
-                    id="global-pen-controls"
-                    sx={{
-                        position: 'fixed',
-                        top: 20,
-                        right: 20,
-                        bgcolor: 'rgba(0,0,0,0.7)',
-                        color: 'white',
-                        padding: 1,
-                        borderRadius: 2,
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 1,
-                        zIndex: 10000, // Above canvas
-                    }}
-                >
-                    <Typography variant="body2" sx={{ mx: 1, userSelect: 'none' }}>
-                        Press ESC to exit
-                    </Typography>
-                    
-                    <Box sx={{ width: 1, height: 24, bgcolor: 'rgba(255,255,255,0.3)' }} />
-                    
-                    <Tooltip title="Copy to Clipboard">
-                        <IconButton 
-                            onClick={handleCopy} 
-                            size="small" 
-                            sx={{ color: 'white' }}
-                            disabled={isProcessing}
-                        >
-                            <ContentCopyIcon fontSize="small" />
-                        </IconButton>
-                    </Tooltip>
-                </Paper>
             </Box>
         )}
     </Portal>
