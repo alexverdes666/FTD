@@ -65,15 +65,27 @@ const MainLayout = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [desktopOpen, setDesktopOpen] = useState(true);
   const [anchorEl, setAnchorEl] = useState(null);
   const [quickSwitcherOpen, setQuickSwitcherOpen] = useState(false);
-  const [expandedMenus, setExpandedMenus] = useState({ networks: false, leads: false, users: false, payroll: false, schedules: false, erp: false });
+  const [expandedMenus, setExpandedMenus] = useState({
+    networks: false,
+    leads: false,
+    users: false,
+    payroll: false,
+    schedules: false,
+    erp: false,
+  });
   const navigate = useNavigate();
   const location = useLocation();
   const dispatch = useDispatch();
   const user = useSelector(selectUser);
   const handleDrawerToggle = () => {
-    setMobileOpen(!mobileOpen);
+    if (isMobile) {
+      setMobileOpen(!mobileOpen);
+    } else {
+      setDesktopOpen(!desktopOpen);
+    }
   };
   const handleProfileMenuOpen = (event) => {
     setAnchorEl(event.currentTarget);
@@ -99,16 +111,20 @@ const MainLayout = () => {
   useEffect(() => {
     const handleKeyDown = (event) => {
       // Ctrl+Shift+S or Cmd+Shift+S to open quick switcher
-      if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key === 'S') {
+      if (
+        (event.ctrlKey || event.metaKey) &&
+        event.shiftKey &&
+        event.key === "S"
+      ) {
         event.preventDefault();
         handleOpenQuickSwitcher();
       }
       // Alt+1, Alt+2, etc. for quick switching (if you want to add this later)
     };
 
-    document.addEventListener('keydown', handleKeyDown);
+    document.addEventListener("keydown", handleKeyDown);
     return () => {
-      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener("keydown", handleKeyDown);
     };
   }, []);
   const handleNavigation = (path) => {
@@ -117,11 +133,11 @@ const MainLayout = () => {
       setMobileOpen(false);
     }
   };
-  
+
   const handleMenuToggle = (menuKey) => {
-    setExpandedMenus(prev => ({
+    setExpandedMenus((prev) => ({
       ...prev,
-      [menuKey]: !prev[menuKey]
+      [menuKey]: !prev[menuKey],
     }));
   };
   const getNavigationItems = () => {
@@ -143,11 +159,11 @@ const MainLayout = () => {
               path: "/orders",
             },
             {
-              text: "Leads", 
-              icon: <LeadsIcon />, 
-              path: "/leads"
-            }
-          ]
+              text: "Leads",
+              icon: <LeadsIcon />,
+              path: "/leads",
+            },
+          ],
         },
         {
           text: "Users",
@@ -161,11 +177,11 @@ const MainLayout = () => {
               path: "/users",
             },
             {
-              text: "Account Management", 
-              icon: <AdminIcon />, 
-              path: "/account-management"
-            }
-          ]
+              text: "Account Management",
+              icon: <AdminIcon />,
+              path: "/account-management",
+            },
+          ],
         },
         {
           text: "Networks",
@@ -179,21 +195,21 @@ const MainLayout = () => {
               path: "/client-networks",
             },
             {
-              text: "Our Networks", 
-              icon: <NetworkIcon />, 
-              path: "/our-networks"
+              text: "Our Networks",
+              icon: <NetworkIcon />,
+              path: "/our-networks",
             },
             {
-              text: "Client Brokers", 
-              icon: <BusinessIcon />, 
-              path: "/client-brokers"
+              text: "Client Brokers",
+              icon: <BusinessIcon />,
+              path: "/client-brokers",
             },
             {
-              text: "Campaigns", 
-              icon: <CampaignIcon />, 
-              path: "/campaigns"
-            }
-          ]
+              text: "Campaigns",
+              icon: <CampaignIcon />,
+              path: "/campaigns",
+            },
+          ],
         },
         {
           text: "Performance",
@@ -212,16 +228,16 @@ const MainLayout = () => {
               path: "/payroll",
             },
             {
-              text: "Affiliate Managers", 
-              icon: <TableIcon />, 
-              path: "/affiliate-managers"
+              text: "Affiliate Managers",
+              icon: <TableIcon />,
+              path: "/affiliate-managers",
             },
             {
-              text: "Withdrawals", 
-              icon: <WithdrawIcon />, 
-              path: "/withdrawals"
-            }
-          ]
+              text: "Withdrawals",
+              icon: <WithdrawIcon />,
+              path: "/withdrawals",
+            },
+          ],
         },
         { text: "Refunds Management", icon: <RefundsIcon />, path: "/refunds" },
         {
@@ -244,8 +260,8 @@ const MainLayout = () => {
               text: "Announcements",
               icon: <AnnouncementIcon />,
               path: "/announcements",
-            }
-          ]
+            },
+          ],
         },
         {
           text: "Agents",
@@ -259,25 +275,26 @@ const MainLayout = () => {
               path: "/agent-schedule",
             },
             {
-              text: "AM Calls Calendar", 
-              icon: <CalendarIcon />, 
-              path: "/agent-call-calendar"
+              text: "AM Calls Calendar",
+              icon: <CalendarIcon />,
+              path: "/agent-call-calendar",
             },
             {
-              text: "Approve AM Calls", 
-              icon: <ApproveIcon />, 
-              path: "/approve-am-calls"
+              text: "Approve AM Calls",
+              icon: <ApproveIcon />,
+              path: "/approve-am-calls",
             },
             {
               text: "Deposit Calls",
               icon: <DepositCallIcon />,
-              path: "/deposit-calls"
+              path: "/deposit-calls",
             },
-            { text: "Agent Comments",
-              icon: <CommentIcon />, 
-              path: "/agent-comments" 
-            }
-          ]
+            {
+              text: "Agent Comments",
+              icon: <CommentIcon />,
+              path: "/agent-comments",
+            },
+          ],
         },
         { text: "Support Tickets", icon: <TicketIcon />, path: "/tickets" },
       ];
@@ -296,11 +313,11 @@ const MainLayout = () => {
               path: "/orders",
             },
             {
-              text: "Leads", 
-              icon: <LeadsIcon />, 
-              path: "/leads"
-            }
-          ]
+              text: "Leads",
+              icon: <LeadsIcon />,
+              path: "/leads",
+            },
+          ],
         },
         { text: "Our Networks", icon: <NetworkIcon />, path: "/our-networks" },
         { text: "My Table", icon: <TableIcon />, path: "/my-table" },
@@ -317,11 +334,11 @@ const MainLayout = () => {
               path: "/payroll",
             },
             {
-              text: "Payment History", 
-              icon: <HistoryIcon />, 
-              path: "/payment-history"
-            }
-          ]
+              text: "Payment History",
+              icon: <HistoryIcon />,
+              path: "/payment-history",
+            },
+          ],
         },
         {
           text: "Agents",
@@ -335,36 +352,44 @@ const MainLayout = () => {
               path: "/agent-schedule",
             },
             {
-              text: "AM Calls Calendar", 
-              icon: <CalendarIcon />, 
-              path: "/agent-call-calendar"
+              text: "AM Calls Calendar",
+              icon: <CalendarIcon />,
+              path: "/agent-call-calendar",
             },
             {
-              text: "Approve AM Calls", 
-              icon: <ApproveIcon />, 
-              path: "/approve-am-calls"
+              text: "Approve AM Calls",
+              icon: <ApproveIcon />,
+              path: "/approve-am-calls",
             },
             {
               text: "Deposit Calls",
               icon: <DepositCallIcon />,
-              path: "/deposit-calls"
+              path: "/deposit-calls",
             },
             {
-              text: "Agent Comments", 
-              icon: <CommentIcon />, 
-              path: "/agent-comments" 
-            }
-          ]
+              text: "Agent Comments",
+              icon: <CommentIcon />,
+              path: "/agent-comments",
+            },
+          ],
         },
-        { text: "Announcements", icon: <AnnouncementIcon />, path: "/announcements" },
+        {
+          text: "Announcements",
+          icon: <AnnouncementIcon />,
+          path: "/announcements",
+        },
         { text: "Support Tickets", icon: <TicketIcon />, path: "/tickets" },
       ];
-      
+
       // Add refunds management if user has permission
       if (user?.permissions?.canManageRefunds) {
-        affiliateManagerItems.splice(-2, 0, { text: "Refunds Management", icon: <RefundsIcon />, path: "/refunds" });
+        affiliateManagerItems.splice(-2, 0, {
+          text: "Refunds Management",
+          icon: <RefundsIcon />,
+          path: "/refunds",
+        });
       }
-      
+
       return affiliateManagerItems;
     } else if (user?.role === "agent") {
       return [
@@ -381,16 +406,16 @@ const MainLayout = () => {
               path: "/agent-schedule",
             },
             {
-              text: "AM Calls Calendar", 
-              icon: <CalendarIcon />, 
-              path: "/agent-call-calendar"
+              text: "AM Calls Calendar",
+              icon: <CalendarIcon />,
+              path: "/agent-call-calendar",
             },
             {
               text: "Deposit Calls",
               icon: <DepositCallIcon />,
-              path: "/deposit-calls"
-            }
-          ]
+              path: "/deposit-calls",
+            },
+          ],
         },
         {
           text: "Payroll",
@@ -404,20 +429,28 @@ const MainLayout = () => {
               path: "/payroll",
             },
             {
-              text: "Payment History", 
-              icon: <HistoryIcon />, 
-              path: "/payment-history"
-            }
-          ]
+              text: "Payment History",
+              icon: <HistoryIcon />,
+              path: "/payment-history",
+            },
+          ],
         },
-        { text: "Announcements", icon: <AnnouncementIcon />, path: "/announcements" },
+        {
+          text: "Announcements",
+          icon: <AnnouncementIcon />,
+          path: "/announcements",
+        },
         { text: "Support Tickets", icon: <TicketIcon />, path: "/tickets" },
       ];
     } else if (user?.role === "lead_manager") {
       return [
         ...commonItems,
         { text: "Lead Management", icon: <LeadsIcon />, path: "/leads" },
-        { text: "Verifications", icon: <VerificationIcon />, path: "/verifications" },
+        {
+          text: "Verifications",
+          icon: <VerificationIcon />,
+          path: "/verifications",
+        },
         { text: "Support Tickets", icon: <TicketIcon />, path: "/tickets" },
       ];
     } else if (user?.role === "refunds_manager") {
@@ -439,8 +472,8 @@ const MainLayout = () => {
               text: "SIM Cards",
               icon: <SimCardIcon />,
               path: "/simcards",
-            }
-          ]
+            },
+          ],
         },
         { text: "Support Tickets", icon: <TicketIcon />, path: "/tickets" },
       ];
@@ -451,11 +484,11 @@ const MainLayout = () => {
     ];
   };
   const navigationItems = getNavigationItems();
-  
+
   // Helper function to get all navigation paths (including nested ones) for title display
   const getAllNavigationPaths = (items) => {
     const paths = [];
-    items.forEach(item => {
+    items.forEach((item) => {
       if (item.path) {
         paths.push(item);
       }
@@ -465,7 +498,7 @@ const MainLayout = () => {
     });
     return paths;
   };
-  
+
   const allNavigationPaths = getAllNavigationPaths(navigationItems);
   const drawer = (
     <Box>
@@ -498,7 +531,11 @@ const MainLayout = () => {
                   <ListItemText primary={item.text} />
                   {expandedMenus[item.key] ? <ExpandLess /> : <ExpandMore />}
                 </ListItem>
-                <Collapse in={expandedMenus[item.key]} timeout="auto" unmountOnExit>
+                <Collapse
+                  in={expandedMenus[item.key]}
+                  timeout="auto"
+                  unmountOnExit
+                >
                   <List component="div" disablePadding>
                     {item.children.map((child) => (
                       <ListItem
@@ -564,8 +601,12 @@ const MainLayout = () => {
       <AppBar
         position="fixed"
         sx={{
-          width: { md: `calc(100% - ${drawerWidth}px)` },
-          ml: { md: `${drawerWidth}px` },
+          width: { md: desktopOpen ? `calc(100% - ${drawerWidth}px)` : "100%" },
+          ml: { md: desktopOpen ? `${drawerWidth}px` : 0 },
+          transition: theme.transitions.create(["width", "margin"], {
+            easing: theme.transitions.easing.sharp,
+            duration: theme.transitions.duration.enteringScreen,
+          }),
         }}
       >
         <Toolbar>
@@ -574,7 +615,7 @@ const MainLayout = () => {
             aria-label="open drawer"
             edge="start"
             onClick={handleDrawerToggle}
-            sx={{ mr: 2, display: { md: "none" } }}
+            sx={{ mr: 2 }}
           >
             <MenuIcon />
           </IconButton>
@@ -601,19 +642,21 @@ const MainLayout = () => {
               color="inherit"
             >
               <Box position="relative">
-                <Avatar sx={{ width: 32, height: 32, bgcolor: "secondary.main" }}>
+                <Avatar
+                  sx={{ width: 32, height: 32, bgcolor: "secondary.main" }}
+                >
                   {user?.fullName?.charAt(0)?.toUpperCase()}
                 </Avatar>
-                {user?.role === 'admin' && !user?.twoFactorEnabled && (
+                {user?.role === "admin" && !user?.twoFactorEnabled && (
                   <SecurityIcon
                     color="warning"
                     sx={{
-                      position: 'absolute',
+                      position: "absolute",
                       bottom: -4,
                       right: -4,
                       fontSize: 16,
-                      bgcolor: 'background.paper',
-                      borderRadius: '50%'
+                      bgcolor: "background.paper",
+                      borderRadius: "50%",
                     }}
                   />
                 )}
@@ -660,16 +703,23 @@ const MainLayout = () => {
       {}
       <Box
         component="nav"
-        sx={{ width: { md: drawerWidth }, flexShrink: { md: 0 } }}
+        sx={{
+          width: { md: desktopOpen ? drawerWidth : 0 },
+          flexShrink: { md: 0 },
+          transition: theme.transitions.create("width", {
+            easing: theme.transitions.easing.sharp,
+            duration: theme.transitions.duration.enteringScreen,
+          }),
+        }}
         aria-label="navigation menu"
       >
-        {}
+        {/* The implementation can be swapped with js to avoid SEO duplication of links. */}
         <Drawer
           variant="temporary"
           open={mobileOpen}
           onClose={handleDrawerToggle}
           ModalProps={{
-            keepMounted: true,
+            keepMounted: true, // Better open performance on mobile.
           }}
           sx={{
             display: { xs: "block", md: "none" },
@@ -681,9 +731,9 @@ const MainLayout = () => {
         >
           {drawer}
         </Drawer>
-        {}
+        {/* Desktop drawer */}
         <Drawer
-          variant="permanent"
+          variant="persistent"
           sx={{
             display: { xs: "none", md: "block" },
             "& .MuiDrawer-paper": {
@@ -691,7 +741,7 @@ const MainLayout = () => {
               width: drawerWidth,
             },
           }}
-          open
+          open={desktopOpen}
         >
           {drawer}
         </Drawer>
@@ -702,7 +752,11 @@ const MainLayout = () => {
         sx={{
           flexGrow: 1,
           p: 3,
-          width: { md: `calc(100% - ${drawerWidth}px)` },
+          width: { md: desktopOpen ? `calc(100% - ${drawerWidth}px)` : "100%" },
+          transition: theme.transitions.create(["width", "margin"], {
+            easing: theme.transitions.easing.sharp,
+            duration: theme.transitions.duration.enteringScreen,
+          }),
           display: "flex",
           flexDirection: "column",
           minHeight: "100vh",
@@ -716,14 +770,14 @@ const MainLayout = () => {
         </Box>
         <Footer />
       </Box>
-      
+
       {/* Floating Chat Button */}
       <ChatButton />
 
       {/* Quick Switcher Modal */}
-      <QuickSwitcher 
-        open={quickSwitcherOpen} 
-        onClose={handleCloseQuickSwitcher} 
+      <QuickSwitcher
+        open={quickSwitcherOpen}
+        onClose={handleCloseQuickSwitcher}
       />
 
       {/* Announcement Popup for agents and affiliate managers */}
