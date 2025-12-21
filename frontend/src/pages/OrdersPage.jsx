@@ -68,6 +68,7 @@ import { useForm, Controller } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
 import * as yup from "yup";
 import api from "../services/api";
+import notificationService from "../services/notificationService";
 import { selectUser } from "../store/slices/authSlice";
 import { getSortedCountries } from "../constants/countries";
 import LeadQuickView from "../components/LeadQuickView";
@@ -977,6 +978,7 @@ const OrdersPage = () => {
           setCreateDialogOpen(false);
           reset();
         } else {
+          notificationService.playOrderCreatedSound();
           setNotification({
             message: "Order created successfully!",
             severity: "success",

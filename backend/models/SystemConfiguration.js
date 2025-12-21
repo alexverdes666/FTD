@@ -40,6 +40,13 @@ const systemConfigurationSchema = new mongoose.Schema(
         min: 0,
       },
     },
+    // Sound settings configuration
+    soundSettings: {
+      orderCreatedSound: {
+        type: String,
+        default: "/audio/debeliq.mp3",
+      },
+    },
     // Track when this configuration was last updated
     lastUpdatedBy: {
       type: mongoose.Schema.Types.ObjectId,

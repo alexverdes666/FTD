@@ -24,7 +24,7 @@ exports.getNotes = async (req, res) => {
 // @access  Private
 exports.createNote = async (req, res) => {
   try {
-    const { type, text, imageData, color, width, height, aspectRatio, position } = req.body;
+    const { type, text, imageData, color, width, height, aspectRatio, position, fontSize, isBold, textAlign, connections } = req.body;
 
     const note = await StickyNote.create({
       user: req.user.id,
@@ -35,7 +35,11 @@ exports.createNote = async (req, res) => {
       width,
       height,
       aspectRatio,
-      position
+      fontSize,
+      isBold,
+      textAlign,
+      position,
+      connections: connections || []
     });
 
     res.status(201).json({
@@ -56,6 +60,7 @@ exports.createNote = async (req, res) => {
 // @access  Private
 exports.updateNote = async (req, res) => {
   try {
+    console.log(`[DEBUG_BACKEND] Updating note ${req.params.id}. Body:`, JSON.stringify(req.body));
     let note = await StickyNote.findById(req.params.id);
 
     if (!note) {
@@ -73,10 +78,39 @@ exports.updateNote = async (req, res) => {
       });
     }
 
-    note = await StickyNote.findByIdAndUpdate(req.params.id, req.body, {
+    // Only update allowed fields to prevent overwriting everything if not passed
+    const allowedUpdates = {};
+    if (req.body.text !== undefined) allowedUpdates.text = req.body.text;
+    if (req.body.color !== undefined) allowedUpdates.color = req.body.color;
+    if (req.body.width !== undefined) allowedUpdates.width = req.body.width;
+    if (req.body.height !== undefined) allowedUpdates.height = req.body.height;
+    if (req.body.fontSize !== undefined) allowedUpdates.fontSize = req.body.fontSize;
+    if (req.body.isBold !== undefined) allowedUpdates.isBold = req.body.isBold;
+    if (req.body.textAlign !== undefined) allowedUpdates.textAlign = req.body.textAlign;
+    if (req.body.connections !== undefined) allowedUpdates.connections = req.body.connections;
+    if (req.body.position !== undefined) {
+      // Ensure position has x and y
+      if (typeof req.body.position.x === 'number' && typeof req.body.position.y === 'number') {
+        allowedUpdates.position = {
+          x: req.body.position.x,
+          y: req.body.position.y
+        };
+      }
+    }
+
+    if (Object.keys(allowedUpdates).length === 0) {
+       return res.status(400).json({
+         success: false,
+         message: 'No valid fields to update'
+       });
+    }
+
+    note = await StickyNote.findByIdAndUpdate(req.params.id, { $set: allowedUpdates }, {
       new: true,
       runValidators: true
     });
+
+    console.log(`[DEBUG_BACKEND] Updated note result:`, JSON.stringify(note));
 
     res.status(200).json({
       success: true,

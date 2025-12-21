@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   Box,
   Paper,
@@ -7,24 +7,18 @@ import {
   Menu,
   MenuItem,
   Fab,
+  Typography,
 } from "@mui/material";
 import {
   Close as CloseIcon,
   Palette as PaletteIcon,
   NoteAdd as NoteAddIcon,
+  KeyboardArrowUp as ArrowUpIcon,
+  KeyboardArrowDown as ArrowDownIcon,
 } from "@mui/icons-material";
 import { motion, AnimatePresence } from "framer-motion";
 import api from "../services/api";
 import { toast } from "react-hot-toast";
-
-const NOTE_COLORS = [
-  "#FFF740", // Classic Yellow
-  "#feff9c", // Pale Yellow
-  "#ff65a3", // Pink
-  "#7afcff", // Cyan
-  "#ff7eb9", // Magenta
-  "#e2f0cb", // Green
-];
 
 const NotesPage = () => {
   const [notes, setNotes] = useState([]);
@@ -36,6 +30,9 @@ const NotesPage = () => {
   const [isDragging, setIsDragging] = useState(false);
   const dragStart = useRef({ x: 0, y: 0 });
   const containerRef = useRef(null);
+
+  // Connection state
+  const [tempConnection, setTempConnection] = useState(null);
 
   // Fetch notes on mount
   useEffect(() => {
@@ -136,13 +133,22 @@ const NotesPage = () => {
   // Pan / Zoom Logic
   const handleMouseDown = (e) => {
     // Only pan if clicking on the background (not on a note)
-    if (e.target.closest(".sticky-note")) return;
+    if (e.target.closest(".sticky-note") || e.target.closest(".connection-handle")) return;
 
     if (e.button === 0) {
       // Left click
       setIsDragging(true);
       dragStart.current = { x: e.clientX, y: e.clientY };
     }
+  };
+
+  const getCanvasCoordinates = (clientX, clientY) => {
+    if (!containerRef.current) return { x: 0, y: 0 };
+    const rect = containerRef.current.getBoundingClientRect();
+    return {
+      x: (clientX - rect.left - view.x) / view.scale,
+      y: (clientY - rect.top - view.y) / view.scale,
+    };
   };
 
   const handleMouseMove = (e) => {
@@ -158,10 +164,18 @@ const NotesPage = () => {
 
       dragStart.current = { x: e.clientX, y: e.clientY };
     }
+
+    if (tempConnection) {
+        const coords = getCanvasCoordinates(e.clientX, e.clientY);
+        setTempConnection(prev => ({ ...prev, endPoint: coords }));
+    }
   };
 
   const handleMouseUp = () => {
     setIsDragging(false);
+    if (tempConnection) {
+        setTempConnection(null);
+    }
   };
 
   const handleWheel = (e) => {
@@ -188,17 +202,45 @@ const NotesPage = () => {
     });
   };
 
-  const addNote = async () => {
+  const addNote = async (initialPosition) => {
+    let position;
+    
+    // Check if initialPosition is a coordinates object (has x property)
+    // If it's an event (from click handler) or undefined, calculate center
+    if (initialPosition && typeof initialPosition.x === 'number') {
+      position = initialPosition;
+    } else {
+      // Calculate center of viewport
+      if (containerRef.current) {
+        const rect = containerRef.current.getBoundingClientRect();
+        const centerCoords = getCanvasCoordinates(
+          rect.left + rect.width / 2,
+          rect.top + rect.height / 2
+        );
+        // Center the note (default width/height is 250)
+        position = {
+          x: centerCoords.x - 125,
+          y: centerCoords.y - 125,
+        };
+      } else {
+        position = {
+          x: 100 + notes.length * 30,
+          y: 100 + notes.length * 30,
+        };
+      }
+    }
+
     const newNoteData = {
       type: "text",
       text: "",
-      color: NOTE_COLORS[0],
+      color: "#FFF740", // Default Classic Yellow
       width: 250,
       height: 250,
-      position: {
-        x: 100 + notes.length * 30,
-        y: 100 + notes.length * 30,
-      },
+      fontSize: 16,
+      isBold: false,
+      textAlign: "left",
+      position: position,
+      connections: [],
     };
 
     try {
@@ -214,20 +256,24 @@ const NotesPage = () => {
   };
 
   // Updates local state immediately for UI responsiveness
-  const updateNote = (id, updates) => {
-    setNotes(
-      notes.map((note) => (note.id === id ? { ...note, ...updates } : note))
+  const updateNote = useCallback((id, updates) => {
+    setNotes((prevNotes) =>
+      prevNotes.map((note) => (note.id === id ? { ...note, ...updates } : note))
     );
-  };
+  }, []);
 
   // Persists changes to the database
-  const saveNote = async (id, updates) => {
+  const saveNote = useCallback(async (id, updates) => {
     try {
-      await api.put(`/sticky-notes/${id}`, updates);
+      const response = await api.put(`/sticky-notes/${id}`, updates);
+      if (response.data.success) {
+        // refined: removed toast success message as per user request
+      }
     } catch (error) {
       console.error("Failed to save note", error);
+      toast.error("Failed to save note");
     }
-  };
+  }, []);
 
   const deleteNote = async (id) => {
     try {
@@ -241,6 +287,97 @@ const NotesPage = () => {
 
   const bringToFront = (id) => {
     setActiveNoteId(id);
+  };
+
+  // Connection Logic
+  const handleConnectionStart = (e, noteId, handle) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const coords = getCanvasCoordinates(e.clientX, e.clientY);
+    setTempConnection({
+      startNoteId: noteId,
+      startHandle: handle,
+      endPoint: coords
+    });
+  };
+
+  const handleConnectionComplete = async (e, targetNoteId, targetHandle) => {
+    e.stopPropagation();
+    e.preventDefault();
+
+    if (!tempConnection) return;
+    if (tempConnection.startNoteId === targetNoteId) {
+        setTempConnection(null);
+        return;
+    }
+
+    const startNote = notes.find(n => n.id === tempConnection.startNoteId);
+    if (!startNote) return;
+
+    // Create new connection object
+    const newConnection = {
+        targetId: targetNoteId,
+        sourceHandle: tempConnection.startHandle,
+        targetHandle: targetHandle
+    };
+
+    // Check if connection already exists
+    const exists = startNote.connections?.some(
+        c => c.targetId === targetNoteId && 
+             c.sourceHandle === tempConnection.startHandle && 
+             c.targetHandle === targetHandle
+    );
+
+    if (!exists) {
+        const updatedConnections = [...(startNote.connections || []), newConnection];
+        updateNote(startNote.id, { connections: updatedConnections });
+        await saveNote(startNote.id, { connections: updatedConnections });
+    }
+
+    setTempConnection(null);
+  };
+
+  const getHandlePosition = (note, side) => {
+    if (!note) return { x: 0, y: 0 };
+    const y = note.position.y + note.height / 2;
+    const x = side === 'left' ? note.position.x : note.position.x + note.width;
+    return { x, y };
+  };
+
+  const generatePath = (start, end, startSide, endSide) => {
+     // Orthogonal routing: Horizontal -> Vertical -> Horizontal
+     // This mimics "move up and down but not vertically" (step behavior)
+     const offset = 30; // Distance to go out before turning
+
+     let path = `M ${start.x} ${start.y}`;
+
+     // Calculate intermediate points
+     // Strategy: Go out from start handle, then go vertical to match end handle Y, then go horizontal to end handle.
+     // If end handle is on the "wrong" side (e.g. Right -> Right), we need extra steps.
+     
+     // Determine "out" direction
+     const startDir = startSide === 'left' ? -1 : 1;
+     const endDir = endSide === 'left' ? -1 : 1;
+
+     const p1 = { x: start.x + offset * startDir, y: start.y };
+     const p2 = { x: end.x + offset * endDir, y: end.y };
+
+     // Middle X for vertical segment
+     let midX = (p1.x + p2.x) / 2;
+
+     // Simple orthogonal path:
+     // Start -> P1 -> (midX, P1.y) -> (midX, P2.y) -> P2 -> End
+     
+     // However, if we are connecting close notes or overlapping, simple midpoint might be weird.
+     // But for "Upload Labs" style, usually it's strict steps.
+     
+     path += ` L ${p1.x} ${p1.y}`;
+     path += ` L ${midX} ${p1.y}`;
+     path += ` L ${midX} ${p2.y}`;
+     path += ` L ${p2.x} ${p2.y}`;
+     path += ` L ${end.x} ${end.y}`;
+
+     return path;
   };
 
   return (
@@ -259,7 +396,6 @@ const NotesPage = () => {
         overflow: "hidden",
         backgroundColor: "#eeeeee",
         backgroundImage: "radial-gradient(#d4d4d4 2px, transparent 2px)",
-        // Adjust background size and position based on view to simulate infinite canvas
         backgroundSize: `${20 * view.scale}px ${20 * view.scale}px`,
         backgroundPosition: `${view.x}px ${view.y}px`,
         cursor: isDragging ? "grabbing" : "grab",
@@ -271,11 +407,9 @@ const NotesPage = () => {
           height: "100%",
           transformOrigin: "0 0",
           position: "relative",
-          // Apply the pan/zoom transform
           transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})`,
         }}
       >
-        {/* Notes container with absolute positioning for free movement */}
         <Box
           sx={{
             position: "relative",
@@ -285,6 +419,62 @@ const NotesPage = () => {
             minHeight: "2000px",
           }}
         >
+          {/* SVG Connections Layer */}
+          <svg
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: '100%',
+              pointerEvents: 'none',
+              overflow: 'visible',
+              zIndex: 0
+            }}
+          >
+            {/* Existing Connections */}
+            {notes.map(note => (
+                note.connections && note.connections.map((conn, idx) => {
+                    const targetNote = notes.find(n => n.id === conn.targetId);
+                    if (!targetNote) return null;
+                    const startPos = getHandlePosition(note, conn.sourceHandle);
+                    const endPos = getHandlePosition(targetNote, conn.targetHandle);
+                    return (
+                        <path
+                            key={`${note.id}-${idx}`}
+                            d={generatePath(startPos, endPos, conn.sourceHandle, conn.targetHandle)}
+                            stroke="#333"
+                            strokeWidth="4"
+                            fill="none"
+                        />
+                    );
+                })
+            ))}
+            
+            {/* Temporary Connection */}
+            {tempConnection && (() => {
+                const startNote = notes.find(n => n.id === tempConnection.startNoteId);
+                if (!startNote) return null;
+                const startPos = getHandlePosition(startNote, tempConnection.startHandle);
+                const endPos = tempConnection.endPoint;
+                // Guess end side based on relative position or just use opposite of start?
+                // For drawing, we can assume 'right' if cursor is to right, etc.
+                // Or just assume 'right' for end if unknown.
+                // Actually, let's just use the logic:
+                const endSide = endPos.x > startPos.x ? 'left' : 'right';
+                
+                return (
+                    <path
+                        d={generatePath(startPos, endPos, tempConnection.startHandle, endSide)}
+                        stroke="#333"
+                        strokeWidth="4"
+                        fill="none"
+                        strokeDasharray="5,5"
+                    />
+                );
+            })()}
+          </svg>
+
           <AnimatePresence>
             {notes.map((note) => (
               <StickyNote
@@ -296,6 +486,8 @@ const NotesPage = () => {
                 onDelete={deleteNote}
                 onBringToFront={bringToFront}
                 isActive={activeNoteId === note.id}
+                onConnectionStart={handleConnectionStart}
+                onConnectionComplete={handleConnectionComplete}
               />
             ))}
           </AnimatePresence>
@@ -312,12 +504,18 @@ const NotesPage = () => {
             : undefined
         }
       >
-        <MenuItem onClick={addNote}>
+        <MenuItem 
+          onClick={() => {
+            if (contextMenu) {
+              const coords = getCanvasCoordinates(contextMenu.mouseX, contextMenu.mouseY);
+              addNote(coords);
+            }
+          }}
+        >
           <NoteAddIcon sx={{ mr: 1 }} /> Add Note
         </MenuItem>
       </Menu>
 
-      {/* Floating Action Button */}
       <Fab
         color="primary"
         aria-label="add"
@@ -338,15 +536,15 @@ const StickyNote = ({
   onDelete,
   onBringToFront,
   isActive,
+  onConnectionStart,
+  onConnectionComplete,
 }) => {
-  const [anchorEl, setAnchorEl] = useState(null);
   const [isResizing, setIsResizing] = useState(false);
   const [isDraggingNote, setIsDraggingNote] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const [position, setPosition] = useState(() => {
     return note.position || { x: 0, y: 0 };
   });
-  // Local state for dimensions during resizing to avoid flickering
   const [dimensions, setDimensions] = useState({
     width: note.width,
     height: note.height,
@@ -355,7 +553,6 @@ const StickyNote = ({
   const dragStartNotePos = useRef({ x: 0, y: 0 });
   const resizeDimensions = useRef({ width: note.width, height: note.height });
 
-  // Sync dimensions from props when not resizing
   useEffect(() => {
     if (!isResizing) {
       setDimensions({ width: note.width, height: note.height });
@@ -363,42 +560,56 @@ const StickyNote = ({
     }
   }, [note.width, note.height, isResizing]);
 
-  // Sync position from props when not dragging
   useEffect(() => {
     if (!isDraggingNote) {
       setPosition(note.position || { x: 0, y: 0 });
     }
-  }, [note.position]); // Removed isDraggingNote dependency to prevent snap-back on drag end
+  }, [note.position, isDraggingNote]);
 
-  const handleColorClick = (event) => {
-    event.stopPropagation();
-    setAnchorEl(event.currentTarget);
+  const handleColorChange = (e) => {
+    const newColor = e.target.value;
+    onUpdate(note.id, { color: newColor });
   };
 
-  const handleColorClose = (color) => {
-    setAnchorEl(null);
-    if (color) {
-      onUpdate(note.id, { color });
-      onSave(note.id, { color });
-    }
+  const handleColorSave = (e) => {
+    const newColor = e.target.value;
+    onSave(note.id, { color: newColor });
   };
 
-  // Note dragging logic
+  const handleFontSizeChange = (delta) => {
+    const currentSize = note.fontSize || 16;
+    const newSize = Math.max(8, Math.min(72, currentSize + delta));
+    onUpdate(note.id, { fontSize: newSize });
+    onSave(note.id, { fontSize: newSize });
+  };
+
+  const handleBoldToggle = () => {
+    const newBold = !note.isBold;
+    onUpdate(note.id, { isBold: newBold });
+    onSave(note.id, { isBold: newBold });
+  };
+
+  const handleAlignToggle = () => {
+    const newAlign = note.textAlign === "center" ? "left" : "center";
+    onUpdate(note.id, { textAlign: newAlign });
+    onSave(note.id, { textAlign: newAlign });
+  };
+
   const handleNoteDragStart = (e) => {
-    // Don't drag when interacting with controls, textareas, inputs, or buttons
     if (
       e.target.tagName === "TEXTAREA" ||
       e.target.tagName === "INPUT" ||
       e.target.tagName === "BUTTON" ||
-      e.target.closest("button") || // Check if click is inside a button
-      e.target.closest(".MuiIconButton-root") // Check for Material-UI icon buttons
+      e.target.closest("button") || 
+      e.target.closest(".MuiIconButton-root") ||
+      e.target.closest(".connection-handle") // Don't drag note when clicking handle
     ) {
       return;
     }
 
     e.stopPropagation();
-    e.preventDefault(); // Prevent default to avoid any browser drag behavior
-    onBringToFront(note.id); // Bring this note to front when starting to drag
+    e.preventDefault();
+    onBringToFront(note.id);
     setIsDraggingNote(true);
     dragStartPos.current = { x: e.clientX, y: e.clientY };
     dragStartNotePos.current = { ...position };
@@ -409,6 +620,9 @@ const StickyNote = ({
 
     const handleMouseMove = (e) => {
       e.preventDefault();
+      e.stopPropagation();
+      if (!isDraggingNote) return;
+
       const deltaX = (e.clientX - dragStartPos.current.x) / scale;
       const deltaY = (e.clientY - dragStartPos.current.y) / scale;
 
@@ -418,17 +632,17 @@ const StickyNote = ({
       };
 
       setPosition(newPosition);
-      // Remove onUpdate from here to avoid flooding updates during drag
-      // onUpdate(note.id, { position: newPosition });
+      onUpdate(note.id, { position: newPosition });
     };
 
     const handleMouseUp = (e) => {
-      e.preventDefault();
+      if (!isDraggingNote) return;
+
       setIsDraggingNote(false);
 
-      // Update parent state and save to DB on drag end
       const deltaX = (e.clientX - dragStartPos.current.x) / scale;
       const deltaY = (e.clientY - dragStartPos.current.y) / scale;
+      
       const finalPosition = {
         x: dragStartNotePos.current.x + deltaX,
         y: dragStartNotePos.current.y + deltaY,
@@ -438,13 +652,9 @@ const StickyNote = ({
       onSave(note.id, { position: finalPosition });
     };
 
-    // Also handle mouse leaving the window to prevent stuck drag state
     const handleMouseLeave = (e) => {
-      // Only end drag if mouse actually leaves the document
-      if (e.relatedTarget === null) {
+      if (e.relatedTarget === null && isDraggingNote) {
         setIsDraggingNote(false);
-        // We should also save here if we were dragging
-        // Recalculate position as in mouseup
         const deltaX = (e.clientX - dragStartPos.current.x) / scale;
         const deltaY = (e.clientY - dragStartPos.current.y) / scale;
         const finalPosition = {
@@ -456,22 +666,21 @@ const StickyNote = ({
       }
     };
 
-    window.addEventListener("mousemove", handleMouseMove);
-    window.addEventListener("mouseup", handleMouseUp);
+    window.addEventListener("mousemove", handleMouseMove, { capture: true });
+    window.addEventListener("mouseup", handleMouseUp, { capture: true });
     document.addEventListener("mouseleave", handleMouseLeave);
 
     return () => {
-      window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("mouseup", handleMouseUp);
+      window.removeEventListener("mousemove", handleMouseMove, { capture: true });
+      window.removeEventListener("mouseup", handleMouseUp, { capture: true });
       document.removeEventListener("mouseleave", handleMouseLeave);
     };
-  }, [isDraggingNote, scale, note.id, onUpdate, onSave, position]);
+  }, [isDraggingNote, scale, note.id, onUpdate, onSave]);
 
-  // Resize logic with scale correction
   const handleResizeStart = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    onBringToFront(note.id); // Bring this note to front when starting to resize
+    onBringToFront(note.id);
     setIsResizing(true);
 
     const startX = e.clientX;
@@ -481,27 +690,22 @@ const StickyNote = ({
 
     const handleMouseMove = (moveEvent) => {
       moveEvent.preventDefault();
-      // Calculate delta and divide by scale to get "world space" delta
       const deltaX = (moveEvent.clientX - startX) / scale;
       const deltaY = (moveEvent.clientY - startY) / scale;
 
       let newWidth = Math.max(200, startWidth + deltaX);
       let newHeight = Math.max(150, startHeight + deltaY);
 
-      // For images, maintain aspect ratio
       if (note.type === "image" && note.aspectRatio) {
-        // Use the larger delta to determine the new size while maintaining aspect ratio
         const widthBasedHeight = newWidth / note.aspectRatio;
         const heightBasedWidth = newHeight * note.aspectRatio;
 
-        // Choose the dimension that gives the larger overall size
         if (Math.abs(deltaX) > Math.abs(deltaY)) {
           newHeight = widthBasedHeight;
         } else {
           newWidth = heightBasedWidth;
         }
 
-        // Ensure minimum sizes are respected
         if (newWidth < 100) {
           newWidth = 100;
           newHeight = newWidth / note.aspectRatio;
@@ -512,9 +716,9 @@ const StickyNote = ({
         }
       }
 
-      // Update local state immediately for smooth resizing
       resizeDimensions.current = { width: newWidth, height: newHeight };
       setDimensions({ width: newWidth, height: newHeight });
+      onUpdate(note.id, { width: newWidth, height: newHeight });
     };
 
     const handleMouseUp = (upEvent) => {
@@ -525,9 +729,7 @@ const StickyNote = ({
         height: resizeDimensions.current.height,
       };
 
-      // Update parent state first
       onUpdate(note.id, finalUpdates);
-      // Save to DB
       onSave(note.id, finalUpdates);
 
       setIsResizing(false);
@@ -538,16 +740,13 @@ const StickyNote = ({
     };
 
     const handleMouseLeave = (leaveEvent) => {
-      // Only end resize if mouse actually leaves the document
       if (leaveEvent.relatedTarget === null) {
         const finalUpdates = {
           width: resizeDimensions.current.width,
           height: resizeDimensions.current.height,
         };
 
-        // Update parent state first
         onUpdate(note.id, finalUpdates);
-        // Save to DB
         onSave(note.id, finalUpdates);
 
         setIsResizing(false);
@@ -565,7 +764,7 @@ const StickyNote = ({
 
   return (
     <motion.div
-      className="sticky-note" // Added class for click detection
+      className="sticky-note"
       initial={{ opacity: 0, scale: 0.8 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.8 }}
@@ -581,33 +780,61 @@ const StickyNote = ({
         top: position.y,
         cursor: isDraggingNote
           ? "grabbing"
-          : note.type === "image"
-          ? "grab"
           : "grab",
-        // Remove all visual effects for images to keep them completely clean
         boxShadow: note.type === "image" ? "none" : undefined,
         border: note.type === "image" ? "none" : undefined,
         background: note.type === "image" ? "transparent" : undefined,
-        userSelect: "none", // Prevent text selection during drag
-        touchAction: "none", // Prevent touch scrolling during drag
-        zIndex: isActive ? 1000 : 1, // Active note gets higher z-index
+        userSelect: "none",
+        touchAction: "none",
+        zIndex: isActive ? 1000 : 1,
       }}
-      // Prevent drag propagation to container (pan) when interacting with note
       onMouseDown={handleNoteDragStart}
-      // Ensure mouseup is captured even if it happens on this element
-      onMouseUp={(e) => {
-        if (isDraggingNote) {
-          e.stopPropagation();
-          e.preventDefault();
-          setIsDraggingNote(false);
-          // Handled in useEffect, but good to have fallback if event listener fails
-        }
-      }}
     >
+      {/* Connection Handles */}
+      <Box
+         className="connection-handle left"
+         onMouseDown={(e) => onConnectionStart(e, note.id, 'left')}
+         onMouseUp={(e) => onConnectionComplete(e, note.id, 'left')}
+         sx={{
+           position: 'absolute',
+           left: -8,
+           top: '50%',
+           transform: 'translateY(-50%)',
+           width: 16,
+           height: 16,
+           borderRadius: '50%',
+           border: '2px solid #666',
+           bgcolor: 'white',
+           cursor: 'crosshair',
+           zIndex: 1100,
+           transition: 'transform 0.2s',
+           '&:hover': { transform: 'translateY(-50%) scale(1.2)', bgcolor: '#ddd' }
+         }}
+       />
+
+       <Box
+         className="connection-handle right"
+         onMouseDown={(e) => onConnectionStart(e, note.id, 'right')}
+         onMouseUp={(e) => onConnectionComplete(e, note.id, 'right')}
+         sx={{
+           position: 'absolute',
+           right: -8,
+           top: '50%',
+           transform: 'translateY(-50%)',
+           width: 16,
+           height: 16,
+           borderRadius: '50%',
+           border: '2px solid #666',
+           bgcolor: 'white',
+           cursor: 'crosshair',
+           zIndex: 1100,
+           transition: 'transform 0.2s',
+           '&:hover': { transform: 'translateY(-50%) scale(1.2)', bgcolor: '#ddd' }
+         }}
+       />
+
       {note.type === "image" ? (
-        // Image with controls - single container to prevent nesting issues
         <>
-          {/* Pure image without any background */}
           <Box
             onMouseEnter={() => setIsHovered(true)}
             onMouseLeave={() => setIsHovered(false)}
@@ -618,7 +845,7 @@ const StickyNote = ({
               border: "1px solid rgba(0, 0, 0, 0.1)",
               boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
               overflow: "hidden",
-              userSelect: "none", // Prevent text selection during drag
+              userSelect: "none",
             }}
           >
             <img
@@ -628,16 +855,15 @@ const StickyNote = ({
                 width: "100%",
                 height: "100%",
                 objectFit: "fill",
-                pointerEvents: "none", // Image itself doesn't capture events
+                pointerEvents: "none",
                 display: "block",
                 border: "none",
                 userSelect: "none",
-                WebkitUserDrag: "none", // Prevent default image drag in webkit
+                WebkitUserDrag: "none",
               }}
-              draggable={false} // Prevent default browser drag
+              draggable={false}
             />
 
-            {/* Close button for images - positioned exactly at top right corner */}
             <IconButton
               size="small"
               onClick={(e) => {
@@ -646,7 +872,7 @@ const StickyNote = ({
                 onDelete(note.id);
               }}
               onMouseDown={(e) => {
-                e.stopPropagation(); // Prevent drag when clicking close button
+                e.stopPropagation();
               }}
               sx={{
                 position: "absolute",
@@ -671,7 +897,6 @@ const StickyNote = ({
               <CloseIcon sx={{ fontSize: `${16 / scale}px` }} />
             </IconButton>
 
-            {/* Resize Handle for images - positioned exactly at bottom right corner */}
             <Box
               onMouseDown={handleResizeStart}
               sx={{
@@ -709,7 +934,6 @@ const StickyNote = ({
           </Box>
         </>
       ) : (
-        // Text notes with Paper wrapper
         <Paper
           elevation={3}
           sx={{
@@ -734,8 +958,52 @@ const StickyNote = ({
               bgcolor: "rgba(0,0,0,0.05)",
             }}
           >
-            <IconButton size="small" onClick={handleColorClick}>
+            <IconButton
+              size="small"
+              onClick={() => handleFontSizeChange(2)}
+              title="Increase font size"
+            >
+              <ArrowUpIcon fontSize="small" />
+            </IconButton>
+            <IconButton
+              size="small"
+              onClick={() => handleFontSizeChange(-2)}
+              title="Decrease font size"
+            >
+              <ArrowDownIcon fontSize="small" />
+            </IconButton>
+            <IconButton
+              size="small"
+              onClick={handleBoldToggle}
+              title="Toggle Bold"
+            >
+              <Typography sx={{ fontWeight: "bold" }}>B</Typography>
+            </IconButton>
+            <IconButton
+              size="small"
+              onClick={handleAlignToggle}
+              title="Toggle Center"
+              sx={{ width: "auto", borderRadius: 1, px: 0.5 }}
+            >
+              <Typography variant="caption">center</Typography>
+            </IconButton>
+            <IconButton size="small" sx={{ position: "relative", overflow: "hidden" }}>
               <PaletteIcon fontSize="small" />
+              <input
+                type="color"
+                value={note.color}
+                onChange={handleColorChange}
+                onBlur={handleColorSave}
+                style={{
+                  opacity: 0,
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  width: "100%",
+                  height: "100%",
+                  cursor: "pointer",
+                }}
+              />
             </IconButton>
             <IconButton
               size="small"
@@ -759,6 +1027,14 @@ const StickyNote = ({
             InputProps={{
               disableUnderline: true,
             }}
+            inputProps={{
+              style: {
+                fontSize: note.fontSize || 16,
+                fontWeight: note.isBold ? "bold" : "normal",
+                textAlign: note.textAlign || "left",
+                lineHeight: 1.5,
+              },
+            }}
             sx={{
               p: 2,
               flexGrow: 1,
@@ -770,7 +1046,6 @@ const StickyNote = ({
             }}
           />
 
-          {/* Resize Handle for text notes */}
           <Box
             onMouseDown={handleResizeStart}
             sx={{
@@ -799,29 +1074,6 @@ const StickyNote = ({
               }}
             />
           </Box>
-
-          <Menu
-            anchorEl={anchorEl}
-            open={Boolean(anchorEl)}
-            onClose={() => handleColorClose()}
-          >
-            <Box sx={{ display: "flex", p: 1, gap: 1 }}>
-              {NOTE_COLORS.map((color) => (
-                <Box
-                  key={color}
-                  onClick={() => handleColorClose(color)}
-                  sx={{
-                    width: 24,
-                    height: 24,
-                    bgcolor: color,
-                    borderRadius: "50%",
-                    cursor: "pointer",
-                    border: "1px solid #ccc",
-                  }}
-                />
-              ))}
-            </Box>
-          </Menu>
         </Paper>
       )}
     </motion.div>

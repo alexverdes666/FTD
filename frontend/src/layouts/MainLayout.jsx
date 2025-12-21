@@ -785,7 +785,7 @@ const MainLayout = () => {
       </Box>
 
       {/* Floating Chat Button */}
-      <ChatButton />
+      {location.pathname !== "/notes" && <ChatButton />}
 
       {/* Quick Switcher Modal */}
       <QuickSwitcher

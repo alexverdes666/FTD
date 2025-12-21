@@ -159,6 +159,21 @@ class NotificationService {
     }
   }
 
+  // Play order created sound
+  playOrderCreatedSound() {
+    if (!this.audioEnabled || !this.isEnabled) return;
+    
+    try {
+      const audio = new Audio('/audio/debeliq.mp3');
+      audio.volume = 1.0;
+      audio.play().catch(error => {
+        console.warn('Error playing order created sound:', error);
+      });
+    } catch (error) {
+      console.warn('Error initializing order created sound:', error);
+    }
+  }
+
   // Show browser notification
   showBrowserNotification(title, options = {}) {
     if (!this.browserNotificationsEnabled || !this.isEnabled) return null;

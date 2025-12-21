@@ -42,10 +42,28 @@ const stickyNoteSchema = new mongoose.Schema({
   aspectRatio: {
     type: Number
   },
+  fontSize: {
+    type: Number,
+    default: 16
+  },
+  isBold: {
+    type: Boolean,
+    default: false
+  },
+  textAlign: {
+    type: String,
+    enum: ['left', 'center', 'right'],
+    default: 'left'
+  },
   position: {
     x: { type: Number, required: true },
     y: { type: Number, required: true }
   },
+  connections: [{
+    targetId: { type: mongoose.Schema.Types.ObjectId, ref: 'StickyNote' },
+    sourceHandle: { type: String, enum: ['left', 'right'] },
+    targetHandle: { type: String, enum: ['left', 'right'] }
+  }],
   zIndex: {
     type: Number,
     default: 1
