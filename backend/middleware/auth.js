@@ -93,6 +93,10 @@ exports.protect = async (req, res, next) => {
       }
 
       req.user = user;
+      // Attach originalUserId if present in token (for impersonation/account switching)
+      if (decoded.originalUserId) {
+        req.user.originalUserId = decoded.originalUserId;
+      }
       next();
     } catch (err) {
       return res.status(401).json({
