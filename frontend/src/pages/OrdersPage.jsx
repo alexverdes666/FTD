@@ -365,7 +365,8 @@ const OrdersPage = () => {
   // Change Requester State
   const [changeRequesterOpen, setChangeRequesterOpen] = useState(false);
   const [requesterHistoryOpen, setRequesterHistoryOpen] = useState(false);
-  const [selectedOrderForRequester, setSelectedOrderForRequester] = useState(null);
+  const [selectedOrderForRequester, setSelectedOrderForRequester] =
+    useState(null);
   const [potentialRequesters, setPotentialRequesters] = useState([]);
   const [loadingRequesters, setLoadingRequesters] = useState(false);
   const [selectedNewRequester, setSelectedNewRequester] = useState(null);
@@ -373,13 +374,13 @@ const OrdersPage = () => {
   const fetchPotentialRequesters = useCallback(async () => {
     try {
       setLoadingRequesters(true);
-      const response = await api.get('/users?isActive=true&limit=1000');
+      const response = await api.get("/users?isActive=true&limit=1000");
       setPotentialRequesters(response.data.data);
     } catch (error) {
       console.error("Error fetching potential requesters:", error);
       setNotification({
         message: "Failed to fetch users list",
-        severity: "error"
+        severity: "error",
       });
     } finally {
       setLoadingRequesters(false);
@@ -405,21 +406,24 @@ const OrdersPage = () => {
 
   const handleSubmitChangeRequester = async () => {
     if (!selectedOrderForRequester || !selectedNewRequester) return;
-    
+
     try {
-      await api.put(`/orders/${selectedOrderForRequester._id}/change-requester`, {
-        newRequesterId: selectedNewRequester._id
-      });
+      await api.put(
+        `/orders/${selectedOrderForRequester._id}/change-requester`,
+        {
+          newRequesterId: selectedNewRequester._id,
+        }
+      );
       setChangeRequesterOpen(false);
       setNotification({
         message: "Requester changed successfully",
-        severity: "success"
+        severity: "success",
       });
       fetchOrders();
     } catch (err) {
       setNotification({
         message: err.response?.data?.message || "Failed to change requester",
-        severity: "error"
+        severity: "error",
       });
     }
   };
@@ -463,13 +467,13 @@ const OrdersPage = () => {
   // Autocomplete states for Create Order Dialog
   const [clientNetworkInput, setClientNetworkInput] = useState("");
   const [clientNetworkOpen, setClientNetworkOpen] = useState(false);
-  
+
   const [ourNetworkInput, setOurNetworkInput] = useState("");
   const [ourNetworkOpen, setOurNetworkOpen] = useState(false);
-  
+
   const [campaignInput, setCampaignInput] = useState("");
   const [campaignOpen, setCampaignOpen] = useState(false);
-  
+
   const [clientBrokersInput, setClientBrokersInput] = useState("");
   const [clientBrokersOpen, setClientBrokersOpen] = useState(false);
 
@@ -749,77 +753,88 @@ const OrdersPage = () => {
     setManualLeads((prev) => prev.filter((_, i) => i !== index));
   }, []);
 
-  const checkFulfillment = useCallback(async (data) => {
-    // Skip if manual mode or required fields missing
-    if (manualSelectionMode || !data) return;
-    
-    // Minimal validation to avoid spamming empty checks
-    const hasLeads = (data.ftd > 0 || data.filler > 0 || data.cold > 0);
-    if (!hasLeads) {
+  const checkFulfillment = useCallback(
+    async (data) => {
+      // Skip if manual mode or required fields missing
+      if (manualSelectionMode || !data) return;
+
+      // Minimal validation to avoid spamming empty checks
+      const hasLeads = data.ftd > 0 || data.filler > 0 || data.cold > 0;
+      if (!hasLeads) {
         setFulfillmentSummary(null);
         return;
-    }
+      }
 
-    setCheckingFulfillment(true);
-    try {
+      setCheckingFulfillment(true);
+      try {
         // Build agent assignments
         const agentAssignments = [];
         if (data.ftdAgents && data.ftdAgents.length > 0) {
-            data.ftdAgents.forEach((agentId, index) => {
-                if (agentId) agentAssignments.push({ leadType: "ftd", agentId, index });
-            });
+          data.ftdAgents.forEach((agentId, index) => {
+            if (agentId)
+              agentAssignments.push({ leadType: "ftd", agentId, index });
+          });
         }
         if (data.fillerAgents && data.fillerAgents.length > 0) {
-            data.fillerAgents.forEach((agentId, index) => {
-                if (agentId) agentAssignments.push({ leadType: "filler", agentId, index });
-            });
+          data.fillerAgents.forEach((agentId, index) => {
+            if (agentId)
+              agentAssignments.push({ leadType: "filler", agentId, index });
+          });
         }
 
         const checkData = {
-            requests: {
-                ftd: Number(data.ftd) || 0,
-                filler: Number(data.filler) || 0,
-                cold: Number(data.cold) || 0,
-            },
-            country: data.countryFilter,
-            gender: data.genderFilter,
-            selectedClientNetwork: data.selectedClientNetwork,
-            selectedClientBrokers: data.selectedClientBrokers,
-            agentFilter: data.agentFilter || null,
-            agentAssignments
+          requests: {
+            ftd: Number(data.ftd) || 0,
+            filler: Number(data.filler) || 0,
+            cold: Number(data.cold) || 0,
+          },
+          country: data.countryFilter,
+          gender: data.genderFilter,
+          selectedClientNetwork: data.selectedClientNetwork,
+          selectedClientBrokers: data.selectedClientBrokers,
+          agentFilter: data.agentFilter || null,
+          agentAssignments,
         };
 
         const response = await api.post("/orders/check-fulfillment", checkData);
         setFulfillmentSummary(response.data.summary);
-    } catch (err) {
+      } catch (err) {
         console.error("Fulfillment check failed:", err);
         // Don't show error notification for background check
-    } finally {
+      } finally {
         setCheckingFulfillment(false);
-    }
-  }, [manualSelectionMode]);
+      }
+    },
+    [manualSelectionMode]
+  );
 
   // Watch specific fields to avoid infinite loop with full form watch
   const watchedValues = watch([
-      "ftd", "filler", "cold", 
-      "countryFilter", "genderFilter", 
-      "selectedClientNetwork", "selectedClientBrokers", 
-      "agentFilter", "ftdAgents", "fillerAgents"
+    "ftd",
+    "filler",
+    "cold",
+    "countryFilter",
+    "genderFilter",
+    "selectedClientNetwork",
+    "selectedClientBrokers",
+    "agentFilter",
+    "ftdAgents",
+    "fillerAgents",
   ]);
-  
+
   // Create a stable object for debounce
   const stableWatchedValues = useMemo(() => {
     return {
-        ftd: watchedValues[0],
-        filler: watchedValues[1],
-        cold: watchedValues[2],
-        countryFilter: watchedValues[3],
-        genderFilter: watchedValues[4],
-        selectedClientNetwork: watchedValues[5],
-        selectedClientBrokers: watchedValues[6],
-        agentFilter: watchedValues[7],
-        ftdAgents: watchedValues[8],
-        fillerAgents: watchedValues[9],
+      ftd: watchedValues[0],
+      filler: watchedValues[1],
+      cold: watchedValues[2],
+      countryFilter: watchedValues[3],
+      genderFilter: watchedValues[4],
+      selectedClientNetwork: watchedValues[5],
+      selectedClientBrokers: watchedValues[6],
+      agentFilter: watchedValues[7],
+      ftdAgents: watchedValues[8],
+      fillerAgents: watchedValues[9],
     };
   }, [
     watchedValues[0],
@@ -831,18 +846,23 @@ const OrdersPage = () => {
     watchedValues[6],
     watchedValues[7],
     watchedValues[8],
-    watchedValues[9]
+    watchedValues[9],
   ]);
 
   const debouncedFormValues = useDebounce(stableWatchedValues, 1000);
 
   useEffect(() => {
     if (createDialogOpen && !manualSelectionMode) {
-        checkFulfillment(debouncedFormValues);
+      checkFulfillment(debouncedFormValues);
     } else {
-        setFulfillmentSummary(null);
+      setFulfillmentSummary(null);
     }
-  }, [debouncedFormValues, createDialogOpen, manualSelectionMode, checkFulfillment]);
+  }, [
+    debouncedFormValues,
+    createDialogOpen,
+    manualSelectionMode,
+    checkFulfillment,
+  ]);
 
   const onSubmitOrder = useCallback(
     async (data) => {
@@ -1978,7 +1998,7 @@ const OrdersPage = () => {
     </Typography>
   );
   return (
-    <Box sx={{ p: isSmallScreen ? 2 : 3, pt: 0, mt: -2 }}>
+    <Box>
       {notification.message && (
         <Collapse in={!!notification.message}>
           <Alert
@@ -2227,34 +2247,43 @@ const OrdersPage = () => {
                           align="center"
                           sx={{ display: { xs: "none", md: "table-cell" } }}
                         >
-                          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5 }}>
+                          <Box
+                            sx={{
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              gap: 0.5,
+                            }}
+                          >
                             <Typography variant="body2">
                               {order.requester?.fullName}
                             </Typography>
-                             {user?.role === 'admin' && order.requester?.role !== 'admin' && (
-                              <IconButton
-                                size="small"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleOpenChangeRequester(order);
-                                }}
-                                title="Change Requester"
-                              >
-                                <EditIcon sx={{ fontSize: 14 }} />
-                              </IconButton>
-                            )}
-                             {user?.role === 'admin' && order.requesterHistory?.length > 0 && (
-                              <IconButton
-                                size="small"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleOpenRequesterHistory(order);
-                                }}
-                                title="Requester History"
-                              >
-                                <HistoryIcon sx={{ fontSize: 14 }} />
-                              </IconButton>
-                            )}
+                            {user?.role === "admin" &&
+                              order.requester?.role !== "admin" && (
+                                <IconButton
+                                  size="small"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenChangeRequester(order);
+                                  }}
+                                  title="Change Requester"
+                                >
+                                  <EditIcon sx={{ fontSize: 14 }} />
+                                </IconButton>
+                              )}
+                            {user?.role === "admin" &&
+                              order.requesterHistory?.length > 0 && (
+                                <IconButton
+                                  size="small"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenRequesterHistory(order);
+                                  }}
+                                  title="Requester History"
+                                >
+                                  <HistoryIcon sx={{ fontSize: 14 }} />
+                                </IconButton>
+                              )}
                           </Box>
                         </TableCell>
                         <TableCell align="center">
@@ -2932,13 +2961,20 @@ const OrdersPage = () => {
                                                 gap: 1,
                                               }}
                                             >
-                                              <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+                                              <Box
+                                                sx={{
+                                                  display: "flex",
+                                                  alignItems: "center",
+                                                  gap: 2,
+                                                }}
+                                              >
                                                 <Typography
                                                   variant="subtitle1"
                                                   sx={{ fontWeight: "bold" }}
                                                 >
                                                   Assigned Leads (
-                                                  {expandedDetails.leads.length})
+                                                  {expandedDetails.leads.length}
+                                                  )
                                                 </Typography>
                                                 <Button
                                                   variant="contained"
@@ -3453,15 +3489,22 @@ const OrdersPage = () => {
                         <Autocomplete
                           open={clientNetworkOpen}
                           onOpen={() => {
-                            if (clientNetworkInput.length > 0) setClientNetworkOpen(true);
+                            if (clientNetworkInput.length > 0)
+                              setClientNetworkOpen(true);
                           }}
                           onClose={() => setClientNetworkOpen(false)}
                           inputValue={clientNetworkInput}
                           onInputChange={(event, newInputValue, reason) => {
                             setClientNetworkInput(newInputValue);
-                            if (reason === 'input' && newInputValue.length > 0) {
+                            if (
+                              reason === "input" &&
+                              newInputValue.length > 0
+                            ) {
                               setClientNetworkOpen(true);
-                            } else if (reason === 'clear' || newInputValue.length === 0) {
+                            } else if (
+                              reason === "clear" ||
+                              newInputValue.length === 0
+                            ) {
                               setClientNetworkOpen(false);
                             }
                           }}
@@ -3545,15 +3588,19 @@ const OrdersPage = () => {
                       <Autocomplete
                         open={ourNetworkOpen}
                         onOpen={() => {
-                          if (ourNetworkInput.length > 0) setOurNetworkOpen(true);
+                          if (ourNetworkInput.length > 0)
+                            setOurNetworkOpen(true);
                         }}
                         onClose={() => setOurNetworkOpen(false)}
                         inputValue={ourNetworkInput}
                         onInputChange={(event, newInputValue, reason) => {
                           setOurNetworkInput(newInputValue);
-                          if (reason === 'input' && newInputValue.length > 0) {
+                          if (reason === "input" && newInputValue.length > 0) {
                             setOurNetworkOpen(true);
-                          } else if (reason === 'clear' || newInputValue.length === 0) {
+                          } else if (
+                            reason === "clear" ||
+                            newInputValue.length === 0
+                          ) {
                             setOurNetworkOpen(false);
                           }
                         }}
@@ -3634,9 +3681,12 @@ const OrdersPage = () => {
                         inputValue={campaignInput}
                         onInputChange={(event, newInputValue, reason) => {
                           setCampaignInput(newInputValue);
-                          if (reason === 'input' && newInputValue.length > 0) {
+                          if (reason === "input" && newInputValue.length > 0) {
                             setCampaignOpen(true);
-                          } else if (reason === 'clear' || newInputValue.length === 0) {
+                          } else if (
+                            reason === "clear" ||
+                            newInputValue.length === 0
+                          ) {
                             setCampaignOpen(false);
                           }
                         }}
@@ -3660,7 +3710,9 @@ const OrdersPage = () => {
                         renderOption={(props, option) => (
                           <li {...props} key={option._id}>
                             <Box>
-                              <Typography variant="body2">{option.name}</Typography>
+                              <Typography variant="body2">
+                                {option.name}
+                              </Typography>
                               {option.description && (
                                 <Typography
                                   variant="caption"
@@ -3701,7 +3753,7 @@ const OrdersPage = () => {
                   control={control}
                   render={({ field: { onChange, value } }) => {
                     const [suggestion, setSuggestion] = React.useState("");
-                    
+
                     const handleInputChange = (e) => {
                       const inputValue = e.target.value;
                       setClientBrokersInput(inputValue);
@@ -4178,75 +4230,141 @@ const OrdersPage = () => {
 
               {}
             </Grid>
-              {errors[""] && (
-                <Alert severity="error" sx={{ mt: 2 }}>
-                  {errors[""]?.message}
-                </Alert>
-              )}
-              
-              {/* Fulfillment Summary */}
-              {!manualSelectionMode && (
-                  <Box sx={{ mt: 2, p: 2, bgcolor: 'background.default', borderRadius: 1, border: '1px solid', borderColor: 'divider' }}>
-                      <Typography variant="subtitle2" gutterBottom display="flex" alignItems="center" gap={1}>
-                          Order Fulfillment Estimate
-                          {checkingFulfillment && <CircularProgress size={16} />}
-                      </Typography>
-                      
-                      {!checkingFulfillment && fulfillmentSummary ? (
-                          <>
-                              <Box display="flex" alignItems="center" gap={1} mb={1}>
-                                  <Chip 
-                                      label={fulfillmentSummary.status === 'fulfilled' ? 'Can be Fulfilled' : fulfillmentSummary.status === 'partial' ? 'Partially Fulfilled' : 'Not Fulfilled'} 
-                                      color={fulfillmentSummary.status === 'fulfilled' ? 'success' : fulfillmentSummary.status === 'partial' ? 'warning' : 'error'}
-                                      size="small"
-                                  />
-                                  <Typography variant="body2">{fulfillmentSummary.message}</Typography>
-                              </Box>
-                              
-                              {fulfillmentSummary.details && fulfillmentSummary.details.length > 0 && (
-                                  <Box mt={1}>
-                                      {fulfillmentSummary.details.map((detail, idx) => (
-                                          <Typography key={idx} variant="caption" display="block" color="text.secondary">
-                                              • {detail}
-                                          </Typography>
-                                      ))}
-                                  </Box>
-                              )}
-                              
-                              <Box mt={1} display="flex" gap={2}>
-                                  {Object.entries(fulfillmentSummary.breakdown || {}).map(([type, stats]) => (
-                                      stats.requested > 0 && (
-                                          <Box key={type}>
-                                              <Typography variant="caption" fontWeight="bold" display="block">
-                                                  {type.toUpperCase()}
-                                              </Typography>
-                                              <Typography variant="caption" color={stats.available < stats.requested ? 'error.main' : 'success.main'}>
-                                                  {stats.available} / {stats.requested}
-                                              </Typography>
-                                          </Box>
-                                      )
-                                  ))}
-                              </Box>
-                          </>
-                      ) : !checkingFulfillment && !fulfillmentSummary && (watch("ftd") > 0 || watch("filler") > 0 || watch("cold") > 0) ? (
-                           <Typography variant="caption" color="text.secondary">Enter lead details to see fulfillment estimate...</Typography>
-                      ) : (checkingFulfillment && fulfillmentSummary) ? (
-                         // Keep showing old summary while loading new one
-                         <Box sx={{ opacity: 0.5 }}>
-                              <Box display="flex" alignItems="center" gap={1} mb={1}>
-                                  <Chip 
-                                      label={fulfillmentSummary.status === 'fulfilled' ? 'Can be Fulfilled' : fulfillmentSummary.status === 'partial' ? 'Partially Fulfilled' : 'Not Fulfilled'} 
-                                      color={fulfillmentSummary.status === 'fulfilled' ? 'success' : fulfillmentSummary.status === 'partial' ? 'warning' : 'error'}
-                                      size="small"
-                                  />
-                                  <Typography variant="body2">{fulfillmentSummary.message}</Typography>
-                              </Box>
-                         </Box>
-                      ) : null}
-                  </Box>
-              )}
+            {errors[""] && (
+              <Alert severity="error" sx={{ mt: 2 }}>
+                {errors[""]?.message}
+              </Alert>
+            )}
 
-            </DialogContent>
+            {/* Fulfillment Summary */}
+            {!manualSelectionMode && (
+              <Box
+                sx={{
+                  mt: 2,
+                  p: 2,
+                  bgcolor: "background.default",
+                  borderRadius: 1,
+                  border: "1px solid",
+                  borderColor: "divider",
+                }}
+              >
+                <Typography
+                  variant="subtitle2"
+                  gutterBottom
+                  display="flex"
+                  alignItems="center"
+                  gap={1}
+                >
+                  Order Fulfillment Estimate
+                  {checkingFulfillment && <CircularProgress size={16} />}
+                </Typography>
+
+                {!checkingFulfillment && fulfillmentSummary ? (
+                  <>
+                    <Box display="flex" alignItems="center" gap={1} mb={1}>
+                      <Chip
+                        label={
+                          fulfillmentSummary.status === "fulfilled"
+                            ? "Can be Fulfilled"
+                            : fulfillmentSummary.status === "partial"
+                            ? "Partially Fulfilled"
+                            : "Not Fulfilled"
+                        }
+                        color={
+                          fulfillmentSummary.status === "fulfilled"
+                            ? "success"
+                            : fulfillmentSummary.status === "partial"
+                            ? "warning"
+                            : "error"
+                        }
+                        size="small"
+                      />
+                      <Typography variant="body2">
+                        {fulfillmentSummary.message}
+                      </Typography>
+                    </Box>
+
+                    {fulfillmentSummary.details &&
+                      fulfillmentSummary.details.length > 0 && (
+                        <Box mt={1}>
+                          {fulfillmentSummary.details.map((detail, idx) => (
+                            <Typography
+                              key={idx}
+                              variant="caption"
+                              display="block"
+                              color="text.secondary"
+                            >
+                              • {detail}
+                            </Typography>
+                          ))}
+                        </Box>
+                      )}
+
+                    <Box mt={1} display="flex" gap={2}>
+                      {Object.entries(fulfillmentSummary.breakdown || {}).map(
+                        ([type, stats]) =>
+                          stats.requested > 0 && (
+                            <Box key={type}>
+                              <Typography
+                                variant="caption"
+                                fontWeight="bold"
+                                display="block"
+                              >
+                                {type.toUpperCase()}
+                              </Typography>
+                              <Typography
+                                variant="caption"
+                                color={
+                                  stats.available < stats.requested
+                                    ? "error.main"
+                                    : "success.main"
+                                }
+                              >
+                                {stats.available} / {stats.requested}
+                              </Typography>
+                            </Box>
+                          )
+                      )}
+                    </Box>
+                  </>
+                ) : !checkingFulfillment &&
+                  !fulfillmentSummary &&
+                  (watch("ftd") > 0 ||
+                    watch("filler") > 0 ||
+                    watch("cold") > 0) ? (
+                  <Typography variant="caption" color="text.secondary">
+                    Enter lead details to see fulfillment estimate...
+                  </Typography>
+                ) : checkingFulfillment && fulfillmentSummary ? (
+                  // Keep showing old summary while loading new one
+                  <Box sx={{ opacity: 0.5 }}>
+                    <Box display="flex" alignItems="center" gap={1} mb={1}>
+                      <Chip
+                        label={
+                          fulfillmentSummary.status === "fulfilled"
+                            ? "Can be Fulfilled"
+                            : fulfillmentSummary.status === "partial"
+                            ? "Partially Fulfilled"
+                            : "Not Fulfilled"
+                        }
+                        color={
+                          fulfillmentSummary.status === "fulfilled"
+                            ? "success"
+                            : fulfillmentSummary.status === "partial"
+                            ? "warning"
+                            : "error"
+                        }
+                        size="small"
+                      />
+                      <Typography variant="body2">
+                        {fulfillmentSummary.message}
+                      </Typography>
+                    </Box>
+                  </Box>
+                ) : null}
+              </Box>
+            )}
+          </DialogContent>
           <DialogActions>
             <Button
               onClick={() => {
@@ -5014,7 +5132,15 @@ const OrdersPage = () => {
 };
 
 // Change Requester Dialog Component
-const ChangeRequesterDialog = ({ open, onClose, onSubmit, requesters, loading, selectedRequester, onSelectRequester }) => (
+const ChangeRequesterDialog = ({
+  open,
+  onClose,
+  onSubmit,
+  requesters,
+  loading,
+  selectedRequester,
+  onSelectRequester,
+}) => (
   <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
     <DialogTitle>Change Order Requester</DialogTitle>
     <DialogContent sx={{ pt: 2 }}>
@@ -5024,7 +5150,14 @@ const ChangeRequesterDialog = ({ open, onClose, onSubmit, requesters, loading, s
         loading={loading}
         value={selectedRequester}
         onChange={(event, newValue) => onSelectRequester(newValue)}
-        renderInput={(params) => <TextField {...params} label="Select New Requester" variant="outlined" margin="normal" />}
+        renderInput={(params) => (
+          <TextField
+            {...params}
+            label="Select New Requester"
+            variant="outlined"
+            margin="normal"
+          />
+        )}
         renderOption={(props, option) => (
           <li {...props}>
             <ListItemText primary={option.fullName} secondary={option.role} />
@@ -5032,12 +5165,17 @@ const ChangeRequesterDialog = ({ open, onClose, onSubmit, requesters, loading, s
         )}
       />
       <Alert severity="warning" sx={{ mt: 2 }}>
-        Changing the requester will relink all connections (leads, etc.) to the new requester.
+        Changing the requester will relink all connections (leads, etc.) to the
+        new requester.
       </Alert>
     </DialogContent>
     <DialogActions>
       <Button onClick={onClose}>Cancel</Button>
-      <Button onClick={onSubmit} variant="contained" disabled={!selectedRequester}>
+      <Button
+        onClick={onSubmit}
+        variant="contained"
+        disabled={!selectedRequester}
+      >
         Change Requester
       </Button>
     </DialogActions>
@@ -5063,17 +5201,27 @@ const RequesterHistoryDialog = ({ open, onClose, order }) => (
             <TableBody>
               {order.requesterHistory.map((history, index) => (
                 <TableRow key={index}>
-                  <TableCell>{history.previousRequester?.fullName || 'Unknown'}</TableCell>
-                  <TableCell>{history.newRequester?.fullName || 'Unknown'}</TableCell>
-                  <TableCell>{history.changedBy?.fullName || 'Unknown'}</TableCell>
-                  <TableCell>{new Date(history.changedAt).toLocaleString()}</TableCell>
+                  <TableCell>
+                    {history.previousRequester?.fullName || "Unknown"}
+                  </TableCell>
+                  <TableCell>
+                    {history.newRequester?.fullName || "Unknown"}
+                  </TableCell>
+                  <TableCell>
+                    {history.changedBy?.fullName || "Unknown"}
+                  </TableCell>
+                  <TableCell>
+                    {new Date(history.changedAt).toLocaleString()}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         </TableContainer>
       ) : (
-        <Typography color="textSecondary" align="center" sx={{ py: 3 }}>No history available.</Typography>
+        <Typography color="textSecondary" align="center" sx={{ py: 3 }}>
+          No history available.
+        </Typography>
       )}
     </DialogContent>
     <DialogActions>
