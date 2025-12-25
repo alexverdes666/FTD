@@ -3,8 +3,12 @@ const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 const axios = require("axios");
 const { getClientIP, isAdminIPAllowed } = require("../middleware/auth");
-const generateToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET, {
+const generateToken = (id, originalUserId = null) => {
+  const payload = { id };
+  if (originalUserId) {
+    payload.originalUserId = originalUserId;
+  }
+  return jwt.sign(payload, process.env.JWT_SECRET, {
     expiresIn: process.env.JWT_EXPIRE || "30d",
   });
 };
@@ -232,7 +236,10 @@ exports.changePassword = async (req, res, next) => {
 // Get related accounts for the same person (for account switching)
 exports.getRelatedAccounts = async (req, res, next) => {
   try {
-    const currentUser = await User.findById(req.user.id).populate({
+    // Determine the original authenticated user (if currently impersonating)
+    const rootUserId = req.user.originalUserId || req.user.id;
+    
+    const currentUser = await User.findById(rootUserId).populate({
       path: "linkedAccounts",
       select: "fullName email role permissions isActive status",
       match: { isActive: true, status: "approved" },
@@ -280,21 +287,29 @@ exports.getRelatedAccounts = async (req, res, next) => {
         email: user.email,
         role: user.role,
         permissions: user.permissions,
-        isCurrentAccount: user._id.toString() === currentUser._id.toString(),
+        isCurrentAccount: user._id.toString() === req.user.id.toString(), // Check against actual current user (impersonated or real)
       }));
 
-    // Ensure current user is in the list if not already there
-    const currentUserInList = allAccounts.find((acc) => acc.isCurrentAccount);
-    if (!currentUserInList) {
+    // Ensure root user is in the list if not already there
+    // If I am impersonating B, and A is the root, A should be in the list.
+    // If I am A (root), A should be in the list.
+    const rootUserInList = allAccounts.find((acc) => acc.id.toString() === rootUserId.toString());
+    if (!rootUserInList) {
       allAccounts.unshift({
         id: currentUser._id,
         fullName: currentUser.fullName,
         email: currentUser.email,
         role: currentUser.role,
         permissions: currentUser.permissions,
-        isCurrentAccount: true,
+        isCurrentAccount: currentUser._id.toString() === req.user.id.toString(),
       });
+    } else {
+       // If root user IS in the list (because of bidirectional linking), make sure isCurrentAccount is correct
+       // It might be false if I am impersonating B.
+       // The map above handles isCurrentAccount based on req.user.id, so we are good.
     }
+
+    console.log("Returning accounts:", allAccounts.length);
 
     console.log("Returning accounts:", allAccounts.length);
 
@@ -477,7 +492,11 @@ exports.verify2FAAndLogin = async (req, res, next) => {
 exports.switchAccount = async (req, res, next) => {
   try {
     const { accountId } = req.body;
-    const currentUser = await User.findById(req.user.id);
+    
+    // Identify the original authenticated user (source of truth for permissions)
+    const rootUserId = req.user.originalUserId || req.user.id;
+    
+    const currentUser = await User.findById(rootUserId);
 
     if (!currentUser) {
       return res.status(404).json({
@@ -494,15 +513,19 @@ exports.switchAccount = async (req, res, next) => {
       });
     }
 
-    // Verify that the target account is in the current user's linked accounts
-    const currentUserWithLinked = await User.findById(req.user.id);
+    // Verify that the target account is in the ROOT user's linked accounts
+    // We check against rootUserId, not the potentially impersonated req.user.id
+    const currentUserWithLinked = await User.findById(rootUserId);
     const isLinkedAccount =
       currentUserWithLinked.linkedAccounts &&
       currentUserWithLinked.linkedAccounts.some(
         (linkedId) => linkedId.toString() === accountId
       );
 
-    if (!isLinkedAccount) {
+    // Also allow switching back to the root user itself
+    const isSwitchingToRoot = accountId === rootUserId.toString();
+
+    if (!isLinkedAccount && !isSwitchingToRoot) {
       return res.status(403).json({
         success: false,
         message:
@@ -531,8 +554,11 @@ exports.switchAccount = async (req, res, next) => {
       }
     }
 
-    // Generate new token for the target account
-    const token = generateToken(targetUser._id);
+    // Generate new token for the target account, preserving the original user ID
+    // If we are switching back to root, we don't need to store originalUserId anymore (or we can, but it's redundant)
+    // Actually, it's cleaner to keep it null if we are the root user.
+    const newOriginalUserId = isSwitchingToRoot ? null : rootUserId;
+    const token = generateToken(targetUser._id, newOriginalUserId);
 
     let agentPerformanceData = null;
     if (targetUser.role === "agent" && targetUser.fullName) {
