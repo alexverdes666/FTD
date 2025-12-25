@@ -41,6 +41,7 @@ import {
   Link,
   Tooltip,
   DialogContentText,
+  Menu,
 } from "@mui/material";
 import {
   ExpandMore as ExpandMoreIcon,
@@ -67,6 +68,7 @@ import {
   WhatsApp as WhatsAppIcon,
   Videocam as VideocamIcon,
   PlayArrow as PlayArrowIcon,
+  MoreVert as MoreVertIcon,
 } from "@mui/icons-material";
 import AddLeadForm from "../components/AddLeadForm";
 import DocumentPreview from "../components/DocumentPreview";
@@ -2158,8 +2160,9 @@ const LeadsPage = () => {
                       backgroundColor: "background.paper",
                       fontSize: "0.8125rem",
                       py: 0.5,
-                      px: 1,
+                      px: 0.5,
                       textAlign: "center",
+                      maxWidth: "150px"
                     }}
                   >
                     Name
@@ -2171,9 +2174,9 @@ const LeadsPage = () => {
                         backgroundColor: "background.paper",
                         fontSize: "0.8125rem",
                         py: 0.5,
-                        px: 1,
-                        textAlign: "center",
-                      }}
+                      px: 0.5,
+                      textAlign: "center",
+                    }}
                     >
                       Type
                     </TableCell>
@@ -2185,8 +2188,9 @@ const LeadsPage = () => {
                         backgroundColor: "background.paper",
                         fontSize: "0.8125rem",
                         py: 0.5,
-                        px: 1,
+                        px: 0.5,
                         textAlign: "center",
+                        maxWidth: "250px"
                       }}
                     >
                       Contact
@@ -2198,7 +2202,7 @@ const LeadsPage = () => {
                       backgroundColor: "background.paper",
                       fontSize: "0.8125rem",
                       py: 0.5,
-                      px: 1,
+                      px: 0.5,
                       textAlign: "center",
                     }}
                   >
@@ -2211,9 +2215,9 @@ const LeadsPage = () => {
                         backgroundColor: "background.paper",
                         fontSize: "0.8125rem",
                         py: 0.5,
-                        px: 1,
-                        textAlign: "center",
-                      }}
+                      px: 0.5,
+                      textAlign: "center",
+                    }}
                     >
                       Type
                     </TableCell>
@@ -2225,9 +2229,9 @@ const LeadsPage = () => {
                         backgroundColor: "background.paper",
                         fontSize: "0.8125rem",
                         py: 0.5,
-                        px: 1,
-                        textAlign: "center",
-                      }}
+                      px: 0.5,
+                      textAlign: "center",
+                    }}
                     >
                       Gender
                     </TableCell>
@@ -2239,9 +2243,9 @@ const LeadsPage = () => {
                         backgroundColor: "background.paper",
                         fontSize: "0.8125rem",
                         py: 0.5,
-                        px: 1,
-                        textAlign: "center",
-                      }}
+                      px: 0.5,
+                      textAlign: "center",
+                    }}
                     >
                       Assigned To
                     </TableCell>
@@ -2252,7 +2256,7 @@ const LeadsPage = () => {
                       backgroundColor: "background.paper",
                       fontSize: "0.8125rem",
                       py: 0.5,
-                      px: 1,
+                      px: 0.5,
                       textAlign: "center",
                     }}
                   >
@@ -2264,7 +2268,7 @@ const LeadsPage = () => {
                       backgroundColor: "background.paper",
                       fontSize: "0.8125rem",
                       py: 0.5,
-                      px: 1,
+                      px: 0.5,
                       textAlign: "center",
                     }}
                   >
@@ -2275,7 +2279,7 @@ const LeadsPage = () => {
                       backgroundColor: "background.paper",
                       fontSize: "0.8125rem",
                       py: 0.5,
-                      px: 1,
+                      px: 0.5,
                       textAlign: "center",
                     }}
                   >
@@ -3194,6 +3198,17 @@ const LeadRow = React.memo(
 
       return false;
     })();
+    const [anchorEl, setAnchorEl] = useState(null);
+    const open = Boolean(anchorEl);
+    const handleMenuClick = (event) => {
+      event.stopPropagation();
+      setAnchorEl(event.currentTarget);
+    };
+    const handleMenuClose = (event) => {
+      if (event) event.stopPropagation();
+      setAnchorEl(null);
+    };
+
     const handleRowClick = (event) => {
       if (
         event.target.closest(
@@ -3207,7 +3222,7 @@ const LeadRow = React.memo(
     const cellSx = {
       borderRight: "1px solid rgba(224, 224, 224, 1)",
       py: 0.25,
-      px: 1,
+      px: 0.5,
       fontSize: "0.8125rem",
       textAlign: "center",
     };
@@ -3244,7 +3259,7 @@ const LeadRow = React.memo(
             </Tooltip>
           </TableCell>
         )}
-        <TableCell sx={{ ...cellSx, textAlign: "left" }}>
+        <TableCell sx={{ ...cellSx, textAlign: "left", maxWidth: "150px" }}>
           <Stack direction="row" spacing={1} alignItems="center">
             <Avatar
               sx={{
@@ -3286,21 +3301,25 @@ const LeadRow = React.memo(
             }}
           />
         </TableCell>
-        <TableCell sx={cellSx}>
+        <TableCell sx={{ ...cellSx, maxWidth: "250px" }}>
           <Stack spacing={0} alignItems="center">
-            <Typography
-              variant="caption"
-              sx={{
-                display: "flex",
-                alignItems: "center",
-                gap: 0.5,
-                fontSize: "0.75rem",
-                lineHeight: 1.2,
-              }}
-              noWrap
-            >
-              📧 {lead.newEmail}
-            </Typography>
+            <Tooltip title={lead.newEmail} placement="top" arrow>
+              <Typography
+                variant="caption"
+                sx={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 0.5,
+                  fontSize: "0.75rem",
+                  lineHeight: 1.2,
+                  width: "100%",
+                  justifyContent: "center",
+                }}
+                noWrap
+              >
+                📧 {lead.newEmail}
+              </Typography>
+            </Tooltip>
             <Typography
               variant="caption"
               sx={{
@@ -3330,12 +3349,26 @@ const LeadRow = React.memo(
             }}
           />
         </TableCell>
-        <TableCell sx={cellSx}>{lead.gender || "N/A"}</TableCell>
+        <TableCell sx={cellSx}>
+          {!lead.gender || lead.gender === "not_defined" ? (
+            <Typography sx={{ fontWeight: "bold", fontSize: "1.2rem" }}>
+              -
+            </Typography>
+          ) : (
+            lead.gender
+          )}
+        </TableCell>
         {isAdminOrManager && (
           <TableCell sx={cellSx}>
-            <Typography variant="caption" noWrap>
-              {lead.assignedAgent ? lead.assignedAgent.fullName : "Unassigned"}
-            </Typography>
+            {lead.assignedAgent ? (
+              <Typography variant="caption" noWrap>
+                {lead.assignedAgent.fullName}
+              </Typography>
+            ) : (
+              <Typography sx={{ fontWeight: "bold", fontSize: "1.2rem" }}>
+                -
+              </Typography>
+            )}
           </TableCell>
         )}
         <TableCell sx={cellSx}>
@@ -3367,40 +3400,6 @@ const LeadRow = React.memo(
         </TableCell>
         <TableCell sx={{ ...cellSx, py: 0 }}>
           <Stack direction="row" spacing={0.5} alignItems="center" justifyContent="center">
-            <FormControl size="small" sx={{ minWidth: 85 }}>
-              <Select
-                value={lead.status}
-                onChange={(e) => onUpdateStatus(lead._id, e.target.value)}
-                size="small"
-                disabled={!isOwner}
-                sx={{
-                  height: 24,
-                  "& .MuiSelect-select": { py: 0, px: 1, fontSize: "0.75rem", display: 'flex', alignItems: 'center' },
-                }}
-                onClick={(e) => e.stopPropagation()}
-              >
-                {Object.values(LEAD_STATUSES).map((status) => (
-                  <MenuItem
-                    key={status}
-                    value={status}
-                    sx={{ fontSize: "0.875rem" }}
-                  >
-                    {status.charAt(0).toUpperCase() + status.slice(1)}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-            {}
-            <IconButton
-              size="small"
-              onClick={(e) => {
-                e.stopPropagation();
-                onComment(lead);
-              }}
-              disabled={!isOwner}
-            >
-              <CommentIcon sx={{ fontSize: "1.25rem" }} />
-            </IconButton>
             {(user?.role === ROLES.ADMIN || isLeadManager) && (
               <IconButton
                 size="small"
@@ -3413,22 +3412,76 @@ const LeadRow = React.memo(
                 <EditIcon sx={{ fontSize: "1.25rem" }} />
               </IconButton>
             )}
-            {canDeleteLeads && (
-              <IconButton
-                size="small"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (
-                    window.confirm("Are you sure you want to delete this lead?")
-                  ) {
-                    onDeleteLead(lead._id);
-                  }
+
+            <IconButton size="small" onClick={handleMenuClick}>
+              <MoreVertIcon sx={{ fontSize: "1.25rem" }} />
+            </IconButton>
+
+            <Menu
+              anchorEl={anchorEl}
+              open={open}
+              onClose={handleMenuClose}
+              onClick={(e) => e.stopPropagation()}
+              transformOrigin={{ horizontal: "right", vertical: "top" }}
+              anchorOrigin={{ horizontal: "right", vertical: "bottom" }}
+            >
+              <MenuItem
+                disabled
+                sx={{
+                  opacity: 1,
+                  fontWeight: "bold",
+                  fontSize: "0.75rem",
+                  py: 0.5,
                 }}
-                color="error"
               >
-                <DeleteIcon sx={{ fontSize: "1.25rem" }} />
-              </IconButton>
-            )}
+                Status
+              </MenuItem>
+              {Object.values(LEAD_STATUSES).map((status) => (
+                <MenuItem
+                  key={status}
+                  onClick={(e) => {
+                    handleMenuClose(e);
+                    onUpdateStatus(lead._id, status);
+                  }}
+                  selected={lead.status === status}
+                  disabled={!isOwner}
+                  dense
+                  sx={{ pl: 4 }}
+                >
+                  {status.charAt(0).toUpperCase() + status.slice(1)}
+                </MenuItem>
+              ))}
+
+              <Divider />
+
+              <MenuItem
+                onClick={(e) => {
+                  handleMenuClose(e);
+                  onComment(lead);
+                }}
+                disabled={!isOwner}
+                dense
+              >
+                <CommentIcon fontSize="small" sx={{ mr: 1 }} /> Add Comment
+              </MenuItem>
+
+              {canDeleteLeads && (
+                <MenuItem
+                  onClick={(e) => {
+                    handleMenuClose(e);
+                    if (
+                      window.confirm("Are you sure you want to delete this lead?")
+                    ) {
+                      onDeleteLead(lead._id);
+                    }
+                  }}
+                  sx={{ color: "error.main" }}
+                  dense
+                >
+                  <DeleteIcon fontSize="small" sx={{ mr: 1 }} /> Delete Lead
+                </MenuItem>
+              )}
+            </Menu>
           </Stack>
         </TableCell>
       </TableRow>
