@@ -316,14 +316,6 @@ const LeadDetails = React.memo(({ lead }) => (
             </Box>
             <Box>
               <Typography variant="caption" color="text.secondary">
-                Lead ID
-              </Typography>
-              <Typography variant="body2" fontFamily="monospace">
-                {lead._id}
-              </Typography>
-            </Box>
-            <Box>
-              <Typography variant="caption" color="text.secondary">
                 Created
               </Typography>
               <Typography variant="body2">
@@ -2132,7 +2124,8 @@ const LeadsPage = () => {
                       sx={{
                         borderRight: "1px solid rgba(224, 224, 224, 1)",
                         backgroundColor: "background.paper",
-                        fontSize: "0.875rem",
+                        fontSize: "0.8125rem",
+                        py: 0.5,
                       }}
                     >
                       <Checkbox
@@ -2143,6 +2136,8 @@ const LeadsPage = () => {
                           leads.length > 0 && numSelected === leads.length
                         }
                         onChange={handleSelectAll}
+                        size="small"
+                        sx={{ p: 0.5 }}
                       />
                     </TableCell>
                   )}
@@ -2152,7 +2147,8 @@ const LeadsPage = () => {
                       sx={{
                         borderRight: "1px solid rgba(224, 224, 224, 1)",
                         backgroundColor: "background.paper",
-                        fontSize: "0.875rem",
+                        fontSize: "0.8125rem",
+                        py: 0.5,
                       }}
                     />
                   )}
@@ -2160,8 +2156,10 @@ const LeadsPage = () => {
                     sx={{
                       borderRight: "1px solid rgba(224, 224, 224, 1)",
                       backgroundColor: "background.paper",
-                      fontSize: "0.875rem",
-                      py: 1,
+                      fontSize: "0.8125rem",
+                      py: 0.5,
+                      px: 1,
+                      textAlign: "center",
                     }}
                   >
                     Name
@@ -2171,8 +2169,10 @@ const LeadsPage = () => {
                       sx={{
                         borderRight: "1px solid rgba(224, 224, 224, 1)",
                         backgroundColor: "background.paper",
-                        fontSize: "0.875rem",
-                        py: 1,
+                        fontSize: "0.8125rem",
+                        py: 0.5,
+                        px: 1,
+                        textAlign: "center",
                       }}
                     >
                       Type
@@ -2183,8 +2183,10 @@ const LeadsPage = () => {
                       sx={{
                         borderRight: "1px solid rgba(224, 224, 224, 1)",
                         backgroundColor: "background.paper",
-                        fontSize: "0.875rem",
-                        py: 1,
+                        fontSize: "0.8125rem",
+                        py: 0.5,
+                        px: 1,
+                        textAlign: "center",
                       }}
                     >
                       Contact
@@ -2194,8 +2196,10 @@ const LeadsPage = () => {
                     sx={{
                       borderRight: "1px solid rgba(224, 224, 224, 1)",
                       backgroundColor: "background.paper",
-                      fontSize: "0.875rem",
-                      py: 1,
+                      fontSize: "0.8125rem",
+                      py: 0.5,
+                      px: 1,
+                      textAlign: "center",
                     }}
                   >
                     Country
@@ -2205,8 +2209,10 @@ const LeadsPage = () => {
                       sx={{
                         borderRight: "1px solid rgba(224, 224, 224, 1)",
                         backgroundColor: "background.paper",
-                        fontSize: "0.875rem",
-                        py: 1,
+                        fontSize: "0.8125rem",
+                        py: 0.5,
+                        px: 1,
+                        textAlign: "center",
                       }}
                     >
                       Type
@@ -2217,8 +2223,10 @@ const LeadsPage = () => {
                       sx={{
                         borderRight: "1px solid rgba(224, 224, 224, 1)",
                         backgroundColor: "background.paper",
-                        fontSize: "0.875rem",
-                        py: 1,
+                        fontSize: "0.8125rem",
+                        py: 0.5,
+                        px: 1,
+                        textAlign: "center",
                       }}
                     >
                       Gender
@@ -2229,8 +2237,10 @@ const LeadsPage = () => {
                       sx={{
                         borderRight: "1px solid rgba(224, 224, 224, 1)",
                         backgroundColor: "background.paper",
-                        fontSize: "0.875rem",
-                        py: 1,
+                        fontSize: "0.8125rem",
+                        py: 0.5,
+                        px: 1,
+                        textAlign: "center",
                       }}
                     >
                       Assigned To
@@ -2240,8 +2250,10 @@ const LeadsPage = () => {
                     sx={{
                       borderRight: "1px solid rgba(224, 224, 224, 1)",
                       backgroundColor: "background.paper",
-                      fontSize: "0.875rem",
-                      py: 1,
+                      fontSize: "0.8125rem",
+                      py: 0.5,
+                      px: 1,
+                      textAlign: "center",
                     }}
                   >
                     Status
@@ -2250,8 +2262,10 @@ const LeadsPage = () => {
                     sx={{
                       borderRight: "1px solid rgba(224, 224, 224, 1)",
                       backgroundColor: "background.paper",
-                      fontSize: "0.875rem",
-                      py: 1,
+                      fontSize: "0.8125rem",
+                      py: 0.5,
+                      px: 1,
+                      textAlign: "center",
                     }}
                   >
                     Cooldown
@@ -2259,8 +2273,10 @@ const LeadsPage = () => {
                   <TableCell
                     sx={{
                       backgroundColor: "background.paper",
-                      fontSize: "0.875rem",
-                      py: 1,
+                      fontSize: "0.8125rem",
+                      py: 0.5,
+                      px: 1,
+                      textAlign: "center",
                     }}
                   >
                     Actions
@@ -2835,7 +2851,7 @@ const GroupedLeadRow = React.memo(
     return (
       <React.Fragment key={leadId}>
         <TableRow hover sx={{ '& > *': { borderBottom: 'unset' } }}>
-          <TableCell padding="checkbox">
+          <TableCell padding="checkbox" align="center">
             <IconButton
               size="small"
               onClick={() => onToggleExpansion(leadId)}
@@ -2854,15 +2870,15 @@ const GroupedLeadRow = React.memo(
               </Typography>
             </Box>
           </TableCell>
-          <TableCell>{leadInfo?.country || 'N/A'}</TableCell>
-          <TableCell>
+          <TableCell align="center">{leadInfo?.country || 'N/A'}</TableCell>
+          <TableCell align="center">
             <Chip
               label={leadInfo?.leadType?.toUpperCase() || "UNKNOWN"}
               color={getLeadTypeColor(leadInfo?.leadType)}
               size="small"
             />
           </TableCell>
-          <TableCell>
+          <TableCell align="center">
             <Chip
               label={
                 leadInfo?.status
@@ -2873,7 +2889,7 @@ const GroupedLeadRow = React.memo(
               size="small"
             />
           </TableCell>
-          <TableCell>
+          <TableCell align="center">
             <Chip
               label={`${orders.length} Order${orders.length !== 1 ? 's' : ''}`}
               color="primary"
@@ -2881,7 +2897,7 @@ const GroupedLeadRow = React.memo(
               variant="outlined"
             />
           </TableCell>
-          <TableCell>
+          <TableCell align="center">
             <Typography variant="caption">
               {leadInfo?.assignedAgentAt
                 ? new Date(leadInfo.assignedAgentAt).toLocaleDateString()
@@ -2890,7 +2906,7 @@ const GroupedLeadRow = React.memo(
                   : 'N/A'}
             </Typography>
           </TableCell>
-          <TableCell>
+          <TableCell align="center">
             {/* Comments now handled per order in expanded view */}
           </TableCell>
         </TableRow>
@@ -2898,7 +2914,7 @@ const GroupedLeadRow = React.memo(
           <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={9}>
             <Collapse in={isExpanded} timeout="auto" unmountOnExit>
               <Box sx={{ margin: 2 }}>
-                <Typography variant="h6" gutterBottom component="div">
+                <Typography variant="h6" gutterBottom component="div" align="center">
                   Orders ({orders.length})
                 </Typography>
                 {orders.length === 0 ? (
@@ -2907,18 +2923,18 @@ const GroupedLeadRow = React.memo(
                   <Table size="small">
                     <TableHead>
                       <TableRow>
-                        <TableCell>Order Date</TableCell>
-                        <TableCell>Ordered As</TableCell>
-                        <TableCell>Call Number</TableCell>
-                        <TableCell>Verified</TableCell>
-                        <TableCell>Client Brokers</TableCell>
-                        <TableCell>Comments</TableCell>
+                        <TableCell align="center">Order Date</TableCell>
+                        <TableCell align="center">Ordered As</TableCell>
+                        <TableCell align="center">Call Number</TableCell>
+                        <TableCell align="center">Verified</TableCell>
+                        <TableCell align="center">Client Brokers</TableCell>
+                        <TableCell align="center">Comments</TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
                       {orders.map((order) => (
                         <TableRow key={order.orderId}>
-                          <TableCell>
+                          <TableCell align="center">
                             <Typography variant="body2">
                               {new Date(order.orderCreatedAt).toLocaleDateString()}
                             </Typography>
@@ -2926,15 +2942,15 @@ const GroupedLeadRow = React.memo(
                               {new Date(order.orderCreatedAt).toLocaleTimeString()}
                             </Typography>
                           </TableCell>
-                          <TableCell>
+                          <TableCell align="center">
                             <Chip
                               label={order.orderedAs?.toUpperCase() || 'N/A'}
                               size="small"
                               color={order.orderedAs === 'ftd' ? 'success' : order.orderedAs === 'filler' ? 'info' : 'default'}
                             />
                           </TableCell>
-                          <TableCell>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <TableCell align="center">
+                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
                               {order.orderedAs === 'filler' ? (
                                 <Tooltip title="Call changes are not available for leads ordered as filler">
                                   <span>
@@ -2981,8 +2997,8 @@ const GroupedLeadRow = React.memo(
                               )}
                             </Box>
                           </TableCell>
-                          <TableCell>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <TableCell align="center">
+                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
                               {order.orderedAs === 'filler' ? (
                                 <Tooltip title="Verification changes are not available for leads ordered as filler">
                                   <span>
@@ -3021,9 +3037,9 @@ const GroupedLeadRow = React.memo(
                               )}
                             </Box>
                           </TableCell>
-                          <TableCell>
+                          <TableCell align="center">
                             {order.clientBrokers && order.clientBrokers.length > 0 ? (
-                              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, justifyContent: 'center' }}>
                                 {order.clientBrokers.map((broker, idx) => {
                                   // Determine chip color based on injection status
                                   const getStatusColor = (status) => {
@@ -3055,8 +3071,8 @@ const GroupedLeadRow = React.memo(
                               </Typography>
                             )}
                           </TableCell>
-                          <TableCell>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <TableCell align="center">
+                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
                               <Tooltip title="Add Comment">
                                 <IconButton
                                   size="small"
@@ -3077,7 +3093,7 @@ const GroupedLeadRow = React.memo(
                             </Box>
                             {order.comments && order.comments.length > 0 && (
                               <Box sx={{ mt: 1, maxHeight: 200, overflowY: 'auto' }}>
-                                <Stack spacing={1}>
+                                <Stack spacing={1} alignItems="center">
                                   {order.comments.map((comment, idx) => (
                                     <Paper
                                       key={idx}
@@ -3086,6 +3102,8 @@ const GroupedLeadRow = React.memo(
                                         p: 1,
                                         bgcolor: 'action.hover',
                                         borderRadius: 1,
+                                        width: '100%',
+                                        textAlign: 'left'
                                       }}
                                     >
                                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
@@ -3188,8 +3206,10 @@ const LeadRow = React.memo(
     };
     const cellSx = {
       borderRight: "1px solid rgba(224, 224, 224, 1)",
-      py: 0.5,
-      fontSize: "0.875rem",
+      py: 0.25,
+      px: 1,
+      fontSize: "0.8125rem",
+      textAlign: "center",
     };
     return (
       <TableRow
@@ -3203,10 +3223,11 @@ const LeadRow = React.memo(
               theme.palette.grey.main
             }`,
           cursor: "pointer",
+          height: "40px",
         }}
       >
         {canAssignLeads && (
-          <TableCell padding="checkbox" sx={cellSx}>
+          <TableCell padding="checkbox" sx={{ ...cellSx, py: 0 }}>
             <Tooltip 
               title={lead.leadType === 'cold' ? "Cold leads cannot be assigned to agents" : ""}
               arrow
@@ -3216,17 +3237,19 @@ const LeadRow = React.memo(
                   checked={selectedLeads.has(lead._id)}
                   onChange={onSelectLead(lead._id)}
                   disabled={lead.leadType === 'cold'}
+                  size="small"
+                  sx={{ p: 0.5 }}
                 />
               </span>
             </Tooltip>
           </TableCell>
         )}
-        <TableCell sx={cellSx}>
+        <TableCell sx={{ ...cellSx, textAlign: "left" }}>
           <Stack direction="row" spacing={1} alignItems="center">
             <Avatar
               sx={{
-                width: 24,
-                height: 24,
+                width: 20,
+                height: 20,
                 fontSize: "0.75rem",
                 bgcolor: (theme) =>
                   theme.palette[getLeadTypeColor(getDisplayLeadType(lead))]?.light,
@@ -3241,22 +3264,14 @@ const LeadRow = React.memo(
                 .charAt(0)
                 .toUpperCase()}
             </Avatar>
-            <Box>
-              <Typography
-                variant="body2"
-                sx={{ fontWeight: "bold", fontSize: "0.875rem" }}
-              >
-                {lead.fullName ||
-                  `${lead.firstName} ${lead.lastName || ""}`.trim()}
-              </Typography>
-              <Typography
-                variant="caption"
-                color="text.secondary"
-                sx={{ fontSize: "0.75rem" }}
-              >
-                ID: {lead._id.slice(-8)}
-              </Typography>
-            </Box>
+            <Typography
+              variant="body2"
+              sx={{ fontWeight: "medium", fontSize: "0.8125rem" }}
+              noWrap
+            >
+              {lead.fullName ||
+                `${lead.firstName} ${lead.lastName || ""}`.trim()}
+            </Typography>
           </Stack>
         </TableCell>
         <TableCell sx={cellSx}>
@@ -3267,31 +3282,35 @@ const LeadRow = React.memo(
             sx={{
               fontWeight: "medium",
               height: "20px",
-              "& .MuiChip-label": { fontSize: "0.75rem", px: 1 },
+              "& .MuiChip-label": { fontSize: "0.7rem", px: 1 },
             }}
           />
         </TableCell>
         <TableCell sx={cellSx}>
-          <Stack spacing={0.5}>
+          <Stack spacing={0} alignItems="center">
             <Typography
-              variant="body2"
+              variant="caption"
               sx={{
                 display: "flex",
                 alignItems: "center",
-                gap: 1,
-                fontSize: "0.875rem",
+                gap: 0.5,
+                fontSize: "0.75rem",
+                lineHeight: 1.2,
               }}
+              noWrap
             >
               📧 {lead.newEmail}
             </Typography>
             <Typography
-              variant="body2"
+              variant="caption"
               sx={{
                 display: "flex",
                 alignItems: "center",
-                gap: 1,
-                fontSize: "0.875rem",
+                gap: 0.5,
+                fontSize: "0.75rem",
+                lineHeight: 1.2,
               }}
+              noWrap
             >
               📱{" "}
               {lead.prefix && lead.newPhone
@@ -3307,14 +3326,16 @@ const LeadRow = React.memo(
             variant="outlined"
             sx={{
               height: "20px",
-              "& .MuiChip-label": { fontSize: "0.75rem", px: 1 },
+              "& .MuiChip-label": { fontSize: "0.7rem", px: 1 },
             }}
           />
         </TableCell>
         <TableCell sx={cellSx}>{lead.gender || "N/A"}</TableCell>
         {isAdminOrManager && (
           <TableCell sx={cellSx}>
-            {lead.assignedAgent ? lead.assignedAgent.fullName : "Unassigned"}
+            <Typography variant="caption" noWrap>
+              {lead.assignedAgent ? lead.assignedAgent.fullName : "Unassigned"}
+            </Typography>
           </TableCell>
         )}
         <TableCell sx={cellSx}>
@@ -3324,7 +3345,7 @@ const LeadRow = React.memo(
             size="small"
             sx={{
               height: "20px",
-              "& .MuiChip-label": { fontSize: "0.75rem", px: 1 },
+              "& .MuiChip-label": { fontSize: "0.7rem", px: 1 },
             }}
           />
         </TableCell>
@@ -3338,22 +3359,23 @@ const LeadRow = React.memo(
                 size="small"
                 sx={{
                   height: "20px",
-                  "& .MuiChip-label": { fontSize: "0.75rem", px: 1 },
+                  "& .MuiChip-label": { fontSize: "0.7rem", px: 1 },
                 }}
               />
             );
           })()}
         </TableCell>
-        <TableCell sx={{ py: 0.5 }}>
-          <Stack direction="row" spacing={0.5}>
-            <FormControl size="small" sx={{ minWidth: 100 }}>
+        <TableCell sx={{ ...cellSx, py: 0 }}>
+          <Stack direction="row" spacing={0.5} alignItems="center" justifyContent="center">
+            <FormControl size="small" sx={{ minWidth: 85 }}>
               <Select
                 value={lead.status}
                 onChange={(e) => onUpdateStatus(lead._id, e.target.value)}
                 size="small"
                 disabled={!isOwner}
                 sx={{
-                  "& .MuiSelect-select": { py: 0.5, fontSize: "0.875rem" },
+                  height: 24,
+                  "& .MuiSelect-select": { py: 0, px: 1, fontSize: "0.75rem", display: 'flex', alignItems: 'center' },
                 }}
                 onClick={(e) => e.stopPropagation()}
               >

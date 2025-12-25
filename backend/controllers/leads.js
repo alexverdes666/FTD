@@ -11,6 +11,7 @@ const ClientBroker = require("../models/ClientBroker");
 const Campaign = require("../models/Campaign");
 const CallChangeRequest = require("../models/CallChangeRequest");
 const sessionSecurity = require("../utils/sessionSecurity");
+const LeadService = require("../services/leadService");
 exports.getLeads = async (req, res, next) => {
   try {
     const {
@@ -947,121 +948,45 @@ exports.assignLeads = async (req, res, next) => {
     }
     const { leadIds, agentId } = req.body;
 
-    // Verify agent exists and is valid
-    const agent = await User.findById(agentId);
-    if (
-      !agent ||
-      agent.role !== "agent" ||
-      !agent.isActive ||
-      agent.status !== "approved"
-    ) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid or inactive/unapproved agent selected.",
+    try {
+      const result = await LeadService.assignLeadsToAgent(
+        leadIds,
+        agentId,
+        req.user
+      );
+
+      res.status(200).json({
+        success: true,
+        message: `${result.assignedCount} leads assigned successfully`,
+        data: result,
       });
-    }
-
-    // Check if any of the leads are cold leads (cold leads cannot be assigned)
-    const leadsToCheck = await Lead.find({ _id: { $in: leadIds } });
-    const coldLeads = leadsToCheck.filter((lead) => lead.leadType === "cold");
-    if (coldLeads.length > 0) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Cold leads cannot be assigned to agents. Only FTD and Filler leads can be assigned.",
-        data: {
-          coldLeadIds: coldLeads.map((lead) => lead._id),
-          coldLeadCount: coldLeads.length,
-        },
-      });
-    }
-
-    let updateCondition = {
-      _id: { $in: leadIds },
-      leadType: { $in: ["ftd", "filler"] }, // Only allow FTD and Filler to be assigned
-    };
-
-    // For affiliate managers, ensure they can only assign leads from their orders
-    if (req.user.role === "affiliate_manager") {
-      // First get leads with order information to validate access
-      const accessibleLeads = await Lead.aggregate([
-        {
-          $match: {
-            _id: { $in: leadIds.map((id) => new mongoose.Types.ObjectId(id)) },
-          },
-        },
-        {
-          $lookup: {
-            from: "orders",
-            localField: "orderId",
-            foreignField: "_id",
-            as: "orderDetails",
-          },
-        },
-        {
-          $addFields: {
-            order: { $arrayElemAt: ["$orderDetails", 0] },
-          },
-        },
-        {
-          $match: {
-            $or: [
-              { "order.requester": new mongoose.Types.ObjectId(req.user.id) },
-              { assignedAgent: new mongoose.Types.ObjectId(req.user.id) },
-            ],
-          },
-        },
-        { $project: { _id: 1 } },
-      ]);
-
-      const accessibleLeadIds = accessibleLeads.map((lead) => lead._id);
-      updateCondition._id = { $in: accessibleLeadIds };
-
-      if (accessibleLeadIds.length !== leadIds.length) {
-        return res.status(403).json({
+    } catch (error) {
+      // Handle specific error cases
+      if (error.message.includes("Cold leads cannot be assigned")) {
+        const leadsToCheck = await Lead.find({ _id: { $in: leadIds } });
+        const coldLeads = leadsToCheck.filter(
+          (lead) => lead.leadType === "cold"
+        );
+        return res.status(400).json({
           success: false,
-          message: "Access denied. You can only assign leads from your orders.",
+          message: error.message,
+          data: {
+            coldLeadIds: coldLeads.map((lead) => lead._id),
+            coldLeadCount: coldLeads.length,
+          },
         });
       }
+      if (
+        error.message.includes("Invalid or inactive") ||
+        error.message.includes("Access denied")
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: error.message,
+        });
+      }
+      throw error;
     }
-    console.log("Assigning leads with:", {
-      updateCondition,
-      agentId,
-      agentName: agent.fullName,
-      agentCode: agent.fourDigitCode,
-    });
-    const result = await Lead.updateMany(updateCondition, {
-      $set: {
-        assignedAgent: agentId,
-        assignedAgentAt: new Date(),
-      },
-    });
-    console.log("Assignment result:", result);
-    const verifyLeads = await Lead.find({ _id: { $in: leadIds } })
-      .populate("assignedAgent", "fullName fourDigitCode email")
-      .limit(3);
-    console.log(
-      "Verification - First few assigned leads:",
-      verifyLeads.map((lead) => ({
-        id: lead._id,
-        assignedAgent: lead.assignedAgent
-          ? {
-              id: lead.assignedAgent._id,
-              fullName: lead.assignedAgent.fullName,
-              fourDigitCode: lead.assignedAgent.fourDigitCode,
-            }
-          : null,
-      }))
-    );
-    res.status(200).json({
-      success: true,
-      message: `${result.modifiedCount} leads assigned successfully`,
-      data: {
-        assignedCount: result.modifiedCount,
-        agentName: agent.fullName,
-        agentCode: agent.fourDigitCode,
-      },
-    });
   } catch (error) {
     next(error);
   }
@@ -1077,68 +1002,24 @@ exports.unassignLeads = async (req, res, next) => {
       });
     }
     const { leadIds } = req.body;
-    let updateCondition = {
-      _id: { $in: leadIds },
-      assignedAgent: { $ne: null },
-    };
 
-    // For affiliate managers, ensure they can only unassign leads from their orders
-    if (req.user.role === "affiliate_manager") {
-      // First get leads with order information to validate access
-      const accessibleLeads = await Lead.aggregate([
-        {
-          $match: {
-            _id: { $in: leadIds.map((id) => new mongoose.Types.ObjectId(id)) },
-          },
-        },
-        {
-          $lookup: {
-            from: "orders",
-            localField: "orderId",
-            foreignField: "_id",
-            as: "orderDetails",
-          },
-        },
-        {
-          $addFields: {
-            order: { $arrayElemAt: ["$orderDetails", 0] },
-          },
-        },
-        {
-          $match: {
-            $or: [
-              { "order.requester": new mongoose.Types.ObjectId(req.user.id) },
-              { assignedAgent: new mongoose.Types.ObjectId(req.user.id) },
-            ],
-          },
-        },
-        { $project: { _id: 1 } },
-      ]);
+    try {
+      const result = await LeadService.unassignLeads(leadIds, req.user);
 
-      const accessibleLeadIds = accessibleLeads.map((lead) => lead._id);
-      updateCondition._id = { $in: accessibleLeadIds };
-
-      if (accessibleLeadIds.length !== leadIds.length) {
+      res.status(200).json({
+        success: true,
+        message: `${result.unassignedCount} leads unassigned successfully`,
+        data: result,
+      });
+    } catch (error) {
+      if (error.message.includes("Access denied")) {
         return res.status(403).json({
           success: false,
-          message:
-            "Access denied. You can only unassign leads from your orders.",
+          message: error.message,
         });
       }
+      throw error;
     }
-    const result = await Lead.updateMany(updateCondition, {
-      $set: {
-        assignedAgent: null,
-        assignedAgentAt: null,
-      },
-    });
-    res.status(200).json({
-      success: true,
-      message: `${result.modifiedCount} leads unassigned successfully`,
-      data: {
-        unassignedCount: result.modifiedCount,
-      },
-    });
   } catch (error) {
     next(error);
   }
@@ -1156,22 +1037,7 @@ exports.assignClientBrokerToLead = async (req, res, next) => {
     const leadId = req.params.id;
     const { clientBrokerId, campaign, intermediaryClientNetwork, domain } =
       req.body;
-    const [lead, clientBroker] = await Promise.all([
-      Lead.findById(leadId),
-      ClientBroker.findById(clientBrokerId),
-    ]);
-    if (!lead) {
-      return res.status(404).json({
-        success: false,
-        message: "Lead not found",
-      });
-    }
-    if (!clientBroker) {
-      return res.status(404).json({
-        success: false,
-        message: "Client broker not found",
-      });
-    }
+
     if (
       !["admin", "affiliate_manager", "lead_manager"].includes(req.user.role)
     ) {
@@ -1181,43 +1047,37 @@ exports.assignClientBrokerToLead = async (req, res, next) => {
           "Access denied. Only admins, affiliate managers, and lead managers can assign client brokers.",
       });
     }
-    if (!clientBroker.isActive) {
-      return res.status(400).json({
-        success: false,
-        message: "Cannot assign lead to inactive client broker",
+
+    try {
+      const updatedLead = await LeadService.assignClientBrokerToLead(
+        leadId,
+        clientBrokerId,
+        req.user.id,
+        null, // orderId - will use lead.orderId in service
+        intermediaryClientNetwork,
+        domain,
+        campaign
+      );
+
+      res.status(200).json({
+        success: true,
+        message: `Successfully assigned client broker to lead "${updatedLead.firstName} ${updatedLead.lastName}"`,
+        data: updatedLead,
       });
+    } catch (error) {
+      if (
+        error.message.includes("not found") ||
+        error.message.includes("inactive") ||
+        error.message.includes("already assigned")
+      ) {
+        const statusCode = error.message.includes("not found") ? 404 : 400;
+        return res.status(statusCode).json({
+          success: false,
+          message: error.message,
+        });
+      }
+      throw error;
     }
-    if (lead.isAssignedToClientBroker(clientBrokerId)) {
-      return res.status(400).json({
-        success: false,
-        message: `Lead "${lead.firstName} ${lead.lastName}" is already assigned to client broker "${clientBroker.name}".`,
-        data: {
-          leadId: lead._id,
-          leadName: `${lead.firstName} ${lead.lastName}`,
-          clientBroker: clientBroker.name,
-        },
-      });
-    }
-    lead.assignClientBroker(
-      clientBrokerId,
-      req.user.id,
-      lead.orderId,
-      intermediaryClientNetwork,
-      domain
-    );
-    if (campaign !== undefined) {
-      lead.campaign = campaign;
-    }
-    clientBroker.assignLead(leadId);
-    await Promise.all([lead.save(), clientBroker.save()]);
-    const updatedLead = await Lead.findById(leadId)
-      .populate("assignedAgent", "fullName fourDigitCode email")
-      .populate("assignedClientBrokers", "name domain");
-    res.status(200).json({
-      success: true,
-      message: `Successfully assigned client broker "${clientBroker.name}" to lead "${lead.firstName} ${lead.lastName}"`,
-      data: updatedLead,
-    });
   } catch (error) {
     console.error("Assign client broker to lead error:", error);
     next(error);
