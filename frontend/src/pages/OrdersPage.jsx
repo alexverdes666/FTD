@@ -470,8 +470,6 @@ const OrdersPage = () => {
   const [campaignInput, setCampaignInput] = useState("");
   const [campaignOpen, setCampaignOpen] = useState(false);
   
-  const [clientBrokersInput, setClientBrokersInput] = useState("");
-  const [clientBrokersOpen, setClientBrokersOpen] = useState(false);
 
   const fetchOrders = useCallback(async () => {
     setLoading(true);
@@ -3699,141 +3697,60 @@ const OrdersPage = () => {
                 <Controller
                   name="selectedClientBrokers"
                   control={control}
-                  render={({ field: { onChange, value } }) => {
-                    const [suggestion, setSuggestion] = React.useState("");
-                    
-                    const handleInputChange = (e) => {
-                      const inputValue = e.target.value;
-                      setClientBrokersInput(inputValue);
-
-                      if (!inputValue.trim()) {
-                        setSuggestion("");
-                        return;
+                  render={({ field: { onChange, value } }) => (
+                    <Autocomplete
+                      multiple
+                      options={clientBrokers}
+                      getOptionLabel={(option) => option.name}
+                      value={clientBrokers.filter((broker) =>
+                        (value || []).includes(broker._id)
+                      )}
+                      isOptionEqualToValue={(option, value) =>
+                        option._id === value._id
                       }
-
-                      // Find matching broker (starts with input)
-                      const lowerValue = inputValue.toLowerCase();
-                      const match = clientBrokers.find(
-                        (broker) =>
-                          broker.name.toLowerCase().startsWith(lowerValue) &&
-                          !(value || []).includes(broker._id) // Don't suggest already selected
-                      );
-
-                      if (match) {
-                        setSuggestion(match.name);
-                      } else {
-                        setSuggestion("");
-                      }
-                    };
-
-                    const handleKeyDown = (e) => {
-                      if (
-                        e.key === "Tab" &&
-                        suggestion &&
-                        suggestion !== clientBrokersInput
-                      ) {
-                        e.preventDefault();
-                        const match = clientBrokers.find(
-                          (broker) =>
-                            broker.name.toLowerCase() ===
-                            suggestion.toLowerCase()
-                        );
-                        if (match) {
-                          const currentValues = value || [];
-                          onChange([...currentValues, match._id]);
-                          setClientBrokersInput("");
-                          setSuggestion("");
-                          setFilteredAgents([]);
-                          setUnassignedLeadsStats({ ftd: null, filler: null });
-                        }
-                      } else if (e.key === "Escape") {
-                        setSuggestion("");
-                        setClientBrokersInput("");
-                      }
-                    };
-
-                    return (
-                      <Box>
-                        <Box sx={{ position: "relative" }}>
-                          <TextField
+                      onChange={(event, newValue) => {
+                        onChange(newValue.map((broker) => broker._id));
+                        setFilteredAgents([]);
+                        setUnassignedLeadsStats({ ftd: null, filler: null });
+                      }}
+                      loading={loadingClientBrokers}
+                      disabled={loadingClientBrokers}
+                      renderInput={(params) => (
+                        <TextField
+                          {...params}
+                          size="small"
+                          fullWidth
+                          label="Client Brokers (optional - to exclude leads)"
+                          placeholder="Type to search..."
+                          error={!!errors.selectedClientBrokers}
+                          helperText={
+                            errors.selectedClientBrokers?.message ||
+                            "Select brokers to exclude their leads from the order."
+                          }
+                          InputProps={{
+                            ...params.InputProps,
+                            endAdornment: (
+                              <React.Fragment>
+                                {loadingClientBrokers ? (
+                                  <CircularProgress color="inherit" size={20} />
+                                ) : null}
+                                {params.InputProps.endAdornment}
+                              </React.Fragment>
+                            ),
+                          }}
+                        />
+                      )}
+                      renderTags={(tagValue, getTagProps) =>
+                        tagValue.map((option, index) => (
+                          <Chip
+                            label={option.name}
+                            {...getTagProps({ index })}
                             size="small"
-                            fullWidth
-                            label="Client Brokers (optional - to exclude leads)"
-                            placeholder="Type to search and press Tab..."
-                            value={clientBrokersInput}
-                            onChange={handleInputChange}
-                            onKeyDown={handleKeyDown}
-                            disabled={loadingClientBrokers}
-                            error={!!errors.selectedClientBrokers}
-                            helperText={
-                              errors.selectedClientBrokers?.message ||
-                              "Type to search, press Tab to add. These leads will be excluded from the order."
-                            }
-                            InputProps={{
-                              endAdornment: loadingClientBrokers ? (
-                                <CircularProgress color="inherit" size={20} />
-                              ) : null,
-                            }}
-                            autoComplete="off"
                           />
-                          {suggestion &&
-                            suggestion !== clientBrokersInput &&
-                            clientBrokersInput && (
-                              <Box
-                                sx={{
-                                  position: "absolute",
-                                  left: 14,
-                                  top: "19px",
-                                  pointerEvents: "none",
-                                  fontSize: "0.875rem",
-                                  color: "text.disabled",
-                                }}
-                              >
-                                <span style={{ visibility: "hidden" }}>
-                                  {clientBrokersInput}
-                                </span>
-                                <span style={{ color: "#999" }}>
-                                  {suggestion.slice(clientBrokersInput.length)}
-                                </span>
-                              </Box>
-                            )}
-                        </Box>
-
-                        {/* Selected Brokers */}
-                        {value && value.length > 0 && (
-                          <Box
-                            sx={{
-                              mt: 1,
-                              display: "flex",
-                              gap: 0.5,
-                              flexWrap: "wrap",
-                            }}
-                          >
-                            {clientBrokers
-                              .filter((broker) => value.includes(broker._id))
-                              .map((broker) => (
-                                <Chip
-                                  key={broker._id}
-                                  label={broker.name}
-                                  size="small"
-                                  onDelete={() => {
-                                    onChange(
-                                      value.filter((id) => id !== broker._id)
-                                    );
-                                    setFilteredAgents([]);
-                                    setUnassignedLeadsStats({
-                                      ftd: null,
-                                      filler: null,
-                                    });
-                                  }}
-                                  sx={{ height: "auto" }}
-                                />
-                              ))}
-                          </Box>
-                        )}
-                      </Box>
-                    );
-                  }}
+                        ))
+                      }
+                    />
+                  )}
                 />
               </Grid>
 
