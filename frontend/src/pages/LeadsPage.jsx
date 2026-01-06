@@ -41,6 +41,9 @@ import {
   Link,
   Tooltip,
   DialogContentText,
+  Menu,
+  ListItemIcon,
+  ListItemText,
 } from "@mui/material";
 import {
   ExpandMore as ExpandMoreIcon,
@@ -67,6 +70,11 @@ import {
   WhatsApp as WhatsAppIcon,
   Videocam as VideocamIcon,
   PlayArrow as PlayArrowIcon,
+  MoreVert as MoreVertIcon,
+  CheckCircle as CheckCircleIcon,
+  Cancel as CancelIcon,
+  Phone as PhoneIcon,
+  ShoppingCart as ShoppingCartIcon,
 } from "@mui/icons-material";
 import AddLeadForm from "../components/AddLeadForm";
 import DocumentPreview from "../components/DocumentPreview";
@@ -2122,8 +2130,24 @@ const LeadsPage = () => {
       {}
       <Box sx={{ display: { xs: "none", md: "block" } }}>
         <Paper>
-          <TableContainer sx={{ maxHeight: "calc(100vh - 180px)" }}>
-            <Table stickyHeader size="small">
+          <TableContainer sx={{ 
+            maxHeight: "calc(100vh - 180px)",
+            overflowX: "auto",
+            '& .MuiTable-root': {
+              minWidth: 'auto',
+              tableLayout: 'auto'
+            }
+          }}>
+            <Table stickyHeader size="small" sx={{
+              '& .MuiTableCell-root': {
+                padding: '4px 8px',
+                fontSize: '0.8rem'
+              },
+              '& .MuiChip-root': {
+                height: '18px',
+                fontSize: '0.7rem'
+              }
+            }}>
               <TableHead>
                 <TableRow>
                   {!isAgent && canAssignLeads && (
@@ -2236,16 +2260,7 @@ const LeadsPage = () => {
                       Assigned To
                     </TableCell>
                   )}
-                  <TableCell
-                    sx={{
-                      borderRight: "1px solid rgba(224, 224, 224, 1)",
-                      backgroundColor: "background.paper",
-                      fontSize: "0.875rem",
-                      py: 1,
-                    }}
-                  >
-                    Status
-                  </TableCell>
+                  {/* Status column hidden but still searchable */}
                   <TableCell
                     sx={{
                       borderRight: "1px solid rgba(224, 224, 224, 1)",
@@ -2271,7 +2286,7 @@ const LeadsPage = () => {
                 {loading ? (
                   <TableRow>
                     <TableCell
-                      colSpan={isAgent ? 8 : (isAdminOrManager ? 11 : 10)}
+                      colSpan={isAgent ? 7 : (isAdminOrManager ? 10 : 9)}
                       align="center"
                     >
                       <CircularProgress />
@@ -2280,7 +2295,7 @@ const LeadsPage = () => {
                 ) : leads.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={isAgent ? 8 : (isAdminOrManager ? 11 : 10)}
+                      colSpan={isAgent ? 7 : (isAdminOrManager ? 10 : 9)}
                       align="center"
                     >
                       No leads found
@@ -2834,55 +2849,65 @@ const GroupedLeadRow = React.memo(
 
     return (
       <React.Fragment key={leadId}>
-        <TableRow hover sx={{ '& > *': { borderBottom: 'unset' } }}>
+        <TableRow hover sx={{ 
+          '& > *': { borderBottom: 'unset' },
+          '& .MuiTableCell-root': {
+            py: 0.25,
+            px: 1,
+            fontSize: '0.75rem'
+          }
+        }}>
           <TableCell padding="checkbox">
             <IconButton
               size="small"
               onClick={() => onToggleExpansion(leadId)}
+              sx={{ padding: '4px' }}
             >
-              {isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+              {isExpanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
             </IconButton>
           </TableCell>
           <TableCell>
             <Box>
-              <Typography variant="body2" fontWeight="medium">
+              <Typography variant="body2" fontWeight="medium" sx={{ fontSize: '0.8rem' }}>
                 {leadInfo?.prefix && `${leadInfo.prefix} `}
                 {leadInfo?.firstName || 'N/A'} {leadInfo?.lastName || ''}
               </Typography>
-              <Typography variant="caption" color="text.secondary">
+              <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>
                 {leadInfo?.newEmail || 'No email'}
               </Typography>
             </Box>
           </TableCell>
-          <TableCell>{leadInfo?.country || 'N/A'}</TableCell>
+          <TableCell>
+            <Typography variant="caption" sx={{ fontSize: '0.75rem' }}>
+              {leadInfo?.country || 'N/A'}
+            </Typography>
+          </TableCell>
           <TableCell>
             <Chip
               label={leadInfo?.leadType?.toUpperCase() || "UNKNOWN"}
               color={getLeadTypeColor(leadInfo?.leadType)}
               size="small"
+              sx={{
+                height: '18px',
+                '& .MuiChip-label': { fontSize: '0.65rem', px: 0.75 }
+              }}
             />
           </TableCell>
-          <TableCell>
-            <Chip
-              label={
-                leadInfo?.status
-                  ? leadInfo.status.charAt(0).toUpperCase() + leadInfo.status.slice(1)
-                  : "Unknown"
-              }
-              color={getStatusColor(leadInfo?.status)}
-              size="small"
-            />
-          </TableCell>
+          {/* Status column hidden but still searchable/filterable */}
           <TableCell>
             <Chip
               label={`${orders.length} Order${orders.length !== 1 ? 's' : ''}`}
               color="primary"
               size="small"
               variant="outlined"
+              sx={{
+                height: '18px',
+                '& .MuiChip-label': { fontSize: '0.65rem', px: 0.75 }
+              }}
             />
           </TableCell>
           <TableCell>
-            <Typography variant="caption">
+            <Typography variant="caption" sx={{ fontSize: '0.7rem' }}>
               {leadInfo?.assignedAgentAt
                 ? new Date(leadInfo.assignedAgentAt).toLocaleDateString()
                 : leadInfo?.createdAt 
@@ -2895,7 +2920,7 @@ const GroupedLeadRow = React.memo(
           </TableCell>
         </TableRow>
         <TableRow>
-          <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={9}>
+          <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={8}>
             <Collapse in={isExpanded} timeout="auto" unmountOnExit>
               <Box sx={{ margin: 2 }}>
                 <Typography variant="h6" gutterBottom component="div">
@@ -3140,6 +3165,19 @@ const LeadRow = React.memo(
     handleEditLead,
     updateCallNumber,
   }) => {
+    const [anchorEl, setAnchorEl] = useState(null);
+    const menuOpen = Boolean(anchorEl);
+    
+    const handleMenuOpen = (event) => {
+      event.stopPropagation();
+      setAnchorEl(event.currentTarget);
+    };
+    
+    const handleMenuClose = (event) => {
+      if (event) event.stopPropagation();
+      setAnchorEl(null);
+    };
+    
     // Helper function to check if two IDs match (handles different formats)
     const idsMatch = (id1, id2) => {
       if (!id1 || !id2) return false;
@@ -3188,7 +3226,8 @@ const LeadRow = React.memo(
     };
     const cellSx = {
       borderRight: "1px solid rgba(224, 224, 224, 1)",
-      py: 0.5,
+      py: 0.25,
+      px: 1,
       fontSize: "0.875rem",
     };
     return (
@@ -3222,11 +3261,11 @@ const LeadRow = React.memo(
           </TableCell>
         )}
         <TableCell sx={cellSx}>
-          <Stack direction="row" spacing={1} alignItems="center">
+          <Stack direction="row" spacing={0.5} alignItems="center">
             <Avatar
               sx={{
-                width: 24,
-                height: 24,
+                width: 28,
+                height: 28,
                 fontSize: "0.75rem",
                 bgcolor: (theme) =>
                   theme.palette[getLeadTypeColor(getDisplayLeadType(lead))]?.light,
@@ -3241,22 +3280,13 @@ const LeadRow = React.memo(
                 .charAt(0)
                 .toUpperCase()}
             </Avatar>
-            <Box>
-              <Typography
-                variant="body2"
-                sx={{ fontWeight: "bold", fontSize: "0.875rem" }}
-              >
-                {lead.fullName ||
-                  `${lead.firstName} ${lead.lastName || ""}`.trim()}
-              </Typography>
-              <Typography
-                variant="caption"
-                color="text.secondary"
-                sx={{ fontSize: "0.75rem" }}
-              >
-                ID: {lead._id.slice(-8)}
-              </Typography>
-            </Box>
+            <Typography
+              variant="body2"
+              sx={{ fontWeight: "medium", fontSize: "0.8rem" }}
+            >
+              {lead.fullName ||
+                `${lead.firstName} ${lead.lastName || ""}`.trim()}
+            </Typography>
           </Stack>
         </TableCell>
         <TableCell sx={cellSx}>
@@ -3266,20 +3296,20 @@ const LeadRow = React.memo(
             size="small"
             sx={{
               fontWeight: "medium",
-              height: "20px",
-              "& .MuiChip-label": { fontSize: "0.75rem", px: 1 },
+              height: "18px",
+              "& .MuiChip-label": { fontSize: "0.65rem", px: 0.75 },
             }}
           />
         </TableCell>
         <TableCell sx={cellSx}>
-          <Stack spacing={0.5}>
+          <Stack spacing={0.25}>
             <Typography
               variant="body2"
               sx={{
                 display: "flex",
                 alignItems: "center",
-                gap: 1,
-                fontSize: "0.875rem",
+                gap: 0.5,
+                fontSize: "0.75rem",
               }}
             >
               📧 {lead.newEmail}
@@ -3289,8 +3319,8 @@ const LeadRow = React.memo(
               sx={{
                 display: "flex",
                 alignItems: "center",
-                gap: 1,
-                fontSize: "0.875rem",
+                gap: 0.5,
+                fontSize: "0.75rem",
               }}
             >
               📱{" "}
@@ -3306,8 +3336,8 @@ const LeadRow = React.memo(
             size="small"
             variant="outlined"
             sx={{
-              height: "20px",
-              "& .MuiChip-label": { fontSize: "0.75rem", px: 1 },
+              height: "18px",
+              "& .MuiChip-label": { fontSize: "0.65rem", px: 0.75 },
             }}
           />
         </TableCell>
@@ -3317,17 +3347,7 @@ const LeadRow = React.memo(
             {lead.assignedAgent ? lead.assignedAgent.fullName : "Unassigned"}
           </TableCell>
         )}
-        <TableCell sx={cellSx}>
-          <Chip
-            label={lead.status.charAt(0).toUpperCase() + lead.status.slice(1)}
-            color={getStatusColor(lead.status)}
-            size="small"
-            sx={{
-              height: "20px",
-              "& .MuiChip-label": { fontSize: "0.75rem", px: 1 },
-            }}
-          />
-        </TableCell>
+        {/* Status column hidden but still filterable/searchable */}
         <TableCell sx={cellSx}>
           {(() => {
             const cooldown = getCooldownStatus(lead);
@@ -3337,48 +3357,15 @@ const LeadRow = React.memo(
                 color={cooldown.color}
                 size="small"
                 sx={{
-                  height: "20px",
-                  "& .MuiChip-label": { fontSize: "0.75rem", px: 1 },
+                  height: "18px",
+                  "& .MuiChip-label": { fontSize: "0.65rem", px: 0.75 },
                 }}
               />
             );
           })()}
         </TableCell>
-        <TableCell sx={{ py: 0.5 }}>
-          <Stack direction="row" spacing={0.5}>
-            <FormControl size="small" sx={{ minWidth: 100 }}>
-              <Select
-                value={lead.status}
-                onChange={(e) => onUpdateStatus(lead._id, e.target.value)}
-                size="small"
-                disabled={!isOwner}
-                sx={{
-                  "& .MuiSelect-select": { py: 0.5, fontSize: "0.875rem" },
-                }}
-                onClick={(e) => e.stopPropagation()}
-              >
-                {Object.values(LEAD_STATUSES).map((status) => (
-                  <MenuItem
-                    key={status}
-                    value={status}
-                    sx={{ fontSize: "0.875rem" }}
-                  >
-                    {status.charAt(0).toUpperCase() + status.slice(1)}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-            {}
-            <IconButton
-              size="small"
-              onClick={(e) => {
-                e.stopPropagation();
-                onComment(lead);
-              }}
-              disabled={!isOwner}
-            >
-              <CommentIcon sx={{ fontSize: "1.25rem" }} />
-            </IconButton>
+        <TableCell sx={{ py: 0.25, px: 0.5 }}>
+          <Stack direction="row" spacing={0.5} alignItems="center">
             {(user?.role === ROLES.ADMIN || isLeadManager) && (
               <IconButton
                 size="small"
@@ -3387,26 +3374,125 @@ const LeadRow = React.memo(
                   handleEditLead(lead);
                 }}
                 title="Edit Lead"
+                sx={{ padding: '4px' }}
               >
-                <EditIcon sx={{ fontSize: "1.25rem" }} />
+                <EditIcon sx={{ fontSize: "1rem" }} />
               </IconButton>
             )}
-            {canDeleteLeads && (
-              <IconButton
-                size="small"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (
-                    window.confirm("Are you sure you want to delete this lead?")
-                  ) {
-                    onDeleteLead(lead._id);
-                  }
-                }}
-                color="error"
-              >
-                <DeleteIcon sx={{ fontSize: "1.25rem" }} />
-              </IconButton>
-            )}
+            <IconButton
+              size="small"
+              onClick={handleMenuOpen}
+              disabled={!isOwner && !canDeleteLeads}
+              sx={{ padding: '4px' }}
+              title="More actions"
+            >
+              <MoreVertIcon sx={{ fontSize: "1rem" }} />
+            </IconButton>
+            <Menu
+              anchorEl={anchorEl}
+              open={menuOpen}
+              onClose={handleMenuClose}
+              onClick={(e) => e.stopPropagation()}
+              anchorOrigin={{
+                vertical: 'bottom',
+                horizontal: 'right',
+              }}
+              transformOrigin={{
+                vertical: 'top',
+                horizontal: 'right',
+              }}
+            >
+              {isOwner && (
+                <Box>
+                  <MenuItem
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onUpdateStatus(lead._id, LEAD_STATUSES.ACTIVE);
+                      handleMenuClose();
+                    }}
+                    sx={{ fontSize: '0.75rem', py: 0.75 }}
+                  >
+                    <ListItemIcon>
+                      <CheckCircleIcon fontSize="small" sx={{ color: 'success.main' }} />
+                    </ListItemIcon>
+                    <ListItemText primary="Active" />
+                  </MenuItem>
+                  <MenuItem
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onUpdateStatus(lead._id, LEAD_STATUSES.CONTACTED);
+                      handleMenuClose();
+                    }}
+                    sx={{ fontSize: '0.75rem', py: 0.75 }}
+                  >
+                    <ListItemIcon>
+                      <PhoneIcon fontSize="small" sx={{ color: 'info.main' }} />
+                    </ListItemIcon>
+                    <ListItemText primary="Contacted" />
+                  </MenuItem>
+                  <MenuItem
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onUpdateStatus(lead._id, LEAD_STATUSES.CONVERTED);
+                      handleMenuClose();
+                    }}
+                    sx={{ fontSize: '0.75rem', py: 0.75 }}
+                  >
+                    <ListItemIcon>
+                      <ShoppingCartIcon fontSize="small" sx={{ color: 'success.main' }} />
+                    </ListItemIcon>
+                    <ListItemText primary="Converted" />
+                  </MenuItem>
+                  <MenuItem
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onUpdateStatus(lead._id, LEAD_STATUSES.INACTIVE);
+                      handleMenuClose();
+                    }}
+                    sx={{ fontSize: '0.75rem', py: 0.75 }}
+                  >
+                    <ListItemIcon>
+                      <CancelIcon fontSize="small" sx={{ color: 'error.main' }} />
+                    </ListItemIcon>
+                    <ListItemText primary="Inactive" />
+                  </MenuItem>
+                  <Divider />
+                  <MenuItem
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onComment(lead);
+                      handleMenuClose();
+                    }}
+                    sx={{ fontSize: '0.75rem', py: 0.75 }}
+                  >
+                    <ListItemIcon>
+                      <CommentIcon fontSize="small" />
+                    </ListItemIcon>
+                    <ListItemText primary="Add Comment" />
+                  </MenuItem>
+                </Box>
+              )}
+              {canDeleteLeads && (
+                <Box>
+                  {isOwner && <Divider />}
+                  <MenuItem
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleMenuClose();
+                      if (window.confirm("Are you sure you want to delete this lead?")) {
+                        onDeleteLead(lead._id);
+                      }
+                    }}
+                    sx={{ fontSize: '0.75rem', py: 0.75, color: 'error.main' }}
+                  >
+                    <ListItemIcon>
+                      <DeleteIcon fontSize="small" color="error" />
+                    </ListItemIcon>
+                    <ListItemText primary="Delete" />
+                  </MenuItem>
+                </Box>
+              )}
+            </Menu>
           </Stack>
         </TableCell>
       </TableRow>
@@ -3429,6 +3515,19 @@ const LeadCard = React.memo(
     isLeadManager,
     handleEditLead,
   }) => {
+    const [anchorEl, setAnchorEl] = useState(null);
+    const menuOpen = Boolean(anchorEl);
+    
+    const handleMenuOpen = (event) => {
+      event.stopPropagation();
+      setAnchorEl(event.currentTarget);
+    };
+    
+    const handleMenuClose = (event) => {
+      if (event) event.stopPropagation();
+      setAnchorEl(null);
+    };
+    
     const handleCardClick = (event) => {
       if (
         event.target.closest(
@@ -3500,23 +3599,12 @@ const LeadCard = React.memo(
                     {lead.fullName ||
                       `${lead.firstName} ${lead.lastName || ""}`.trim()}
                   </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    ID: {lead._id.slice(-8)}
-                  </Typography>
                 </Box>
               </Stack>
               <Stack direction="row" spacing={1} alignItems="center">
                 <Chip
                   label={(getDisplayLeadType(lead) || "unknown").toUpperCase()}
                   color={getLeadTypeColor(getDisplayLeadType(lead))}
-                  size="small"
-                  sx={{ fontWeight: "medium" }}
-                />
-                <Chip
-                  label={
-                    lead.status.charAt(0).toUpperCase() + lead.status.slice(1)
-                  }
-                  color={getStatusColor(lead.status)}
                   size="small"
                   sx={{ fontWeight: "medium" }}
                 />
@@ -3527,91 +3615,144 @@ const LeadCard = React.memo(
             <Divider />
           </Grid>
           <Grid item xs={12}>
-            <FormControl size="small" fullWidth>
-              <InputLabel>Status</InputLabel>
-              <Select
-                value={lead.status}
-                label="Status"
-                onChange={(e) => onUpdateStatus(lead._id, e.target.value)}
+            <Stack direction="row" spacing={1} justifyContent="space-between" alignItems="center">
+              <Chip
+                label={lead.status.charAt(0).toUpperCase() + lead.status.slice(1)}
+                color={getStatusColor(lead.status)}
                 size="small"
-              >
-                {Object.values(LEAD_STATUSES).map((status) => (
-                  <MenuItem key={status} value={status}>
-                    {status.charAt(0).toUpperCase() + status.slice(1)}
+                sx={{ fontWeight: "medium" }}
+              />
+              <Stack direction="row" spacing={1}>
+                <IconButton
+                  size="small"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onToggleExpansion(lead._id);
+                  }}
+                  sx={{
+                    transform: expandedRows.has(lead._id)
+                      ? "rotate(180deg)"
+                      : "none",
+                  }}
+                >
+                  <ExpandMoreIcon />
+                </IconButton>
+                {(user?.role === ROLES.ADMIN || isLeadManager) && (
+                  <IconButton
+                    size="small"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleEditLead(lead);
+                    }}
+                    title="Edit Lead"
+                  >
+                    <EditIcon />
+                  </IconButton>
+                )}
+                <IconButton
+                  size="small"
+                  onClick={handleMenuOpen}
+                  title="More actions"
+                >
+                  <MoreVertIcon />
+                </IconButton>
+                <Menu
+                  anchorEl={anchorEl}
+                  open={menuOpen}
+                  onClose={handleMenuClose}
+                  onClick={(e) => e.stopPropagation()}
+                  anchorOrigin={{
+                    vertical: 'bottom',
+                    horizontal: 'right',
+                  }}
+                  transformOrigin={{
+                    vertical: 'top',
+                    horizontal: 'right',
+                  }}
+                >
+                  <MenuItem
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onUpdateStatus(lead._id, LEAD_STATUSES.ACTIVE);
+                      handleMenuClose();
+                    }}
+                  >
+                    <ListItemIcon>
+                      <CheckCircleIcon fontSize="small" sx={{ color: 'success.main' }} />
+                    </ListItemIcon>
+                    <ListItemText primary="Active" />
                   </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-          </Grid>
-          <Grid item xs={12}>
-            <Stack direction="row" spacing={1} justifyContent="flex-end">
-              <IconButton
-                size="small"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onToggleExpansion(lead._id);
-                }}
-                sx={{
-                  transform: expandedRows.has(lead._id)
-                    ? "rotate(180deg)"
-                    : "none",
-                }}
-              >
-                <ExpandMoreIcon />
-              </IconButton>
-              {}
-              <IconButton
-                size="small"
-                onClick={() => onComment(lead)}
-                sx={{ color: "info.main" }}
-              >
-                <CommentIcon />
-              </IconButton>
-              {(user?.role === ROLES.ADMIN || isLeadManager) && (
-                <IconButton
-                  size="small"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleEditLead(lead);
-                  }}
-                  title="Edit Lead"
-                >
-                  <EditIcon />
-                </IconButton>
-              )}
-              {canDeleteLeads && (
-                <IconButton
-                  size="small"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (
-                      window.confirm(
-                        "Are you sure you want to delete this lead?"
-                      )
-                    ) {
-                      onDeleteLead(lead._id);
-                    }
-                  }}
-                  color="error"
-                >
-                  <DeleteIcon />
-                </IconButton>
-              )}
-              {canAssignLeads && (
-                <Tooltip 
-                  title={lead.leadType === 'cold' ? "Cold leads cannot be assigned to agents" : ""}
-                  arrow
-                >
-                  <span>
-                    <Checkbox
-                      checked={selectedLeads.has(lead._id)}
-                      onChange={onSelectLead(lead._id)}
-                      size="small"
-                      disabled={lead.leadType === 'cold'}
-                    />
-                  </span>
-                </Tooltip>
-              )}
+                  <MenuItem
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onUpdateStatus(lead._id, LEAD_STATUSES.CONTACTED);
+                      handleMenuClose();
+                    }}
+                  >
+                    <ListItemIcon>
+                      <PhoneIcon fontSize="small" sx={{ color: 'info.main' }} />
+                    </ListItemIcon>
+                    <ListItemText primary="Contacted" />
+                  </MenuItem>
+                  <MenuItem
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onUpdateStatus(lead._id, LEAD_STATUSES.CONVERTED);
+                      handleMenuClose();
+                    }}
+                  >
+                    <ListItemIcon>
+                      <ShoppingCartIcon fontSize="small" sx={{ color: 'success.main' }} />
+                    </ListItemIcon>
+                    <ListItemText primary="Converted" />
+                  </MenuItem>
+                  <MenuItem
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onUpdateStatus(lead._id, LEAD_STATUSES.INACTIVE);
+                      handleMenuClose();
+                    }}
+                  >
+                    <ListItemIcon>
+                      <CancelIcon fontSize="small" sx={{ color: 'error.main' }} />
+                    </ListItemIcon>
+                    <ListItemText primary="Inactive" />
+                  </MenuItem>
+                  <Divider />
+                  <MenuItem
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onComment(lead);
+                      handleMenuClose();
+                    }}
+                  >
+                    <ListItemIcon>
+                      <CommentIcon fontSize="small" />
+                    </ListItemIcon>
+                    <ListItemText primary="Add Comment" />
+                  </MenuItem>
+                  {canDeleteLeads && (
+                    <Box>
+                      <Divider />
+                      <MenuItem
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleMenuClose();
+                          if (window.confirm("Are you sure you want to delete this lead?")) {
+                            onDeleteLead(lead._id);
+                          }
+                        }}
+                        sx={{ color: 'error.main' }}
+                      >
+                        <ListItemIcon>
+                          <DeleteIcon fontSize="small" color="error" />
+                        </ListItemIcon>
+                        <ListItemText primary="Delete" />
+                      </MenuItem>
+                    </Box>
+                  )}
+                </Menu>
+              </Stack>
             </Stack>
           </Grid>
           <Collapse in={expandedRows.has(lead._id)} sx={{ width: "100%" }}>

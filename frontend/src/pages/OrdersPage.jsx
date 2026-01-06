@@ -335,6 +335,7 @@ const OrdersPage = () => {
   const [leadsPreviewModal, setLeadsPreviewModal] = useState({
     open: false,
     leads: [],
+    orderId: null,
   });
 
   const {
@@ -1326,16 +1327,49 @@ const OrdersPage = () => {
     setShowLeadsSearch(false);
   }, []);
 
-  const handleOpenLeadsPreviewModal = useCallback((leads) => {
+  const handleOpenLeadsPreviewModal = useCallback((leads, orderId) => {
     setLeadsPreviewModal({
       open: true,
       leads: leads || [],
+      orderId: orderId,
     });
   }, []);
 
   const handleCloseLeadsPreviewModal = useCallback(() => {
-    setLeadsPreviewModal({ open: false, leads: [] });
+    setLeadsPreviewModal({ open: false, leads: [], orderId: null });
   }, []);
+
+  const handleCancelLead = async (leadId) => {
+    const orderId = leadsPreviewModal.orderId;
+    if (!orderId) return;
+
+    if (
+      !window.confirm(
+        "Are you sure you want to remove this lead from the order? It will be returned to the pool of available leads."
+      )
+    ) {
+      return;
+    }
+
+    try {
+      await api.delete(`/orders/${orderId}/leads/${leadId}`);
+      notificationService.success("Lead removed from order successfully");
+
+      // Update the local state to remove the lead from the modal
+      setLeadsPreviewModal((prev) => ({
+        ...prev,
+        leads: prev.leads.filter((lead) => lead._id !== leadId),
+      }));
+
+      // Refresh the orders list to reflect the changes (e.g. updated counts)
+      fetchOrders();
+    } catch (error) {
+      console.error("Error removing lead from order:", error);
+      notificationService.error(
+        error.response?.data?.message || "Failed to remove lead from order"
+      );
+    }
+  };
 
   // Filter leads based on search query (multiple fields)
   const filteredLeads = useMemo(() => {
@@ -1625,47 +1659,6 @@ const OrdersPage = () => {
     setFilters({ status: "", priority: "", startDate: "", endDate: "" });
     setPage(0);
   }, []);
-
-  const handleCancelLead = useCallback(
-    async (orderId, leadId, leadName) => {
-      try {
-        const confirmed = window.confirm(
-          `Are you sure you want to cancel lead "${leadName}" from this order? This will return the lead to the database as unused.`
-        );
-
-        if (!confirmed) return;
-
-        await api.delete(`/orders/${orderId}/leads/${leadId}`);
-        setNotification({
-          message: `Lead "${leadName}" has been cancelled from the order and returned to the database as unused`,
-          severity: "success",
-        });
-
-        // Refresh the expanded order data
-        if (expandedRowData[orderId]) {
-          try {
-            const response = await api.get(`/orders/${orderId}`);
-            setExpandedRowData((prev) => ({
-              ...prev,
-              [orderId]: response.data.data,
-            }));
-            // Also refresh refund assignment status
-            fetchRefundAssignmentStatus(orderId);
-          } catch (err) {
-            console.error("Failed to refresh order data:", err);
-          }
-        }
-
-        fetchOrders();
-      } catch (err) {
-        setNotification({
-          message: err.response?.data?.message || "Failed to cancel lead",
-          severity: "error",
-        });
-      }
-    },
-    [fetchOrders, expandedRowData]
-  );
 
   // Refunds Manager Assignment Handlers
   const handleOpenRefundsAssignment = useCallback((orderId) => {
@@ -2318,24 +2311,31 @@ const OrdersPage = () => {
                               alignItems: "center",
                               justifyContent: "center",
                               gap: 0.5,
+                              "&:hover .edit-requester-icon": {
+                                opacity: 1,
+                              },
                             }}
                           >
                             <Typography variant="body2">
                               {order.requester?.fullName}
                             </Typography>
-                            {user?.role === "admin" &&
-                              order.requester?.role !== "admin" && (
-                                <IconButton
-                                  size="small"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleOpenChangeRequester(order);
-                                  }}
-                                  title="Change Requester"
-                                >
-                                  <EditIcon sx={{ fontSize: 14 }} />
-                                </IconButton>
-                              )}
+                            {user?.role === "admin" && (
+                              <IconButton
+                                className="edit-requester-icon"
+                                size="small"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenChangeRequester(order);
+                                }}
+                                title="Change Requester"
+                                sx={{
+                                  opacity: 0,
+                                  transition: "opacity 0.2s",
+                                }}
+                              >
+                                <EditIcon sx={{ fontSize: 14 }} />
+                              </IconButton>
+                            )}
                             {user?.role === "admin" &&
                               order.requesterHistory?.length > 0 && (
                                 <IconButton
@@ -3059,7 +3059,8 @@ const OrdersPage = () => {
                                                   startIcon={<ViewIcon />}
                                                   onClick={() =>
                                                     handleOpenLeadsPreviewModal(
-                                                      expandedDetails.leads
+                                                      expandedDetails.leads,
+                                                      order._id
                                                     )
                                                   }
                                                 >
@@ -5353,12 +5354,22 @@ const OrdersPage = () => {
                   >
                     Client Broker
                   </TableCell>
+                  {user.role === "admin" && (
+                    <TableCell
+                      sx={{ fontWeight: "bold", backgroundColor: "grey.100" }}
+                    >
+                      Actions
+                    </TableCell>
+                  )}
                 </TableRow>
               </TableHead>
               <TableBody>
                 {leadsPreviewModal.leads.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={3} align="center">
+                    <TableCell
+                      colSpan={user.role === "admin" ? 4 : 3}
+                      align="center"
+                    >
                       <Typography color="text.secondary">
                         No leads found
                       </Typography>
@@ -5410,6 +5421,18 @@ const OrdersPage = () => {
                             lead.clientBroker ||
                             "-"}
                         </TableCell>
+                        {user.role === "admin" && (
+                          <TableCell>
+                            <IconButton
+                              size="small"
+                              color="error"
+                              onClick={() => handleCancelLead(lead._id)}
+                              title="Remove from order"
+                            >
+                              <DeleteIcon fontSize="small" />
+                            </IconButton>
+                          </TableCell>
+                        )}
                       </TableRow>
                     );
                   })

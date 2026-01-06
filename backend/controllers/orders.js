@@ -3659,11 +3659,10 @@ exports.cancelLeadFromOrder = async (req, res, next) => {
     const { orderId, leadId } = req.params;
 
     // Check user permissions
-    if (req.user.role !== "admin" && req.user.role !== "affiliate_manager") {
+    if (req.user.role !== "admin") {
       return res.status(403).json({
         success: false,
-        message:
-          "Access denied. Only admins and affiliate managers can cancel leads from orders.",
+        message: "Access denied. Only admins can cancel leads from orders.",
       });
     }
 
@@ -3674,17 +3673,6 @@ exports.cancelLeadFromOrder = async (req, res, next) => {
         success: false,
         message: "Order not found",
       });
-    }
-
-    // For affiliate managers, ensure they can only cancel leads from their orders
-    if (req.user.role === "affiliate_manager") {
-      if (order.requester.toString() !== req.user._id.toString()) {
-        return res.status(403).json({
-          success: false,
-          message:
-            "Access denied. You can only cancel leads from your own orders.",
-        });
-      }
     }
 
     // Find the lead
