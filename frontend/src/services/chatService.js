@@ -832,6 +832,23 @@ class ChatService {
     }
   }
 
+  // Search messages across all conversations (global keyword search)
+  async searchAllMessages(searchQuery, params = {}) {
+    try {
+      const { limit = 30 } = params;
+      const response = await api.get('/chat/messages/search', { 
+        params: {
+          query: searchQuery,
+          limit
+        }
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error searching all messages:', error);
+      throw error;
+    }
+  }
+
   // REACTION METHODS
 
   // Add a reaction to a message

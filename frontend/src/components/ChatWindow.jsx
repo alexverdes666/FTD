@@ -6,6 +6,7 @@ import {
   Typography,
   List,
   ListItem,
+  ListItemButton,
   ListItemText,
   ListItemAvatar,
   Avatar,
@@ -55,7 +56,8 @@ import {
   VolumeUp as VolumeUpIcon,
   VolumeOff as VolumeOffIcon,
   Fullscreen as FullscreenIcon,
-  FullscreenExit as FullscreenExitIcon
+  FullscreenExit as FullscreenExitIcon,
+  AddReaction as AddReactionIcon
 } from '@mui/icons-material';
 import EmojiPicker from 'emoji-picker-react';
 import { useSelector } from 'react-redux';
@@ -70,9 +72,22 @@ import ChatMessageInput from './ChatMessageInput';
 import MentionAutocomplete from './MentionAutocomplete';
 import MessageReactions from './MessageReactions';
 import MessageSeenBy from './MessageSeenBy';
+import MessageItem from './MessageItem';
+import ConversationListItem from './ConversationListItem';
 import notificationService from '../services/notificationService';
 import { useUnreadCounts } from '../hooks/useUnreadCounts';
 import { parseMentions, detectMentionTyping, insertMention, cleanMentionsForDisplay } from '../utils/mentionUtils';
+
+// Debounce utility for conversation refreshes
+const debounce = (fn, delay) => {
+  let timeoutId;
+  const debouncedFn = (...args) => {
+    clearTimeout(timeoutId);
+    timeoutId = setTimeout(() => fn(...args), delay);
+  };
+  debouncedFn.cancel = () => clearTimeout(timeoutId);
+  return debouncedFn;
+};
 
 const ChatWindow = ({ isOpen, onClose, initialConversationId = null, initialParticipantId = null }) => {
   const user = useSelector(selectUser);
@@ -85,12 +100,18 @@ const ChatWindow = ({ isOpen, onClose, initialConversationId = null, initialPart
   const [loading, setLoading] = useState(false);
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  
+  // Global keyword search states
+  const [globalSearchResults, setGlobalSearchResults] = useState([]);
+  const [isGlobalSearching, setIsGlobalSearching] = useState(false);
+  const [showGlobalSearchResults, setShowGlobalSearchResults] = useState(false);
   const [typingUsers, setTypingUsers] = useState([]);
   const [replyToMessage, setReplyToMessage] = useState(null);
   const [editingMessage, setEditingMessage] = useState(null);
   const [editContent, setEditContent] = useState('');
   const [messageMenuAnchor, setMessageMenuAnchor] = useState(null);
   const [selectedMessage, setSelectedMessage] = useState(null);
+  const [reactionPickerAnchor, setReactionPickerAnchor] = useState(null);
   const [chatableUsers, setChatableUsers] = useState([]);
   const [userSearchQuery, setUserSearchQuery] = useState('');
   const [showNewChatDialog, setShowNewChatDialog] = useState(false);
@@ -166,6 +187,18 @@ const ChatWindow = ({ isOpen, onClose, initialConversationId = null, initialPart
   const isTypingRef = useRef(false);
   const selectedConversationRef = useRef(selectedConversation);
   
+  // Debounced conversation refresh to avoid excessive API calls
+  const debouncedRefreshConversations = useRef(
+    debounce(async () => {
+      try {
+        const response = await chatService.getConversations();
+        setConversations(response.data || []);
+      } catch (error) {
+        console.error('Error refreshing conversations:', error);
+      }
+    }, 1000) // Wait 1 second after last message before refreshing
+  ).current;
+  
   // Keep refs in sync with state
   useEffect(() => {
     newMessageRef.current = newMessage;
@@ -222,6 +255,43 @@ const ChatWindow = ({ isOpen, onClose, initialConversationId = null, initialPart
     setSearchError(null);
     setJumpingToMessage(null);
   }, []);
+
+  // Global keyword search handler
+  const handleGlobalSearch = useCallback(async (query) => {
+    if (!query || query.trim().length < 2) {
+      setGlobalSearchResults([]);
+      setShowGlobalSearchResults(false);
+      return;
+    }
+
+    setIsGlobalSearching(true);
+    try {
+      const response = await chatService.searchAllMessages(query.trim());
+      if (response.success) {
+        setGlobalSearchResults(response.data || []);
+        setShowGlobalSearchResults(true);
+      }
+    } catch (error) {
+      console.error('Error performing global search:', error);
+      setGlobalSearchResults([]);
+    } finally {
+      setIsGlobalSearching(false);
+    }
+  }, []);
+
+  // Debounced global search effect
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (searchQuery.trim().length >= 2) {
+        handleGlobalSearch(searchQuery);
+      } else {
+        setGlobalSearchResults([]);
+        setShowGlobalSearchResults(false);
+      }
+    }, 300);
+
+    return () => clearTimeout(timeoutId);
+  }, [searchQuery, handleGlobalSearch]);
 
   // Scroll to bottom function (defined early to avoid hoisting issues)
   const scrollToBottom = useCallback((behavior = 'auto') => {
@@ -325,6 +395,32 @@ const ChatWindow = ({ isOpen, onClose, initialConversationId = null, initialPart
       setMessagesLoading(false);
     }
   }, []);
+
+  // Handle clicking on a global search result
+  const handleGlobalSearchResultClick = useCallback(async (result) => {
+    // Find the conversation in our list
+    const conversation = conversations.find(c => c._id === result.conversationId);
+    if (conversation) {
+      await selectConversation(conversation);
+      // Clear search after selecting
+      setSearchQuery('');
+      setGlobalSearchResults([]);
+      setShowGlobalSearchResults(false);
+    } else {
+      // Try to load the conversation directly
+      try {
+        const response = await chatService.getConversation(result.conversationId);
+        if (response.success && response.data) {
+          await selectConversation(response.data);
+          setSearchQuery('');
+          setGlobalSearchResults([]);
+          setShowGlobalSearchResults(false);
+        }
+      } catch (error) {
+        console.error('Error loading conversation from search result:', error);
+      }
+    }
+  }, [conversations, selectConversation]);
 
   const selectConversationById = useCallback(async (conversationId) => {
     try {
@@ -474,25 +570,18 @@ const ChatWindow = ({ isOpen, onClose, initialConversationId = null, initialPart
       return currentSelected;
     });
 
-    // Fetch updated conversations list from backend to ensure we have correct data
+    // Debounced fetch of updated conversations list to avoid excessive API calls
     // The backend has already updated the conversation's lastMessage in the Message post-save hook
     // This ensures we always show the decrypted content and complete message data
-    chatService.getConversations()
-      .then(response => {
-        setConversations(response.data || []);
-        
-        // If this is our own message, ensure the conversation doesn't show as unread
-        if (data.message.sender._id === user._id) {
-          // Clear any unread count for our own messages
-          unreadService.markConversationAsRead(data.conversationId).catch(error => {
-            console.error('Error clearing unread count for own message:', error);
-          });
-        }
-      })
-      .catch(error => {
-        console.error('Error loading conversations:', error);
+    debouncedRefreshConversations();
+    
+    // If this is our own message, ensure the conversation doesn't show as unread
+    if (data.message.sender._id === user._id) {
+      unreadService.markConversationAsRead(data.conversationId).catch(error => {
+        console.error('Error clearing unread count for own message:', error);
       });
-  }, [isOpen, user]);
+    }
+  }, [isOpen, user, debouncedRefreshConversations]);
 
   const handleMessageEdited = useCallback((data) => {
     setSelectedConversation(currentSelected => {
@@ -1299,6 +1388,23 @@ const ChatWindow = ({ isOpen, onClose, initialConversationId = null, initialPart
     }
   };
 
+  // Memoized callback for message menu open (for MessageItem component)
+  const handleMessageMenuOpen = useCallback((e, message) => {
+    setSelectedMessage(message);
+    setMessageMenuAnchor(e.currentTarget);
+  }, []);
+
+  // Memoized callback for edit content change
+  const handleEditContentChange = useCallback((value) => {
+    setEditContent(value);
+  }, []);
+
+  // Memoized callback for cancel edit
+  const handleCancelEdit = useCallback(() => {
+    setEditingMessage(null);
+    setEditContent('');
+  }, []);
+
   const handleImageUpload = async (uploadedImage) => {
     if (!selectedConversation) return;
 
@@ -1647,14 +1753,8 @@ const ChatWindow = ({ isOpen, onClose, initialConversationId = null, initialPart
       return '';
     }
     
-    const now = new Date();
-    const diffInHours = (now - date) / (1000 * 60 * 60);
-
-    if (diffInHours < 24) {
-      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    } else {
-      return date.toLocaleDateString();
-    }
+    // Always show time only (HH:MM)
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
   const getConversationTitle = (conversation) => {
@@ -1858,7 +1958,7 @@ const ChatWindow = ({ isOpen, onClose, initialConversationId = null, initialPart
             </Box>
             <TextField
               size="medium"
-              placeholder="Search conversations..."
+              placeholder="Search by keyword..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               InputProps={{
@@ -1892,148 +1992,99 @@ const ChatWindow = ({ isOpen, onClose, initialConversationId = null, initialPart
             )}
           </Box>
 
-          {/* Conversations */}
+          {/* Conversations / Search Results */}
           <Box sx={{ flexGrow: 1, overflow: 'auto' }}>
             {loading ? (
               <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
                 <CircularProgress />
               </Box>
-            ) : (
-              <List sx={{ p: 0 }}>
-                {filteredConversations.map((conversation) => {
-                  const unreadCount = unreadCounts[conversation._id] || 0;
-
-                  return (
-                    <ListItem
-                      key={conversation._id}
-                      button
-                      selected={selectedConversation?._id === conversation._id}
-                      onClick={() => selectConversation(conversation)}
+            ) : isGlobalSearching ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
+                <CircularProgress size={24} />
+                <Typography sx={{ ml: 1 }} color="text.secondary">Searching messages...</Typography>
+              </Box>
+            ) : showGlobalSearchResults && globalSearchResults.length > 0 ? (
+              // Global Search Results
+              <Box>
+                <Box sx={{ px: 2, py: 1, bgcolor: 'action.hover', borderBottom: 1, borderColor: 'divider' }}>
+                  <Typography variant="caption" color="text.secondary">
+                    Found {globalSearchResults.length} message{globalSearchResults.length !== 1 ? 's' : ''} matching "{searchQuery}"
+                  </Typography>
+                </Box>
+                <List sx={{ p: 0 }}>
+                  {globalSearchResults.map((result) => (
+                    <ListItemButton
+                      key={result._id}
+                      onClick={() => handleGlobalSearchResultClick(result)}
                       sx={{ 
-                        px: 2.5, 
-                        py: 1.5,
-                        // Add visual indicators for unread messages
-                        ...(unreadCount > 0 && {
-                          borderLeft: '4px solid',
-                          borderLeftColor: 'primary.main',
-                          backgroundColor: 'action.hover',
-                          '&:hover': {
-                            backgroundColor: 'action.selected',
-                          }
-                        })
+                        borderBottom: 1, 
+                        borderColor: 'divider',
+                        '&:hover': { bgcolor: 'action.hover' }
                       }}
                     >
-                      <ListItemAvatar>
-                        <Box sx={{ position: 'relative' }}>
-                        {getConversationAvatar(conversation)}
-                          {unreadCount > 0 && (
-                            <Box
-                              sx={{
-                                position: 'absolute',
-                                top: -2,
-                                right: -2,
-                                width: 12,
-                                height: 12,
-                                borderRadius: '50%',
-                                backgroundColor: 'error.main',
-                                border: '2px solid white',
-                                animation: 'pulse 2s infinite',
-                                '@keyframes pulse': {
-                                  '0%': { opacity: 1 },
-                                  '50%': { opacity: 0.5 },
-                                  '100%': { opacity: 1 },
-                                }
-                              }}
-                            />
-                          )}
-                        </Box>
-                      </ListItemAvatar>
                       <ListItemText
                         primary={
-                          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <Typography 
-                              variant="subtitle2" 
-                              noWrap
-                              sx={{
-                                // Make text bold and slightly larger for unread conversations
-                                ...(unreadCount > 0 && {
-                                  fontWeight: 'bold',
-                                  color: 'text.primary',
-                                  textDecoration: 'underline',
-                                  textDecorationColor: 'primary.main'
-                                })
-                              }}
-                            >
-                              {getConversationTitle(conversation)}
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                              {result.conversationTitle || 'Conversation'}
                             </Typography>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                              {unreadCount > 0 && (
-                                <Chip 
-                                  label="NEW" 
-                                  size="small" 
-                                  color="error"
-                                  sx={{ 
-                                    height: 18, 
-                                    fontSize: '0.65rem',
-                                    fontWeight: 'bold',
-                                    animation: 'pulse 2s infinite',
-                                    '@keyframes pulse': {
-                                      '0%': { transform: 'scale(1)' },
-                                      '50%': { transform: 'scale(1.05)' },
-                                      '100%': { transform: 'scale(1)' },
-                                    }
-                                  }}
-                                />
-                              )}
-                            {unreadCount > 0 && (
-                              <Badge badgeContent={unreadCount} color="primary" />
-                            )}
-                            </Box>
+                            <Typography variant="caption" color="text.secondary">
+                              {new Date(result.createdAt).toLocaleDateString()}
+                            </Typography>
                           </Box>
                         }
                         secondary={
-                          <>
-                          <Typography 
-                            variant="body2" 
-                            color="text.secondary" 
-                            noWrap
-                            component="span"
-                            sx={{
-                              display: 'block',
-                              // Make subtitle text bolder for unread conversations
-                              ...(unreadCount > 0 && {
-                                fontWeight: 'medium',
-                                color: 'text.primary'
-                              })
-                            }}
-                          >
-                              {getConversationSubtitle(conversation, unreadCount)}
-                          </Typography>
-                            {conversation.lastMessage && (
-                              <Typography 
-                                variant="caption" 
-                                color="text.secondary"
-                                component="span"
-                                sx={{
-                                  display: 'block',
-                                  ...(unreadCount > 0 && {
-                                    color: 'primary.main',
-                                    fontWeight: 'medium'
-                                  })
-                                }}
-                              >
-                                {formatMessageTime(conversation.lastMessage.timestamp)}
-                              </Typography>
-                            )}
-                          </>
+                          <Box>
+                            <Typography 
+                              variant="caption" 
+                              color="text.secondary"
+                              sx={{ display: 'block', mb: 0.5 }}
+                            >
+                              {result.sender?.fullName || 'Unknown'}
+                            </Typography>
+                            <Typography 
+                              variant="body2" 
+                              sx={{ 
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                display: '-webkit-box',
+                                WebkitLineClamp: 2,
+                                WebkitBoxOrient: 'vertical',
+                                '& mark': {
+                                  bgcolor: 'warning.light',
+                                  color: 'warning.contrastText',
+                                  px: 0.5,
+                                  borderRadius: 0.5
+                                }
+                              }}
+                              dangerouslySetInnerHTML={{ __html: result.highlightedContent || result.content }}
+                            />
+                          </Box>
                         }
-                        secondaryTypographyProps={{
-                          component: 'div'
-                        }}
                       />
-                    </ListItem>
-                  );
-                })}
+                    </ListItemButton>
+                  ))}
+                </List>
+              </Box>
+            ) : showGlobalSearchResults && globalSearchResults.length === 0 && searchQuery.trim().length >= 2 ? (
+              <Box sx={{ p: 2, textAlign: 'center' }}>
+                <Typography color="text.secondary">
+                  No messages found matching "{searchQuery}"
+                </Typography>
+              </Box>
+            ) : (
+              // Regular conversation list
+              <List sx={{ p: 0 }}>
+                {filteredConversations.map((conversation) => (
+                  <ConversationListItem
+                    key={conversation._id}
+                    conversation={conversation}
+                    isSelected={selectedConversation?._id === conversation._id}
+                    unreadCount={unreadCounts[conversation._id] || 0}
+                    currentUserId={user._id}
+                    onSelect={selectConversation}
+                  />
+                ))}
                 {filteredConversations.length === 0 && (
                   <Box sx={{ p: 2, textAlign: 'center' }}>
                     <Typography color="text.secondary">
@@ -2389,249 +2440,25 @@ const ChatWindow = ({ isOpen, onClose, initialConversationId = null, initialPart
                       </Box>
                     )}
                     
-                    {messages.map((message, index) => {
-                      const isOwnMessage = message.sender._id === user._id;
-
-                      return (
-                        <React.Fragment key={message._id}>
-                          <Box
-                            sx={{
-                              display: 'flex',
-                              justifyContent: isOwnMessage ? 'flex-end' : 'flex-start',
-                              mb: 1,
-                            }}
-                            data-message-id={message._id}
-                          >
-                            <Paper
-                              sx={{
-                                p: { xs: 0.75, sm: 1 },
-                                maxWidth: { xs: '85%', sm: '70%' },
-                                bgcolor: isOwnMessage ? 'primary.main' : 'grey.100',
-                                color: isOwnMessage ? 'primary.contrastText' : 'text.primary',
-                                // Show slightly different appearance for optimistic/sending messages
-                                opacity: message.status === 'sending' ? 0.7 : 1,
-                                // Add pulse animation styles
-                                '@keyframes pulse': {
-                                  '0%': { opacity: 0.7 },
-                                  '50%': { opacity: 1 },
-                                  '100%': { opacity: 0.7 },
-                                },
-                                // Red border for failed messages
-                                ...(message.status === 'failed' && {
-                                  border: '1px solid',
-                                  borderColor: 'error.main'
-                                }),
-                                // Orange border for failed deletion
-                                ...(message.status === 'delete_failed' && {
-                                  border: '1px solid',
-                                  borderColor: 'warning.main',
-                                  bgcolor: isOwnMessage ? 'rgba(255, 152, 0, 0.1)' : 'rgba(255, 152, 0, 0.05)'
-                                })
-                              }}
-                              onContextMenu={(e) => {
-                                e.preventDefault();
-                                // Only show context menu for sent messages or delete_failed messages
-                                if ((message.status === 'sent' || message.status === 'delete_failed') && !message.isOptimistic) {
-                                  setSelectedMessage(message);
-                                  setMessageMenuAnchor(e.currentTarget);
-                                }
-                              }}
-                            >
-                            {message.replyTo && (
-                              <Box sx={{ mb: 0.5, p: 0.5, bgcolor: 'rgba(0,0,0,0.1)', borderRadius: 1 }}>
-                                <Typography variant="caption" display="block">
-                                  Replying to{selectedConversation.type === 'group' && message.replyTo.sender ? 
-                                    ` ${message.replyTo.sender.fullName}` : 
-                                    ''}: {message.replyTo.content}
-                                </Typography>
-                              </Box>
-                            )}
-
-                            {editingMessage?._id === message._id ? (
-                              <Box>
-                                <TextField
-                                  size="small"
-                                  multiline
-                                  value={editContent}
-                                  onChange={(e) => setEditContent(e.target.value)}
-                                  onKeyPress={(e) => {
-                                    if (e.key === 'Enter' && !e.shiftKey) {
-                                      e.preventDefault();
-                                      handleSaveEdit();
-                                    }
-                                  }}
-                                  sx={{ width: '100%', mb: 1 }}
-                                />
-                                <Box sx={{ display: 'flex', gap: 1 }}>
-                                  <Button size="small" onClick={handleSaveEdit}>
-                                    Save
-                                  </Button>
-                                  <Button size="small" onClick={() => setEditingMessage(null)}>
-                                    Cancel
-                                  </Button>
-                                </Box>
-                              </Box>
-                            ) : (
-                              <>
-                                {/* Show sender name for group chats (only for messages from others) */}
-                                {selectedConversation.type === 'group' && !isOwnMessage && (
-                                  <Typography variant="caption" sx={{ 
-                                    display: 'block', 
-                                    fontWeight: 'bold', 
-                                    color: 'primary.main',
-                                    mb: 0.5 
-                                  }}>
-                                    {message.sender?.fullName || 'Unknown User'}
-                                  </Typography>
-                                )}
-                                
-                                {message.messageType === 'image' ? (
-                                  <ChatImageMessage
-                                    message={message}
-                                    isOwnMessage={isOwnMessage}
-                                    maxWidth={250}
-                                    maxHeight={200}
-                                  />
-                                ) : (
-                                  <Typography 
-                                    variant="body1"
-                                    dangerouslySetInnerHTML={{
-                                      __html: DOMPurify.sanitize(parseMentions(message.content, user._id))
-                                    }}
-                                    sx={{
-                                      fontSize: '0.95rem',
-                                      '& .mention': {
-                                        cursor: 'pointer',
-                                        transition: 'opacity 0.2s'
-                                      },
-                                      '& .mention:hover': {
-                                        opacity: 0.8
-                                      }
-                                    }}
-                                  />
-                                )}
-                                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 0.5 }}>
-                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                    <Typography variant="caption" sx={{ opacity: 0.7 }}>
-                                      {formatMessageTime(message.createdAt)}
-                                      {message.isEdited && ' (edited)'}
-                                    </Typography>
-
-                                    {/* Message status indicators */}
-                                    {message.status === 'sending' && (
-                                      <Tooltip title="Sending...">
-                                        <ScheduleIcon
-                                          sx={{
-                                            fontSize: '12px',
-                                            opacity: 0.7,
-                                            animation: 'pulse 1.5s infinite'
-                                          }}
-                                        />
-                                      </Tooltip>
-                                    )}
-
-                                    {/* Show "Seen by" for group chats, simple check for direct messages */}
-                                    {message.status === 'sent' && isOwnMessage && selectedConversation?.type === 'group' && (
-                                      <MessageSeenBy
-                                        message={message}
-                                        conversation={selectedConversation}
-                                        isOwnMessage={isOwnMessage}
-                                        currentUserId={user._id}
-                                      />
-                                    )}
-
-                                    {message.status === 'sent' && isOwnMessage && selectedConversation?.type !== 'group' && (
-                                      <Tooltip title="Sent">
-                                        <CheckCircleIcon
-                                          sx={{
-                                            fontSize: '12px',
-                                            opacity: 0.7,
-                                            color: 'success.main'
-                                          }}
-                                        />
-                                      </Tooltip>
-                                    )}
-
-                                    {message.status === 'failed' && (
-                                      <Tooltip title={`Failed to send: ${message.error || 'Unknown error'}`}>
-                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                          <ErrorIcon
-                                            sx={{
-                                              fontSize: '12px',
-                                              color: 'error.main'
-                                            }}
-                                          />
-                                          <IconButton
-                                            size="small"
-                                            sx={{
-                                              opacity: 0.7,
-                                              minWidth: 'auto',
-                                              width: '16px',
-                                              height: '16px'
-                                            }}
-                                            onClick={() => handleRetryMessage(message)}
-                                          >
-                                            <RefreshIcon fontSize="small" />
-                                          </IconButton>
-                                        </Box>
-                                      </Tooltip>
-                                    )}
-
-                                    {message.status === 'delete_failed' && (
-                                      <Tooltip title={`Failed to delete: ${message.error || 'Unknown error'}`}>
-                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                          <ErrorIcon
-                                            sx={{
-                                              fontSize: '12px',
-                                              color: 'warning.main'
-                                            }}
-                                          />
-                                          <IconButton
-                                            size="small"
-                                            sx={{
-                                              opacity: 0.7,
-                                              minWidth: 'auto',
-                                              width: '16px',
-                                              height: '16px'
-                                            }}
-                                            onClick={() => handleDeleteMessage(message)}
-                                          >
-                                            <DeleteIcon fontSize="small" />
-                                          </IconButton>
-                                        </Box>
-                                      </Tooltip>
-                                    )}
-                                  </Box>
-
-                                  {/* Only show menu for successfully sent messages or delete_failed messages */}
-                                  {((message.status === 'sent' || message.status === 'delete_failed') && !message.isOptimistic) && (
-                                    <IconButton
-                                      size="small"
-                                      sx={{ opacity: 0.7 }}
-                                      onClick={(e) => {
-                                        setSelectedMessage(message);
-                                        setMessageMenuAnchor(e.currentTarget);
-                                      }}
-                                    >
-                                      <MoreVertIcon fontSize="small" />
-                                    </IconButton>
-                                  )}
-                                </Box>
-                                
-                                {/* Message Reactions */}
-                                <MessageReactions
-                                  message={message}
-                                  currentUserId={user._id}
-                                  onReactionToggle={handleReactionToggle}
-                                  isOwnMessage={isOwnMessage}
-                                />
-                              </>
-                            )}
-                          </Paper>
-                          </Box>
-                        </React.Fragment>
-                      );
-                    })}
+                    {messages.map((message) => (
+                      <MessageItem
+                        key={message._id}
+                        message={message}
+                        isOwnMessage={message.sender._id === user._id}
+                        currentUserId={user._id}
+                        selectedConversation={selectedConversation}
+                        editingMessage={editingMessage}
+                        editContent={editContent}
+                        onEditContentChange={handleEditContentChange}
+                        onSaveEdit={handleSaveEdit}
+                        onCancelEdit={handleCancelEdit}
+                        onMenuOpen={handleMessageMenuOpen}
+                        onRetryMessage={handleRetryMessage}
+                        onDeleteMessage={handleDeleteMessage}
+                        onReactionToggle={handleReactionToggle}
+                        formatMessageTime={formatMessageTime}
+                      />
+                    ))}
 
                     {/* Typing indicator */}
                     {typingUsers.length > 0 && (
@@ -2768,6 +2595,12 @@ const ChatWindow = ({ isOpen, onClose, initialConversationId = null, initialPart
         open={Boolean(messageMenuAnchor)}
         onClose={() => setMessageMenuAnchor(null)}
       >
+        <MenuItem onClick={(e) => {
+          setReactionPickerAnchor(e.currentTarget);
+        }}>
+          <AddReactionIcon sx={{ mr: 1 }} />
+          React
+        </MenuItem>
         <MenuItem onClick={() => handleReplyToMessage(selectedMessage)}>
           <ReplyIcon sx={{ mr: 1 }} />
           Reply
@@ -2785,6 +2618,48 @@ const ChatWindow = ({ isOpen, onClose, initialConversationId = null, initialPart
           </MenuItem>
         )}
       </Menu>
+
+      {/* Reaction Emoji Picker Popover */}
+      <Popover
+        open={Boolean(reactionPickerAnchor)}
+        anchorEl={reactionPickerAnchor}
+        onClose={() => setReactionPickerAnchor(null)}
+        anchorOrigin={{
+          vertical: 'top',
+          horizontal: 'center',
+        }}
+        transformOrigin={{
+          vertical: 'bottom',
+          horizontal: 'center',
+        }}
+      >
+        <Paper sx={{ p: 1, display: 'flex', gap: 0.5, flexWrap: 'wrap', maxWidth: 280 }}>
+          {['👍', '❤️', '😂', '😮', '😢', '🙏', '🎉', '🔥'].map((emoji, index) => (
+            <IconButton
+              key={index}
+              onClick={() => {
+                if (selectedMessage) {
+                  handleReactionToggle(selectedMessage._id, emoji);
+                }
+                setReactionPickerAnchor(null);
+                setMessageMenuAnchor(null);
+              }}
+              sx={{
+                fontSize: '1.5rem',
+                width: 44,
+                height: 44,
+                '&:hover': {
+                  bgcolor: 'action.hover',
+                  transform: 'scale(1.2)',
+                },
+                transition: 'all 0.2s ease'
+              }}
+            >
+              {emoji}
+            </IconButton>
+          ))}
+        </Paper>
+      </Popover>
 
       {/* New Chat Dialog */}
       <Dialog open={showNewChatDialog} onClose={() => setShowNewChatDialog(false)} maxWidth="sm" fullWidth>

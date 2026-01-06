@@ -1337,6 +1337,152 @@ exports.removeReaction = async (req, res, next) => {
   }
 };
 
+// Search messages across all user's conversations (global search)
+exports.searchAllMessages = async (req, res, next) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation error',
+        errors: errors.array()
+      });
+    }
+
+    const { query: searchQuery, limit = 30 } = req.query;
+
+    if (!searchQuery || !searchQuery.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Search query is required'
+      });
+    }
+
+    // Get all conversations where user is a participant
+    const userConversations = await Conversation.find({
+      'participants.user': req.user._id,
+      isActive: true
+    }).select('_id type title participants').lean();
+
+    if (userConversations.length === 0) {
+      return res.status(200).json({
+        success: true,
+        data: [],
+        searchQuery: searchQuery.trim()
+      });
+    }
+
+    const conversationIds = userConversations.map(c => c._id);
+
+    // Build search criteria for all user conversations
+    const searchCriteria = {
+      conversation: { $in: conversationIds },
+      isDeleted: false,
+      messageType: { $in: ['text', 'system'] }
+    };
+
+    try {
+      // Search in plain text content
+      const plainTextResults = await Message.find({
+        ...searchCriteria,
+        'encryption.isEncrypted': { $ne: true },
+        content: { $regex: searchQuery.trim(), $options: 'i' }
+      })
+      .populate('sender', 'fullName email role')
+      .populate('conversation', 'type title participants')
+      .populate({
+        path: 'conversation',
+        populate: {
+          path: 'participants.user',
+          select: 'fullName email role'
+        }
+      })
+      .sort({ createdAt: -1 })
+      .limit(parseInt(limit));
+
+      // For encrypted messages, get and filter after decryption
+      const encryptedMessages = await Message.find({
+        ...searchCriteria,
+        'encryption.isEncrypted': true
+      })
+      .populate('sender', 'fullName email role')
+      .populate('conversation', 'type title participants')
+      .populate({
+        path: 'conversation',
+        populate: {
+          path: 'participants.user',
+          select: 'fullName email role'
+        }
+      })
+      .sort({ createdAt: -1 })
+      .limit(200); // Limit for performance
+
+      // Filter encrypted messages by decrypted content
+      const matchingEncryptedMessages = encryptedMessages.filter(msg => {
+        try {
+          const decryptedContent = msg.decryptedContent;
+          return decryptedContent && decryptedContent.toLowerCase().includes(searchQuery.trim().toLowerCase());
+        } catch (error) {
+          return false;
+        }
+      });
+
+      // Combine and sort results
+      const allResults = [...plainTextResults, ...matchingEncryptedMessages];
+      allResults.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+      // Apply limit
+      const limitedResults = allResults.slice(0, parseInt(limit));
+
+      // Transform messages
+      const transformedMessages = limitedResults.map(msg => {
+        const messageObj = msg.toObject();
+        messageObj.content = msg.decryptedContent;
+        delete messageObj.encryption;
+
+        // Get conversation display name
+        if (messageObj.conversation) {
+          if (messageObj.conversation.type === 'group') {
+            messageObj.conversationTitle = messageObj.conversation.title || 'Group Chat';
+          } else {
+            // For direct chats, find the other participant
+            const otherParticipant = messageObj.conversation.participants?.find(
+              p => p.user && p.user._id.toString() !== req.user._id.toString()
+            );
+            messageObj.conversationTitle = otherParticipant?.user?.fullName || 'Direct Chat';
+          }
+          messageObj.conversationId = messageObj.conversation._id;
+          messageObj.conversationType = messageObj.conversation.type;
+        }
+
+        // Add highlight
+        const highlightedContent = messageObj.content.replace(
+          new RegExp(`(${searchQuery.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'),
+          '<mark>$1</mark>'
+        );
+        messageObj.highlightedContent = highlightedContent;
+
+        return messageObj;
+      });
+
+      res.status(200).json({
+        success: true,
+        data: transformedMessages,
+        total: transformedMessages.length,
+        searchQuery: searchQuery.trim()
+      });
+    } catch (searchError) {
+      console.error('Error during global message search:', searchError);
+      return res.status(500).json({
+        success: false,
+        message: 'Error performing search'
+      });
+    }
+  } catch (error) {
+    next(error);
+  }
+};
+
 // Search messages within a conversation
 exports.searchMessages = async (req, res, next) => {
   try {

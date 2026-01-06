@@ -17,6 +17,7 @@ const {
   removeParticipantFromGroup,
   updateGroupConversation,
   searchMessages,
+  searchAllMessages,
   addReaction,
   removeReaction
 } = require('../controllers/chat');
@@ -101,6 +102,22 @@ router.get(
       .withMessage('Before must be a valid ISO 8601 date')
   ],
   getMessages
+);
+
+// Search messages across all conversations (global search)
+router.get(
+  '/messages/search',
+  [
+    query('query')
+      .trim()
+      .isLength({ min: 1, max: 200 })
+      .withMessage('Search query must be between 1 and 200 characters'),
+    query('limit')
+      .optional()
+      .isInt({ min: 1, max: 50 })
+      .withMessage('Limit must be between 1 and 50')
+  ],
+  searchAllMessages
 );
 
 // Search messages within a conversation
