@@ -63,6 +63,7 @@ import {
   Close as CloseIcon,
   ChevronLeft as ChevronLeftIcon,
   ChevronRight as ChevronRightIcon,
+  Search as SearchIcon,
 } from "@mui/icons-material";
 import { useForm, Controller } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
@@ -327,6 +328,15 @@ const OrdersPage = () => {
     orderId: null,
   });
 
+  // Search state for leads modal
+  const [leadsSearchQuery, setLeadsSearchQuery] = useState("");
+  const [showLeadsSearch, setShowLeadsSearch] = useState(false);
+
+  const [leadsPreviewModal, setLeadsPreviewModal] = useState({
+    open: false,
+    leads: [],
+  });
+
   const {
     control,
     handleSubmit,
@@ -365,7 +375,8 @@ const OrdersPage = () => {
   // Change Requester State
   const [changeRequesterOpen, setChangeRequesterOpen] = useState(false);
   const [requesterHistoryOpen, setRequesterHistoryOpen] = useState(false);
-  const [selectedOrderForRequester, setSelectedOrderForRequester] = useState(null);
+  const [selectedOrderForRequester, setSelectedOrderForRequester] =
+    useState(null);
   const [potentialRequesters, setPotentialRequesters] = useState([]);
   const [loadingRequesters, setLoadingRequesters] = useState(false);
   const [selectedNewRequester, setSelectedNewRequester] = useState(null);
@@ -373,13 +384,13 @@ const OrdersPage = () => {
   const fetchPotentialRequesters = useCallback(async () => {
     try {
       setLoadingRequesters(true);
-      const response = await api.get('/users?isActive=true&limit=1000');
+      const response = await api.get("/users?isActive=true&limit=1000");
       setPotentialRequesters(response.data.data);
     } catch (error) {
       console.error("Error fetching potential requesters:", error);
       setNotification({
         message: "Failed to fetch users list",
-        severity: "error"
+        severity: "error",
       });
     } finally {
       setLoadingRequesters(false);
@@ -405,21 +416,24 @@ const OrdersPage = () => {
 
   const handleSubmitChangeRequester = async () => {
     if (!selectedOrderForRequester || !selectedNewRequester) return;
-    
+
     try {
-      await api.put(`/orders/${selectedOrderForRequester._id}/change-requester`, {
-        newRequesterId: selectedNewRequester._id
-      });
+      await api.put(
+        `/orders/${selectedOrderForRequester._id}/change-requester`,
+        {
+          newRequesterId: selectedNewRequester._id,
+        }
+      );
       setChangeRequesterOpen(false);
       setNotification({
         message: "Requester changed successfully",
-        severity: "success"
+        severity: "success",
       });
       fetchOrders();
     } catch (err) {
       setNotification({
         message: err.response?.data?.message || "Failed to change requester",
-        severity: "error"
+        severity: "error",
       });
     }
   };
@@ -463,13 +477,12 @@ const OrdersPage = () => {
   // Autocomplete states for Create Order Dialog
   const [clientNetworkInput, setClientNetworkInput] = useState("");
   const [clientNetworkOpen, setClientNetworkOpen] = useState(false);
-  
+
   const [ourNetworkInput, setOurNetworkInput] = useState("");
   const [ourNetworkOpen, setOurNetworkOpen] = useState(false);
-  
+
   const [campaignInput, setCampaignInput] = useState("");
   const [campaignOpen, setCampaignOpen] = useState(false);
-  
 
   const fetchOrders = useCallback(async () => {
     setLoading(true);
@@ -747,77 +760,88 @@ const OrdersPage = () => {
     setManualLeads((prev) => prev.filter((_, i) => i !== index));
   }, []);
 
-  const checkFulfillment = useCallback(async (data) => {
-    // Skip if manual mode or required fields missing
-    if (manualSelectionMode || !data) return;
-    
-    // Minimal validation to avoid spamming empty checks
-    const hasLeads = (data.ftd > 0 || data.filler > 0 || data.cold > 0);
-    if (!hasLeads) {
+  const checkFulfillment = useCallback(
+    async (data) => {
+      // Skip if manual mode or required fields missing
+      if (manualSelectionMode || !data) return;
+
+      // Minimal validation to avoid spamming empty checks
+      const hasLeads = data.ftd > 0 || data.filler > 0 || data.cold > 0;
+      if (!hasLeads) {
         setFulfillmentSummary(null);
         return;
-    }
+      }
 
-    setCheckingFulfillment(true);
-    try {
+      setCheckingFulfillment(true);
+      try {
         // Build agent assignments
         const agentAssignments = [];
         if (data.ftdAgents && data.ftdAgents.length > 0) {
-            data.ftdAgents.forEach((agentId, index) => {
-                if (agentId) agentAssignments.push({ leadType: "ftd", agentId, index });
-            });
+          data.ftdAgents.forEach((agentId, index) => {
+            if (agentId)
+              agentAssignments.push({ leadType: "ftd", agentId, index });
+          });
         }
         if (data.fillerAgents && data.fillerAgents.length > 0) {
-            data.fillerAgents.forEach((agentId, index) => {
-                if (agentId) agentAssignments.push({ leadType: "filler", agentId, index });
-            });
+          data.fillerAgents.forEach((agentId, index) => {
+            if (agentId)
+              agentAssignments.push({ leadType: "filler", agentId, index });
+          });
         }
 
         const checkData = {
-            requests: {
-                ftd: Number(data.ftd) || 0,
-                filler: Number(data.filler) || 0,
-                cold: Number(data.cold) || 0,
-            },
-            country: data.countryFilter,
-            gender: data.genderFilter,
-            selectedClientNetwork: data.selectedClientNetwork,
-            selectedClientBrokers: data.selectedClientBrokers,
-            agentFilter: data.agentFilter || null,
-            agentAssignments
+          requests: {
+            ftd: Number(data.ftd) || 0,
+            filler: Number(data.filler) || 0,
+            cold: Number(data.cold) || 0,
+          },
+          country: data.countryFilter,
+          gender: data.genderFilter,
+          selectedClientNetwork: data.selectedClientNetwork,
+          selectedClientBrokers: data.selectedClientBrokers,
+          agentFilter: data.agentFilter || null,
+          agentAssignments,
         };
 
         const response = await api.post("/orders/check-fulfillment", checkData);
         setFulfillmentSummary(response.data.summary);
-    } catch (err) {
+      } catch (err) {
         console.error("Fulfillment check failed:", err);
         // Don't show error notification for background check
-    } finally {
+      } finally {
         setCheckingFulfillment(false);
-    }
-  }, [manualSelectionMode]);
+      }
+    },
+    [manualSelectionMode]
+  );
 
   // Watch specific fields to avoid infinite loop with full form watch
   const watchedValues = watch([
-      "ftd", "filler", "cold", 
-      "countryFilter", "genderFilter", 
-      "selectedClientNetwork", "selectedClientBrokers", 
-      "agentFilter", "ftdAgents", "fillerAgents"
+    "ftd",
+    "filler",
+    "cold",
+    "countryFilter",
+    "genderFilter",
+    "selectedClientNetwork",
+    "selectedClientBrokers",
+    "agentFilter",
+    "ftdAgents",
+    "fillerAgents",
   ]);
-  
+
   // Create a stable object for debounce
   const stableWatchedValues = useMemo(() => {
     return {
-        ftd: watchedValues[0],
-        filler: watchedValues[1],
-        cold: watchedValues[2],
-        countryFilter: watchedValues[3],
-        genderFilter: watchedValues[4],
-        selectedClientNetwork: watchedValues[5],
-        selectedClientBrokers: watchedValues[6],
-        agentFilter: watchedValues[7],
-        ftdAgents: watchedValues[8],
-        fillerAgents: watchedValues[9],
+      ftd: watchedValues[0],
+      filler: watchedValues[1],
+      cold: watchedValues[2],
+      countryFilter: watchedValues[3],
+      genderFilter: watchedValues[4],
+      selectedClientNetwork: watchedValues[5],
+      selectedClientBrokers: watchedValues[6],
+      agentFilter: watchedValues[7],
+      ftdAgents: watchedValues[8],
+      fillerAgents: watchedValues[9],
     };
   }, [
     watchedValues[0],
@@ -829,18 +853,23 @@ const OrdersPage = () => {
     watchedValues[6],
     watchedValues[7],
     watchedValues[8],
-    watchedValues[9]
+    watchedValues[9],
   ]);
 
   const debouncedFormValues = useDebounce(stableWatchedValues, 1000);
 
   useEffect(() => {
     if (createDialogOpen && !manualSelectionMode) {
-        checkFulfillment(debouncedFormValues);
+      checkFulfillment(debouncedFormValues);
     } else {
-        setFulfillmentSummary(null);
+      setFulfillmentSummary(null);
     }
-  }, [debouncedFormValues, createDialogOpen, manualSelectionMode, checkFulfillment]);
+  }, [
+    debouncedFormValues,
+    createDialogOpen,
+    manualSelectionMode,
+    checkFulfillment,
+  ]);
 
   const onSubmitOrder = useCallback(
     async (data) => {
@@ -1293,16 +1322,67 @@ const OrdersPage = () => {
 
   const handleCloseAssignedLeadsModal = useCallback(() => {
     setAssignedLeadsModal((prev) => ({ ...prev, open: false }));
+    setLeadsSearchQuery("");
+    setShowLeadsSearch(false);
   }, []);
+
+  const handleOpenLeadsPreviewModal = useCallback((leads) => {
+    setLeadsPreviewModal({
+      open: true,
+      leads: leads || [],
+    });
+  }, []);
+
+  const handleCloseLeadsPreviewModal = useCallback(() => {
+    setLeadsPreviewModal({ open: false, leads: [] });
+  }, []);
+
+  // Filter leads based on search query (multiple fields)
+  const filteredLeads = useMemo(() => {
+    if (!leadsSearchQuery.trim()) {
+      return assignedLeadsModal.leads;
+    }
+
+    const query = leadsSearchQuery.toLowerCase().trim();
+
+    return assignedLeadsModal.leads.filter((lead) => {
+      // Search in lead name
+      const fullName = `${lead.firstName || ""} ${
+        lead.lastName || ""
+      }`.toLowerCase();
+      if (fullName.includes(query)) return true;
+
+      // Search in email
+      if (lead.email?.toLowerCase().includes(query)) return true;
+
+      // Search in assigned agent
+      const agentName = lead.assignedAgent?.fullName?.toLowerCase() || "";
+      if (agentName.includes(query)) return true;
+
+      // Search in client broker
+      const clientBroker =
+        lead.assignedClientBrokers?.[0]?.name?.toLowerCase() ||
+        lead.clientBroker?.toLowerCase() ||
+        "";
+      if (clientBroker.includes(query)) return true;
+
+      // Search in gender
+      const gender = lead.gender?.toLowerCase() || "";
+      if (gender.includes(query)) return true;
+
+      return false;
+    });
+  }, [assignedLeadsModal.leads, leadsSearchQuery]);
 
   const handleNextLead = useCallback(() => {
     setAssignedLeadsModal((prev) => {
-      if (prev.currentIndex < prev.leads.length - 1) {
+      const maxIndex = filteredLeads.length - 1;
+      if (prev.currentIndex < maxIndex) {
         return { ...prev, currentIndex: prev.currentIndex + 1 };
       }
       return prev;
     });
-  }, []);
+  }, [filteredLeads.length]);
 
   const handlePrevLead = useCallback(() => {
     setAssignedLeadsModal((prev) => {
@@ -1337,6 +1417,13 @@ const OrdersPage = () => {
     handlePrevLead,
     handleCloseAssignedLeadsModal,
   ]);
+
+  // Reset current index when search query changes
+  useEffect(() => {
+    if (leadsSearchQuery && filteredLeads.length > 0) {
+      setAssignedLeadsModal((prev) => ({ ...prev, currentIndex: 0 }));
+    }
+  }, [leadsSearchQuery, filteredLeads.length]);
 
   const popoverOpen = Boolean(leadPopoverAnchor);
 
@@ -2225,34 +2312,43 @@ const OrdersPage = () => {
                           align="center"
                           sx={{ display: { xs: "none", md: "table-cell" } }}
                         >
-                          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5 }}>
+                          <Box
+                            sx={{
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              gap: 0.5,
+                            }}
+                          >
                             <Typography variant="body2">
                               {order.requester?.fullName}
                             </Typography>
-                             {user?.role === 'admin' && order.requester?.role !== 'admin' && (
-                              <IconButton
-                                size="small"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleOpenChangeRequester(order);
-                                }}
-                                title="Change Requester"
-                              >
-                                <EditIcon sx={{ fontSize: 14 }} />
-                              </IconButton>
-                            )}
-                             {user?.role === 'admin' && order.requesterHistory?.length > 0 && (
-                              <IconButton
-                                size="small"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleOpenRequesterHistory(order);
-                                }}
-                                title="Requester History"
-                              >
-                                <HistoryIcon sx={{ fontSize: 14 }} />
-                              </IconButton>
-                            )}
+                            {user?.role === "admin" &&
+                              order.requester?.role !== "admin" && (
+                                <IconButton
+                                  size="small"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenChangeRequester(order);
+                                  }}
+                                  title="Change Requester"
+                                >
+                                  <EditIcon sx={{ fontSize: 14 }} />
+                                </IconButton>
+                              )}
+                            {user?.role === "admin" &&
+                              order.requesterHistory?.length > 0 && (
+                                <IconButton
+                                  size="small"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenRequesterHistory(order);
+                                  }}
+                                  title="Requester History"
+                                >
+                                  <HistoryIcon sx={{ fontSize: 14 }} />
+                                </IconButton>
+                              )}
                           </Box>
                         </TableCell>
                         <TableCell align="center">
@@ -2930,13 +3026,20 @@ const OrdersPage = () => {
                                                 gap: 1,
                                               }}
                                             >
-                                              <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+                                              <Box
+                                                sx={{
+                                                  display: "flex",
+                                                  alignItems: "center",
+                                                  gap: 2,
+                                                }}
+                                              >
                                                 <Typography
                                                   variant="subtitle1"
                                                   sx={{ fontWeight: "bold" }}
                                                 >
                                                   Assigned Leads (
-                                                  {expandedDetails.leads.length})
+                                                  {expandedDetails.leads.length}
+                                                  )
                                                 </Typography>
                                                 <Button
                                                   variant="contained"
@@ -2949,6 +3052,18 @@ const OrdersPage = () => {
                                                   }
                                                 >
                                                   See Leads
+                                                </Button>
+                                                <Button
+                                                  variant="outlined"
+                                                  size="small"
+                                                  startIcon={<ViewIcon />}
+                                                  onClick={() =>
+                                                    handleOpenLeadsPreviewModal(
+                                                      expandedDetails.leads
+                                                    )
+                                                  }
+                                                >
+                                                  Preview
                                                 </Button>
                                               </Box>
                                               <Box
@@ -3451,15 +3566,22 @@ const OrdersPage = () => {
                         <Autocomplete
                           open={clientNetworkOpen}
                           onOpen={() => {
-                            if (clientNetworkInput.length > 0) setClientNetworkOpen(true);
+                            if (clientNetworkInput.length > 0)
+                              setClientNetworkOpen(true);
                           }}
                           onClose={() => setClientNetworkOpen(false)}
                           inputValue={clientNetworkInput}
                           onInputChange={(event, newInputValue, reason) => {
                             setClientNetworkInput(newInputValue);
-                            if (reason === 'input' && newInputValue.length > 0) {
+                            if (
+                              reason === "input" &&
+                              newInputValue.length > 0
+                            ) {
                               setClientNetworkOpen(true);
-                            } else if (reason === 'clear' || newInputValue.length === 0) {
+                            } else if (
+                              reason === "clear" ||
+                              newInputValue.length === 0
+                            ) {
                               setClientNetworkOpen(false);
                             }
                           }}
@@ -3543,15 +3665,19 @@ const OrdersPage = () => {
                       <Autocomplete
                         open={ourNetworkOpen}
                         onOpen={() => {
-                          if (ourNetworkInput.length > 0) setOurNetworkOpen(true);
+                          if (ourNetworkInput.length > 0)
+                            setOurNetworkOpen(true);
                         }}
                         onClose={() => setOurNetworkOpen(false)}
                         inputValue={ourNetworkInput}
                         onInputChange={(event, newInputValue, reason) => {
                           setOurNetworkInput(newInputValue);
-                          if (reason === 'input' && newInputValue.length > 0) {
+                          if (reason === "input" && newInputValue.length > 0) {
                             setOurNetworkOpen(true);
-                          } else if (reason === 'clear' || newInputValue.length === 0) {
+                          } else if (
+                            reason === "clear" ||
+                            newInputValue.length === 0
+                          ) {
                             setOurNetworkOpen(false);
                           }
                         }}
@@ -3632,9 +3758,12 @@ const OrdersPage = () => {
                         inputValue={campaignInput}
                         onInputChange={(event, newInputValue, reason) => {
                           setCampaignInput(newInputValue);
-                          if (reason === 'input' && newInputValue.length > 0) {
+                          if (reason === "input" && newInputValue.length > 0) {
                             setCampaignOpen(true);
-                          } else if (reason === 'clear' || newInputValue.length === 0) {
+                          } else if (
+                            reason === "clear" ||
+                            newInputValue.length === 0
+                          ) {
                             setCampaignOpen(false);
                           }
                         }}
@@ -3658,7 +3787,9 @@ const OrdersPage = () => {
                         renderOption={(props, option) => (
                           <li {...props} key={option._id}>
                             <Box>
-                              <Typography variant="body2">{option.name}</Typography>
+                              <Typography variant="body2">
+                                {option.name}
+                              </Typography>
                               {option.description && (
                                 <Typography
                                   variant="caption"
@@ -4095,75 +4226,141 @@ const OrdersPage = () => {
 
               {}
             </Grid>
-              {errors[""] && (
-                <Alert severity="error" sx={{ mt: 2 }}>
-                  {errors[""]?.message}
-                </Alert>
-              )}
-              
-              {/* Fulfillment Summary */}
-              {!manualSelectionMode && (
-                  <Box sx={{ mt: 2, p: 2, bgcolor: 'background.default', borderRadius: 1, border: '1px solid', borderColor: 'divider' }}>
-                      <Typography variant="subtitle2" gutterBottom display="flex" alignItems="center" gap={1}>
-                          Order Fulfillment Estimate
-                          {checkingFulfillment && <CircularProgress size={16} />}
-                      </Typography>
-                      
-                      {!checkingFulfillment && fulfillmentSummary ? (
-                          <>
-                              <Box display="flex" alignItems="center" gap={1} mb={1}>
-                                  <Chip 
-                                      label={fulfillmentSummary.status === 'fulfilled' ? 'Can be Fulfilled' : fulfillmentSummary.status === 'partial' ? 'Partially Fulfilled' : 'Not Fulfilled'} 
-                                      color={fulfillmentSummary.status === 'fulfilled' ? 'success' : fulfillmentSummary.status === 'partial' ? 'warning' : 'error'}
-                                      size="small"
-                                  />
-                                  <Typography variant="body2">{fulfillmentSummary.message}</Typography>
-                              </Box>
-                              
-                              {fulfillmentSummary.details && fulfillmentSummary.details.length > 0 && (
-                                  <Box mt={1}>
-                                      {fulfillmentSummary.details.map((detail, idx) => (
-                                          <Typography key={idx} variant="caption" display="block" color="text.secondary">
-                                              • {detail}
-                                          </Typography>
-                                      ))}
-                                  </Box>
-                              )}
-                              
-                              <Box mt={1} display="flex" gap={2}>
-                                  {Object.entries(fulfillmentSummary.breakdown || {}).map(([type, stats]) => (
-                                      stats.requested > 0 && (
-                                          <Box key={type}>
-                                              <Typography variant="caption" fontWeight="bold" display="block">
-                                                  {type.toUpperCase()}
-                                              </Typography>
-                                              <Typography variant="caption" color={stats.available < stats.requested ? 'error.main' : 'success.main'}>
-                                                  {stats.available} / {stats.requested}
-                                              </Typography>
-                                          </Box>
-                                      )
-                                  ))}
-                              </Box>
-                          </>
-                      ) : !checkingFulfillment && !fulfillmentSummary && (watch("ftd") > 0 || watch("filler") > 0 || watch("cold") > 0) ? (
-                           <Typography variant="caption" color="text.secondary">Enter lead details to see fulfillment estimate...</Typography>
-                      ) : (checkingFulfillment && fulfillmentSummary) ? (
-                         // Keep showing old summary while loading new one
-                         <Box sx={{ opacity: 0.5 }}>
-                              <Box display="flex" alignItems="center" gap={1} mb={1}>
-                                  <Chip 
-                                      label={fulfillmentSummary.status === 'fulfilled' ? 'Can be Fulfilled' : fulfillmentSummary.status === 'partial' ? 'Partially Fulfilled' : 'Not Fulfilled'} 
-                                      color={fulfillmentSummary.status === 'fulfilled' ? 'success' : fulfillmentSummary.status === 'partial' ? 'warning' : 'error'}
-                                      size="small"
-                                  />
-                                  <Typography variant="body2">{fulfillmentSummary.message}</Typography>
-                              </Box>
-                         </Box>
-                      ) : null}
-                  </Box>
-              )}
+            {errors[""] && (
+              <Alert severity="error" sx={{ mt: 2 }}>
+                {errors[""]?.message}
+              </Alert>
+            )}
 
-            </DialogContent>
+            {/* Fulfillment Summary */}
+            {!manualSelectionMode && (
+              <Box
+                sx={{
+                  mt: 2,
+                  p: 2,
+                  bgcolor: "background.default",
+                  borderRadius: 1,
+                  border: "1px solid",
+                  borderColor: "divider",
+                }}
+              >
+                <Typography
+                  variant="subtitle2"
+                  gutterBottom
+                  display="flex"
+                  alignItems="center"
+                  gap={1}
+                >
+                  Order Fulfillment Estimate
+                  {checkingFulfillment && <CircularProgress size={16} />}
+                </Typography>
+
+                {!checkingFulfillment && fulfillmentSummary ? (
+                  <>
+                    <Box display="flex" alignItems="center" gap={1} mb={1}>
+                      <Chip
+                        label={
+                          fulfillmentSummary.status === "fulfilled"
+                            ? "Can be Fulfilled"
+                            : fulfillmentSummary.status === "partial"
+                            ? "Partially Fulfilled"
+                            : "Not Fulfilled"
+                        }
+                        color={
+                          fulfillmentSummary.status === "fulfilled"
+                            ? "success"
+                            : fulfillmentSummary.status === "partial"
+                            ? "warning"
+                            : "error"
+                        }
+                        size="small"
+                      />
+                      <Typography variant="body2">
+                        {fulfillmentSummary.message}
+                      </Typography>
+                    </Box>
+
+                    {fulfillmentSummary.details &&
+                      fulfillmentSummary.details.length > 0 && (
+                        <Box mt={1}>
+                          {fulfillmentSummary.details.map((detail, idx) => (
+                            <Typography
+                              key={idx}
+                              variant="caption"
+                              display="block"
+                              color="text.secondary"
+                            >
+                              • {detail}
+                            </Typography>
+                          ))}
+                        </Box>
+                      )}
+
+                    <Box mt={1} display="flex" gap={2}>
+                      {Object.entries(fulfillmentSummary.breakdown || {}).map(
+                        ([type, stats]) =>
+                          stats.requested > 0 && (
+                            <Box key={type}>
+                              <Typography
+                                variant="caption"
+                                fontWeight="bold"
+                                display="block"
+                              >
+                                {type.toUpperCase()}
+                              </Typography>
+                              <Typography
+                                variant="caption"
+                                color={
+                                  stats.available < stats.requested
+                                    ? "error.main"
+                                    : "success.main"
+                                }
+                              >
+                                {stats.available} / {stats.requested}
+                              </Typography>
+                            </Box>
+                          )
+                      )}
+                    </Box>
+                  </>
+                ) : !checkingFulfillment &&
+                  !fulfillmentSummary &&
+                  (watch("ftd") > 0 ||
+                    watch("filler") > 0 ||
+                    watch("cold") > 0) ? (
+                  <Typography variant="caption" color="text.secondary">
+                    Enter lead details to see fulfillment estimate...
+                  </Typography>
+                ) : checkingFulfillment && fulfillmentSummary ? (
+                  // Keep showing old summary while loading new one
+                  <Box sx={{ opacity: 0.5 }}>
+                    <Box display="flex" alignItems="center" gap={1} mb={1}>
+                      <Chip
+                        label={
+                          fulfillmentSummary.status === "fulfilled"
+                            ? "Can be Fulfilled"
+                            : fulfillmentSummary.status === "partial"
+                            ? "Partially Fulfilled"
+                            : "Not Fulfilled"
+                        }
+                        color={
+                          fulfillmentSummary.status === "fulfilled"
+                            ? "success"
+                            : fulfillmentSummary.status === "partial"
+                            ? "warning"
+                            : "error"
+                        }
+                        size="small"
+                      />
+                      <Typography variant="body2">
+                        {fulfillmentSummary.message}
+                      </Typography>
+                    </Box>
+                  </Box>
+                ) : null}
+              </Box>
+            )}
+          </DialogContent>
           <DialogActions>
             <Button
               onClick={() => {
@@ -4887,51 +5084,360 @@ const OrdersPage = () => {
               <CloseIcon />
             </IconButton>
 
-            {assignedLeadsModal.leads[assignedLeadsModal.currentIndex] && (
-              <LeadQuickView
-                lead={assignedLeadsModal.leads[assignedLeadsModal.currentIndex]}
-                onLeadUpdate={handleLeadUpdate}
-                onConvertLeadType={(lead) =>
-                  handleConvertLeadType(
-                    orders.find((o) => o._id === assignedLeadsModal.orderId),
-                    lead
-                  )
-                }
-                onChangeFTDLead={(lead) =>
-                  handleOpenChangeFTDDialog(
-                    orders.find((o) => o._id === assignedLeadsModal.orderId),
-                    lead
-                  )
-                }
-                onAssignLeadToAgent={handleOpenAssignLeadDialog}
-                onAssignDepositCall={(lead) =>
-                  handleOpenAssignDepositCallDialog(
-                    orders.find((o) => o._id === assignedLeadsModal.orderId),
-                    lead
-                  )
-                }
-                titleExtra={
-                  <Typography
-                    component="div"
-                    variant="subtitle1"
-                    color="text.secondary"
-                    sx={{ fontWeight: "bold" }}
-                  >
-                    {assignedLeadsModal.currentIndex + 1} /{" "}
-                    {assignedLeadsModal.leads.length}
-                  </Typography>
-                }
-              />
+            {filteredLeads.length > 0 ? (
+              filteredLeads[assignedLeadsModal.currentIndex] && (
+                <LeadQuickView
+                  lead={filteredLeads[assignedLeadsModal.currentIndex]}
+                  onLeadUpdate={handleLeadUpdate}
+                  onConvertLeadType={(lead) =>
+                    handleConvertLeadType(
+                      orders.find((o) => o._id === assignedLeadsModal.orderId),
+                      lead
+                    )
+                  }
+                  onChangeFTDLead={(lead) =>
+                    handleOpenChangeFTDDialog(
+                      orders.find((o) => o._id === assignedLeadsModal.orderId),
+                      lead
+                    )
+                  }
+                  onAssignLeadToAgent={handleOpenAssignLeadDialog}
+                  onAssignDepositCall={(lead) =>
+                    handleOpenAssignDepositCallDialog(
+                      orders.find((o) => o._id === assignedLeadsModal.orderId),
+                      lead
+                    )
+                  }
+                  titleExtra={
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                      {!showLeadsSearch ? (
+                        <>
+                          <IconButton
+                            size="small"
+                            onClick={() => setShowLeadsSearch(true)}
+                            sx={{
+                              color: "text.secondary",
+                              "&:hover": { color: "primary.main" },
+                            }}
+                          >
+                            <SearchIcon sx={{ fontSize: 18 }} />
+                          </IconButton>
+                          <Typography
+                            component="div"
+                            variant="subtitle1"
+                            color="text.secondary"
+                            sx={{ fontWeight: "bold" }}
+                          >
+                            {assignedLeadsModal.currentIndex + 1} /{" "}
+                            {filteredLeads.length}
+                            {leadsSearchQuery && (
+                              <Typography
+                                component="span"
+                                variant="caption"
+                                sx={{ ml: 0.5, opacity: 0.7 }}
+                              >
+                                (of {assignedLeadsModal.leads.length})
+                              </Typography>
+                            )}
+                          </Typography>
+                        </>
+                      ) : (
+                        <Box
+                          sx={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 0.5,
+                          }}
+                        >
+                          <TextField
+                            size="small"
+                            placeholder="Search leads..."
+                            value={leadsSearchQuery}
+                            onChange={(e) =>
+                              setLeadsSearchQuery(e.target.value)
+                            }
+                            autoFocus
+                            sx={{
+                              width: 200,
+                              "& .MuiOutlinedInput-root": {
+                                height: 32,
+                                fontSize: "0.875rem",
+                              },
+                            }}
+                            InputProps={{
+                              startAdornment: (
+                                <SearchIcon
+                                  sx={{
+                                    fontSize: 16,
+                                    mr: 0.5,
+                                    color: "text.secondary",
+                                  }}
+                                />
+                              ),
+                            }}
+                          />
+                          <IconButton
+                            size="small"
+                            onClick={() => {
+                              setLeadsSearchQuery("");
+                              setShowLeadsSearch(false);
+                            }}
+                            sx={{ color: "text.secondary" }}
+                          >
+                            <CloseIcon sx={{ fontSize: 18 }} />
+                          </IconButton>
+                          <Typography
+                            component="div"
+                            variant="subtitle1"
+                            color="text.secondary"
+                            sx={{ fontWeight: "bold", ml: 0.5 }}
+                          >
+                            {assignedLeadsModal.currentIndex + 1} /{" "}
+                            {filteredLeads.length}
+                            {leadsSearchQuery && (
+                              <Typography
+                                component="span"
+                                variant="caption"
+                                sx={{ ml: 0.5, opacity: 0.7 }}
+                              >
+                                (of {assignedLeadsModal.leads.length})
+                              </Typography>
+                            )}
+                          </Typography>
+                        </Box>
+                      )}
+                    </Box>
+                  }
+                />
+              )
+            ) : (
+              <Paper
+                elevation={8}
+                sx={{
+                  width: 1000,
+                  maxWidth: "95vw",
+                  p: 2,
+                  bgcolor: "background.paper",
+                  borderRadius: 2,
+                  border: 1,
+                  borderColor: "divider",
+                  display: "flex",
+                  justifyContent: "flex-end",
+                  alignItems: "center",
+                }}
+              >
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                  {!showLeadsSearch ? (
+                    <>
+                      <IconButton
+                        size="small"
+                        onClick={() => setShowLeadsSearch(true)}
+                        sx={{
+                          color: "text.secondary",
+                          "&:hover": { color: "primary.main" },
+                        }}
+                      >
+                        <SearchIcon sx={{ fontSize: 18 }} />
+                      </IconButton>
+                      <Typography
+                        component="div"
+                        variant="subtitle1"
+                        color="text.secondary"
+                        sx={{ fontWeight: "bold" }}
+                      >
+                        0 / {assignedLeadsModal.leads.length}
+                      </Typography>
+                    </>
+                  ) : (
+                    <Box
+                      sx={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 0.5,
+                      }}
+                    >
+                      <TextField
+                        size="small"
+                        placeholder="Search leads..."
+                        value={leadsSearchQuery}
+                        onChange={(e) => setLeadsSearchQuery(e.target.value)}
+                        autoFocus
+                        sx={{
+                          width: 200,
+                          "& .MuiOutlinedInput-root": {
+                            height: 32,
+                            fontSize: "0.875rem",
+                          },
+                        }}
+                        InputProps={{
+                          startAdornment: (
+                            <SearchIcon
+                              sx={{
+                                fontSize: 16,
+                                mr: 0.5,
+                                color: "text.secondary",
+                              }}
+                            />
+                          ),
+                        }}
+                      />
+                      <IconButton
+                        size="small"
+                        onClick={() => {
+                          setLeadsSearchQuery("");
+                          setShowLeadsSearch(false);
+                        }}
+                        sx={{ color: "text.secondary" }}
+                      >
+                        <CloseIcon sx={{ fontSize: 18 }} />
+                      </IconButton>
+                      <Typography
+                        component="div"
+                        variant="subtitle1"
+                        color="text.secondary"
+                        sx={{ fontWeight: "bold", ml: 0.5 }}
+                      >
+                        0 / {assignedLeadsModal.leads.length}
+                      </Typography>
+                    </Box>
+                  )}
+                </Box>
+              </Paper>
             )}
           </Box>
         </DialogContent>
+      </Dialog>
+
+      {/* Leads Preview Modal */}
+      <Dialog
+        open={leadsPreviewModal.open}
+        onClose={handleCloseLeadsPreviewModal}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>
+          <Box
+            sx={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
+          >
+            <Typography variant="h6">Leads Preview</Typography>
+            <IconButton
+              aria-label="close"
+              onClick={handleCloseLeadsPreviewModal}
+              size="small"
+            >
+              <CloseIcon />
+            </IconButton>
+          </Box>
+        </DialogTitle>
+        <DialogContent dividers>
+          <TableContainer>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell
+                    sx={{ fontWeight: "bold", backgroundColor: "grey.100" }}
+                  >
+                    Lead Name
+                  </TableCell>
+                  <TableCell
+                    sx={{ fontWeight: "bold", backgroundColor: "grey.100" }}
+                  >
+                    Assigned Agent
+                  </TableCell>
+                  <TableCell
+                    sx={{ fontWeight: "bold", backgroundColor: "grey.100" }}
+                  >
+                    Client Broker
+                  </TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {leadsPreviewModal.leads.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={3} align="center">
+                      <Typography color="text.secondary">
+                        No leads found
+                      </Typography>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  leadsPreviewModal.leads.map((lead, index) => {
+                    const leadType = getDisplayLeadType(lead);
+                    return (
+                      <TableRow key={lead._id || index} hover>
+                        <TableCell sx={{ pl: 0.5 }}>
+                          <Box
+                            sx={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 0.5,
+                            }}
+                          >
+                            <Chip
+                              label={leadType?.toUpperCase() || "N/A"}
+                              size="small"
+                              color={
+                                leadType === "ftd"
+                                  ? "success"
+                                  : leadType === "filler"
+                                  ? "warning"
+                                  : leadType === "cold"
+                                  ? "info"
+                                  : "default"
+                              }
+                              sx={{
+                                height: 20,
+                                fontSize: "0.65rem",
+                                "& .MuiChip-label": {
+                                  padding: "0 4px",
+                                },
+                              }}
+                            />
+                            <Typography variant="body2">
+                              {lead.firstName} {lead.lastName}
+                            </Typography>
+                          </Box>
+                        </TableCell>
+                        <TableCell>
+                          {lead.assignedAgent?.fullName || "-"}
+                        </TableCell>
+                        <TableCell>
+                          {lead.assignedClientBrokers?.[0]?.name ||
+                            lead.clientBroker ||
+                            "-"}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseLeadsPreviewModal} variant="outlined">
+            Close
+          </Button>
+        </DialogActions>
       </Dialog>
     </Box>
   );
 };
 
 // Change Requester Dialog Component
-const ChangeRequesterDialog = ({ open, onClose, onSubmit, requesters, loading, selectedRequester, onSelectRequester }) => (
+const ChangeRequesterDialog = ({
+  open,
+  onClose,
+  onSubmit,
+  requesters,
+  loading,
+  selectedRequester,
+  onSelectRequester,
+}) => (
   <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
     <DialogTitle>Change Order Requester</DialogTitle>
     <DialogContent sx={{ pt: 2 }}>
@@ -4941,7 +5447,14 @@ const ChangeRequesterDialog = ({ open, onClose, onSubmit, requesters, loading, s
         loading={loading}
         value={selectedRequester}
         onChange={(event, newValue) => onSelectRequester(newValue)}
-        renderInput={(params) => <TextField {...params} label="Select New Requester" variant="outlined" margin="normal" />}
+        renderInput={(params) => (
+          <TextField
+            {...params}
+            label="Select New Requester"
+            variant="outlined"
+            margin="normal"
+          />
+        )}
         renderOption={(props, option) => (
           <li {...props}>
             <ListItemText primary={option.fullName} secondary={option.role} />
@@ -4949,12 +5462,17 @@ const ChangeRequesterDialog = ({ open, onClose, onSubmit, requesters, loading, s
         )}
       />
       <Alert severity="warning" sx={{ mt: 2 }}>
-        Changing the requester will relink all connections (leads, etc.) to the new requester.
+        Changing the requester will relink all connections (leads, etc.) to the
+        new requester.
       </Alert>
     </DialogContent>
     <DialogActions>
       <Button onClick={onClose}>Cancel</Button>
-      <Button onClick={onSubmit} variant="contained" disabled={!selectedRequester}>
+      <Button
+        onClick={onSubmit}
+        variant="contained"
+        disabled={!selectedRequester}
+      >
         Change Requester
       </Button>
     </DialogActions>
@@ -4980,17 +5498,27 @@ const RequesterHistoryDialog = ({ open, onClose, order }) => (
             <TableBody>
               {order.requesterHistory.map((history, index) => (
                 <TableRow key={index}>
-                  <TableCell>{history.previousRequester?.fullName || 'Unknown'}</TableCell>
-                  <TableCell>{history.newRequester?.fullName || 'Unknown'}</TableCell>
-                  <TableCell>{history.changedBy?.fullName || 'Unknown'}</TableCell>
-                  <TableCell>{new Date(history.changedAt).toLocaleString()}</TableCell>
+                  <TableCell>
+                    {history.previousRequester?.fullName || "Unknown"}
+                  </TableCell>
+                  <TableCell>
+                    {history.newRequester?.fullName || "Unknown"}
+                  </TableCell>
+                  <TableCell>
+                    {history.changedBy?.fullName || "Unknown"}
+                  </TableCell>
+                  <TableCell>
+                    {new Date(history.changedAt).toLocaleString()}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         </TableContainer>
       ) : (
-        <Typography color="textSecondary" align="center" sx={{ py: 3 }}>No history available.</Typography>
+        <Typography color="textSecondary" align="center" sx={{ py: 3 }}>
+          No history available.
+        </Typography>
       )}
     </DialogContent>
     <DialogActions>
