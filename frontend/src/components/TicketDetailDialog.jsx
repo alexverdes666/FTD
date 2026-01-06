@@ -16,9 +16,10 @@ import {
   CardContent,
   TextField,
   IconButton,
-  Collapse,
   Alert,
-  CircularProgress
+  CircularProgress,
+  alpha,
+  useTheme
 } from '@mui/material';
 import {
   Close as CloseIcon,
@@ -27,9 +28,8 @@ import {
   Assignment as AssignIcon,
   CheckCircle as ResolveIcon,
   Comment as CommentIcon,
-  ExpandMore as ExpandMoreIcon,
-  ExpandLess as ExpandLessIcon,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Send as SendIcon
 } from '@mui/icons-material';
 import { toast } from 'react-hot-toast';
 import { selectUser } from '../store/slices/authSlice';
@@ -41,12 +41,17 @@ const TicketDetailDialog = ({
   ticketId, 
   onTicketUpdate 
 }) => {
+  const theme = useTheme();
   const user = useSelector(selectUser);
   const [ticket, setTicket] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [showComments, setShowComments] = useState(true);
   const [newComment, setNewComment] = useState('');
   const [addingComment, setAddingComment] = useState(false);
+  
+  // Resolve ticket states
+  const [showResolveForm, setShowResolveForm] = useState(false);
+  const [resolutionNote, setResolutionNote] = useState('');
+  const [resolving, setResolving] = useState(false);
   
   // Image upload states
   const [uploadingImages, setUploadingImages] = useState(false);
@@ -56,6 +61,19 @@ const TicketDetailDialog = ({
   // Ticket images state
   const [ticketImages, setTicketImages] = useState([]);
   const [loadingImages, setLoadingImages] = useState(false);
+  
+  // Image preview state
+  const [previewImage, setPreviewImage] = useState(null);
+  const [previewPosition, setPreviewPosition] = useState({ x: 0, y: 0 });
+
+  const handleImageMouseEnter = (event, img) => {
+    setPreviewPosition({ x: 20, y: 20 });
+    setPreviewImage(img);
+  };
+
+  const handleImageMouseLeave = () => {
+    setPreviewImage(null);
+  };
 
   // Load ticket details
   useEffect(() => {
@@ -184,15 +202,36 @@ const TicketDetailDialog = ({
     }
   };
 
+  const handleResolveTicket = async () => {
+    try {
+      setResolving(true);
+      await ticketsService.resolveTicket(ticketId, resolutionNote);
+      toast.success('Ticket resolved successfully');
+      setShowResolveForm(false);
+      setResolutionNote('');
+      
+      // Reload ticket details
+      await loadTicketDetails();
+      
+      // Notify parent of update
+      if (onTicketUpdate) {
+        onTicketUpdate({ ...ticket, status: 'resolved' });
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to resolve ticket');
+    } finally {
+      setResolving(false);
+    }
+  };
 
   const isAdmin = user?.role === 'admin';
   const isTicketOwner = ticket && ticket.createdBy._id === user?._id;
 
   if (!ticket && loading) {
     return (
-      <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-        <DialogContent sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
-          <CircularProgress />
+      <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+        <DialogContent sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+          <CircularProgress size={28} />
         </DialogContent>
       </Dialog>
     );
@@ -201,122 +240,114 @@ const TicketDetailDialog = ({
   if (!ticket) return null;
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-      <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Typography variant="h6">
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', py: 1.5, px: 2 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          <Typography variant="subtitle1" fontWeight={600}>
             Ticket Details
           </Typography>
           {ticketsService.isTicketOverdue(ticket) && (
-            <ScheduleIcon color="warning" />
+            <ScheduleIcon color="warning" fontSize="small" />
           )}
         </Box>
-        <IconButton onClick={onClose}>
-          <CloseIcon />
+        <IconButton onClick={onClose} size="small">
+          <CloseIcon fontSize="small" />
         </IconButton>
       </DialogTitle>
 
-      <DialogContent dividers>
-        <Stack spacing={3}>
+      <DialogContent dividers sx={{ p: 1.5 }}>
+        <Stack spacing={1.5}>
           {/* Ticket Header */}
           <Box>
-            <Typography variant="h5" gutterBottom>
+            <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 0.5 }}>
               {ticket.title}
             </Typography>
-            <Stack direction="row" spacing={1} flexWrap="wrap" sx={{ mb: 2 }}>
+            <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
               <Chip
                 label={ticketsService.formatTicketStatus(ticket.status)}
                 color={ticketsService.getStatusColor(ticket.status)}
                 size="small"
+                sx={{ height: 22, fontSize: '0.75rem' }}
               />
               <Chip
                 label={ticketsService.formatTicketPriority(ticket.priority)}
                 color={ticketsService.getPriorityColor(ticket.priority)}
                 size="small"
+                sx={{ height: 22, fontSize: '0.75rem' }}
               />
               <Chip
                 label={ticketsService.formatTicketCategory(ticket.category)}
                 variant="outlined"
                 size="small"
+                sx={{ height: 22, fontSize: '0.75rem' }}
               />
               {ticket.tags && ticket.tags.map(tag => (
-                <Chip key={tag} label={tag} size="small" variant="outlined" />
+                <Chip key={tag} label={tag} size="small" variant="outlined" sx={{ height: 22, fontSize: '0.75rem' }} />
               ))}
             </Stack>
           </Box>
 
           {/* Ticket Info */}
-          <Card variant="outlined">
-            <CardContent>
-              <Stack spacing={2}>
+          <Card variant="outlined" sx={{ bgcolor: alpha(theme.palette.background.default, 0.5) }}>
+            <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+              <Stack spacing={1}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <Avatar sx={{ width: 32, height: 32 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                    <Avatar sx={{ width: 24, height: 24, fontSize: '0.75rem' }}>
                       {ticket.createdBy.fullName?.charAt(0)}
                     </Avatar>
                     <Box>
-                      <Typography variant="body2" fontWeight={600}>
+                      <Typography variant="caption" fontWeight={600} display="block" lineHeight={1.2}>
                         {ticket.createdBy.fullName}
                       </Typography>
-                      <Typography variant="caption" color="textSecondary">
-                        Created {ticketsService.formatTimeAgo(ticket.createdAt)}
+                      <Typography variant="caption" color="textSecondary" sx={{ fontSize: '0.65rem' }}>
+                        {ticketsService.formatTimeAgo(ticket.createdAt)}
                       </Typography>
                     </Box>
                   </Box>
                   
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <AssignIcon fontSize="small" color="action" />
-                    <Box>
-                      <Typography variant="body2" fontWeight={600}>
-                        Admin Handled
-                      </Typography>
-                      <Typography variant="caption" color="textSecondary">
-                        Support Team
-                      </Typography>
-                    </Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                    <AssignIcon sx={{ fontSize: 16 }} color="action" />
+                    <Typography variant="caption" fontWeight={600}>Admin Handled</Typography>
                   </Box>
                 </Box>
 
-                <Divider />
+                <Divider sx={{ my: 0.5 }} />
 
-                <Typography variant="body1">
+                <Typography variant="body2" sx={{ fontSize: '0.8rem', lineHeight: 1.4 }}>
                   {ticket.description}
                 </Typography>
 
                 {/* Display ticket images (not associated with comments) */}
                 {ticketImages.filter(img => img.commentIndex === null).length > 0 && (
-                  <Box sx={{ mt: 2 }}>
-                    <Typography variant="body2" fontWeight={600} gutterBottom>
-                      Attachments:
-                    </Typography>
-                    <Stack direction="row" spacing={1} flexWrap="wrap" gap={1}>
+                  <Box>
+                    <Typography variant="caption" fontWeight={600}>Attachments:</Typography>
+                    <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap sx={{ mt: 0.5 }}>
                       {ticketImages
                         .filter(img => img.commentIndex === null)
                         .map((img) => (
-                          <Card 
+                          <Box 
                             key={img._id} 
-                            variant="outlined" 
                             sx={{ 
-                              width: 120, 
-                              height: 120,
+                              width: 60, 
+                              height: 60,
+                              borderRadius: 1,
+                              overflow: 'hidden',
                               cursor: 'pointer',
-                              '&:hover': { boxShadow: 2 }
+                              border: `1px solid ${theme.palette.divider}`,
+                              '&:hover': { boxShadow: 2, borderColor: theme.palette.primary.main }
                             }}
                             onClick={() => window.open(ticketsService.getTicketImageUrl(img._id), '_blank')}
+                            onMouseEnter={(e) => handleImageMouseEnter(e, img)}
+                            onMouseLeave={handleImageMouseLeave}
                           >
-                            <CardContent sx={{ p: 0, height: '100%' }}>
-                              <Box
-                                component="img"
-                                src={ticketsService.getTicketImageThumbnailUrl(img._id)}
-                                alt={img.originalName}
-                                sx={{
-                                  width: '100%',
-                                  height: '100%',
-                                  objectFit: 'cover'
-                                }}
-                              />
-                            </CardContent>
-                          </Card>
+                            <Box
+                              component="img"
+                              src={ticketsService.getTicketImageThumbnailUrl(img._id)}
+                              alt={img.originalName}
+                              sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            />
+                          </Box>
                         ))}
                     </Stack>
                   </Box>
@@ -325,22 +356,24 @@ const TicketDetailDialog = ({
                 {ticket.dueDate && (
                   <Alert 
                     severity={ticketsService.isTicketOverdue(ticket) ? 'warning' : 'info'}
-                    sx={{ mt: 2 }}
+                    sx={{ py: 0.25, px: 1, '& .MuiAlert-message': { py: 0.5 } }}
                   >
-                    Due: {new Date(ticket.dueDate).toLocaleDateString()} at {new Date(ticket.dueDate).toLocaleTimeString()}
+                    <Typography variant="caption">
+                      Due: {new Date(ticket.dueDate).toLocaleDateString()} at {new Date(ticket.dueDate).toLocaleTimeString()}
+                    </Typography>
                   </Alert>
                 )}
 
                 {ticket.resolution && ticket.status === 'resolved' && (
-                  <Alert severity="success" sx={{ mt: 2 }}>
-                    <Typography variant="body2" fontWeight={600}>
+                  <Alert severity="success" sx={{ py: 0.25, px: 1, '& .MuiAlert-message': { py: 0.5 } }}>
+                    <Typography variant="caption" fontWeight={600}>
                       Resolved by {ticket.resolution.resolvedBy.fullName}
                     </Typography>
-                    <Typography variant="body2">
+                    <Typography variant="caption" display="block">
                       {ticketsService.formatTimeAgo(ticket.resolution.resolvedAt)}
                     </Typography>
                     {ticket.resolution.resolutionNote && (
-                      <Typography variant="body2" sx={{ mt: 1 }}>
+                      <Typography variant="caption" display="block" sx={{ mt: 0.25 }}>
                         {ticket.resolution.resolutionNote}
                       </Typography>
                     )}
@@ -350,197 +383,356 @@ const TicketDetailDialog = ({
             </CardContent>
           </Card>
 
-          {/* Comments Section */}
-          <Box>
-            <Box 
-              sx={{ 
-                display: 'flex', 
-                justifyContent: 'space-between', 
-                alignItems: 'center',
-                cursor: 'pointer'
+          {/* Comments Section - Chat Bubbles */}
+          {ticket.comments && ticket.comments.length > 0 && (
+            <Box
+              sx={{
+                bgcolor: alpha(theme.palette.grey[500], 0.04),
+                borderRadius: 1.5,
+                p: 1,
+                maxHeight: 200,
+                overflowY: 'auto',
+                '&::-webkit-scrollbar': { width: 4 },
+                '&::-webkit-scrollbar-thumb': {
+                  bgcolor: alpha(theme.palette.primary.main, 0.2),
+                  borderRadius: 2,
+                },
               }}
-              onClick={() => setShowComments(!showComments)}
             >
-              <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <CommentIcon />
-                Comments ({ticket.comments?.length || 0})
-              </Typography>
-              {showComments ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-            </Box>
-
-            <Collapse in={showComments}>
-              <Stack spacing={2} sx={{ mt: 2 }}>
-                {ticket.comments && ticket.comments.length > 0 ? (
-                  ticket.comments.map((comment, index) => (
-                    <Card key={index} variant="outlined">
-                      <CardContent>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <Avatar sx={{ width: 24, height: 24 }}>
-                              {comment.user.fullName?.charAt(0)}
-                            </Avatar>
-                            <Typography variant="body2" fontWeight={600}>
-                              {comment.user.fullName}
-                            </Typography>
-                            {comment.isInternal && (
-                              <Chip label="Internal" size="small" color="warning" />
-                            )}
-                          </Box>
-                          <Typography variant="caption" color="textSecondary">
-                            {ticketsService.formatTimeAgo(comment.createdAt)}
+              <Stack spacing={1}>
+                {ticket.comments.map((comment, index) => {
+                  const isOwnComment = comment.user._id === user?._id;
+                  return (
+                    <Box
+                      key={index}
+                      sx={{
+                        display: 'flex',
+                        flexDirection: isOwnComment ? 'row-reverse' : 'row',
+                        gap: 0.75,
+                        alignItems: 'flex-start',
+                      }}
+                    >
+                      <Avatar
+                        sx={{
+                          width: 24,
+                          height: 24,
+                          bgcolor: isOwnComment 
+                            ? theme.palette.primary.main 
+                            : theme.palette.secondary.main,
+                          fontSize: '0.7rem',
+                          fontWeight: 600,
+                        }}
+                      >
+                        {comment.user.fullName?.charAt(0)}
+                      </Avatar>
+                      
+                      <Box
+                        sx={{
+                          maxWidth: '80%',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: isOwnComment ? 'flex-end' : 'flex-start',
+                        }}
+                      >
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.25 }}>
+                          <Typography variant="caption" fontWeight={600} color="text.secondary" sx={{ fontSize: '0.65rem' }}>
+                            {comment.user.fullName}
                           </Typography>
-                        </Box>
-                        <Typography variant="body2">
-                          {comment.message}
-                        </Typography>
-                        
-                        {/* Display comment images */}
-                        {ticketImages.filter(img => img.commentIndex === index).length > 0 && (
-                          <Box sx={{ mt: 1 }}>
-                            <Stack direction="row" spacing={1} flexWrap="wrap" gap={1}>
-                              {ticketImages
-                                .filter(img => img.commentIndex === index)
-                                .map((img) => (
-                                  <Card 
-                                    key={img._id} 
-                                    variant="outlined" 
-                                    sx={{ 
-                                      width: 80, 
-                                      height: 80,
-                                      cursor: 'pointer',
-                                      '&:hover': { boxShadow: 2 }
-                                    }}
-                                    onClick={() => window.open(ticketsService.getTicketImageUrl(img._id), '_blank')}
-                                  >
-                                    <CardContent sx={{ p: 0, height: '100%' }}>
-                                      <Box
-                                        component="img"
-                                        src={ticketsService.getTicketImageThumbnailUrl(img._id)}
-                                        alt={img.originalName}
-                                        sx={{
-                                          width: '100%',
-                                          height: '100%',
-                                          objectFit: 'cover'
-                                        }}
-                                      />
-                                    </CardContent>
-                                  </Card>
-                                ))}
-                            </Stack>
-                          </Box>
-                        )}
-                      </CardContent>
-                    </Card>
-                  ))
-                ) : (
-                  <Typography variant="body2" color="textSecondary" sx={{ textAlign: 'center', py: 2 }}>
-                    No comments yet
-                  </Typography>
-                )}
-
-                {/* Add Comment */}
-                {(isTicketOwner || isAdmin) && ticket.status !== 'closed' && (
-                  <Card variant="outlined">
-                    <CardContent>
-                      <Stack spacing={2}>
-                        <TextField
-                          multiline
-                          rows={3}
-                          placeholder="Add a comment..."
-                          value={newComment}
-                          onChange={(e) => setNewComment(e.target.value)}
-                          fullWidth
-                        />
-                        
-                        {/* Image Upload for Comment */}
-                        <Box>
-                          <input
-                            accept="image/*"
-                            style={{ display: 'none' }}
-                            id="comment-image-upload"
-                            multiple
-                            type="file"
-                            onChange={handleCommentImageSelect}
-                            disabled={uploadingImages}
-                          />
-                          <label htmlFor="comment-image-upload">
-                            <Button
-                              variant="outlined"
-                              component="span"
-                              size="small"
-                              startIcon={uploadingImages ? <CircularProgress size={16} /> : <ImageIcon />}
-                              disabled={uploadingImages}
-                            >
-                              {uploadingImages ? 'Uploading...' : 'Attach Images'}
-                            </Button>
-                          </label>
-                          
-                          {/* Display selected comment images */}
-                          {commentImages.length > 0 && (
-                            <Box sx={{ mt: 1 }}>
-                              <Stack direction="row" spacing={1} flexWrap="wrap" gap={1}>
-                                {commentImages.map((img) => (
-                                  <Card key={img.id} variant="outlined" sx={{ position: 'relative', width: 60, height: 60 }}>
-                                    <CardContent sx={{ p: 0, height: '100%', position: 'relative' }}>
-                                      <Box
-                                        component="img"
-                                        src={img.url}
-                                        alt={img.name}
-                                        sx={{
-                                          width: '100%',
-                                          height: '100%',
-                                          objectFit: 'cover'
-                                        }}
-                                      />
-                                      <IconButton
-                                        size="small"
-                                        onClick={() => handleRemoveCommentImage(img.id)}
-                                        sx={{
-                                          position: 'absolute',
-                                          top: 0,
-                                          right: 0,
-                                          bgcolor: 'background.paper',
-                                          padding: '2px',
-                                          '&:hover': { bgcolor: 'error.light' }
-                                        }}
-                                      >
-                                        <CloseIcon fontSize="small" sx={{ fontSize: 14 }} />
-                                      </IconButton>
-                                    </CardContent>
-                                  </Card>
-                                ))}
-                              </Stack>
-                            </Box>
+                          {comment.isInternal && (
+                            <Chip 
+                              label="Internal" 
+                              size="small" 
+                              color="warning" 
+                              sx={{ height: 14, fontSize: '0.55rem', '& .MuiChip-label': { px: 0.5 } }} 
+                            />
                           )}
                         </Box>
                         
-                        <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-                          <Button
-                            variant="contained"
-                            onClick={handleAddComment}
-                            disabled={addingComment || !newComment.trim()}
-                            startIcon={addingComment ? <CircularProgress size={16} /> : <CommentIcon />}
-                          >
-                            {addingComment ? 'Adding...' : 'Add Comment'}
-                          </Button>
+                        <Box
+                          sx={{
+                            bgcolor: isOwnComment
+                              ? theme.palette.primary.main
+                              : alpha(theme.palette.grey[500], 0.1),
+                            color: isOwnComment ? 'white' : 'text.primary',
+                            px: 1.25,
+                            py: 0.75,
+                            borderRadius: 2,
+                            borderTopRightRadius: isOwnComment ? 3 : 16,
+                            borderTopLeftRadius: isOwnComment ? 16 : 3,
+                            boxShadow: isOwnComment 
+                              ? `0 1px 4px ${alpha(theme.palette.primary.main, 0.25)}`
+                              : 'none',
+                          }}
+                        >
+                          <Typography variant="caption" sx={{ lineHeight: 1.4, fontSize: '0.75rem' }}>
+                            {comment.message}
+                          </Typography>
                         </Box>
-                      </Stack>
-                    </CardContent>
-                  </Card>
+                        
+                        {/* Display comment images */}
+                        {ticketImages.filter(img => img.commentIndex === index).length > 0 && (
+                          <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap sx={{ mt: 0.5 }}>
+                            {ticketImages
+                              .filter(img => img.commentIndex === index)
+                              .map((img) => (
+                                <Box 
+                                  key={img._id} 
+                                  sx={{ 
+                                    width: 40, 
+                                    height: 40,
+                                    borderRadius: 1,
+                                    overflow: 'hidden',
+                                    cursor: 'pointer',
+                                    border: `1px solid ${alpha(theme.palette.divider, 0.3)}`,
+                                    transition: 'all 0.15s ease',
+                                    '&:hover': { 
+                                      boxShadow: 2,
+                                      borderColor: theme.palette.primary.main,
+                                      transform: 'scale(1.05)'
+                                    }
+                                  }}
+                                  onClick={() => window.open(ticketsService.getTicketImageUrl(img._id), '_blank')}
+                                  onMouseEnter={(e) => handleImageMouseEnter(e, img)}
+                                  onMouseLeave={handleImageMouseLeave}
+                                >
+                                  <Box
+                                    component="img"
+                                    src={ticketsService.getTicketImageThumbnailUrl(img._id)}
+                                    alt={img.originalName}
+                                    sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                  />
+                                </Box>
+                              ))}
+                          </Stack>
+                        )}
+                        
+                        <Typography 
+                          variant="caption" 
+                          color="text.disabled"
+                          sx={{ mt: 0.25, fontSize: '0.6rem' }}
+                        >
+                          {ticketsService.formatTimeAgo(comment.createdAt)}
+                        </Typography>
+                      </Box>
+                    </Box>
+                  );
+                })}
+              </Stack>
+            </Box>
+          )}
+
+          {/* Add Comment */}
+          {(isTicketOwner || isAdmin) && ticket.status !== 'closed' && (
+            <Box
+              sx={{
+                bgcolor: alpha(theme.palette.background.paper, 0.6),
+                borderRadius: 1.5,
+                p: 1,
+                border: `1px solid ${alpha(theme.palette.divider, 0.08)}`,
+              }}
+            >
+              <Stack spacing={0.75}>
+                <TextField
+                  multiline
+                  rows={1}
+                  placeholder="Write a message..."
+                  value={newComment}
+                  onChange={(e) => setNewComment(e.target.value)}
+                  fullWidth
+                  size="small"
+                  sx={{
+                    '& .MuiOutlinedInput-root': {
+                      borderRadius: 1.5,
+                      bgcolor: 'background.paper',
+                      fontSize: '0.8rem',
+                    },
+                    '& .MuiOutlinedInput-input': {
+                      py: 0.75,
+                    }
+                  }}
+                />
+                
+                {/* Image Upload for Comment */}
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Box>
+                    <input
+                      accept="image/*"
+                      style={{ display: 'none' }}
+                      id="comment-image-upload"
+                      multiple
+                      type="file"
+                      onChange={handleCommentImageSelect}
+                      disabled={uploadingImages}
+                    />
+                    <label htmlFor="comment-image-upload">
+                      <IconButton
+                        component="span"
+                        size="small"
+                        disabled={uploadingImages}
+                        sx={{ p: 0.5, color: 'text.secondary', '&:hover': { color: 'primary.main' } }}
+                      >
+                        {uploadingImages ? <CircularProgress size={16} /> : <ImageIcon fontSize="small" />}
+                      </IconButton>
+                    </label>
+                  </Box>
+                  
+                  <Button
+                    variant="contained"
+                    onClick={handleAddComment}
+                    disabled={addingComment || !newComment.trim()}
+                    size="small"
+                    endIcon={addingComment ? <CircularProgress size={12} color="inherit" /> : <SendIcon sx={{ fontSize: 14 }} />}
+                    sx={{
+                      borderRadius: 1.5,
+                      px: 1.5,
+                      py: 0.25,
+                      textTransform: 'none',
+                      fontSize: '0.75rem',
+                      minHeight: 28,
+                    }}
+                  >
+                    Send
+                  </Button>
+                </Box>
+                
+                {/* Display selected comment images */}
+                {commentImages.length > 0 && (
+                  <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
+                    {commentImages.map((img) => (
+                      <Box 
+                        key={img.id} 
+                        sx={{ position: 'relative', width: 36, height: 36, borderRadius: 0.75, overflow: 'hidden' }}
+                      >
+                        <Box
+                          component="img"
+                          src={img.url}
+                          alt={img.name}
+                          sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        />
+                        <IconButton
+                          size="small"
+                          onClick={() => handleRemoveCommentImage(img.id)}
+                          sx={{
+                            position: 'absolute',
+                            top: -2,
+                            right: -2,
+                            bgcolor: 'error.main',
+                            color: 'white',
+                            padding: '1px',
+                            '&:hover': { bgcolor: 'error.dark' }
+                          }}
+                        >
+                          <CloseIcon sx={{ fontSize: 10 }} />
+                        </IconButton>
+                      </Box>
+                    ))}
+                  </Stack>
                 )}
               </Stack>
-            </Collapse>
-          </Box>
+            </Box>
+          )}
         </Stack>
       </DialogContent>
 
-      <DialogActions>
-        <Button onClick={onClose} variant="contained">
+      <DialogActions sx={{ px: 1.5, py: 1, gap: 0.5 }}>
+        {/* Resolve Ticket Section */}
+        {isAdmin && ticket.status !== 'resolved' && ticket.status !== 'closed' && (
+          <>
+            {!showResolveForm ? (
+              <Button
+                variant="contained"
+                color="success"
+                size="small"
+                startIcon={<ResolveIcon sx={{ fontSize: 16 }} />}
+                onClick={() => setShowResolveForm(true)}
+                sx={{
+                  mr: 'auto',
+                  textTransform: 'none',
+                  borderRadius: 1.5,
+                  fontSize: '0.75rem',
+                  py: 0.5,
+                }}
+              >
+                Resolve
+              </Button>
+            ) : (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mr: 'auto', flex: 1, maxWidth: '65%' }}>
+                <TextField
+                  size="small"
+                  placeholder="Resolution note..."
+                  value={resolutionNote}
+                  onChange={(e) => setResolutionNote(e.target.value)}
+                  fullWidth
+                  sx={{
+                    '& .MuiOutlinedInput-root': { borderRadius: 1.5, fontSize: '0.75rem' },
+                    '& .MuiOutlinedInput-input': { py: 0.5 }
+                  }}
+                />
+                <Button
+                  variant="contained"
+                  color="success"
+                  onClick={handleResolveTicket}
+                  disabled={resolving}
+                  size="small"
+                  sx={{ minWidth: 'auto', px: 1.5, borderRadius: 1.5, textTransform: 'none', fontSize: '0.7rem', py: 0.5 }}
+                >
+                  {resolving ? <CircularProgress size={14} color="inherit" /> : 'OK'}
+                </Button>
+                <Button
+                  variant="outlined"
+                  onClick={() => { setShowResolveForm(false); setResolutionNote(''); }}
+                  size="small"
+                  sx={{ minWidth: 'auto', px: 1, borderRadius: 1.5, textTransform: 'none', fontSize: '0.7rem', py: 0.5 }}
+                >
+                  ✕
+                </Button>
+              </Box>
+            )}
+          </>
+        )}
+        <Button 
+          onClick={onClose} 
+          variant="contained"
+          size="small"
+          sx={{ borderRadius: 1.5, textTransform: 'none', fontSize: '0.75rem', py: 0.5 }}
+        >
           Close
         </Button>
       </DialogActions>
+
+      {/* Image Preview */}
+      {previewImage && (
+        <Box
+          component="img"
+          src={ticketsService.getTicketImageUrl(previewImage._id)}
+          alt={previewImage.originalName}
+          onMouseEnter={() => setPreviewImage(previewImage)}
+          onMouseLeave={handleImageMouseLeave}
+          sx={{
+            position: 'fixed',
+            left: previewPosition.x,
+            top: previewPosition.y,
+            right: 20,
+            bottom: 20,
+            zIndex: 1400,
+            objectFit: 'contain',
+            borderRadius: 1,
+            pointerEvents: 'none',
+            animation: 'fadeIn 0.15s ease-out',
+            '@keyframes fadeIn': {
+              from: {
+                opacity: 0,
+              },
+              to: {
+                opacity: 1,
+              }
+            }
+          }}
+        />
+      )}
     </Dialog>
   );
 };
 
 export default TicketDetailDialog;
+
