@@ -1080,12 +1080,12 @@ const handleManualSelectionOrder = async (req, res, next) => {
     }
 
     // Validate all manual leads
-    const leadIds = manualLeads.map(ml => ml.leadId);
+    const leadIds = manualLeads.map((ml) => ml.leadId);
     const foundLeads = await Lead.find({ _id: { $in: leadIds } });
 
     if (foundLeads.length !== leadIds.length) {
-      const foundIds = foundLeads.map(l => l._id.toString());
-      const missingIds = leadIds.filter(id => !foundIds.includes(id));
+      const foundIds = foundLeads.map((l) => l._id.toString());
+      const missingIds = leadIds.filter((id) => !foundIds.includes(id));
       return res.status(400).json({
         success: false,
         message: `Some leads not found: ${missingIds.join(", ")}`,
@@ -1094,12 +1094,17 @@ const handleManualSelectionOrder = async (req, res, next) => {
 
     // Validate agents exist
     const User = require("../models/User");
-    const agentIds = [...new Set(manualLeads.map(ml => ml.agentId))];
-    const foundAgents = await User.find({ _id: { $in: agentIds }, role: "agent" });
-    
+    const agentIds = [...new Set(manualLeads.map((ml) => ml.agentId))];
+    const foundAgents = await User.find({
+      _id: { $in: agentIds },
+      role: "agent",
+    });
+
     if (foundAgents.length !== agentIds.length) {
-      const foundAgentIds = foundAgents.map(a => a._id.toString());
-      const missingAgentIds = agentIds.filter(id => !foundAgentIds.includes(id));
+      const foundAgentIds = foundAgents.map((a) => a._id.toString());
+      const missingAgentIds = agentIds.filter(
+        (id) => !foundAgentIds.includes(id)
+      );
       return res.status(400).json({
         success: false,
         message: `Some agents not found: ${missingAgentIds.join(", ")}`,
@@ -1107,11 +1112,11 @@ const handleManualSelectionOrder = async (req, res, next) => {
     }
 
     // Create a map of leadId -> lead for easy lookup
-    const leadMap = new Map(foundLeads.map(l => [l._id.toString(), l]));
+    const leadMap = new Map(foundLeads.map((l) => [l._id.toString(), l]));
 
     // Calculate requests counts based on manual lead types
     const requestsCounts = { ftd: 0, filler: 0, cold: 0 };
-    manualLeads.forEach(ml => {
+    manualLeads.forEach((ml) => {
       if (requestsCounts[ml.leadType] !== undefined) {
         requestsCounts[ml.leadType]++;
       }
@@ -1122,7 +1127,7 @@ const handleManualSelectionOrder = async (req, res, next) => {
     const orderCountry = firstLead?.country || "Mixed";
 
     // Create leadsMetadata to track how each lead was ordered
-    const leadsMetadata = manualLeads.map(ml => ({
+    const leadsMetadata = manualLeads.map((ml) => ({
       leadId: ml.leadId,
       orderedAs: ml.leadType,
     }));
@@ -1151,14 +1156,14 @@ const handleManualSelectionOrder = async (req, res, next) => {
     // Update each lead with order assignment and agent assignment
     const updatePromises = manualLeads.map(async (ml) => {
       const lead = leadMap.get(ml.leadId);
-      
+
       // Update assigned agent
       lead.assignedAgent = ml.agentId;
       lead.assignedAgentAt = new Date();
-      
+
       // Update lastUsedInOrder for cooldown tracking
       lead.lastUsedInOrder = new Date();
-      
+
       // Add client network to history if provided
       if (selectedClientNetwork) {
         if (!lead.clientNetworkHistory) {
@@ -1187,7 +1192,7 @@ const handleManualSelectionOrder = async (req, res, next) => {
 
       // Add client brokers to history if provided
       if (selectedClientBrokers && selectedClientBrokers.length > 0) {
-        selectedClientBrokers.forEach(brokerId => {
+        selectedClientBrokers.forEach((brokerId) => {
           if (!lead.assignedClientBrokers) {
             lead.assignedClientBrokers = [];
           }
@@ -1226,13 +1231,18 @@ const handleManualSelectionOrder = async (req, res, next) => {
 
     // Populate the order for response
     const populatedOrder = await Order.findById(order._id)
-      .populate("leads", "firstName lastName newEmail newPhone country leadType orderedAs")
+      .populate(
+        "leads",
+        "firstName lastName newEmail newPhone country leadType orderedAs"
+      )
       .populate("requester", "fullName email")
       .populate("selectedClientNetwork", "name")
       .populate("selectedOurNetwork", "name")
       .populate("selectedCampaign", "name");
 
-    console.log(`[MANUAL-ORDER] Created order ${order._id} with ${manualLeads.length} manually selected leads`);
+    console.log(
+      `[MANUAL-ORDER] Created order ${order._id} with ${manualLeads.length} manually selected leads`
+    );
 
     return res.status(201).json({
       success: true,
@@ -1252,7 +1262,7 @@ exports.createOrder = async (req, res, next) => {
       manualLeadsCount: req.body.manualLeads?.length,
       country: req.body.country,
     });
-    
+
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       console.log("[ORDER-CREATE] Validation errors:", errors.array());
@@ -1401,29 +1411,45 @@ exports.createOrder = async (req, res, next) => {
       const totalAvailableCount = await Lead.countDocuments(query);
 
       let availableLeads;
-      
+
       if (agentId) {
         // When agent is specified, prioritize fetching their assigned leads first
         // Fetch ALL agent-assigned leads + ALL unassigned leads (no limit)
         const agentQuery = { ...query, assignedAgent: agentId };
         const unassignedQuery = { ...query, assignedAgent: null };
-        
+
         // Debug: Log the queries being used
-        console.log(`[${leadType.toUpperCase()}-QUERY-DEBUG] Agent query:`, JSON.stringify(agentQuery));
-        console.log(`[${leadType.toUpperCase()}-QUERY-DEBUG] Unassigned query:`, JSON.stringify(unassignedQuery));
-        console.log(`[${leadType.toUpperCase()}-QUERY-DEBUG] Total matching base criteria: ${totalAvailableCount} (no fetch limit)`);
-        
+        console.log(
+          `[${leadType.toUpperCase()}-QUERY-DEBUG] Agent query:`,
+          JSON.stringify(agentQuery)
+        );
+        console.log(
+          `[${leadType.toUpperCase()}-QUERY-DEBUG] Unassigned query:`,
+          JSON.stringify(unassignedQuery)
+        );
+        console.log(
+          `[${leadType.toUpperCase()}-QUERY-DEBUG] Total matching base criteria: ${totalAvailableCount} (no fetch limit)`
+        );
+
         const agentLeads = await Lead.find(agentQuery);
         const unassignedLeads = await Lead.find(unassignedQuery);
-        
+
         // Debug: Log IDs of unassigned leads fetched
-        console.log(`[${leadType.toUpperCase()}-QUERY-DEBUG] Unassigned lead IDs fetched: ${unassignedLeads.map(l => l._id).join(', ')}`);
-        
+        console.log(
+          `[${leadType.toUpperCase()}-QUERY-DEBUG] Unassigned lead IDs fetched: ${unassignedLeads
+            .map((l) => l._id)
+            .join(", ")}`
+        );
+
         // Combine agent leads first, then unassigned
         availableLeads = [...agentLeads, ...unassignedLeads];
-        
+
         console.log(
-          `[${leadType.toUpperCase()}] Fetched ${agentLeads.length} agent-assigned leads + ${unassignedLeads.length} unassigned leads for agent ${agentId}`
+          `[${leadType.toUpperCase()}] Fetched ${
+            agentLeads.length
+          } agent-assigned leads + ${
+            unassignedLeads.length
+          } unassigned leads for agent ${agentId}`
         );
       } else {
         // No agent specified, fetch all matching leads (no limit)
@@ -1431,22 +1457,60 @@ exports.createOrder = async (req, res, next) => {
       }
 
       // Apply cooldown filter for FTD and Filler leads (10-day cooldown)
-      if (leadType === 'ftd' || leadType === 'filler') {
+      if (leadType === "ftd" || leadType === "filler") {
         const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
         const beforeCooldownFilter = availableLeads.length;
-        
-        // Debug: Log all leads before cooldown filtering
-        console.log(`[${leadType.toUpperCase()}-COOLDOWN-DEBUG] Checking ${availableLeads.length} leads for cooldown:`);
-        availableLeads.forEach((lead, idx) => {
-          const inCooldown = lead.lastUsedInOrder && lead.lastUsedInOrder >= tenDaysAgo;
-          console.log(`[${leadType.toUpperCase()}-COOLDOWN-DEBUG] Lead ${idx}: ID=${lead._id}, lastUsedInOrder=${lead.lastUsedInOrder || 'NULL'}, inCooldown=${inCooldown}, assignedAgent=${lead.assignedAgent || 'NULL'}`);
-        });
-        
-        availableLeads = availableLeads.filter(
-          (lead) => !lead.lastUsedInOrder || lead.lastUsedInOrder < tenDaysAgo
+
+        // Extract phones from available leads to checking for duplicates
+        const leadPhones = availableLeads
+          .map((l) => l.newPhone)
+          .filter(Boolean);
+
+        // Find ALL leads (ftd or filler) with these phones that have been used recently
+        // This prevents using an FTD lead if a Filler lead with same phone was used recently (and vice versa)
+        const recentlyUsedLeads = await Lead.find({
+          newPhone: { $in: leadPhones },
+          leadType: { $in: ["ftd", "filler"] },
+          lastUsedInOrder: { $gte: tenDaysAgo },
+        }).select("newPhone");
+
+        const recentlyUsedPhones = new Set(
+          recentlyUsedLeads.map((l) => l.newPhone)
         );
+
+        // Debug: Log all leads before cooldown filtering
         console.log(
-          `[${leadType.toUpperCase()}] Cooldown filtering: ${beforeCooldownFilter - availableLeads.length} leads filtered out (in 10-day cooldown), ${availableLeads.length} leads remain`
+          `[${leadType.toUpperCase()}-COOLDOWN-DEBUG] Checking ${
+            availableLeads.length
+          } leads for cooldown:`
+        );
+        availableLeads.forEach((lead, idx) => {
+          const inCooldown =
+            lead.lastUsedInOrder && lead.lastUsedInOrder >= tenDaysAgo;
+          const isDuplicateUsed = recentlyUsedPhones.has(lead.newPhone);
+          console.log(
+            `[${leadType.toUpperCase()}-COOLDOWN-DEBUG] Lead ${idx}: ID=${
+              lead._id
+            }, Phone=${lead.newPhone}, lastUsedInOrder=${
+              lead.lastUsedInOrder || "NULL"
+            }, inCooldown=${inCooldown}, isDuplicateUsed=${isDuplicateUsed}, assignedAgent=${
+              lead.assignedAgent || "NULL"
+            }`
+          );
+        });
+
+        availableLeads = availableLeads.filter((lead) => {
+          const inCooldown =
+            lead.lastUsedInOrder && lead.lastUsedInOrder >= tenDaysAgo;
+          const isDuplicateUsed = recentlyUsedPhones.has(lead.newPhone);
+          return !inCooldown && !isDuplicateUsed;
+        });
+        console.log(
+          `[${leadType.toUpperCase()}] Cooldown filtering: ${
+            beforeCooldownFilter - availableLeads.length
+          } leads filtered out (in 10-day cooldown or duplicate used), ${
+            availableLeads.length
+          } leads remain`
         );
       }
 
@@ -1575,19 +1639,25 @@ exports.createOrder = async (req, res, next) => {
       }
 
       let availableLeads;
-      
+
       // If agentFilter is specified, prioritize fetching agent-assigned leads
       if (agentFilter && (leadType === "ftd" || leadType === "filler")) {
         const agentQuery = { ...query, assignedAgent: agentFilter };
         const unassignedQuery = { ...query, assignedAgent: null };
-        
+
         const agentLeads = await Lead.find(agentQuery).limit(fetchLimit);
-        const unassignedLeads = await Lead.find(unassignedQuery).limit(fetchLimit);
-        
+        const unassignedLeads = await Lead.find(unassignedQuery).limit(
+          fetchLimit
+        );
+
         availableLeads = [...agentLeads, ...unassignedLeads];
-        
+
         console.log(
-          `[${leadType.toUpperCase()}-DEBUG] Fetched ${agentLeads.length} agent-assigned + ${unassignedLeads.length} unassigned (total: ${availableLeads.length})`
+          `[${leadType.toUpperCase()}-DEBUG] Fetched ${
+            agentLeads.length
+          } agent-assigned + ${unassignedLeads.length} unassigned (total: ${
+            availableLeads.length
+          })`
         );
       } else {
         availableLeads = await Lead.find(query).limit(fetchLimit);
@@ -1737,19 +1807,21 @@ exports.createOrder = async (req, res, next) => {
       // Pull leads for each agent
       for (const [agentId, indices] of Object.entries(assignmentsByAgent)) {
         console.log(
-          `[FTD-DEBUG] ===== Processing agent ${agentId} with ${indices.length} assignments (indices: ${indices.join(", ")}) =====`
+          `[FTD-DEBUG] ===== Processing agent ${agentId} with ${
+            indices.length
+          } assignments (indices: ${indices.join(", ")}) =====`
         );
-        
+
         // If using per-assignment genders, process each index separately
         if (perAssignmentGenders) {
           console.log(
             `[FTD-DEBUG] Using perAssignmentGenders mode for agent ${agentId}`
           );
-          
+
           for (const index of indices) {
             const assignment = ftdAssignments.find((a) => a.index === index);
             const assignmentGender = assignment?.gender;
-            
+
             console.log(
               `[FTD-DEBUG] Processing index ${index} for agent ${agentId}:`,
               {
@@ -1888,22 +1960,22 @@ exports.createOrder = async (req, res, next) => {
       }
 
       // Collect successfully pulled leads
-      console.log(
-        `[FTD-DEBUG] ===== FINAL FTD ARRAY SUMMARY =====`
-      );
-      console.log(
-        `[FTD-DEBUG] ftdLeadsArray length: ${ftdLeadsArray.length}`
-      );
+      console.log(`[FTD-DEBUG] ===== FINAL FTD ARRAY SUMMARY =====`);
+      console.log(`[FTD-DEBUG] ftdLeadsArray length: ${ftdLeadsArray.length}`);
       ftdLeadsArray.forEach((lead, index) => {
         if (lead) {
           console.log(
-            `[FTD-DEBUG] ftdLeadsArray[${index}]: Lead ${lead._id}, assignedAgent: ${lead.assignedAgent || "UNASSIGNED"}, gender: ${lead.gender}`
+            `[FTD-DEBUG] ftdLeadsArray[${index}]: Lead ${
+              lead._id
+            }, assignedAgent: ${lead.assignedAgent || "UNASSIGNED"}, gender: ${
+              lead.gender
+            }`
           );
         } else {
           console.log(`[FTD-DEBUG] ftdLeadsArray[${index}]: NULL (no lead)`);
         }
       });
-      
+
       const ftdLeads = ftdLeadsArray.filter((lead) => lead !== null);
       console.log(
         `[FTD-DEBUG] After filtering nulls: ${ftdLeads.length} FTD leads to process`
@@ -1985,7 +2057,11 @@ exports.createOrder = async (req, res, next) => {
           (lead) => !lead.lastUsedInOrder || lead.lastUsedInOrder < tenDaysAgo
         );
         console.log(
-          `[FTD-DEBUG] Cooldown filtering: ${beforeCooldownFilter - filteredFTDLeads.length} leads filtered out (in 10-day cooldown), ${filteredFTDLeads.length} leads remain`
+          `[FTD-DEBUG] Cooldown filtering: ${
+            beforeCooldownFilter - filteredFTDLeads.length
+          } leads filtered out (in 10-day cooldown), ${
+            filteredFTDLeads.length
+          } leads remain`
         );
 
         if (selectedClientNetwork) {
@@ -2137,19 +2213,21 @@ exports.createOrder = async (req, res, next) => {
       // Pull leads for each agent
       for (const [agentId, indices] of Object.entries(assignmentsByAgent)) {
         console.log(
-          `[FILLER-DEBUG] ===== Processing agent ${agentId} with ${indices.length} assignments (indices: ${indices.join(", ")}) =====`
+          `[FILLER-DEBUG] ===== Processing agent ${agentId} with ${
+            indices.length
+          } assignments (indices: ${indices.join(", ")}) =====`
         );
-        
+
         // If using per-assignment genders, process each index separately
         if (perAssignmentGenders) {
           console.log(
             `[FILLER-DEBUG] Using perAssignmentGenders mode for agent ${agentId}`
           );
-          
+
           for (const index of indices) {
             const assignment = fillerAssignments.find((a) => a.index === index);
             const assignmentGender = assignment?.gender;
-            
+
             console.log(
               `[FILLER-DEBUG] Processing index ${index} for agent ${agentId}:`,
               {
@@ -2292,22 +2370,26 @@ exports.createOrder = async (req, res, next) => {
       }
 
       // Collect successfully pulled leads
-      console.log(
-        `[FILLER-DEBUG] ===== FINAL FILLER ARRAY SUMMARY =====`
-      );
+      console.log(`[FILLER-DEBUG] ===== FINAL FILLER ARRAY SUMMARY =====`);
       console.log(
         `[FILLER-DEBUG] fillerLeadsArray length: ${fillerLeadsArray.length}`
       );
       fillerLeadsArray.forEach((lead, index) => {
         if (lead) {
           console.log(
-            `[FILLER-DEBUG] fillerLeadsArray[${index}]: Lead ${lead._id}, assignedAgent: ${lead.assignedAgent || "UNASSIGNED"}, gender: ${lead.gender}`
+            `[FILLER-DEBUG] fillerLeadsArray[${index}]: Lead ${
+              lead._id
+            }, assignedAgent: ${lead.assignedAgent || "UNASSIGNED"}, gender: ${
+              lead.gender
+            }`
           );
         } else {
-          console.log(`[FILLER-DEBUG] fillerLeadsArray[${index}]: NULL (no lead)`);
+          console.log(
+            `[FILLER-DEBUG] fillerLeadsArray[${index}]: NULL (no lead)`
+          );
         }
       });
-      
+
       const fillerLeads = fillerLeadsArray.filter((lead) => lead !== null);
       console.log(
         `[FILLER-DEBUG] After filtering nulls: ${fillerLeads.length} filler leads to process`
@@ -2389,7 +2471,11 @@ exports.createOrder = async (req, res, next) => {
           (lead) => !lead.lastUsedInOrder || lead.lastUsedInOrder < tenDaysAgo
         );
         console.log(
-          `[FILLER-DEBUG] Cooldown filtering: ${beforeCooldownFilter - filteredFillerLeads.length} leads filtered out (in 10-day cooldown), ${filteredFillerLeads.length} leads remain`
+          `[FILLER-DEBUG] Cooldown filtering: ${
+            beforeCooldownFilter - filteredFillerLeads.length
+          } leads filtered out (in 10-day cooldown), ${
+            filteredFillerLeads.length
+          } leads remain`
         );
 
         // Exclude FTD leads already selected for this order (both regular FTDs and fillers)
@@ -2494,7 +2580,9 @@ exports.createOrder = async (req, res, next) => {
       // PERFORMANCE OPTIMIZATION: Build comprehensive query with all filters upfront
       // Exclude phone numbers already used in this order
       if (pulledLeads.length > 0) {
-        const alreadyPulledPhoneNumbers = pulledLeads.map((lead) => lead.newPhone);
+        const alreadyPulledPhoneNumbers = pulledLeads.map(
+          (lead) => lead.newPhone
+        );
         coldQuery.newPhone = { $nin: alreadyPulledPhoneNumbers };
       }
 
@@ -2503,7 +2591,9 @@ exports.createOrder = async (req, res, next) => {
         // Exclude leads that are already assigned to this client network
         // Use $not + $elemMatch to check if NO history entry has this clientNetwork
         // IMPORTANT: Convert string ID to ObjectId for aggregate() - unlike find(), aggregate doesn't auto-cast
-        const networkObjectId = new mongoose.Types.ObjectId(selectedClientNetwork);
+        const networkObjectId = new mongoose.Types.ObjectId(
+          selectedClientNetwork
+        );
         coldQuery.$or = [
           { clientNetworkHistory: { $exists: false } },
           { clientNetworkHistory: { $size: 0 } },
@@ -2523,7 +2613,9 @@ exports.createOrder = async (req, res, next) => {
       if (selectedClientBrokers && selectedClientBrokers.length > 0) {
         // Exclude leads that have ANY of the selected brokers in assignedClientBrokers array
         // IMPORTANT: Convert string IDs to ObjectIds for aggregate() - unlike find(), aggregate doesn't auto-cast
-        const brokerObjectIds = selectedClientBrokers.map(id => new mongoose.Types.ObjectId(id));
+        const brokerObjectIds = selectedClientBrokers.map(
+          (id) => new mongoose.Types.ObjectId(id)
+        );
         coldQuery.assignedClientBrokers = { $nin: brokerObjectIds };
       }
 
@@ -2738,7 +2830,7 @@ exports.createOrder = async (req, res, next) => {
       };
 
       // Update lastUsedInOrder timestamp for FTD and Filler leads (10-day cooldown)
-      if (leadType === 'ftd' || leadType === 'filler') {
+      if (leadType === "ftd" || leadType === "filler") {
         updateObj.lastUsedInOrder = new Date();
         lead.lastUsedInOrder = new Date();
       }
@@ -2804,10 +2896,14 @@ exports.createOrder = async (req, res, next) => {
 
     // Execute all lead updates in a single bulk operation
     if (bulkOps.length > 0) {
-      console.log(`[ORDER-PERF] Executing bulk update for ${bulkOps.length} leads`);
+      console.log(
+        `[ORDER-PERF] Executing bulk update for ${bulkOps.length} leads`
+      );
       const bulkStart = Date.now();
       await Lead.bulkWrite(bulkOps);
-      console.log(`[ORDER-PERF] Bulk update completed in ${Date.now() - bulkStart}ms`);
+      console.log(
+        `[ORDER-PERF] Bulk update completed in ${Date.now() - bulkStart}ms`
+      );
     }
 
     order.leads = leadIds;
@@ -2869,13 +2965,7 @@ exports.getOrders = async (req, res, next) => {
         errors: errors.array(),
       });
     }
-    const {
-      page = 1,
-      limit = 10,
-      startDate,
-      endDate,
-      search,
-    } = req.query;
+    const { page = 1, limit = 10, startDate, endDate, search } = req.query;
     let query = {};
     if (req.user.role !== "admin") {
       query.requester = req.user._id;
@@ -2883,15 +2973,16 @@ exports.getOrders = async (req, res, next) => {
     if (startDate || endDate) {
       query.plannedDate = {};
       if (startDate) query.plannedDate.$gte = new Date(startDate);
-      if (endDate) query.plannedDate.$lte = new Date(endDate + "T23:59:59.999Z");
+      if (endDate)
+        query.plannedDate.$lte = new Date(endDate + "T23:59:59.999Z");
     }
-    
+
     // Handle search - we'll need to do a more complex query if search is present
     let orders;
     const pageNum = parseInt(page);
     const limitNum = parseInt(limit);
     const skip = (pageNum - 1) * limitNum;
-    
+
     if (search && search.trim()) {
       // First, get all orders matching the base query
       const baseOrders = await Order.find(query)
@@ -2927,75 +3018,96 @@ exports.getOrders = async (req, res, next) => {
           ],
         })
         .sort({ createdAt: -1 });
-      
+
       // Filter orders based on search term
       // Split search into multiple keywords and trim each
-      const searchKeywords = search.toLowerCase().trim().split(/\s+/).filter(k => k.length > 0);
-      
+      const searchKeywords = search
+        .toLowerCase()
+        .trim()
+        .split(/\s+/)
+        .filter((k) => k.length > 0);
+
       const filteredOrders = baseOrders.filter((order) => {
         // Helper function to check if a keyword matches any field in the order
         const matchesKeyword = (keyword) => {
           // Search in order ID
           if (order._id.toString().toLowerCase().includes(keyword)) return true;
-          
+
           // Search in requester name/email
-          if (order.requester?.fullName?.toLowerCase().includes(keyword)) return true;
-          if (order.requester?.email?.toLowerCase().includes(keyword)) return true;
-          
+          if (order.requester?.fullName?.toLowerCase().includes(keyword))
+            return true;
+          if (order.requester?.email?.toLowerCase().includes(keyword))
+            return true;
+
           // Search in status
           if (order.status?.toLowerCase().includes(keyword)) return true;
-          
+
           // Search in priority
           if (order.priority?.toLowerCase().includes(keyword)) return true;
-          
+
           // Search in country filter
           if (order.countryFilter?.toLowerCase().includes(keyword)) return true;
-          
+
           // Search in notes
           if (order.notes?.toLowerCase().includes(keyword)) return true;
-          
+
           // Search in campaign
-          if (order.selectedCampaign?.name?.toLowerCase().includes(keyword)) return true;
-          
+          if (order.selectedCampaign?.name?.toLowerCase().includes(keyword))
+            return true;
+
           // Search in our network
-          if (order.selectedOurNetwork?.name?.toLowerCase().includes(keyword)) return true;
-          
+          if (order.selectedOurNetwork?.name?.toLowerCase().includes(keyword))
+            return true;
+
           // Search in client network
-          if (order.selectedClientNetwork?.name?.toLowerCase().includes(keyword)) return true;
-          
+          if (
+            order.selectedClientNetwork?.name?.toLowerCase().includes(keyword)
+          )
+            return true;
+
           // Search in client brokers
-          if (order.selectedClientBrokers?.some(broker => 
-            broker?.name?.toLowerCase().includes(keyword) || 
-            broker?.domain?.toLowerCase().includes(keyword)
-          )) return true;
-          
+          if (
+            order.selectedClientBrokers?.some(
+              (broker) =>
+                broker?.name?.toLowerCase().includes(keyword) ||
+                broker?.domain?.toLowerCase().includes(keyword)
+            )
+          )
+            return true;
+
           // Search in leads
-          if (order.leads?.some(lead => 
-            lead?.firstName?.toLowerCase().includes(keyword) ||
-            lead?.lastName?.toLowerCase().includes(keyword) ||
-            lead?.email?.toLowerCase().includes(keyword) ||
-            lead?.phone?.toLowerCase().includes(keyword) ||
-            lead?.country?.toLowerCase().includes(keyword) ||
-            lead?.assignedAgent?.fullName?.toLowerCase().includes(keyword) ||
-            lead?.assignedAgent?.email?.toLowerCase().includes(keyword)
-          )) return true;
-          
+          if (
+            order.leads?.some(
+              (lead) =>
+                lead?.firstName?.toLowerCase().includes(keyword) ||
+                lead?.lastName?.toLowerCase().includes(keyword) ||
+                lead?.email?.toLowerCase().includes(keyword) ||
+                lead?.phone?.toLowerCase().includes(keyword) ||
+                lead?.country?.toLowerCase().includes(keyword) ||
+                lead?.assignedAgent?.fullName
+                  ?.toLowerCase()
+                  .includes(keyword) ||
+                lead?.assignedAgent?.email?.toLowerCase().includes(keyword)
+            )
+          )
+            return true;
+
           return false;
         };
-        
+
         // Order must match ALL keywords (AND logic)
-        return searchKeywords.every(keyword => matchesKeyword(keyword));
+        return searchKeywords.every((keyword) => matchesKeyword(keyword));
       });
-      
+
       // Apply pagination to filtered results
       const total = filteredOrders.length;
       orders = filteredOrders.slice(skip, skip + limitNum);
-      
+
       // Merge leadsMetadata with each order's leads
       const ordersWithMetadata = orders.map((order) =>
         mergeLeadsWithMetadata(order)
       );
-      
+
       return res.status(200).json({
         success: true,
         data: ordersWithMetadata,
@@ -3007,7 +3119,7 @@ exports.getOrders = async (req, res, next) => {
         },
       });
     }
-    
+
     // No search - use regular query
     orders = await Order.find(query)
       .populate("requester", "fullName email role")
@@ -3068,8 +3180,8 @@ exports.getOrders = async (req, res, next) => {
 exports.getOrderById = async (req, res, next) => {
   try {
     // Check if lightweight mode is requested (for fast expansion)
-    const lightweight = req.query.lightweight === 'true';
-    
+    const lightweight = req.query.lightweight === "true";
+
     let query = Order.findById(req.params.id)
       .populate("requester", "fullName email role")
       .populate("requesterHistory.previousRequester", "fullName email")
@@ -3079,7 +3191,7 @@ exports.getOrderById = async (req, res, next) => {
       .populate("selectedOurNetwork", "name description")
       .populate("selectedClientNetwork", "name description")
       .populate("selectedClientBrokers", "name domain description");
-    
+
     // Only populate full lead details if not in lightweight mode
     if (!lightweight) {
       query = query.populate({
@@ -3107,9 +3219,9 @@ exports.getOrderById = async (req, res, next) => {
         select: "_id",
       });
     }
-    
+
     let order = await query;
-    
+
     if (!order) {
       return res.status(404).json({
         success: false,
@@ -3121,7 +3233,7 @@ exports.getOrderById = async (req, res, next) => {
     if (!lightweight) {
       order = mergeLeadsWithMetadata(order);
     }
-    
+
     if (
       req.user.role !== "admin" &&
       order.requester._id.toString() !== req.user._id.toString()
@@ -3131,13 +3243,15 @@ exports.getOrderById = async (req, res, next) => {
         message: "Not authorized to view this order",
       });
     }
-    
+
     // In lightweight mode, add lead count for convenience
-    const responseData = lightweight ? {
-      ...order.toObject(),
-      leadsCount: order.leads?.length || 0
-    } : order;
-    
+    const responseData = lightweight
+      ? {
+          ...order.toObject(),
+          leadsCount: order.leads?.length || 0,
+        }
+      : order;
+
     res.status(200).json({
       success: true,
       data: responseData,
@@ -3254,7 +3368,7 @@ exports.cancelOrder = async (req, res, next) => {
         },
         { session }
       );
-      
+
       console.log(
         `[CANCEL-ORDER-DEBUG] Cleared cooldown for ${order.leads.length} leads in cancelled order`
       );
@@ -3262,21 +3376,21 @@ exports.cancelOrder = async (req, res, next) => {
       // Cancel/reject all pending call change requests for this order
       const pendingCallChangeRequests = await CallChangeRequest.countDocuments({
         orderId: order._id,
-        status: "pending"
+        status: "pending",
       });
-      
+
       if (pendingCallChangeRequests > 0) {
         await CallChangeRequest.updateMany(
-          { 
-            orderId: order._id, 
-            status: "pending" 
+          {
+            orderId: order._id,
+            status: "pending",
           },
           {
             $set: {
               status: "rejected",
               reviewedAt: new Date(),
               // Note: reviewedBy will be null to indicate system-automatic rejection due to order cancellation
-            }
+            },
           },
           { session }
         );
@@ -3618,7 +3732,7 @@ exports.cancelLeadFromOrder = async (req, res, next) => {
     // Note: assignedAgent is preserved - once assigned to an agent, it stays assigned
     lead.orderId = undefined;
     lead.createdBy = undefined;
-    
+
     // Reset cooldown timer since the lead is no longer in the order
     // This allows the lead to be used again immediately after cancellation
     lead.lastUsedInOrder = undefined;
@@ -3837,9 +3951,7 @@ exports.changeFTDInOrder = async (req, res, next) => {
       isFillerOrder,
     } = req.body;
 
-    console.log(
-      `[CHANGE-FTD-DEBUG] ===== STARTING FTD REPLACEMENT =====`
-    );
+    console.log(`[CHANGE-FTD-DEBUG] ===== STARTING FTD REPLACEMENT =====`);
     console.log(
       `[CHANGE-FTD-DEBUG] preferredAgent received: ${preferredAgent} (type: ${typeof preferredAgent})`
     );
@@ -3965,15 +4077,17 @@ exports.changeFTDInOrder = async (req, res, next) => {
     // Build filters for finding replacement FTD
     // Use country from request if provided, otherwise fall back to order's country
     const countryToUse = requestCountryFilter || order.countryFilter;
-    const countryFilter = countryToUse
-      ? { country: countryToUse }
-      : {};
+    const countryFilter = countryToUse ? { country: countryToUse } : {};
     const genderFilter =
       order.genderFilter && order.genderFilter !== "not_defined"
         ? { gender: order.genderFilter }
         : {};
-    
-    console.log(`[CHANGE-FTD-DEBUG] Using country filter: ${countryToUse || 'none'} (from ${requestCountryFilter ? 'request' : 'order'})`);
+
+    console.log(
+      `[CHANGE-FTD-DEBUG] Using country filter: ${
+        countryToUse || "none"
+      } (from ${requestCountryFilter ? "request" : "order"})`
+    );
 
     // Build array of lead IDs to exclude (current lead + all previously used leads at this position)
     const leadsToExclude = [leadId, ...replacementHistory];
@@ -4061,12 +4175,12 @@ exports.changeFTDInOrder = async (req, res, next) => {
 
     // Fetch potential replacement FTDs
     let candidateLeads;
-    
+
     // If preferredAgent is specified, ONLY fetch their leads (don't include unassigned)
     if (preferredAgent && !fallbackGender) {
       // Fetch ONLY agent-assigned leads directly (no sampling, no unassigned fallback)
       candidateLeads = await Lead.find(ftdQuery).limit(fetchLimit);
-      
+
       console.log(
         `[CHANGE-FTD-DEBUG] Fetched ${candidateLeads.length} agent-assigned leads for agent ${preferredAgent}`
       );
@@ -4080,9 +4194,13 @@ exports.changeFTDInOrder = async (req, res, next) => {
           $sample: { size: fetchLimit },
         },
       ]);
-      
+
       console.log(
-        `[CHANGE-FTD-DEBUG] Found ${candidateLeads.length} candidate FTD leads for filtering (${fallbackGender ? 'gender fallback' : 'random sample'})`
+        `[CHANGE-FTD-DEBUG] Found ${
+          candidateLeads.length
+        } candidate FTD leads for filtering (${
+          fallbackGender ? "gender fallback" : "random sample"
+        })`
       );
     }
 
@@ -4132,7 +4250,11 @@ exports.changeFTDInOrder = async (req, res, next) => {
         (lead) => !lead.lastUsedInOrder || lead.lastUsedInOrder < tenDaysAgo
       );
       console.log(
-        `[CHANGE-FTD-DEBUG] Cooldown filtering: ${beforeCooldownFilter - filteredFTDLeads.length} leads filtered out (in 10-day cooldown), ${filteredFTDLeads.length} leads remain`
+        `[CHANGE-FTD-DEBUG] Cooldown filtering: ${
+          beforeCooldownFilter - filteredFTDLeads.length
+        } leads filtered out (in 10-day cooldown), ${
+          filteredFTDLeads.length
+        } leads remain`
       );
 
       // Exclude leads with phone numbers already in this order (prevents selecting duplicates)
@@ -4169,7 +4291,11 @@ exports.changeFTDInOrder = async (req, res, next) => {
           (lead) => !lead.isAssignedToClientNetwork(networkToCheck)
         );
         console.log(
-          `[CHANGE-FTD-DEBUG] After client network filtering: ${filteredFTDLeads.length} leads remain (${beforeCount - filteredFTDLeads.length} filtered out)`
+          `[CHANGE-FTD-DEBUG] After client network filtering: ${
+            filteredFTDLeads.length
+          } leads remain (${
+            beforeCount - filteredFTDLeads.length
+          } filtered out)`
         );
       }
 
@@ -4261,7 +4387,7 @@ exports.changeFTDInOrder = async (req, res, next) => {
             },
           });
         }
-        
+
         return res.status(400).json({
           success: false,
           message: `No suitable replacement ${leadTypeLabel} leads found after applying filtration rules`,
@@ -4295,7 +4421,7 @@ exports.changeFTDInOrder = async (req, res, next) => {
         // Note: Agent assignment is preserved - manually assigned agents should stay assigned
         oldLead.orderId = undefined;
         oldLead.createdBy = undefined;
-        
+
         // Reset cooldown timer since the lead is no longer in the order
         // This allows the lead to be used again immediately after replacement
         oldLead.lastUsedInOrder = undefined;
@@ -4503,7 +4629,8 @@ exports.deleteOrder = async (req, res, next) => {
       if (!["admin", "affiliate_manager"].includes(req.user.role)) {
         return res.status(403).json({
           success: false,
-          message: "Only administrators and affiliate managers can permanently delete orders",
+          message:
+            "Only administrators and affiliate managers can permanently delete orders",
         });
       }
 
@@ -4514,7 +4641,7 @@ exports.deleteOrder = async (req, res, next) => {
           return res.status(400).json({
             success: false,
             message:
-              req.user.role === "admin" 
+              req.user.role === "admin"
                 ? "Only cancelled orders can be deleted. Use force=true query parameter to delete non-cancelled orders."
                 : "Only cancelled orders can be deleted.",
           });
@@ -4554,13 +4681,18 @@ exports.convertLeadTypeInOrder = async (req, res, next) => {
 
     console.log(`[CONVERT-LEAD-TYPE] ===== STARTING CONVERSION =====`);
     console.log(`[CONVERT-LEAD-TYPE] orderId: ${orderId}, leadId: ${leadId}`);
-    console.log(`[CONVERT-LEAD-TYPE] targetType requested: ${targetType || 'auto-toggle'}`);
+    console.log(
+      `[CONVERT-LEAD-TYPE] targetType requested: ${targetType || "auto-toggle"}`
+    );
 
     // Check user permissions
-    if (!["admin", "affiliate_manager", "lead_manager"].includes(req.user.role)) {
+    if (
+      !["admin", "affiliate_manager", "lead_manager"].includes(req.user.role)
+    ) {
       return res.status(403).json({
         success: false,
-        message: "Access denied. Only admins, affiliate managers, and lead managers can convert lead types.",
+        message:
+          "Access denied. Only admins, affiliate managers, and lead managers can convert lead types.",
       });
     }
 
@@ -4578,7 +4710,8 @@ exports.convertLeadTypeInOrder = async (req, res, next) => {
       if (order.requester.toString() !== req.user._id.toString()) {
         return res.status(403).json({
           success: false,
-          message: "Access denied. You can only modify leads from your own orders.",
+          message:
+            "Access denied. You can only modify leads from your own orders.",
         });
       }
     }
@@ -4605,7 +4738,8 @@ exports.convertLeadTypeInOrder = async (req, res, next) => {
     if (lead.leadType !== "ftd") {
       return res.status(400).json({
         success: false,
-        message: "Only FTD/Filler leads can be converted (they share the same leadType)",
+        message:
+          "Only FTD/Filler leads can be converted (they share the same leadType)",
       });
     }
 
@@ -4657,7 +4791,9 @@ exports.convertLeadTypeInOrder = async (req, res, next) => {
       order.fulfilled.ftd = (order.fulfilled.ftd || 0) + 1;
     }
 
-    console.log(`[CONVERT-LEAD-TYPE] Updated fulfilled counts - ftd: ${order.fulfilled.ftd}, filler: ${order.fulfilled.filler}`);
+    console.log(
+      `[CONVERT-LEAD-TYPE] Updated fulfilled counts - ftd: ${order.fulfilled.ftd}, filler: ${order.fulfilled.filler}`
+    );
 
     // Save the order
     await order.save();
@@ -4704,8 +4840,8 @@ exports.checkOrderFulfillment = async (req, res, next) => {
           status: "fulfilled",
           message: "Manual selection - specific leads will be used",
           details: [],
-          breakdown: {}
-        }
+          breakdown: {},
+        },
       });
     }
 
@@ -4718,8 +4854,8 @@ exports.checkOrderFulfillment = async (req, res, next) => {
           status: "not_fulfilled",
           message: "No leads requested",
           details: ["No leads requested"],
-          breakdown: {}
-        }
+          breakdown: {},
+        },
       });
     }
 
@@ -4728,31 +4864,36 @@ exports.checkOrderFulfillment = async (req, res, next) => {
 
     // Helper to check availability
     const checkAvailability = async (leadType, count) => {
-      if (count <= 0) return { insufficient: false, available: 0, requested: 0, details: [] };
+      if (count <= 0)
+        return { insufficient: false, available: 0, requested: 0, details: [] };
 
       let baseQuery = {
         leadType,
         ...countryFilter,
-        ...genderFilter
+        ...genderFilter,
       };
 
       // Cooldown check for FTD and Filler
-      if (leadType === 'ftd' || leadType === 'filler') {
+      if (leadType === "ftd" || leadType === "filler") {
         const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
         baseQuery.$or = [
           { lastUsedInOrder: null },
-          { lastUsedInOrder: { $lt: tenDaysAgo } }
+          { lastUsedInOrder: { $lt: tenDaysAgo } },
         ];
       }
 
       // Client Network Exclusion
       if (selectedClientNetwork) {
-        baseQuery["clientNetworkHistory.clientNetwork"] = { $ne: selectedClientNetwork };
+        baseQuery["clientNetworkHistory.clientNetwork"] = {
+          $ne: selectedClientNetwork,
+        };
       }
 
       // Client Broker Exclusion
       if (selectedClientBrokers && selectedClientBrokers.length > 0) {
-        baseQuery["clientBrokerHistory.clientBroker"] = { $nin: selectedClientBrokers };
+        baseQuery["clientBrokerHistory.clientBroker"] = {
+          $nin: selectedClientBrokers,
+        };
       }
 
       let insufficient = false;
@@ -4760,120 +4901,156 @@ exports.checkOrderFulfillment = async (req, res, next) => {
       let totalAvailable = 0;
 
       // Check specific agent assignments
-      const specificAssignments = agentAssignments.filter(a => a.leadType === leadType);
-      
+      const specificAssignments = agentAssignments.filter(
+        (a) => a.leadType === leadType
+      );
+
       // Group assignments by agent
       const assignmentsByAgent = {};
       let unassignedCount = 0; // Number of leads requested without specific agent assignment
-      
+
       // Initialize with unassigned count based on total requested - specific assignments
       if (specificAssignments.length > 0) {
-        specificAssignments.forEach(a => {
-            if (a.agentId) {
-                assignmentsByAgent[a.agentId] = (assignmentsByAgent[a.agentId] || 0) + 1;
-            } else {
-                unassignedCount++;
-            }
+        specificAssignments.forEach((a) => {
+          if (a.agentId) {
+            assignmentsByAgent[a.agentId] =
+              (assignmentsByAgent[a.agentId] || 0) + 1;
+          } else {
+            unassignedCount++;
+          }
         });
-        
+
         // Also add any leads not covered by assignments array (e.g. if array length < count)
         if (specificAssignments.length < count) {
-            unassignedCount += (count - specificAssignments.length);
+          unassignedCount += count - specificAssignments.length;
         }
       } else {
-          // No individual assignments used
-          if (agentFilter) {
-               // Global agent filter applied to all
-               assignmentsByAgent[agentFilter] = count;
-          } else {
-               unassignedCount = count;
-          }
+        // No individual assignments used
+        if (agentFilter) {
+          // Global agent filter applied to all
+          assignmentsByAgent[agentFilter] = count;
+        } else {
+          unassignedCount = count;
+        }
       }
 
       // Check availability for each agent
-      for (const [agentId, requestedForAgent] of Object.entries(assignmentsByAgent)) {
-           // Check agent assigned leads
-           const agentQuery = { ...baseQuery, assignedAgent: agentId };
-           const agentAvailable = await Lead.countDocuments(agentQuery);
-           
-           if (agentAvailable < requestedForAgent) {
-               insufficient = true;
-               details.push(`Agent ${agentId} has only ${agentAvailable} assigned ${leadType} leads (requested ${requestedForAgent}). Fallback to unassigned may be required.`);
-               totalAvailable += agentAvailable; 
-           } else {
-               totalAvailable += requestedForAgent;
-           }
+      for (const [agentId, requestedForAgent] of Object.entries(
+        assignmentsByAgent
+      )) {
+        // Check agent assigned leads
+        const agentQuery = { ...baseQuery, assignedAgent: agentId };
+        const agentAvailable = await Lead.countDocuments(agentQuery);
+
+        if (agentAvailable < requestedForAgent) {
+          insufficient = true;
+          details.push(
+            `Agent ${agentId} has only ${agentAvailable} assigned ${leadType} leads (requested ${requestedForAgent}). Fallback to unassigned may be required.`
+          );
+          totalAvailable += agentAvailable;
+        } else {
+          totalAvailable += requestedForAgent;
+        }
       }
 
       // Check availability for unassigned requests
       if (unassignedCount > 0) {
-           const unassignedQuery = { ...baseQuery, assignedAgent: null };
-           const unassignedAvailable = await Lead.countDocuments(unassignedQuery);
-           
-           if (unassignedAvailable < unassignedCount) {
-               insufficient = true;
-               details.push(`Insufficient unassigned ${leadType} leads (Available: ${unassignedAvailable}, Requested: ${unassignedCount})`);
-               totalAvailable += unassignedAvailable;
-           } else {
-               totalAvailable += unassignedCount;
-           }
+        const unassignedQuery = { ...baseQuery, assignedAgent: null };
+        const unassignedAvailable = await Lead.countDocuments(unassignedQuery);
+
+        if (unassignedAvailable < unassignedCount) {
+          insufficient = true;
+          details.push(
+            `Insufficient unassigned ${leadType} leads (Available: ${unassignedAvailable}, Requested: ${unassignedCount})`
+          );
+          totalAvailable += unassignedAvailable;
+        } else {
+          totalAvailable += unassignedCount;
+        }
       }
-      
+
       // Simplified Aggregate Check
       let guaranteedLeads = 0;
       let unassignedNeeded = 0;
-      
+
       // 1. Check specific agents
-      for (const [agentId, requestedForAgent] of Object.entries(assignmentsByAgent)) {
-           const agentQuery = { ...baseQuery, assignedAgent: agentId };
-           const agentAvailable = await Lead.countDocuments(agentQuery);
-           const takenFromAgent = Math.min(agentAvailable, requestedForAgent);
-           guaranteedLeads += takenFromAgent;
-           unassignedNeeded += (requestedForAgent - takenFromAgent);
+      for (const [agentId, requestedForAgent] of Object.entries(
+        assignmentsByAgent
+      )) {
+        const agentQuery = { ...baseQuery, assignedAgent: agentId };
+        const agentAvailable = await Lead.countDocuments(agentQuery);
+        const takenFromAgent = Math.min(agentAvailable, requestedForAgent);
+        guaranteedLeads += takenFromAgent;
+        unassignedNeeded += requestedForAgent - takenFromAgent;
       }
-      
+
       // 2. Check unassigned needs (direct unassigned requests + fallback from agents)
       unassignedNeeded += unassignedCount;
-      
+
       if (unassignedNeeded > 0) {
-           const unassignedQuery = { ...baseQuery, assignedAgent: null };
-           const unassignedAvailable = await Lead.countDocuments(unassignedQuery);
-           guaranteedLeads += Math.min(unassignedAvailable, unassignedNeeded);
-           
-           if (unassignedAvailable < unassignedNeeded) {
-               insufficient = true;
-           }
-      }
-      
-      if (guaranteedLeads < count) {
+        const unassignedQuery = { ...baseQuery, assignedAgent: null };
+        const unassignedAvailable = await Lead.countDocuments(unassignedQuery);
+        guaranteedLeads += Math.min(unassignedAvailable, unassignedNeeded);
+
+        if (unassignedAvailable < unassignedNeeded) {
           insufficient = true;
-          // Only add general message if no specific ones added (to avoid clutter)
-          if (details.length === 0) {
-              details.push(`Total available ${leadType} leads (${guaranteedLeads}) is less than requested (${count})`);
-          }
+        }
       }
 
-      return { insufficient, details, available: guaranteedLeads, requested: count };
+      if (guaranteedLeads < count) {
+        insufficient = true;
+        // Only add general message if no specific ones added (to avoid clutter)
+        if (details.length === 0) {
+          details.push(
+            `Total available ${leadType} leads (${guaranteedLeads}) is less than requested (${count})`
+          );
+        }
+      }
+
+      return {
+        insufficient,
+        details,
+        available: guaranteedLeads,
+        requested: count,
+      };
     };
 
-    const ftdCheck = ftd > 0 ? await checkAvailability('ftd', ftd) : { insufficient: false };
-    const fillerCheck = filler > 0 ? await checkAvailability('filler', filler) : { insufficient: false };
-    const coldCheck = cold > 0 ? await checkAvailability('cold', cold) : { insufficient: false };
+    const ftdCheck =
+      ftd > 0 ? await checkAvailability("ftd", ftd) : { insufficient: false };
+    const fillerCheck =
+      filler > 0
+        ? await checkAvailability("filler", filler)
+        : { insufficient: false };
+    const coldCheck =
+      cold > 0
+        ? await checkAvailability("cold", cold)
+        : { insufficient: false };
 
     let status = "fulfilled";
     let message = "Order can be fulfilled";
-    let allDetails = [...(ftdCheck.details || []), ...(fillerCheck.details || []), ...(coldCheck.details || [])];
+    let allDetails = [
+      ...(ftdCheck.details || []),
+      ...(fillerCheck.details || []),
+      ...(coldCheck.details || []),
+    ];
 
-    if (ftdCheck.insufficient || fillerCheck.insufficient || coldCheck.insufficient) {
+    if (
+      ftdCheck.insufficient ||
+      fillerCheck.insufficient ||
+      coldCheck.insufficient
+    ) {
       status = "partial";
       message = "Order will be partially fulfilled";
-      
+
       const totalRequested = ftd + filler + cold;
-      const totalAvailable = (ftdCheck.available || 0) + (fillerCheck.available || 0) + (coldCheck.available || 0);
-      
+      const totalAvailable =
+        (ftdCheck.available || 0) +
+        (fillerCheck.available || 0) +
+        (coldCheck.available || 0);
+
       if (totalAvailable === 0) {
-          status = "not_fulfilled";
-          message = "Order cannot be fulfilled";
+        status = "not_fulfilled";
+        message = "Order cannot be fulfilled";
       }
     }
 
@@ -4886,11 +5063,10 @@ exports.checkOrderFulfillment = async (req, res, next) => {
         breakdown: {
           ftd: ftdCheck,
           filler: fillerCheck,
-          cold: coldCheck
-        }
-      }
+          cold: coldCheck,
+        },
+      },
     });
-
   } catch (error) {
     console.error("Check fulfillment error:", error);
     next(error);
@@ -4923,7 +5099,8 @@ exports.changeRequester = async (req, res, next) => {
     if (order.requester.role === "admin") {
       return res.status(403).json({
         success: false,
-        message: "Cannot change requester when the current requester is an admin",
+        message:
+          "Cannot change requester when the current requester is an admin",
       });
     }
 
@@ -4933,12 +5110,12 @@ exports.changeRequester = async (req, res, next) => {
     if (!order.requesterHistory) {
       order.requesterHistory = [];
     }
-    
+
     order.requesterHistory.push({
       previousRequester: oldRequesterId,
       newRequester: newRequesterId,
       changedBy: req.user._id,
-      changedAt: new Date()
+      changedAt: new Date(),
     });
 
     // Update requester
@@ -4954,7 +5131,7 @@ exports.changeRequester = async (req, res, next) => {
         }
       });
       if (assignmentsUpdated) {
-        order.markModified('agentAssignments');
+        order.markModified("agentAssignments");
       }
     }
 
@@ -4975,8 +5152,10 @@ exports.changeRequester = async (req, res, next) => {
           },
         }
       );
-      
-      console.log(`[ORDER-REQUESTER-CHANGE] Updated ${updateResult.modifiedCount} leads from ${oldRequesterId} to ${newRequesterId}`);
+
+      console.log(
+        `[ORDER-REQUESTER-CHANGE] Updated ${updateResult.modifiedCount} leads from ${oldRequesterId} to ${newRequesterId}`
+      );
     }
 
     res.json({
