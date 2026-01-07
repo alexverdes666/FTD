@@ -39,6 +39,10 @@ import {
   Autocomplete,
   Popover,
   Popper,
+  ToggleButton,
+  ToggleButtonGroup,
+  Divider,
+  alpha,
 } from "@mui/material";
 import {
   Add as AddIcon,
@@ -3211,63 +3215,307 @@ const OrdersPage = () => {
           setOurNetworkOpen(false);
           setCampaignInput("");
           setCampaignOpen(false);
-          setClientBrokersInput("");
-          setClientBrokersOpen(false);
         }}
         maxWidth="lg"
         fullWidth
       >
-        <DialogTitle sx={{ pb: 1 }}>Create New Order</DialogTitle>
-        <form onSubmit={handleSubmit(onSubmitOrder)}>
-          <DialogContent sx={{ pt: 1 }}>
-            <Grid container spacing={2}>
-              {/* Manual Selection Mode Toggle */}
-              <Grid item xs={12}>
-                <Box
-                  sx={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 2,
-                    p: 2,
-                    bgcolor: manualSelectionMode
-                      ? "primary.50"
-                      : "action.hover",
-                    borderRadius: 1,
-                    border: manualSelectionMode ? "2px solid" : "1px solid",
-                    borderColor: manualSelectionMode
-                      ? "primary.main"
-                      : "divider",
-                  }}
-                >
-                  <FormControlLabel
-                    control={
-                      <Checkbox
-                        checked={manualSelectionMode}
-                        onChange={(e) => {
-                          setManualSelectionMode(e.target.checked);
-                          if (!e.target.checked) {
-                            setManualLeadEmails("");
-                            setManualLeads([]);
-                          }
+        <DialogTitle 
+          sx={{ 
+            py: 1.5,
+            background: (theme) => `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.08)} 0%, ${alpha(theme.palette.secondary.main, 0.05)} 100%)`,
+            borderBottom: '1px solid',
+            borderColor: 'divider',
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
+            {/* Left: Title and Manual Toggle */}
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <Typography variant="h6" fontWeight={600}>Create New Order</Typography>
+              <Button
+                variant={manualSelectionMode ? "contained" : "outlined"}
+                size="small"
+                onClick={() => {
+                  setManualSelectionMode(!manualSelectionMode);
+                  if (manualSelectionMode) {
+                    setManualLeadEmails("");
+                    setManualLeads([]);
+                  }
+                }}
+                sx={{
+                  borderRadius: '16px',
+                  textTransform: 'none',
+                  fontSize: '0.75rem',
+                  px: 2,
+                  py: 0.5,
+                  minWidth: 'auto',
+                }}
+              >
+                {manualSelectionMode ? "Auto" : "Manual"}
+              </Button>
+            </Box>
+            
+            {/* Right: Quick Filters - Gender & Priority as Chips */}
+            {!manualSelectionMode && (
+              <Box sx={{ display: 'flex', gap: 3, alignItems: 'center' }}>
+                {/* Gender Filter */}
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 500 }}>
+                    Gender:
+                  </Typography>
+                  <Controller
+                    name="genderFilter"
+                    control={control}
+                    render={({ field }) => (
+                      <ToggleButtonGroup
+                        value={field.value || ""}
+                        exclusive
+                        onChange={(e, newValue) => field.onChange(newValue ?? "")}
+                        size="small"
+                        sx={{
+                          '& .MuiToggleButton-root': {
+                            px: 1.5,
+                            py: 0.25,
+                            fontSize: '0.7rem',
+                            textTransform: 'none',
+                            borderRadius: '16px !important',
+                            border: '1px solid',
+                            borderColor: 'divider',
+                            mx: 0.25,
+                            '&.Mui-selected': {
+                              bgcolor: 'primary.main',
+                              color: 'primary.contrastText',
+                              borderColor: 'primary.main',
+                              '&:hover': {
+                                bgcolor: 'primary.dark',
+                              },
+                            },
+                          },
                         }}
-                        color="primary"
-                      />
-                    }
-                    label={
-                      <Box>
-                        <Typography variant="subtitle2" fontWeight="bold">
-                          Manual Lead Selection
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          Select specific leads by email instead of random
-                          selection
-                        </Typography>
-                      </Box>
-                    }
+                      >
+                        <ToggleButton value="">All</ToggleButton>
+                        <ToggleButton value="male">Male</ToggleButton>
+                        <ToggleButton value="female">Female</ToggleButton>
+                        <ToggleButton value="not_defined">N/A</ToggleButton>
+                      </ToggleButtonGroup>
+                    )}
                   />
                 </Box>
-              </Grid>
 
+                {/* Priority Filter */}
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 500 }}>
+                    Priority:
+                  </Typography>
+                  <Controller
+                    name="priority"
+                    control={control}
+                    render={({ field }) => (
+                      <ToggleButtonGroup
+                        value={field.value || "medium"}
+                        exclusive
+                        onChange={(e, newValue) => {
+                          if (newValue !== null) field.onChange(newValue);
+                        }}
+                        size="small"
+                        sx={{
+                          '& .MuiToggleButton-root': {
+                            px: 1.5,
+                            py: 0.25,
+                            fontSize: '0.7rem',
+                            textTransform: 'none',
+                            borderRadius: '16px !important',
+                            border: '1px solid',
+                            borderColor: 'divider',
+                            mx: 0.25,
+                            '&.Mui-selected': {
+                              '&[value="low"]': {
+                                bgcolor: 'success.main',
+                                color: 'success.contrastText',
+                                borderColor: 'success.main',
+                              },
+                              '&[value="medium"]': {
+                                bgcolor: 'warning.main',
+                                color: 'warning.contrastText',
+                                borderColor: 'warning.main',
+                              },
+                              '&[value="high"]': {
+                                bgcolor: 'error.main',
+                                color: 'error.contrastText',
+                                borderColor: 'error.main',
+                              },
+                            },
+                          },
+                        }}
+                      >
+                        <ToggleButton value="low">Low</ToggleButton>
+                        <ToggleButton value="medium">Medium</ToggleButton>
+                        <ToggleButton value="high">High</ToggleButton>
+                      </ToggleButtonGroup>
+                    )}
+                  />
+                </Box>
+              </Box>
+            )}
+          </Box>
+        </DialogTitle>
+        <form onSubmit={handleSubmit(onSubmitOrder)}>
+          <DialogContent sx={{ pt: 2 }}>
+            {/* Top Row: Planned Date + Fulfillment Estimate */}
+            {!manualSelectionMode && (
+              <Box
+                sx={{
+                  mb: 3,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 2,
+                }}
+              >
+                {/* Planned Date - Outside the fulfillment box */}
+                <Controller
+                  name="plannedDate"
+                  control={control}
+                  render={({ field }) => (
+                    <TextField
+                      {...field}
+                      label="Planned Date *"
+                      type="date"
+                      error={!!errors.plannedDate}
+                      size="small"
+                      InputLabelProps={{ shrink: true }}
+                      sx={{ 
+                        '& .MuiInputBase-input': {
+                          py: 0.75,
+                          fontSize: '0.875rem',
+                        },
+                        width: 160,
+                        flexShrink: 0,
+                      }}
+                      value={
+                        field.value
+                          ? new Date(field.value).toISOString().split("T")[0]
+                          : ""
+                      }
+                      onChange={(e) => {
+                        const dateValue = e.target.value ? new Date(e.target.value) : null;
+                        field.onChange(dateValue);
+                      }}
+                    />
+                  )}
+                />
+
+                {/* Fulfillment Box */}
+                <Box
+                  sx={{
+                    flex: 1,
+                    p: 1.5,
+                    bgcolor: (theme) => alpha(theme.palette.info.main, 0.04),
+                    borderRadius: 2,
+                    border: "1px solid",
+                    borderColor: (theme) => alpha(theme.palette.info.main, 0.2),
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 2,
+                    minHeight: 44,
+                  }}
+                >
+                  {/* Left: Title and Status */}
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                    <Typography
+                      variant="subtitle2"
+                      sx={{ 
+                        display: "flex", 
+                        alignItems: "center", 
+                        gap: 1,
+                        fontWeight: 600,
+                        color: 'info.dark',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      📊 Fulfillment
+                      {checkingFulfillment && <CircularProgress size={14} />}
+                    </Typography>
+
+                    {/* Status Chip */}
+                    {!checkingFulfillment && fulfillmentSummary ? (
+                      <Chip
+                        label={
+                          fulfillmentSummary.status === "fulfilled"
+                            ? "✓ Can be Fulfilled"
+                            : fulfillmentSummary.status === "partial"
+                            ? "⚠ Partial"
+                            : "✗ Not Fulfilled"
+                        }
+                        color={
+                          fulfillmentSummary.status === "fulfilled"
+                            ? "success"
+                            : fulfillmentSummary.status === "partial"
+                            ? "warning"
+                            : "error"
+                        }
+                        size="small"
+                        sx={{ fontWeight: 500 }}
+                      />
+                    ) : (
+                      <Chip
+                        label={checkingFulfillment ? "Checking..." : "Pending"}
+                        size="small"
+                        variant="outlined"
+                        sx={{ opacity: 0.6 }}
+                      />
+                    )}
+                  </Box>
+
+                  {/* Right: Breakdown Stats */}
+                  <Box sx={{ display: 'flex', gap: 3 }}>
+                    {fulfillmentSummary?.breakdown ? (
+                      Object.entries(fulfillmentSummary.breakdown).map(([type, stats]) =>
+                        stats.requested > 0 ? (
+                          <Box key={type} sx={{ textAlign: 'center', minWidth: 45 }}>
+                            <Typography 
+                              variant="caption" 
+                              fontWeight="bold" 
+                              display="block" 
+                              sx={{ textTransform: 'uppercase', color: 'text.secondary', fontSize: '0.65rem' }}
+                            >
+                              {type}
+                            </Typography>
+                            <Typography
+                              variant="body2"
+                              fontWeight={600}
+                              color={stats.available < stats.requested ? "error.main" : "success.main"}
+                            >
+                              {stats.available}/{stats.requested}
+                            </Typography>
+                          </Box>
+                        ) : null
+                      )
+                    ) : (
+                      <>
+                        <Box sx={{ textAlign: 'center', minWidth: 45, opacity: 0.4 }}>
+                          <Typography variant="caption" fontWeight="bold" display="block" sx={{ textTransform: 'uppercase', color: 'text.secondary', fontSize: '0.65rem' }}>
+                            FTD
+                          </Typography>
+                          <Typography variant="body2" fontWeight={600} color="text.disabled">
+                            -/-
+                          </Typography>
+                        </Box>
+                        <Box sx={{ textAlign: 'center', minWidth: 45, opacity: 0.4 }}>
+                          <Typography variant="caption" fontWeight="bold" display="block" sx={{ textTransform: 'uppercase', color: 'text.secondary', fontSize: '0.65rem' }}>
+                            Filler
+                          </Typography>
+                          <Typography variant="body2" fontWeight={600} color="text.disabled">
+                            -/-
+                          </Typography>
+                        </Box>
+                      </>
+                    )}
+                  </Box>
+                </Box>
+              </Box>
+            )}
+
+            <Grid container spacing={2}>
               {/* Manual Selection Mode UI */}
               {manualSelectionMode && (
                 <>
@@ -3407,496 +3655,425 @@ const OrdersPage = () => {
               {/* Normal Selection Mode UI */}
               {!manualSelectionMode && (
                 <>
-                  <Grid item xs={6} sm={3}>
-                    <Controller
-                      name="ftd"
-                      control={control}
-                      render={({ field }) => (
-                        <TextField
-                          {...field}
-                          fullWidth
-                          label="FTD"
-                          type="number"
-                          error={!!errors.ftd}
-                          helperText={errors.ftd?.message}
-                          inputProps={{ min: 0 }}
-                          size="small"
-                        />
-                      )}
-                    />
-                  </Grid>
-                  <Grid item xs={6} sm={3}>
-                    <Controller
-                      name="filler"
-                      control={control}
-                      render={({ field }) => (
-                        <TextField
-                          {...field}
-                          fullWidth
-                          label="Filler"
-                          type="number"
-                          error={!!errors.filler}
-                          helperText={errors.filler?.message}
-                          inputProps={{ min: 0 }}
-                          size="small"
-                        />
-                      )}
-                    />
-                  </Grid>
-                  <Grid item xs={6} sm={3}>
-                    <Controller
-                      name="cold"
-                      control={control}
-                      render={({ field }) => (
-                        <TextField
-                          {...field}
-                          fullWidth
-                          label="Cold"
-                          type="number"
-                          error={!!errors.cold}
-                          helperText={errors.cold?.message}
-                          inputProps={{ min: 0 }}
-                          size="small"
-                        />
-                      )}
-                    />
-                  </Grid>
-                  {/* Gender (Normal mode only) */}
-                  <Grid item xs={12} sm={6}>
-                    <Controller
-                      name="genderFilter"
-                      control={control}
-                      render={({ field }) => (
-                        <FormControl
-                          fullWidth
-                          size="small"
-                          error={!!errors.genderFilter}
-                        >
-                          <InputLabel>Gender (Optional)</InputLabel>
-                          <Select
-                            {...field}
-                            label="Gender (Optional)"
-                            value={field.value || ""}
-                          >
-                            <MenuItem value="">All</MenuItem>
-                            <MenuItem value="male">Male</MenuItem>
-                            <MenuItem value="female">Female</MenuItem>
-                            <MenuItem value="not_defined">Not Defined</MenuItem>
-                          </Select>
-                        </FormControl>
-                      )}
-                    />
-                  </Grid>
-
-                  {/* Country Filter */}
+                  {/* Lead Quantities Section */}
                   <Grid item xs={12}>
-                    <Controller
-                      name="countryFilter"
-                      control={control}
-                      render={({ field }) => {
-                        const [inputValue, setInputValue] = React.useState("");
-                        
-                        return (
-                          <Autocomplete
-                            {...field}
-                            options={getSortedCountries().map((country) => country.name)}
-                            value={field.value || null}
-                            inputValue={inputValue}
-                            onInputChange={(event, newInputValue) => {
-                              setInputValue(newInputValue);
-                            }}
-                            onChange={(event, newValue) => {
-                              field.onChange(newValue || "");
-                            }}
-                            filterOptions={(options, state) => {
-                              // Only show options if user is typing (inputValue is not empty)
-                              if (!state.inputValue) {
-                                return [];
-                              }
-                              // Filter options based on input
-                              return options.filter((option) =>
-                                option.toLowerCase().includes(state.inputValue.toLowerCase())
-                              );
-                            }}
-                            open={inputValue.length > 0}
-                            renderInput={(params) => (
+                    <Box
+                      sx={{
+                        p: 2,
+                        bgcolor: (theme) => alpha(theme.palette.grey[500], 0.04),
+                        borderRadius: 2,
+                        border: '1px solid',
+                        borderColor: 'divider',
+                      }}
+                    >
+                      <Typography variant="subtitle2" sx={{ mb: 1.5, fontWeight: 600, color: 'text.secondary' }}>
+                        Lead Quantities
+                      </Typography>
+                      <Grid container spacing={2}>
+                        <Grid item xs={6} sm={3}>
+                          <Controller
+                            name="ftd"
+                            control={control}
+                            render={({ field }) => (
                               <TextField
-                                {...params}
-                                label="Country Filter *"
+                                {...field}
+                                fullWidth
+                                label="FTD"
+                                type="number"
+                                error={!!errors.ftd}
+                                helperText={errors.ftd?.message}
+                                inputProps={{ min: 0 }}
                                 size="small"
-                                error={!!errors.countryFilter}
-                                helperText={errors.countryFilter?.message}
+                                sx={{
+                                  '& .MuiOutlinedInput-root': {
+                                    bgcolor: 'background.paper',
+                                  },
+                                }}
                               />
                             )}
-                            fullWidth
-                            disableClearable={false}
-                            forcePopupIcon={false}
-                            noOptionsText=""
                           />
-                        );
-                      }}
-                    />
+                        </Grid>
+                        <Grid item xs={6} sm={3}>
+                          <Controller
+                            name="filler"
+                            control={control}
+                            render={({ field }) => (
+                              <TextField
+                                {...field}
+                                fullWidth
+                                label="Filler"
+                                type="number"
+                                error={!!errors.filler}
+                                helperText={errors.filler?.message}
+                                inputProps={{ min: 0 }}
+                                size="small"
+                                sx={{
+                                  '& .MuiOutlinedInput-root': {
+                                    bgcolor: 'background.paper',
+                                  },
+                                }}
+                              />
+                            )}
+                          />
+                        </Grid>
+                        <Grid item xs={6} sm={3}>
+                          <Controller
+                            name="cold"
+                            control={control}
+                            render={({ field }) => (
+                              <TextField
+                                {...field}
+                                fullWidth
+                                label="Cold"
+                                type="number"
+                                error={!!errors.cold}
+                                helperText={errors.cold?.message}
+                                inputProps={{ min: 0 }}
+                                size="small"
+                                sx={{
+                                  '& .MuiOutlinedInput-root': {
+                                    bgcolor: 'background.paper',
+                                  },
+                                }}
+                              />
+                            )}
+                          />
+                        </Grid>
+                        <Grid item xs={6} sm={3}>
+                          <Controller
+                            name="countryFilter"
+                            control={control}
+                            render={({ field }) => {
+                              const [inputValue, setInputValue] = React.useState("");
+                              const [isOpen, setIsOpen] = React.useState(false);
+                              
+                              return (
+                                <Autocomplete
+                                  {...field}
+                                  options={getSortedCountries().map((country) => country.name)}
+                                  value={field.value || null}
+                                  inputValue={inputValue}
+                                  open={isOpen}
+                                  onOpen={() => {
+                                    if (inputValue.length > 0) setIsOpen(true);
+                                  }}
+                                  onClose={() => setIsOpen(false)}
+                                  onInputChange={(event, newInputValue, reason) => {
+                                    setInputValue(newInputValue);
+                                    if (reason === "input" && newInputValue.length > 0) {
+                                      setIsOpen(true);
+                                    } else if (reason === "clear" || newInputValue.length === 0) {
+                                      setIsOpen(false);
+                                    }
+                                  }}
+                                  onChange={(event, newValue) => {
+                                    field.onChange(newValue || "");
+                                    setIsOpen(false);
+                                  }}
+                                  filterOptions={(options, state) => {
+                                    if (!state.inputValue) {
+                                      return [];
+                                    }
+                                    return options.filter((option) =>
+                                      option.toLowerCase().includes(state.inputValue.toLowerCase())
+                                    );
+                                  }}
+                                  renderInput={(params) => (
+                                    <TextField
+                                      {...params}
+                                      label="Country *"
+                                      size="small"
+                                      error={!!errors.countryFilter}
+                                      helperText={errors.countryFilter?.message}
+                                      sx={{
+                                        '& .MuiOutlinedInput-root': {
+                                          bgcolor: 'background.paper',
+                                        },
+                                      }}
+                                    />
+                                  )}
+                                  fullWidth
+                                  disableClearable={false}
+                                  forcePopupIcon={false}
+                                  noOptionsText=""
+                                />
+                              );
+                            }}
+                          />
+                        </Grid>
+                      </Grid>
+                    </Box>
                   </Grid>
                 </>
               )}
 
               {/* Common fields for both modes */}
 
-              {/* Priority */}
-              <Grid item xs={12} sm={6}>
-                <Controller
-                  name="priority"
-                  control={control}
-                  render={({ field }) => (
-                    <FormControl
-                      fullWidth
-                      size="small"
-                      error={!!errors.priority}
-                    >
-                      <InputLabel>Priority</InputLabel>
-                      <Select
-                        {...field}
-                        label="Priority"
-                        value={field.value || ""}
-                      >
-                        <MenuItem value="low">Low</MenuItem>
-                        <MenuItem value="medium">Medium</MenuItem>
-                        <MenuItem value="high">High</MenuItem>
-                      </Select>
-                    </FormControl>
-                  )}
-                />
-              </Grid>
-
-              {/* Client Network Selection */}
-              {(user?.role === "admin" ||
-                user?.role === "affiliate_manager") && (
-                <Grid item xs={12}>
-                  <Controller
-                    name="selectedClientNetwork"
-                    control={control}
-                    render={({ field: { onChange, value } }) => (
-                      <Box>
-                        <Autocomplete
-                          open={clientNetworkOpen}
-                          onOpen={() => {
-                            if (clientNetworkInput.length > 0)
-                              setClientNetworkOpen(true);
-                          }}
-                          onClose={() => setClientNetworkOpen(false)}
-                          inputValue={clientNetworkInput}
-                          onInputChange={(event, newInputValue, reason) => {
-                            setClientNetworkInput(newInputValue);
-                            if (
-                              reason === "input" &&
-                              newInputValue.length > 0
-                            ) {
-                              setClientNetworkOpen(true);
-                            } else if (
-                              reason === "clear" ||
-                              newInputValue.length === 0
-                            ) {
-                              setClientNetworkOpen(false);
-                            }
-                          }}
-                          options={clientNetworks}
-                          getOptionLabel={(option) => option.name || ""}
-                          value={
-                            clientNetworks.find((n) => n._id === value) || null
-                          }
-                          onChange={(event, newValue) => {
-                            onChange(newValue ? newValue._id : "");
-                            // Reset filtered agents when client network changes
-                            setFilteredAgents([]);
-                            setUnassignedLeadsStats({
-                              ftd: null,
-                              filler: null,
-                            });
-                          }}
-                          disabled={loadingClientNetworks}
-                          size="small"
-                          renderInput={(params) => (
-                            <TextField
-                              {...params}
-                              label="Client Network *"
-                              error={!!errors.selectedClientNetwork}
-                              placeholder="Search client networks..."
+              {/* Networks Section - Grouped */}
+              <Grid item xs={12}>
+                <Box
+                  sx={{
+                    p: 2,
+                    bgcolor: (theme) => alpha(theme.palette.grey[500], 0.04),
+                    borderRadius: 2,
+                    border: '1px solid',
+                    borderColor: 'divider',
+                  }}
+                >
+                  <Typography variant="subtitle2" sx={{ mb: 1.5, fontWeight: 600, color: 'text.secondary' }}>
+                    Network Configuration
+                  </Typography>
+                  <Grid container spacing={2}>
+                    {/* Client Network Selection */}
+                    {(user?.role === "admin" || user?.role === "affiliate_manager") && (
+                      <Grid item xs={12} md={6}>
+                        <Controller
+                          name="selectedClientNetwork"
+                          control={control}
+                          render={({ field: { onChange, value } }) => (
+                            <Autocomplete
+                              open={clientNetworkOpen}
+                              onOpen={() => {
+                                if (clientNetworkInput.length > 0) setClientNetworkOpen(true);
+                              }}
+                              onClose={() => setClientNetworkOpen(false)}
+                              inputValue={clientNetworkInput}
+                              onInputChange={(event, newInputValue, reason) => {
+                                setClientNetworkInput(newInputValue);
+                                if (reason === "input" && newInputValue.length > 0) {
+                                  setClientNetworkOpen(true);
+                                } else if (reason === "clear" || newInputValue.length === 0) {
+                                  setClientNetworkOpen(false);
+                                }
+                              }}
+                              options={clientNetworks}
+                              getOptionLabel={(option) => option.name || ""}
+                              value={clientNetworks.find((n) => n._id === value) || null}
+                              onChange={(event, newValue) => {
+                                onChange(newValue ? newValue._id : "");
+                                setFilteredAgents([]);
+                                setUnassignedLeadsStats({ ftd: null, filler: null });
+                              }}
+                              disabled={loadingClientNetworks}
+                              size="small"
+                              renderInput={(params) => (
+                                <TextField
+                                  {...params}
+                                  label="Client Network *"
+                                  error={!!errors.selectedClientNetwork}
+                                  placeholder="Search..."
+                                  helperText={
+                                    errors.selectedClientNetwork?.message ||
+                                    (loadingClientNetworks ? "Loading..." : `${clientNetworks.length} available`)
+                                  }
+                                  sx={{ '& .MuiOutlinedInput-root': { bgcolor: 'background.paper' } }}
+                                />
+                              )}
+                              renderOption={(props, option) => (
+                                <li {...props} key={option._id}>
+                                  <Box>
+                                    <Typography variant="body2">{option.name}</Typography>
+                                    {option.description && (
+                                      <Typography variant="caption" sx={{ color: "text.secondary" }}>
+                                        {option.description}
+                                      </Typography>
+                                    )}
+                                  </Box>
+                                </li>
+                              )}
+                              isOptionEqualToValue={(option, value) => option._id === value._id}
                             />
                           )}
-                          renderOption={(props, option) => (
-                            <li {...props} key={option._id}>
-                              <Box>
-                                <Typography variant="body2">
-                                  {option.name}
-                                </Typography>
-                                {option.description && (
-                                  <Typography
-                                    variant="caption"
-                                    sx={{ color: "text.secondary" }}
-                                  >
-                                    {option.description}
-                                  </Typography>
-                                )}
-                              </Box>
-                            </li>
-                          )}
-                          isOptionEqualToValue={(option, value) =>
-                            option._id === value._id
-                          }
                         />
-                        {errors.selectedClientNetwork?.message && (
-                          <Typography
-                            variant="caption"
-                            color="error"
-                            sx={{ mt: 0.5, ml: 1.5, display: "block" }}
-                          >
-                            {errors.selectedClientNetwork.message}
-                          </Typography>
-                        )}
-                        {!errors.selectedClientNetwork?.message && (
-                          <Typography
-                            variant="caption"
-                            color="text.secondary"
-                            sx={{ mt: 0.5, ml: 1.5, display: "block" }}
-                          >
-                            {loadingClientNetworks
-                              ? "Loading client networks..."
-                              : `${clientNetworks.length} client network(s) available`}
-                          </Typography>
-                        )}
-                      </Box>
+                      </Grid>
                     )}
-                  />
-                </Grid>
-              )}
-              {}
-              <Grid item xs={12}>
-                <Controller
-                  name="selectedOurNetwork"
-                  control={control}
-                  render={({ field: { onChange, value } }) => (
-                    <Box>
-                      <Autocomplete
-                        open={ourNetworkOpen}
-                        onOpen={() => {
-                          if (ourNetworkInput.length > 0)
-                            setOurNetworkOpen(true);
-                        }}
-                        onClose={() => setOurNetworkOpen(false)}
-                        inputValue={ourNetworkInput}
-                        onInputChange={(event, newInputValue, reason) => {
-                          setOurNetworkInput(newInputValue);
-                          if (reason === "input" && newInputValue.length > 0) {
-                            setOurNetworkOpen(true);
-                          } else if (
-                            reason === "clear" ||
-                            newInputValue.length === 0
-                          ) {
-                            setOurNetworkOpen(false);
-                          }
-                        }}
-                        options={ourNetworks}
-                        getOptionLabel={(option) => option.name || ""}
-                        value={ourNetworks.find((n) => n._id === value) || null}
-                        onChange={(event, newValue) => {
-                          onChange(newValue ? newValue._id : "");
-                        }}
-                        disabled={loadingOurNetworks}
-                        size="small"
-                        renderInput={(params) => (
-                          <TextField
-                            {...params}
-                            label="Our Network *"
-                            error={!!errors.selectedOurNetwork}
-                            placeholder="Search our networks..."
-                          />
-                        )}
-                        renderOption={(props, option) => (
-                          <li {...props} key={option._id}>
-                            <Box>
-                              <Typography variant="body2">
-                                {option.name}
-                              </Typography>
-                              {option.description && (
-                                <Typography
-                                  variant="caption"
-                                  sx={{ color: "text.secondary" }}
-                                >
-                                  {option.description}
-                                </Typography>
-                              )}
-                            </Box>
-                          </li>
-                        )}
-                        isOptionEqualToValue={(option, value) =>
-                          option._id === value._id
-                        }
-                      />
-                      {errors.selectedOurNetwork?.message && (
-                        <Typography
-                          variant="caption"
-                          color="error"
-                          sx={{ mt: 0.5, ml: 1.5, display: "block" }}
-                        >
-                          {errors.selectedOurNetwork.message}
-                        </Typography>
-                      )}
-                      {!errors.selectedOurNetwork?.message && (
-                        <Typography
-                          variant="caption"
-                          color="text.secondary"
-                          sx={{ mt: 0.5, ml: 1.5, display: "block" }}
-                        >
-                          {loadingOurNetworks
-                            ? "Loading our networks..."
-                            : `${ourNetworks.length} our network(s) available`}
-                        </Typography>
-                      )}
-                    </Box>
-                  )}
-                />
-              </Grid>
-              {}
-              <Grid item xs={12}>
-                <Controller
-                  name="selectedCampaign"
-                  control={control}
-                  render={({ field: { onChange, value } }) => (
-                    <Box>
-                      <Autocomplete
-                        open={campaignOpen}
-                        onOpen={() => {
-                          if (campaignInput.length > 0) setCampaignOpen(true);
-                        }}
-                        onClose={() => setCampaignOpen(false)}
-                        inputValue={campaignInput}
-                        onInputChange={(event, newInputValue, reason) => {
-                          setCampaignInput(newInputValue);
-                          if (reason === "input" && newInputValue.length > 0) {
-                            setCampaignOpen(true);
-                          } else if (
-                            reason === "clear" ||
-                            newInputValue.length === 0
-                          ) {
-                            setCampaignOpen(false);
-                          }
-                        }}
-                        options={campaigns}
-                        getOptionLabel={(option) => option.name || ""}
-                        value={campaigns.find((c) => c._id === value) || null}
-                        onChange={(event, newValue) => {
-                          onChange(newValue ? newValue._id : "");
-                        }}
-                        disabled={loadingCampaigns}
-                        size="small"
-                        renderInput={(params) => (
-                          <TextField
-                            {...params}
-                            label="Campaign *"
-                            error={!!errors.selectedCampaign}
-                            helperText={errors.selectedCampaign?.message}
-                            placeholder="Search campaigns..."
-                          />
-                        )}
-                        renderOption={(props, option) => (
-                          <li {...props} key={option._id}>
-                            <Box>
-                              <Typography variant="body2">
-                                {option.name}
-                              </Typography>
-                              {option.description && (
-                                <Typography
-                                  variant="caption"
-                                  sx={{
-                                    display: "block",
-                                    color: "text.secondary",
-                                  }}
-                                >
-                                  {option.description}
-                                </Typography>
-                              )}
-                            </Box>
-                          </li>
-                        )}
-                        isOptionEqualToValue={(option, value) =>
-                          option._id === value._id
-                        }
-                      />
-                      {!errors.selectedCampaign?.message && (
-                        <Typography
-                          variant="caption"
-                          color="text.secondary"
-                          sx={{ mt: 0.5, ml: 1.5 }}
-                        >
-                          {loadingCampaigns
-                            ? "Loading campaigns..."
-                            : `${campaigns.length} campaign(s) available`}
-                        </Typography>
-                      )}
-                    </Box>
-                  )}
-                />
-              </Grid>
-              {/* Client Broker Selection - Multiple Selection for Filtering */}
-              <Grid item xs={12}>
-                <Controller
-                  name="selectedClientBrokers"
-                  control={control}
-                  render={({ field: { onChange, value } }) => (
-                    <Autocomplete
-                      multiple
-                      options={clientBrokers}
-                      getOptionLabel={(option) => option.name}
-                      value={clientBrokers.filter((broker) =>
-                        (value || []).includes(broker._id)
-                      )}
-                      isOptionEqualToValue={(option, value) =>
-                        option._id === value._id
-                      }
-                      onChange={(event, newValue) => {
-                        onChange(newValue.map((broker) => broker._id));
-                        setFilteredAgents([]);
-                        setUnassignedLeadsStats({ ftd: null, filler: null });
-                      }}
-                      loading={loadingClientBrokers}
-                      disabled={loadingClientBrokers}
-                      renderInput={(params) => (
-                        <TextField
-                          {...params}
-                          size="small"
-                          fullWidth
-                          label="Client Brokers (optional - to exclude leads)"
-                          placeholder="Type to search..."
-                          error={!!errors.selectedClientBrokers}
-                          helperText={
-                            errors.selectedClientBrokers?.message ||
-                            "Select brokers to exclude their leads from the order."
-                          }
-                          InputProps={{
-                            ...params.InputProps,
-                            endAdornment: (
-                              <React.Fragment>
-                                {loadingClientBrokers ? (
-                                  <CircularProgress color="inherit" size={20} />
-                                ) : null}
-                                {params.InputProps.endAdornment}
-                              </React.Fragment>
-                            ),
-                          }}
-                        />
-                      )}
-                      renderTags={(tagValue, getTagProps) =>
-                        tagValue.map((option, index) => (
-                          <Chip
-                            label={option.name}
-                            {...getTagProps({ index })}
+                    {/* Our Network Selection */}
+                    <Grid item xs={12} md={(user?.role === "admin" || user?.role === "affiliate_manager") ? 6 : 12}>
+                      <Controller
+                        name="selectedOurNetwork"
+                        control={control}
+                        render={({ field: { onChange, value } }) => (
+                          <Autocomplete
+                            open={ourNetworkOpen}
+                            onOpen={() => {
+                              if (ourNetworkInput.length > 0) setOurNetworkOpen(true);
+                            }}
+                            onClose={() => setOurNetworkOpen(false)}
+                            inputValue={ourNetworkInput}
+                            onInputChange={(event, newInputValue, reason) => {
+                              setOurNetworkInput(newInputValue);
+                              if (reason === "input" && newInputValue.length > 0) {
+                                setOurNetworkOpen(true);
+                              } else if (reason === "clear" || newInputValue.length === 0) {
+                                setOurNetworkOpen(false);
+                              }
+                            }}
+                            options={ourNetworks}
+                            getOptionLabel={(option) => option.name || ""}
+                            value={ourNetworks.find((n) => n._id === value) || null}
+                            onChange={(event, newValue) => {
+                              onChange(newValue ? newValue._id : "");
+                            }}
+                            disabled={loadingOurNetworks}
                             size="small"
+                            renderInput={(params) => (
+                              <TextField
+                                {...params}
+                                label="Our Network *"
+                                error={!!errors.selectedOurNetwork}
+                                placeholder="Search..."
+                                helperText={
+                                  errors.selectedOurNetwork?.message ||
+                                  (loadingOurNetworks ? "Loading..." : `${ourNetworks.length} available`)
+                                }
+                                sx={{ '& .MuiOutlinedInput-root': { bgcolor: 'background.paper' } }}
+                              />
+                            )}
+                            renderOption={(props, option) => (
+                              <li {...props} key={option._id}>
+                                <Box>
+                                  <Typography variant="body2">{option.name}</Typography>
+                                  {option.description && (
+                                    <Typography variant="caption" sx={{ color: "text.secondary" }}>
+                                      {option.description}
+                                    </Typography>
+                                  )}
+                                </Box>
+                              </li>
+                            )}
+                            isOptionEqualToValue={(option, value) => option._id === value._id}
                           />
-                        ))
-                      }
-                    />
-                  )}
-                />
+                        )}
+                      />
+                    </Grid>
+                  </Grid>
+                </Box>
+              </Grid>
+              {/* Campaign & Brokers Section */}
+              <Grid item xs={12}>
+                <Box
+                  sx={{
+                    p: 2,
+                    bgcolor: (theme) => alpha(theme.palette.grey[500], 0.04),
+                    borderRadius: 2,
+                    border: '1px solid',
+                    borderColor: 'divider',
+                  }}
+                >
+                  <Typography variant="subtitle2" sx={{ mb: 1.5, fontWeight: 600, color: 'text.secondary' }}>
+                    Campaign & Broker Settings
+                  </Typography>
+                  <Grid container spacing={2}>
+                    {/* Campaign Selection */}
+                    <Grid item xs={12} md={6}>
+                      <Controller
+                        name="selectedCampaign"
+                        control={control}
+                        render={({ field: { onChange, value } }) => (
+                          <Autocomplete
+                            open={campaignOpen}
+                            onOpen={() => {
+                              if (campaignInput.length > 0) setCampaignOpen(true);
+                            }}
+                            onClose={() => setCampaignOpen(false)}
+                            inputValue={campaignInput}
+                            onInputChange={(event, newInputValue, reason) => {
+                              setCampaignInput(newInputValue);
+                              if (reason === "input" && newInputValue.length > 0) {
+                                setCampaignOpen(true);
+                              } else if (reason === "clear" || newInputValue.length === 0) {
+                                setCampaignOpen(false);
+                              }
+                            }}
+                            options={campaigns}
+                            getOptionLabel={(option) => option.name || ""}
+                            value={campaigns.find((c) => c._id === value) || null}
+                            onChange={(event, newValue) => {
+                              onChange(newValue ? newValue._id : "");
+                            }}
+                            disabled={loadingCampaigns}
+                            size="small"
+                            renderInput={(params) => (
+                              <TextField
+                                {...params}
+                                label="Campaign *"
+                                error={!!errors.selectedCampaign}
+                                helperText={
+                                  errors.selectedCampaign?.message ||
+                                  (loadingCampaigns ? "Loading..." : `${campaigns.length} available`)
+                                }
+                                placeholder="Search..."
+                                sx={{ '& .MuiOutlinedInput-root': { bgcolor: 'background.paper' } }}
+                              />
+                            )}
+                            renderOption={(props, option) => (
+                              <li {...props} key={option._id}>
+                                <Box>
+                                  <Typography variant="body2">{option.name}</Typography>
+                                  {option.description && (
+                                    <Typography variant="caption" sx={{ display: "block", color: "text.secondary" }}>
+                                      {option.description}
+                                    </Typography>
+                                  )}
+                                </Box>
+                              </li>
+                            )}
+                            isOptionEqualToValue={(option, value) => option._id === value._id}
+                          />
+                        )}
+                      />
+                    </Grid>
+                    {/* Client Brokers Selection */}
+                    <Grid item xs={12} md={6}>
+                      <Controller
+                        name="selectedClientBrokers"
+                        control={control}
+                        render={({ field: { onChange, value } }) => (
+                          <Autocomplete
+                            multiple
+                            options={clientBrokers}
+                            getOptionLabel={(option) => option.name || ""}
+                            value={clientBrokers.filter((broker) => (value || []).includes(broker._id))}
+                            isOptionEqualToValue={(option, value) => option._id === value._id}
+                            onChange={(event, newValue) => {
+                              onChange(newValue.map((broker) => broker._id));
+                              setFilteredAgents([]);
+                              setUnassignedLeadsStats({ ftd: null, filler: null });
+                            }}
+                            loading={loadingClientBrokers}
+                            disabled={loadingClientBrokers}
+                            size="small"
+                            renderInput={(params) => (
+                              <TextField
+                                {...params}
+                                fullWidth
+                                label="Exclude Brokers (optional)"
+                                placeholder="Select..."
+                                error={!!errors.selectedClientBrokers}
+                                helperText={errors.selectedClientBrokers?.message || "Exclude leads from these brokers"}
+                                sx={{ '& .MuiOutlinedInput-root': { bgcolor: 'background.paper' } }}
+                                InputProps={{
+                                  ...params.InputProps,
+                                  endAdornment: (
+                                    <React.Fragment>
+                                      {loadingClientBrokers ? <CircularProgress color="inherit" size={18} /> : null}
+                                      {params.InputProps.endAdornment}
+                                    </React.Fragment>
+                                  ),
+                                }}
+                              />
+                            )}
+                            renderTags={(tagValue, getTagProps) =>
+                              tagValue.map((option, index) => (
+                                <Chip label={option.name} {...getTagProps({ index })} size="small" />
+                              ))
+                            }
+                          />
+                        )}
+                      />
+                    </Grid>
+                  </Grid>
+                </Box>
               </Grid>
 
               {/* Load Agents Button - Shows when criteria are set and FTD or Filler > 0 (Normal mode only) */}
@@ -4181,7 +4358,7 @@ const OrdersPage = () => {
                   </Grid>
                 )}
 
-              {/* Common fields for both modes */}
+              {/* Notes Section */}
               <Grid item xs={12}>
                 <Controller
                   name="notes"
@@ -4190,192 +4367,33 @@ const OrdersPage = () => {
                     <TextField
                       {...field}
                       fullWidth
-                      label="Notes"
+                      label="Notes (optional)"
                       multiline
-                      rows={3}
+                      rows={2}
                       error={!!errors.notes}
                       helperText={errors.notes?.message}
                       size="small"
+                      placeholder="Add any additional notes for this order..."
                     />
                   )}
                 />
               </Grid>
-              <Grid item xs={12} sm={6}>
-                <Controller
-                  name="plannedDate"
-                  control={control}
-                  render={({ field }) => (
-                    <TextField
-                      {...field}
-                      fullWidth
-                      label="Planned Date"
-                      type="date"
-                      error={!!errors.plannedDate}
-                      helperText={
-                        errors.plannedDate?.message ||
-                        "Select the date for when this order should be processed"
-                      }
-                      size="small"
-                      InputLabelProps={{
-                        shrink: true,
-                      }}
-                      value={
-                        field.value
-                          ? new Date(field.value).toISOString().split("T")[0]
-                          : ""
-                      }
-                      onChange={(e) => {
-                        const dateValue = e.target.value
-                          ? new Date(e.target.value)
-                          : null;
-                        field.onChange(dateValue);
-                      }}
-                    />
-                  )}
-                />
-              </Grid>
-              {}
-
-              {}
-
-              {}
             </Grid>
             {errors[""] && (
               <Alert severity="error" sx={{ mt: 2 }}>
                 {errors[""]?.message}
               </Alert>
             )}
-
-            {/* Fulfillment Summary */}
-            {!manualSelectionMode && (
-              <Box
-                sx={{
-                  mt: 2,
-                  p: 2,
-                  bgcolor: "background.default",
-                  borderRadius: 1,
-                  border: "1px solid",
-                  borderColor: "divider",
-                }}
-              >
-                <Typography
-                  variant="subtitle2"
-                  gutterBottom
-                  display="flex"
-                  alignItems="center"
-                  gap={1}
-                >
-                  Order Fulfillment Estimate
-                  {checkingFulfillment && <CircularProgress size={16} />}
-                </Typography>
-
-                {!checkingFulfillment && fulfillmentSummary ? (
-                  <>
-                    <Box display="flex" alignItems="center" gap={1} mb={1}>
-                      <Chip
-                        label={
-                          fulfillmentSummary.status === "fulfilled"
-                            ? "Can be Fulfilled"
-                            : fulfillmentSummary.status === "partial"
-                            ? "Partially Fulfilled"
-                            : "Not Fulfilled"
-                        }
-                        color={
-                          fulfillmentSummary.status === "fulfilled"
-                            ? "success"
-                            : fulfillmentSummary.status === "partial"
-                            ? "warning"
-                            : "error"
-                        }
-                        size="small"
-                      />
-                      <Typography variant="body2">
-                        {fulfillmentSummary.message}
-                      </Typography>
-                    </Box>
-
-                    {fulfillmentSummary.details &&
-                      fulfillmentSummary.details.length > 0 && (
-                        <Box mt={1}>
-                          {fulfillmentSummary.details.map((detail, idx) => (
-                            <Typography
-                              key={idx}
-                              variant="caption"
-                              display="block"
-                              color="text.secondary"
-                            >
-                              • {detail}
-                            </Typography>
-                          ))}
-                        </Box>
-                      )}
-
-                    <Box mt={1} display="flex" gap={2}>
-                      {Object.entries(fulfillmentSummary.breakdown || {}).map(
-                        ([type, stats]) =>
-                          stats.requested > 0 && (
-                            <Box key={type}>
-                              <Typography
-                                variant="caption"
-                                fontWeight="bold"
-                                display="block"
-                              >
-                                {type.toUpperCase()}
-                              </Typography>
-                              <Typography
-                                variant="caption"
-                                color={
-                                  stats.available < stats.requested
-                                    ? "error.main"
-                                    : "success.main"
-                                }
-                              >
-                                {stats.available} / {stats.requested}
-                              </Typography>
-                            </Box>
-                          )
-                      )}
-                    </Box>
-                  </>
-                ) : !checkingFulfillment &&
-                  !fulfillmentSummary &&
-                  (watch("ftd") > 0 ||
-                    watch("filler") > 0 ||
-                    watch("cold") > 0) ? (
-                  <Typography variant="caption" color="text.secondary">
-                    Enter lead details to see fulfillment estimate...
-                  </Typography>
-                ) : checkingFulfillment && fulfillmentSummary ? (
-                  // Keep showing old summary while loading new one
-                  <Box sx={{ opacity: 0.5 }}>
-                    <Box display="flex" alignItems="center" gap={1} mb={1}>
-                      <Chip
-                        label={
-                          fulfillmentSummary.status === "fulfilled"
-                            ? "Can be Fulfilled"
-                            : fulfillmentSummary.status === "partial"
-                            ? "Partially Fulfilled"
-                            : "Not Fulfilled"
-                        }
-                        color={
-                          fulfillmentSummary.status === "fulfilled"
-                            ? "success"
-                            : fulfillmentSummary.status === "partial"
-                            ? "warning"
-                            : "error"
-                        }
-                        size="small"
-                      />
-                      <Typography variant="body2">
-                        {fulfillmentSummary.message}
-                      </Typography>
-                    </Box>
-                  </Box>
-                ) : null}
-              </Box>
-            )}
           </DialogContent>
-          <DialogActions>
+          <DialogActions 
+            sx={{ 
+              px: 3, 
+              py: 2, 
+              borderTop: '1px solid',
+              borderColor: 'divider',
+              bgcolor: (theme) => alpha(theme.palette.grey[500], 0.02),
+            }}
+          >
             <Button
               onClick={() => {
                 setCreateDialogOpen(false);
@@ -4385,11 +4403,20 @@ const OrdersPage = () => {
                 setManualLeadEmails("");
                 setManualLeads([]);
               }}
+              sx={{ px: 3 }}
             >
               Cancel
             </Button>
-            <Button type="submit" variant="contained" disabled={isSubmitting}>
-              {isSubmitting ? <CircularProgress size={24} /> : "Create Order"}
+            <Button 
+              type="submit" 
+              variant="contained" 
+              disabled={isSubmitting}
+              sx={{ 
+                px: 4,
+                fontWeight: 600,
+              }}
+            >
+              {isSubmitting ? <CircularProgress size={22} color="inherit" /> : "Create Order"}
             </Button>
           </DialogActions>
         </form>

@@ -149,24 +149,8 @@ const MainLayout = () => {
     if (user?.role === "admin") {
       return [
         ...commonItems,
-        {
-          text: "Leads",
-          icon: <LeadsIcon />,
-          isExpandable: true,
-          key: "leads",
-          children: [
-            {
-              text: "Orders",
-              icon: <OrdersIcon />,
-              path: "/orders",
-            },
-            {
-              text: "Leads",
-              icon: <LeadsIcon />,
-              path: "/leads",
-            },
-          ],
-        },
+        { text: "Orders", icon: <OrdersIcon />, path: "/orders" },
+        { text: "Leads", icon: <LeadsIcon />, path: "/leads" },
         {
           text: "Users",
           icon: <UsersIcon />,
@@ -303,24 +287,8 @@ const MainLayout = () => {
     } else if (user?.role === "affiliate_manager") {
       const affiliateManagerItems = [
         ...commonItems,
-        {
-          text: "Leads",
-          icon: <LeadsIcon />,
-          isExpandable: true,
-          key: "leads",
-          children: [
-            {
-              text: "Orders",
-              icon: <OrdersIcon />,
-              path: "/orders",
-            },
-            {
-              text: "Leads",
-              icon: <LeadsIcon />,
-              path: "/leads",
-            },
-          ],
-        },
+        { text: "Orders", icon: <OrdersIcon />, path: "/orders" },
+        { text: "Leads", icon: <LeadsIcon />, path: "/leads" },
         { text: "Our Networks", icon: <NetworkIcon />, path: "/our-networks" },
         { text: "My Table", icon: <TableIcon />, path: "/my-table" },
         { text: "My Targets", icon: <TargetIcon />, path: "/am-targets" },
