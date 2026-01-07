@@ -5082,16 +5082,6 @@ exports.changeRequester = async (req, res, next) => {
       });
     }
 
-    // Check if current requester is admin
-    // Prompt: "admin cannot change if another admin is requester"
-    if (order.requester.role === "admin") {
-      return res.status(403).json({
-        success: false,
-        message:
-          "Cannot change requester when the current requester is an admin",
-      });
-    }
-
     const oldRequesterId = order.requester._id;
 
     // Update history
