@@ -144,7 +144,7 @@ const MainLayout = () => {
   const getNavigationItems = () => {
     const commonItems = [
       { text: "Dashboard", icon: <DashboardIcon />, path: "/" },
-      { text: "Notes", icon: <NoteIcon />, path: "/notes" },
+      // { text: "Notes", icon: <NoteIcon />, path: "/notes" },
     ];
     if (user?.role === "admin") {
       return [
