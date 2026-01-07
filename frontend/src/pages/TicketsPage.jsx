@@ -90,7 +90,7 @@ const TicketsPage = () => {
   // Filters
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState({
-    status: '',
+    status: 'open',
     category: '',
     priority: '',
     search: '',
