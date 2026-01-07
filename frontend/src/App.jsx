@@ -46,7 +46,6 @@ import ClientNetworksPage from "./pages/ClientNetworksPage.jsx";
 import OurNetworksPage from "./pages/OurNetworksPage.jsx";
 import ClientBrokersPage from "./pages/ClientBrokersPage.jsx";
 import CampaignsPage from "./pages/CampaignsPage.jsx";
-import PerformancePage from "./pages/PerformancePage.jsx";
 import ProfilePage from "./pages/ProfilePage.jsx";
 import PayrollPage from "./pages/PayrollPage.jsx";
 import WithdrawalsPage from "./pages/WithdrawalsPage.jsx";
@@ -326,7 +325,6 @@ function AppContent() {
             <Route path="our-networks" element={<OurNetworksPage />} />
             <Route path="client-brokers" element={<ClientBrokersPage />} />
             <Route path="campaigns" element={<CampaignsPage />} />
-            <Route path="performance" element={<PerformancePage />} />
             <Route path="payroll" element={<PayrollPage />} />
             <Route path="withdrawals" element={<WithdrawalsPage />} />
             <Route path="payment-history" element={<PaymentHistoryPage />} />

@@ -27,7 +27,6 @@ import {
   Assignment as OrdersIcon,
   Contacts as LeadsIcon,
   People as UsersIcon,
-  Analytics as PerformanceIcon,
   AccountCircle as AccountIcon,
   Logout as LogoutIcon,
   AttachMoney as PaymentIcon,
@@ -196,11 +195,6 @@ const MainLayout = () => {
               path: "/campaigns",
             },
           ],
-        },
-        {
-          text: "Performance",
-          icon: <PerformanceIcon />,
-          path: "/performance",
         },
         {
           text: "Payroll",

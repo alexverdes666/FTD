@@ -7,7 +7,6 @@ import ordersSlice from "./slices/ordersSlice";
 import leadsSlice from "./slices/leadsSlice";
 import usersSlice from "./slices/usersSlice";
 import uiSlice from "./slices/uiSlice";
-import performanceSlice from "./slices/performanceSlice";
 import chatSlice from "./slices/chatSlice";
 import notificationSlice from "./slices/notificationSlice";
 const persistConfig = {
@@ -21,7 +20,6 @@ const rootReducer = combineReducers({
   leads: leadsSlice,
   users: usersSlice,
   ui: uiSlice,
-  performance: performanceSlice,
   chat: chatSlice,
   notifications: notificationSlice,
 });
