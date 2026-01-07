@@ -371,7 +371,7 @@ const PerformancePage = () => {
       variants={containerVariants}
       initial="hidden"
       animate="visible"
-      sx={{ p: isSmallScreen ? 2 : 3 }}
+      sx={{ width: "100%", typography: "body1" }}
     >
       <Box
         display="flex"

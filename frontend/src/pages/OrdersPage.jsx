@@ -2056,7 +2056,7 @@ const OrdersPage = () => {
     </Typography>
   );
   return (
-    <Box sx={{ p: isSmallScreen ? 2 : 3, pt: 0, mt: -2 }}>
+    <Box sx={{ width: "100%", typography: "body1" }}>
       {notification.message && (
         <Collapse in={!!notification.message}>
           <Alert

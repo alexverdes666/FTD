@@ -11,6 +11,22 @@ const ClientBroker = require("../models/ClientBroker");
 const Campaign = require("../models/Campaign");
 const CallChangeRequest = require("../models/CallChangeRequest");
 const sessionSecurity = require("../utils/sessionSecurity");
+
+// Country code to name mapping for search
+const COUNTRY_CODE_MAP = {
+  UK: "United Kingdom",
+  GB: "United Kingdom",
+  US: "United States",
+  USA: "United States",
+  UAE: "United Arab Emirates",
+  CA: "Canada",
+  AU: "Australia",
+  NZ: "New Zealand",
+  SA: "Saudi Arabia",
+  ZA: "South Africa",
+  // Add more common abbreviations as needed
+};
+
 exports.getLeads = async (req, res, next) => {
   try {
     const {
@@ -84,11 +100,46 @@ exports.getLeads = async (req, res, next) => {
     // Handle unified search - multi-keyword search with AND logic
     // Split search into multiple keywords and trim each (similar to Orders page)
     if (search) {
-      searchKeywords = search
+      const rawKeywords = search
         .toLowerCase()
         .trim()
         .split(/\s+/)
         .filter((k) => k.length > 0);
+      
+      // Process special parameters (assigned, unassigned) and expand country codes
+      searchKeywords = rawKeywords
+        .filter((keyword) => {
+          // Handle assigned:true or assigned:false
+          if (keyword.startsWith("assigned:")) {
+            const value = keyword.split(":")[1];
+            if (value === "true") {
+              filter.assignedAgent = { $ne: null };
+            } else if (value === "false") {
+              filter.assignedAgent = null;
+            }
+            return false; // Remove from search keywords
+          }
+          // Handle "assigned" keyword (without colon) - show all assigned leads
+          if (keyword === "assigned") {
+            filter.assignedAgent = { $ne: null };
+            return false; // Remove from search keywords
+          }
+          // Handle "unassigned" keyword
+          if (keyword === "unassigned") {
+            filter.assignedAgent = null;
+            return false; // Remove from search keywords
+          }
+          return true; // Keep other keywords
+        })
+        .map((keyword) => {
+          // Expand country codes to full names
+          const upperKeyword = keyword.toUpperCase();
+          if (COUNTRY_CODE_MAP[upperKeyword]) {
+            return COUNTRY_CODE_MAP[upperKeyword].toLowerCase();
+          }
+          return keyword;
+        });
+      
       // Note: Search filtering will be applied in aggregation pipeline after $lookup
       // to include assignedAgent name/email in the search
     } else {

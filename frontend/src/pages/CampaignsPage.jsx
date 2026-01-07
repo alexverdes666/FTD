@@ -245,7 +245,7 @@ const CampaignsPage = () => {
     }
   };
   return (
-    <Box sx={{ p: isMobile ? 2 : 3, pt: 0, mt: -2 }}>
+    <Box sx={{ width: "100%", typography: "body1" }}>
       {}
       {notification.message && (
         <Alert severity={notification.severity} sx={{ mb: 2 }}>

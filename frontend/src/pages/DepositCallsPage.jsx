@@ -513,7 +513,7 @@ const DepositCallsPage = () => {
   };
 
   return (
-    <Container maxWidth={false} sx={{ px: { xs: 1, sm: 2 } }}>
+    <Box sx={{ width: "100%", typography: "body1" }}>
       <Box sx={{ mb: 3 }}>
         <Box display="flex" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={2}>
           <Box>
@@ -949,7 +949,7 @@ const DepositCallsPage = () => {
           </Dialog>
         </Paper>
       )}
-    </Container>
+    </Box>
   );
 };
 

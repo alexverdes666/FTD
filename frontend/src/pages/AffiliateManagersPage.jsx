@@ -1253,7 +1253,7 @@ const AffiliateManagersPage = () => {
 
   return (
     <LocalizationProvider dateAdapter={AdapterDayjs}>
-      <Box sx={{ p: 3, backgroundColor: "#f5f5f5", minHeight: "100vh" }}>
+      <Box sx={{ width: "100%", typography: "body1", backgroundColor: "#f5f5f5", minHeight: "100vh" }}>
         {alert.show && (
           <Alert severity={alert.severity} sx={{ mb: 2 }}>
             {alert.message}

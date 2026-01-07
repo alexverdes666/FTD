@@ -409,7 +409,7 @@ const DashboardPage = () => {
     }
   };
   return (
-    <Box sx={{ bgcolor: "grey.50", minHeight: "100vh", p: { xs: 1, sm: 2, md: 3 } }}>
+    <Box sx={{ width: "100%", typography: "body1" }}>
       <WelcomeHeader name={user?.fullName || user?.email} />
       {renderDashboardByRole()}
     </Box>

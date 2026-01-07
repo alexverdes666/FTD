@@ -363,7 +363,7 @@ const AgentCallsCalendarPage = () => {
   };
 
   return (
-    <Container maxWidth="xl">
+    <Box sx={{ width: "100%", typography: "body1" }}>
       <Box sx={{ mb: 3 }}>
         <Typography variant="h4" gutterBottom fontWeight="bold">
           AM Calls Calendar
@@ -450,7 +450,7 @@ const AgentCallsCalendarPage = () => {
           date={selectedDay ? `${month}/${selectedDay}/${year}` : ''}
         />
       )}
-    </Container>
+    </Box>
   );
 };
 

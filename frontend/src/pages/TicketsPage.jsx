@@ -366,7 +366,7 @@ const TicketsPage = () => {
   const isAdmin = user?.role === 'admin';
 
   return (
-    <Box sx={{ p: 3 }}>
+    <Box sx={{ width: "100%", typography: "body1" }}>
       {/* Header */}
       <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Typography variant="h4" component="h1">

@@ -58,6 +58,16 @@ export default defineConfig({
     port: 3000,
     open: false,
     allowedHosts: [".ngrok.io", ".ngrok-free.app", "localhost", "127.0.0.1"],
+    hmr: {
+      overlay: true,
+    },
+    fs: {
+      strict: false,
+    },
+  },
+  optimizeDeps: {
+    force: false,
+    exclude: [],
   },
   preview: {
     host: true,

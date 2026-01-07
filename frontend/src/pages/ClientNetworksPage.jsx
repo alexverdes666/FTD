@@ -221,7 +221,7 @@ const ClientNetworksPage = () => {
   }
 
   return (
-    <Box sx={{ p: isMobile ? 2 : 3, pt: 0, mt: -2 }}>
+    <Box sx={{ width: "100%", typography: "body1" }}>
       {/* Notification */}
       {notification.message && (
         <Collapse in={!!notification.message}>

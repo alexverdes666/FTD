@@ -218,6 +218,20 @@ const getDisplayLeadType = (lead) => {
   return lead.orderedAs || lead.leadType;
 };
 
+// Helper function to convert country names to abbreviations
+const getCountryAbbreviation = (country) => {
+  if (!country) return "—";
+  
+  // Split by spaces and take first letter of each word
+  const words = country.trim().split(/\s+/);
+  if (words.length > 1) {
+    return words.map(word => word.charAt(0).toUpperCase()).join('');
+  }
+  
+  // If single word, return as is
+  return country;
+};
+
 // Helper function to calculate cooldown status for FTD/Filler leads (10-day cooldown)
 const getCooldownStatus = (lead) => {
   const leadType = getDisplayLeadType(lead);
@@ -1696,23 +1710,31 @@ const LeadsPage = () => {
     fetchLeads();
   };
   return (
-    <Box>
-      <Box
-        display="flex"
-        justifyContent="space-between"
-        alignItems="center"
-        mb={0}
-        sx={{
-          "& .MuiButton-root": {
-            transition: "all 0.2s ease-in-out",
-            "&:hover": {
-              transform: "translateY(-2px)",
-              boxShadow: (theme) => theme.shadows[4],
+    <Box sx={{ position: 'relative' }}>
+      {/* Floating action bar for selected leads */}
+      {(canAssignLeads && numSelected > 0 && numAssignableSelected === 0) || (isAdminOrManager && numAssignableSelected > 0) ? (
+        <Box
+          sx={{
+            position: 'fixed',
+            top: 80,
+            right: 24,
+            zIndex: 1200,
+            display: 'flex',
+            gap: 2,
+            alignItems: 'center',
+            animation: 'slideInFromRight 0.3s ease-out',
+            '@keyframes slideInFromRight': {
+              '0%': {
+                transform: 'translateX(100%)',
+                opacity: 0,
+              },
+              '100%': {
+                transform: 'translateX(0)',
+                opacity: 1,
+              },
             },
-          },
-        }}
-      >
-        <Box display="flex" gap={2} alignItems="center" ml="auto">
+          }}
+        >
           {canAssignLeads && numSelected > 0 && numAssignableSelected === 0 && (
             <Alert severity="info" sx={{ py: 0.5, px: 2 }}>
               Cold leads cannot be assigned to agents. Only FTD and Filler leads can be assigned.
@@ -1729,9 +1751,10 @@ const LeadsPage = () => {
                 px: 3,
                 py: 1,
                 transition: "all 0.2s",
+                boxShadow: 4,
                 "&:hover": {
                   transform: "translateY(-2px)",
-                  boxShadow: 4,
+                  boxShadow: 6,
                 },
               }}
             >
@@ -1739,7 +1762,7 @@ const LeadsPage = () => {
             </Button>
           )}
         </Box>
-      </Box>
+      ) : null}
       {success && (
         <Alert
           severity="success"
@@ -1904,19 +1927,71 @@ const LeadsPage = () => {
           borderColor: "divider",
         }}
       >
-        <Button
-          startIcon={showFilters ? <ExpandLessIcon /> : <FilterIcon />}
-          onClick={() => setShowFilters(!showFilters)}
-          sx={{
-            mb: 2,
-            color: "primary.main",
-            "&:hover": {
-              bgcolor: "primary.lighter",
-            },
-          }}
-        >
-          {showFilters ? "Hide Filters" : "Show Filters"}
-        </Button>
+        <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+          <Button
+            startIcon={showFilters ? <ExpandLessIcon /> : <FilterIcon />}
+            onClick={() => setShowFilters(!showFilters)}
+            sx={{
+              color: "primary.main",
+              "&:hover": {
+                bgcolor: "primary.lighter",
+              },
+            }}
+          >
+            {showFilters ? "Hide Filters" : "Show Filters"}
+          </Button>
+          {/* Action Icon Buttons - Top Right */}
+          <Box display="flex" gap={0.5}>
+            {(isLeadManager || user?.role === ROLES.ADMIN) && (
+              <Tooltip title="Add New Lead">
+                <IconButton
+                  size="small"
+                  onClick={() => setAddLeadDialogOpen(true)}
+                  sx={{
+                    color: 'primary.main',
+                    '&:hover': {
+                      bgcolor: 'primary.lighter',
+                    },
+                  }}
+                >
+                  <PersonAddIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            )}
+            {isAdminOrManager && (
+              <Tooltip title="Import Leads">
+                <IconButton
+                  size="small"
+                  onClick={() => setImportDialogOpen(true)}
+                  sx={{
+                    color: 'info.main',
+                    '&:hover': {
+                      bgcolor: 'info.lighter',
+                    },
+                  }}
+                >
+                  <ImportIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            )}
+            {canDeleteLeads && (
+              <Tooltip title="Bulk Delete">
+                <IconButton
+                  size="small"
+                  onClick={() => setBulkDeleteDialogOpen(true)}
+                  sx={{
+                    color: 'error.main',
+                    '&:hover': {
+                      bgcolor: 'error.lighter',
+                    },
+                  }}
+                >
+                  <DeleteIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            )}
+          </Box>
+        </Box>
         <Collapse in={showFilters}>
           <Grid container spacing={2}>
             <Grid item xs={12} sm={6} md={4}>
@@ -1927,7 +2002,7 @@ const LeadsPage = () => {
                 onChange={(e) =>
                   handleSearchChange(e.target.value)
                 }
-                placeholder="Search by name, email, phone, country, gender, status, lead type, order status, order priority, or agent..."
+                placeholder="Search by name, email, phone, country (UK, US, etc.), gender, status, lead type, order status, order priority, agent, or use 'assigned', 'unassigned'..."
                 InputProps={{
                   startAdornment: (
                     <SearchIcon sx={{ mr: 1, color: "action.active" }} />
@@ -1940,25 +2015,6 @@ const LeadsPage = () => {
                 }}
               />
             </Grid>
-            {isAdminOrManager && (
-              <Grid item xs={12} sm={6} md={2}>
-                <FormControl fullWidth>
-                  <InputLabel>Assignment</InputLabel>
-                  <Select
-                    value={filters.isAssigned}
-                    label="Assignment"
-                    onChange={(e) =>
-                      handleFilterChange("isAssigned", e.target.value)
-                    }
-                    sx={{ borderRadius: 2 }}
-                  >
-                    <MenuItem value="">All</MenuItem>
-                    <MenuItem value="true">Assigned</MenuItem>
-                    <MenuItem value="false">Unassigned</MenuItem>
-                  </Select>
-                </FormControl>
-              </Grid>
-            )}
             {isAdminOrManager && (
               <Grid item xs={12} sm={6} md={2}>
                 <FormControlLabel
@@ -2064,66 +2120,6 @@ const LeadsPage = () => {
                 }}
               />
             </Grid>
-            {/* Action Buttons */}
-            <Grid item xs={12}>
-              <Box display="flex" gap={2} alignItems="center" mt={2}>
-                {(isLeadManager || user?.role === ROLES.ADMIN) && (
-                  <Button
-                    variant="contained"
-                    color="primary"
-                    startIcon={<PersonAddIcon />}
-                    onClick={() => setAddLeadDialogOpen(true)}
-                    sx={{
-                      borderRadius: 2,
-                      px: 3,
-                      py: 1,
-                      transition: "all 0.3s ease-in-out",
-                      bgcolor: "rgba(255, 255, 255, 0.15)",
-                      backdropFilter: "blur(10px)",
-                      border: "1px solid rgba(255, 255, 255, 0.3)",
-                      color: "text.primary",
-                      "&:hover": {
-                        transform: "translateY(-2px)",
-                        boxShadow: "0 4px 16px rgba(0, 0, 0, 0.1)",
-                        bgcolor: "rgba(255, 255, 255, 0.25)",
-                      },
-                    }}
-                  >
-                    Add New Lead
-                  </Button>
-                )}
-                {isAdminOrManager && (
-                  <Button
-                    variant="outlined"
-                    startIcon={<ImportIcon />}
-                    onClick={() => setImportDialogOpen(true)}
-                    sx={{
-                      borderRadius: 2,
-                      px: 3,
-                      py: 1,
-                      transition: "all 0.2s",
-                      "&:hover": {
-                        transform: "translateY(-2px)",
-                        boxShadow: 2,
-                      },
-                    }}
-                  >
-                    Import Leads
-                  </Button>
-                )}
-                {canDeleteLeads && (
-                  <Button
-                    variant="contained"
-                    color="error"
-                    startIcon={<DeleteIcon />}
-                    onClick={() => setBulkDeleteDialogOpen(true)}
-                    sx={{ ml: 1 }}
-                  >
-                    Bulk Delete
-                  </Button>
-                )}
-              </Box>
-            </Grid>
           </Grid>
         </Collapse>
       </Paper>
@@ -2157,17 +2153,24 @@ const LeadsPage = () => {
                         borderRight: "1px solid rgba(224, 224, 224, 1)",
                         backgroundColor: "background.paper",
                         fontSize: "0.875rem",
+                        width: "40px",
+                        maxWidth: "40px",
+                        padding: "0",
+                        textAlign: "center",
                       }}
                     >
-                      <Checkbox
-                        indeterminate={
-                          numSelected > 0 && numSelected < leads.length
-                        }
-                        checked={
-                          leads.length > 0 && numSelected === leads.length
-                        }
-                        onChange={handleSelectAll}
-                      />
+                      <div style={{ display: 'flex', justifyContent: 'center' }}>
+                        <Checkbox
+                          indeterminate={
+                            numSelected > 0 && numSelected < leads.length
+                          }
+                          checked={
+                            leads.length > 0 && numSelected === leads.length
+                          }
+                          onChange={handleSelectAll}
+                          sx={{ padding: "4px" }}
+                        />
+                      </div>
                     </TableCell>
                   )}
                   {isAgent && (
@@ -2180,12 +2183,28 @@ const LeadsPage = () => {
                       }}
                     />
                   )}
+                  {!isAgent && (
+                    <TableCell
+                      sx={{
+                        borderRight: "1px solid rgba(224, 224, 224, 1)",
+                        backgroundColor: "background.paper",
+                        fontSize: "0.875rem",
+                        py: 1,
+                        textAlign: "center",
+                        width: "70px",
+                        maxWidth: "70px",
+                      }}
+                    >
+                      Type
+                    </TableCell>
+                  )}
                   <TableCell
                     sx={{
                       borderRight: "1px solid rgba(224, 224, 224, 1)",
                       backgroundColor: "background.paper",
                       fontSize: "0.875rem",
                       py: 1,
+                      textAlign: "left",
                     }}
                   >
                     Name
@@ -2197,18 +2216,7 @@ const LeadsPage = () => {
                         backgroundColor: "background.paper",
                         fontSize: "0.875rem",
                         py: 1,
-                      }}
-                    >
-                      Type
-                    </TableCell>
-                  )}
-                  {!isAgent && (
-                    <TableCell
-                      sx={{
-                        borderRight: "1px solid rgba(224, 224, 224, 1)",
-                        backgroundColor: "background.paper",
-                        fontSize: "0.875rem",
-                        py: 1,
+                        textAlign: "center",
                       }}
                     >
                       Contact
@@ -2220,6 +2228,7 @@ const LeadsPage = () => {
                       backgroundColor: "background.paper",
                       fontSize: "0.875rem",
                       py: 1,
+                      textAlign: "center",
                     }}
                   >
                     Country
@@ -2231,6 +2240,9 @@ const LeadsPage = () => {
                         backgroundColor: "background.paper",
                         fontSize: "0.875rem",
                         py: 1,
+                        textAlign: "center",
+                        width: "70px",
+                        maxWidth: "70px",
                       }}
                     >
                       Type
@@ -2243,6 +2255,7 @@ const LeadsPage = () => {
                         backgroundColor: "background.paper",
                         fontSize: "0.875rem",
                         py: 1,
+                        textAlign: "center",
                       }}
                     >
                       Gender
@@ -2255,6 +2268,7 @@ const LeadsPage = () => {
                         backgroundColor: "background.paper",
                         fontSize: "0.875rem",
                         py: 1,
+                        textAlign: "center",
                       }}
                     >
                       Assigned To
@@ -2267,6 +2281,9 @@ const LeadsPage = () => {
                       backgroundColor: "background.paper",
                       fontSize: "0.875rem",
                       py: 1,
+                      textAlign: "center",
+                      width: "70px",
+                      maxWidth: "70px",
                     }}
                   >
                     Cooldown
@@ -2276,6 +2293,9 @@ const LeadsPage = () => {
                       backgroundColor: "background.paper",
                       fontSize: "0.875rem",
                       py: 1,
+                      textAlign: "right",
+                      width: "70px",
+                      maxWidth: "70px",
                     }}
                   >
                     Actions
@@ -2882,7 +2902,7 @@ const GroupedLeadRow = React.memo(
               {leadInfo?.country || 'N/A'}
             </Typography>
           </TableCell>
-          <TableCell>
+          <TableCell sx={{ width: "70px", maxWidth: "70px", textAlign: "center" }}>
             <Chip
               label={leadInfo?.leadType?.toUpperCase() || "UNKNOWN"}
               color={getLeadTypeColor(leadInfo?.leadType)}
@@ -3229,6 +3249,14 @@ const LeadRow = React.memo(
       py: 0.25,
       px: 1,
       fontSize: "0.875rem",
+      textAlign: "center",
+    };
+    const checkboxCellSx = {
+      borderRight: "1px solid rgba(224, 224, 224, 1)",
+      width: "40px",
+      maxWidth: "40px",
+      padding: "0",
+      textAlign: "center",
     };
     return (
       <TableRow
@@ -3245,51 +3273,23 @@ const LeadRow = React.memo(
         }}
       >
         {canAssignLeads && (
-          <TableCell padding="checkbox" sx={cellSx}>
+          <TableCell padding="checkbox" sx={checkboxCellSx}>
             <Tooltip 
               title={lead.leadType === 'cold' ? "Cold leads cannot be assigned to agents" : ""}
               arrow
             >
-              <span onClick={(e) => e.stopPropagation()}>
+              <span onClick={(e) => e.stopPropagation()} style={{ display: 'flex', justifyContent: 'center' }}>
                 <Checkbox
                   checked={selectedLeads.has(lead._id)}
                   onChange={onSelectLead(lead._id)}
                   disabled={lead.leadType === 'cold'}
+                  sx={{ padding: "4px" }}
                 />
               </span>
             </Tooltip>
           </TableCell>
         )}
-        <TableCell sx={cellSx}>
-          <Stack direction="row" spacing={0.5} alignItems="center">
-            <Avatar
-              sx={{
-                width: 28,
-                height: 28,
-                fontSize: "0.75rem",
-                bgcolor: (theme) =>
-                  theme.palette[getLeadTypeColor(getDisplayLeadType(lead))]?.light,
-                color: (theme) =>
-                  theme.palette[getLeadTypeColor(getDisplayLeadType(lead))]?.main,
-              }}
-            >
-              {(
-                lead.fullName ||
-                `${lead.firstName} ${lead.lastName || ""}`.trim()
-              )
-                .charAt(0)
-                .toUpperCase()}
-            </Avatar>
-            <Typography
-              variant="body2"
-              sx={{ fontWeight: "medium", fontSize: "0.8rem" }}
-            >
-              {lead.fullName ||
-                `${lead.firstName} ${lead.lastName || ""}`.trim()}
-            </Typography>
-          </Stack>
-        </TableCell>
-        <TableCell sx={cellSx}>
+        <TableCell sx={{ ...cellSx, width: "70px", maxWidth: "70px" }}>
           <Chip
             label={(getDisplayLeadType(lead) || "unknown").toUpperCase()}
             color={getLeadTypeColor(getDisplayLeadType(lead))}
@@ -3301,8 +3301,17 @@ const LeadRow = React.memo(
             }}
           />
         </TableCell>
+        <TableCell sx={{ ...cellSx, textAlign: "left" }}>
+          <Typography
+            variant="body2"
+            sx={{ fontWeight: "medium", fontSize: "0.8rem" }}
+          >
+            {lead.fullName ||
+              `${lead.firstName} ${lead.lastName || ""}`.trim()}
+          </Typography>
+        </TableCell>
         <TableCell sx={cellSx}>
-          <Stack spacing={0.25}>
+          <Stack spacing={0.25} alignItems="center">
             <Typography
               variant="body2"
               sx={{
@@ -3332,7 +3341,7 @@ const LeadRow = React.memo(
         </TableCell>
         <TableCell sx={cellSx}>
           <Chip
-            label={lead.country || "Unknown"}
+            label={getCountryAbbreviation(lead.country)}
             size="small"
             variant="outlined"
             sx={{
@@ -3341,16 +3350,46 @@ const LeadRow = React.memo(
             }}
           />
         </TableCell>
-        <TableCell sx={cellSx}>{lead.gender || "N/A"}</TableCell>
+        <TableCell sx={cellSx}>
+          {lead.gender && lead.gender !== 'not_defined' ? (
+            lead.gender
+          ) : (
+            <Typography sx={{ fontWeight: 'bold', fontSize: '1rem' }}>—</Typography>
+          )}
+        </TableCell>
         {isAdminOrManager && (
           <TableCell sx={cellSx}>
-            {lead.assignedAgent ? lead.assignedAgent.fullName : "Unassigned"}
+            <Typography sx={{ fontWeight: lead.assignedAgent ? 'normal' : 'bold', fontSize: lead.assignedAgent ? '0.875rem' : '1rem' }}>
+              {lead.assignedAgent ? lead.assignedAgent.fullName : "—"}
+            </Typography>
           </TableCell>
         )}
         {/* Status column hidden but still filterable/searchable */}
-        <TableCell sx={cellSx}>
+        <TableCell sx={{ ...cellSx, width: "70px", maxWidth: "70px" }}>
           {(() => {
             const cooldown = getCooldownStatus(lead);
+            
+            // Show "—" for N/A
+            if (cooldown.text === 'N/A') {
+              return <Typography sx={{ fontSize: '1rem', fontWeight: 'bold' }}>—</Typography>;
+            }
+            
+            // Show green dot for Available
+            if (cooldown.text === 'Available') {
+              return (
+                <Box
+                  sx={{
+                    width: 10,
+                    height: 10,
+                    borderRadius: '50%',
+                    bgcolor: 'success.main',
+                    margin: '0 auto',
+                  }}
+                />
+              );
+            }
+            
+            // Show chip for cooldown days remaining
             return (
               <Chip
                 label={cooldown.text}
@@ -3364,8 +3403,8 @@ const LeadRow = React.memo(
             );
           })()}
         </TableCell>
-        <TableCell sx={{ py: 0.25, px: 0.5 }}>
-          <Stack direction="row" spacing={0.5} alignItems="center">
+        <TableCell sx={{ py: 0.25, px: 0.5, width: "70px", maxWidth: "70px", textAlign: "right" }}>
+          <Stack direction="row" spacing={0.5} alignItems="center" justifyContent="flex-end">
             {(user?.role === ROLES.ADMIN || isLeadManager) && (
               <IconButton
                 size="small"
@@ -3579,21 +3618,6 @@ const LeadCard = React.memo(
               justifyContent="space-between"
             >
               <Stack direction="row" spacing={1.5} alignItems="center">
-                <Avatar
-                  sx={{
-                    bgcolor: (theme) =>
-                      theme.palette[getLeadTypeColor(getDisplayLeadType(lead))]?.light,
-                    color: (theme) =>
-                      theme.palette[getLeadTypeColor(getDisplayLeadType(lead))]?.main,
-                  }}
-                >
-                  {(
-                    lead.fullName ||
-                    `${lead.firstName} ${lead.lastName || ""}`.trim()
-                  )
-                    .charAt(0)
-                    .toUpperCase()}
-                </Avatar>
                 <Box>
                   <Typography variant="subtitle1" fontWeight="bold">
                     {lead.fullName ||

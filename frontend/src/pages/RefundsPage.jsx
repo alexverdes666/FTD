@@ -541,7 +541,7 @@ const RefundsPage = () => {
   }
 
   return (
-    <Box p={3}>
+    <Box sx={{ width: "100%", typography: "body1" }}>
       <Typography variant="h4" gutterBottom>
         Refunds Management
       </Typography>

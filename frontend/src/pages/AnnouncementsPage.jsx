@@ -356,7 +356,7 @@ const AnnouncementsPage = () => {
   );
 
   return (
-    <Container maxWidth="lg">
+    <Box sx={{ width: "100%", typography: "body1" }}>
       {/* Header */}
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={4}>
         <Box display="flex" alignItems="center" gap={2}>
@@ -567,7 +567,7 @@ const AnnouncementsPage = () => {
           </Button>
         </DialogActions>
       </Dialog>
-    </Container>
+    </Box>
   );
 };
 

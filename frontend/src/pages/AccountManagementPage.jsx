@@ -402,7 +402,7 @@ const AccountManagementPage = () => {
   ];
 
   return (
-    <Box sx={{ p: isMobile ? 2 : 3, pt: 0, mt: -2 }}>
+    <Box sx={{ width: "100%", typography: "body1" }}>
       {/* Controls */}
       <Paper sx={{ p: 2, mb: 2 }}>
         <Grid container spacing={2} alignItems="center">

@@ -669,7 +669,7 @@ const AgentCommentsPage = () => {
   const canCreateComments = true; // All authenticated users can create comments
 
   return (
-    <Box sx={{ bgcolor: "grey.50", minHeight: "100vh", p: 3 }}>
+    <Box sx={{ width: "100%", typography: "body1", bgcolor: "grey.50", minHeight: "100vh" }}>
       <Typography variant="h4" gutterBottom sx={{ fontWeight: 600, mb: 3 }}>
         Agent Comments
       </Typography>
