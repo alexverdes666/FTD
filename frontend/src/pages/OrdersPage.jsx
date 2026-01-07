@@ -3217,9 +3217,9 @@ const OrdersPage = () => {
         maxWidth="lg"
         fullWidth
       >
-        <DialogTitle>Create New Order</DialogTitle>
+        <DialogTitle sx={{ pb: 1 }}>Create New Order</DialogTitle>
         <form onSubmit={handleSubmit(onSubmitOrder)}>
-          <DialogContent>
+          <DialogContent sx={{ pt: 1 }}>
             <Grid container spacing={2}>
               {/* Manual Selection Mode Toggle */}
               <Grid item xs={12}>
@@ -3493,35 +3493,48 @@ const OrdersPage = () => {
                     <Controller
                       name="countryFilter"
                       control={control}
-                      render={({ field }) => (
-                        <FormControl
-                          fullWidth
-                          size="small"
-                          error={!!errors.countryFilter}
-                        >
-                          <InputLabel>Country Filter *</InputLabel>
-                          <Select
+                      render={({ field }) => {
+                        const [inputValue, setInputValue] = React.useState("");
+                        
+                        return (
+                          <Autocomplete
                             {...field}
-                            label="Country Filter *"
-                            value={field.value || ""}
-                          >
-                            {getSortedCountries().map((country) => (
-                              <MenuItem key={country.code} value={country.name}>
-                                {country.name}
-                              </MenuItem>
-                            ))}
-                          </Select>
-                          {errors.countryFilter?.message && (
-                            <Typography
-                              variant="caption"
-                              color="error"
-                              sx={{ mt: 0.5, ml: 1.5 }}
-                            >
-                              {errors.countryFilter.message}
-                            </Typography>
-                          )}
-                        </FormControl>
-                      )}
+                            options={getSortedCountries().map((country) => country.name)}
+                            value={field.value || null}
+                            inputValue={inputValue}
+                            onInputChange={(event, newInputValue) => {
+                              setInputValue(newInputValue);
+                            }}
+                            onChange={(event, newValue) => {
+                              field.onChange(newValue || "");
+                            }}
+                            filterOptions={(options, state) => {
+                              // Only show options if user is typing (inputValue is not empty)
+                              if (!state.inputValue) {
+                                return [];
+                              }
+                              // Filter options based on input
+                              return options.filter((option) =>
+                                option.toLowerCase().includes(state.inputValue.toLowerCase())
+                              );
+                            }}
+                            open={inputValue.length > 0}
+                            renderInput={(params) => (
+                              <TextField
+                                {...params}
+                                label="Country Filter *"
+                                size="small"
+                                error={!!errors.countryFilter}
+                                helperText={errors.countryFilter?.message}
+                              />
+                            )}
+                            fullWidth
+                            disableClearable={false}
+                            forcePopupIcon={false}
+                            noOptionsText=""
+                          />
+                        );
+                      }}
                     />
                   </Grid>
                 </>
