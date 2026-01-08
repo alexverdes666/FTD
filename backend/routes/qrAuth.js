@@ -1,6 +1,5 @@
 const express = require('express');
 const router = express.Router();
-const rateLimit = require('express-rate-limit');
 const { protect } = require('../middleware/auth');
 const {
   createSession,
@@ -15,49 +14,27 @@ const {
   checkQRAuthEnabled
 } = require('../controllers/qrAuth');
 
-// Rate limiter for QR auth attempts
-const qrAuthLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 20, // Max 20 attempts per 15 minutes
-  message: {
-    success: false,
-    message: 'Too many QR authentication attempts. Please try again later.'
-  },
-  standardHeaders: true,
-  legacyHeaders: false
-});
-
-// Rate limiter for device registration (more restrictive)
-const deviceRegLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
-  max: 5, // Max 5 registration attempts per hour
-  message: {
-    success: false,
-    message: 'Too many device registration attempts. Please try again later.'
-  }
-});
-
 // Public routes (no auth required)
 // Create a new QR login session
-router.post('/create-session', qrAuthLimiter, createSession);
+router.post('/create-session', createSession);
 
 // Check session status (polling from desktop)
-router.get('/session-status/:sessionToken', qrAuthLimiter, checkSessionStatus);
+router.get('/session-status/:sessionToken', checkSessionStatus);
 
 // Get session details (for mobile approval page)
-router.get('/session/:sessionToken', qrAuthLimiter, getSessionDetails);
+router.get('/session/:sessionToken', getSessionDetails);
 
 // Approve a session (from mobile)
-router.post('/approve', qrAuthLimiter, approveSession);
+router.post('/approve', approveSession);
 
 // Reject a session (from mobile)
-router.post('/reject', qrAuthLimiter, rejectSession);
+router.post('/reject', rejectSession);
 
 // Register device (requires password verification)
-router.post('/register-device', deviceRegLimiter, registerDevice);
+router.post('/register-device', registerDevice);
 
 // Check if user has QR auth enabled (for login flow)
-router.get('/check-enabled/:userId', qrAuthLimiter, checkQRAuthEnabled);
+router.get('/check-enabled/:userId', checkQRAuthEnabled);
 
 // Protected routes (require authentication)
 // Get QR auth status
@@ -70,4 +47,3 @@ router.post('/enable', protect, enableQRAuth);
 router.post('/disable', protect, disableQRAuth);
 
 module.exports = router;
-
