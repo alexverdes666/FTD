@@ -51,6 +51,7 @@ import {
   PhoneCallback as DepositCallIcon,
   Security as SecurityIcon,
   Note as NoteIcon,
+  Speed as PerformanceIcon,
 } from "@mui/icons-material";
 import { logout, selectUser } from "../store/slices/authSlice";
 import Footer from "./Footer";
@@ -277,6 +278,7 @@ const MainLayout = () => {
           ],
         },
         { text: "Support Tickets", icon: <TicketIcon />, path: "/tickets" },
+        { text: "Performance", icon: <PerformanceIcon />, path: "/performance" },
       ];
     } else if (user?.role === "affiliate_manager") {
       const affiliateManagerItems = [

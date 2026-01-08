@@ -4,6 +4,7 @@ import {
   Routes,
   Route,
   Navigate,
+  useLocation,
 } from "react-router-dom";
 import { Provider, useSelector, useDispatch } from "react-redux";
 import { PersistGate } from "redux-persist/integration/react";
@@ -31,6 +32,7 @@ import { backgroundSyncService } from "./services/backgroundSyncService.js";
 import chatService from "./services/chatService.js";
 import notificationService from "./services/notificationService.js";
 import inactivityService from "./services/inactivityService.js";
+import activityTrackerService from "./services/activityTrackerService.js";
 import ProtectedRoute from "./components/common/ProtectedRoute.jsx";
 import PublicRoute from "./components/common/PublicRoute.jsx";
 import MainLayout from "./layouts/MainLayout.jsx";
@@ -69,8 +71,29 @@ import AnnouncementsPage from "./pages/AnnouncementsPage.jsx";
 import AMTargetsPage from "./pages/AMTargetsPage.jsx";
 import DepositCallsPage from "./pages/DepositCallsPage.jsx";
 import NotesPage from "./pages/NotesPage.jsx";
+import PerformancePage from "./pages/PerformancePage.jsx";
 
 import GlobalPen from "./components/GlobalPen.jsx";
+
+// Activity Tracker Location Watcher - must be inside Router context
+const ActivityLocationTracker = () => {
+  const location = useLocation();
+  
+  useEffect(() => {
+    // Track page visit when location changes
+    if (activityTrackerService.isRunning) {
+      // Small delay to ensure document.title is updated
+      setTimeout(() => {
+        activityTrackerService.trackPageVisit(
+          location.pathname,
+          document.title
+        );
+      }, 100);
+    }
+  }, [location.pathname]);
+  
+  return null; // This component doesn't render anything
+};
 
 // Component to handle role-based default routing
 const RoleBasedRedirect = () => {
@@ -173,6 +196,23 @@ function AppContent() {
       backgroundSyncService.stop();
     };
   }, [isAuthenticated, user]);
+
+  // Initialize activity tracker service for performance monitoring
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      // Start activity tracking
+      activityTrackerService.start();
+    } else {
+      // Stop activity tracking when logged out
+      activityTrackerService.stop();
+    }
+
+    // Cleanup on unmount
+    return () => {
+      activityTrackerService.stop();
+    };
+  }, [isAuthenticated, user]);
+
 
   // Initialize inactivity tracking service for auto-logout
   useEffect(() => {
@@ -287,6 +327,7 @@ function AppContent() {
   return (
     <>
       <Router>
+        <ActivityLocationTracker />
         <Routes>
           {}
           <Route
@@ -433,6 +474,14 @@ function AppContent() {
               } 
             />
             <Route path="notes" element={<NotesPage />} />
+            <Route 
+              path="performance" 
+              element={
+                <ProtectedRoute allowedRoles={["admin"]}>
+                  <PerformancePage />
+                </ProtectedRoute>
+              } 
+            />
 
           </Route>
           {}

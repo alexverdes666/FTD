@@ -55,6 +55,7 @@ const depositCallsRoutes = require("./routes/depositCalls");
 const securityAuditRoutes = require("./routes/securityAudit");
 const activityLogRoutes = require("./routes/activityLogs");
 const deviceDetectionRoutes = require("./routes/deviceDetection");
+const userActivityRoutes = require("./routes/userActivity");
 const errorHandler = require("./middleware/errorHandler");
 const { changeTracker } = require("./middleware/changeTracker");
 const { deviceDetectionMiddleware } = require("./middleware/deviceDetection");
@@ -287,6 +288,49 @@ io.on("connection", (socket) => {
     console.log(
       `🔄 User ${socket.userId} upgraded to ${socket.conn.transport.name}`
     );
+  });
+
+  // Handle joining admin performance room (admin only)
+  socket.on("join_room", (roomName, callback) => {
+    try {
+      // Only allow admin to join admin rooms
+      if (roomName.startsWith('admin:') && socket.user.role !== 'admin') {
+        console.warn(`⚠️ Non-admin user ${socket.userId} tried to join ${roomName}`);
+        if (typeof callback === 'function') {
+          callback({ success: false, error: 'Unauthorized' });
+        }
+        return;
+      }
+      
+      socket.join(roomName);
+      console.log(`👥 User ${socket.userId} joined room ${roomName}`);
+      
+      if (typeof callback === 'function') {
+        callback({ success: true, room: roomName });
+      }
+    } catch (error) {
+      console.error(`❌ Error joining room ${roomName}:`, error);
+      if (typeof callback === 'function') {
+        callback({ success: false, error: error.message });
+      }
+    }
+  });
+
+  // Handle leaving rooms
+  socket.on("leave_room", (roomName, callback) => {
+    try {
+      socket.leave(roomName);
+      console.log(`👋 User ${socket.userId} left room ${roomName}`);
+      
+      if (typeof callback === 'function') {
+        callback({ success: true });
+      }
+    } catch (error) {
+      console.error(`❌ Error leaving room ${roomName}:`, error);
+      if (typeof callback === 'function') {
+        callback({ success: false, error: error.message });
+      }
+    }
   });
 
   // Handle joining conversation rooms
@@ -546,6 +590,7 @@ app.use("/api/system-config", systemConfigurationRoutes);
 app.use("/api/security-audit", securityAuditRoutes);
 app.use("/api/activity-logs", activityLogRoutes);
 app.use("/api/device-detection", deviceDetectionRoutes);
+app.use("/api/user-activity", userActivityRoutes);
 const healthRoutes = require("./routes/health");
 app.use("/api/health", healthRoutes);
 app.use(errorHandler);
