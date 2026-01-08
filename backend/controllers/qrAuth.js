@@ -195,15 +195,33 @@ exports.getSessionDetails = async (req, res, next) => {
     if (deviceId) {
       const user = await User.findById(
         session.userId._id || session.userId
-      ).select("+qrAuthDeviceId qrAuthDeviceInfo");
+      ).select("+qrAuthDeviceId qrAuthDeviceInfo qrAuthEnabled");
+
+      console.log(`🔍 QR Auth Auto-Approval Check:`, {
+        providedDeviceId: deviceId?.substring(0, 12) + "...",
+        providedDeviceInfo: deviceInfo,
+        storedDeviceId: user?.qrAuthDeviceId?.substring(0, 12) + "...",
+        storedDeviceInfo: user?.qrAuthDeviceInfo,
+        qrAuthEnabled: user?.qrAuthEnabled,
+      });
 
       if (user && user.qrAuthEnabled) {
-        // Check if device matches - allow by exact deviceId OR by matching device name/info
+        // Check if device matches - allow by exact deviceId OR by matching device name/info (partial match)
         const deviceIdMatches = user.qrAuthDeviceId === deviceId;
+        const storedInfoLower = user.qrAuthDeviceInfo?.toLowerCase() || "";
+        const providedInfoLower = deviceInfo?.toLowerCase() || "";
+        // Allow partial match - either one contains the other
         const deviceInfoMatches =
           deviceInfo &&
           user.qrAuthDeviceInfo &&
-          user.qrAuthDeviceInfo.toLowerCase() === deviceInfo.toLowerCase();
+          (storedInfoLower.includes(providedInfoLower) ||
+            providedInfoLower.includes(storedInfoLower) ||
+            storedInfoLower === providedInfoLower);
+
+        console.log(`🔍 QR Auth Match Results:`, {
+          deviceIdMatches,
+          deviceInfoMatches,
+        });
 
         if (deviceIdMatches || deviceInfoMatches) {
           // Auto-approve the session
@@ -307,12 +325,17 @@ exports.approveSession = async (req, res, next) => {
       });
     }
 
-    // Check if device matches - allow by exact deviceId OR by matching device name/info
+    // Check if device matches - allow by exact deviceId OR by matching device name/info (partial match)
     const deviceIdMatches = user.qrAuthDeviceId === deviceId;
+    const storedInfoLower = user.qrAuthDeviceInfo?.toLowerCase() || "";
+    const providedInfoLower = deviceInfo?.toLowerCase() || "";
+    // Allow partial match - either one contains the other
     const deviceInfoMatches =
       deviceInfo &&
       user.qrAuthDeviceInfo &&
-      user.qrAuthDeviceInfo.toLowerCase() === deviceInfo.toLowerCase();
+      (storedInfoLower.includes(providedInfoLower) ||
+        providedInfoLower.includes(storedInfoLower) ||
+        storedInfoLower === providedInfoLower);
 
     if (!deviceIdMatches && !deviceInfoMatches) {
       console.warn(
@@ -320,9 +343,9 @@ exports.approveSession = async (req, res, next) => {
           `Expected ID: ${
             user.qrAuthDeviceId?.substring(0, 8) || "none"
           }..., Got: ${deviceId.substring(0, 8)}... | ` +
-          `Expected Info: ${user.qrAuthDeviceInfo || "none"}, Got: ${
+          `Expected Info: "${user.qrAuthDeviceInfo || "none"}", Got: "${
             deviceInfo || "none"
-          }`
+          }"`
       );
       return res.status(403).json({
         success: false,
@@ -393,12 +416,17 @@ exports.rejectSession = async (req, res, next) => {
       });
     }
 
-    // Check if device matches - allow by exact deviceId OR by matching device name/info
+    // Check if device matches - allow by exact deviceId OR by matching device name/info (partial match)
     const deviceIdMatches = user.qrAuthDeviceId === deviceId;
+    const storedInfoLower = user.qrAuthDeviceInfo?.toLowerCase() || "";
+    const providedInfoLower = deviceInfo?.toLowerCase() || "";
+    // Allow partial match - either one contains the other
     const deviceInfoMatches =
       deviceInfo &&
       user.qrAuthDeviceInfo &&
-      user.qrAuthDeviceInfo.toLowerCase() === deviceInfo.toLowerCase();
+      (storedInfoLower.includes(providedInfoLower) ||
+        providedInfoLower.includes(storedInfoLower) ||
+        storedInfoLower === providedInfoLower);
 
     // Only registered device can reject (for security)
     if (user.qrAuthDeviceId && !deviceIdMatches && !deviceInfoMatches) {
