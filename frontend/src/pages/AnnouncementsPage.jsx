@@ -234,10 +234,12 @@ const AnnouncementsPage = () => {
     const isUnread = !isAdmin && !announcement.isRead;
 
     return (
-      <Fade in key={announcement._id}>
+      <Fade in>
         <Card
           sx={{
-            mb: 2,
+            height: '100%',
+            display: 'flex',
+            flexDirection: 'column',
             borderLeft: isUnread ? `4px solid ${theme.palette.primary.main}` : 'none',
             bgcolor: isUnread 
               ? theme.palette.mode === 'dark' 
@@ -246,7 +248,7 @@ const AnnouncementsPage = () => {
               : 'background.paper',
           }}
         >
-          <CardContent>
+          <CardContent sx={{ flexGrow: 1 }}>
             <Box display="flex" alignItems="flex-start" justifyContent="space-between" mb={1}>
               <Box display="flex" alignItems="center" gap={1} flexWrap="wrap">
                 {!isAdmin && (
@@ -341,18 +343,20 @@ const AnnouncementsPage = () => {
 
   // Loading skeleton
   const renderSkeleton = () => (
-    <Box>
-      {[1, 2, 3].map((i) => (
-        <Card key={i} sx={{ mb: 2 }}>
-          <CardContent>
-            <Skeleton variant="rectangular" width={100} height={24} sx={{ mb: 2 }} />
-            <Skeleton variant="text" width="60%" height={32} />
-            <Skeleton variant="text" width="100%" />
-            <Skeleton variant="text" width="80%" />
-          </CardContent>
-        </Card>
+    <Grid container spacing={3}>
+      {[1, 2, 3, 4, 5, 6].map((i) => (
+        <Grid item xs={12} md={6} lg={4} key={i}>
+          <Card sx={{ height: '100%' }}>
+            <CardContent>
+              <Skeleton variant="rectangular" width={100} height={24} sx={{ mb: 2 }} />
+              <Skeleton variant="text" width="60%" height={32} />
+              <Skeleton variant="text" width="100%" />
+              <Skeleton variant="text" width="80%" />
+            </CardContent>
+          </Card>
+        </Grid>
       ))}
-    </Box>
+    </Grid>
   );
 
   return (
@@ -420,7 +424,13 @@ const AnnouncementsPage = () => {
         </Paper>
       ) : (
         <Box>
-          {announcements.map(renderAnnouncementCard)}
+          <Grid container spacing={3}>
+            {announcements.map((announcement) => (
+              <Grid item xs={12} md={6} lg={4} key={announcement._id}>
+                {renderAnnouncementCard(announcement)}
+              </Grid>
+            ))}
+          </Grid>
 
           {/* Pagination */}
           {totalPages > 1 && (
