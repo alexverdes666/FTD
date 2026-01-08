@@ -233,8 +233,10 @@ exports.approveSession = async (req, res, next) => {
       });
     }
 
-    // Get user with device ID
-    const user = await User.findById(session.userId).select("+qrAuthDeviceId");
+    // Get user with device ID and device info
+    const user = await User.findById(session.userId).select(
+      "+qrAuthDeviceId qrAuthDeviceInfo"
+    );
     if (!user) {
       return res.status(404).json({
         success: false,
@@ -243,7 +245,7 @@ exports.approveSession = async (req, res, next) => {
     }
 
     // Check if device is registered
-    if (!user.qrAuthDeviceId) {
+    if (!user.qrAuthDeviceId && !user.qrAuthDeviceInfo) {
       return res.status(403).json({
         success: false,
         message:
@@ -252,15 +254,22 @@ exports.approveSession = async (req, res, next) => {
       });
     }
 
-    // Verify the device ID matches
-    if (user.qrAuthDeviceId !== deviceId) {
+    // Check if device matches - allow by exact deviceId OR by matching device name/info
+    const deviceIdMatches = user.qrAuthDeviceId === deviceId;
+    const deviceInfoMatches =
+      deviceInfo &&
+      user.qrAuthDeviceInfo &&
+      user.qrAuthDeviceInfo.toLowerCase() === deviceInfo.toLowerCase();
+
+    if (!deviceIdMatches && !deviceInfoMatches) {
       console.warn(
-        `⚠️ QR Auth: Device mismatch for user ${
-          user.email
-        }. Expected: ${user.qrAuthDeviceId.substring(
-          0,
-          8
-        )}..., Got: ${deviceId.substring(0, 8)}...`
+        `⚠️ QR Auth: Device mismatch for user ${user.email}. ` +
+          `Expected ID: ${
+            user.qrAuthDeviceId?.substring(0, 8) || "none"
+          }..., Got: ${deviceId.substring(0, 8)}... | ` +
+          `Expected Info: ${user.qrAuthDeviceInfo || "none"}, Got: ${
+            deviceInfo || "none"
+          }`
       );
       return res.status(403).json({
         success: false,
@@ -269,13 +278,21 @@ exports.approveSession = async (req, res, next) => {
       });
     }
 
+    // If deviceInfo matched but deviceId didn't, update the stored deviceId for future matches
+    if (!deviceIdMatches && deviceInfoMatches) {
+      console.log(
+        `📱 QR Auth: Updating deviceId for ${user.email} (matched by device name: ${deviceInfo})`
+      );
+      await User.findByIdAndUpdate(user._id, { qrAuthDeviceId: deviceId });
+    }
+
     // Approve the session
     await session.approve(deviceId, deviceInfo);
 
     console.log(
-      `✅ QR Auth: Login approved for ${
-        user.email
-      } from device ${deviceId.substring(0, 8)}...`
+      `✅ QR Auth: Login approved for ${user.email} from device ${
+        deviceInfo || deviceId.substring(0, 8) + "..."
+      }`
     );
 
     res.status(200).json({
@@ -294,7 +311,7 @@ exports.approveSession = async (req, res, next) => {
  */
 exports.rejectSession = async (req, res, next) => {
   try {
-    const { sessionToken, deviceId } = req.body;
+    const { sessionToken, deviceId, deviceInfo } = req.body;
 
     if (!sessionToken || !deviceId) {
       return res.status(400).json({
@@ -312,8 +329,10 @@ exports.rejectSession = async (req, res, next) => {
       });
     }
 
-    // Get user with device ID
-    const user = await User.findById(session.userId).select("+qrAuthDeviceId");
+    // Get user with device ID and device info
+    const user = await User.findById(session.userId).select(
+      "+qrAuthDeviceId qrAuthDeviceInfo"
+    );
     if (!user) {
       return res.status(404).json({
         success: false,
@@ -321,8 +340,15 @@ exports.rejectSession = async (req, res, next) => {
       });
     }
 
+    // Check if device matches - allow by exact deviceId OR by matching device name/info
+    const deviceIdMatches = user.qrAuthDeviceId === deviceId;
+    const deviceInfoMatches =
+      deviceInfo &&
+      user.qrAuthDeviceInfo &&
+      user.qrAuthDeviceInfo.toLowerCase() === deviceInfo.toLowerCase();
+
     // Only registered device can reject (for security)
-    if (user.qrAuthDeviceId && user.qrAuthDeviceId !== deviceId) {
+    if (user.qrAuthDeviceId && !deviceIdMatches && !deviceInfoMatches) {
       return res.status(403).json({
         success: false,
         message: "Only the registered device can reject login attempts",
