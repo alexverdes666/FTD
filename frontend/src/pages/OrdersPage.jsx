@@ -2289,13 +2289,13 @@ const OrdersPage = () => {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={11} align="center">
+                  <TableCell colSpan={10} align="center">
                     <CircularProgress />
                   </TableCell>
                 </TableRow>
               ) : orders.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={11} align="center">
+                  <TableCell colSpan={10} align="center">
                     No orders found
                   </TableCell>
                 </TableRow>
@@ -2512,7 +2512,7 @@ const OrdersPage = () => {
                       <TableRow>
                         <TableCell
                           sx={{ p: 0, borderBottom: "none" }}
-                          colSpan={9}
+                          colSpan={10}
                         >
                           <Collapse
                             in={isExpanded}
@@ -2520,16 +2520,6 @@ const OrdersPage = () => {
                             unmountOnExit
                           >
                             <Box sx={{ p: 3, bgcolor: "grey.50" }}>
-                              <Typography
-                                variant="h6"
-                                sx={{
-                                  mb: 3,
-                                  fontWeight: 600,
-                                  color: "primary.main",
-                                }}
-                              >
-                                Order Details
-                              </Typography>
                               {expandedDetails ? (
                                 <Grid container spacing={2}>
                                   {/* Status Reason Alerts */}
