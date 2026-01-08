@@ -2967,7 +2967,8 @@ exports.getOrders = async (req, res, next) => {
     }
     const { page = 1, limit = 10, startDate, endDate, search } = req.query;
     let query = {};
-    if (req.user.role !== "admin") {
+    // Admin and lead_manager can see all orders; others see only their own
+    if (req.user.role !== "admin" && req.user.role !== "lead_manager") {
       query.requester = req.user._id;
     }
     if (startDate || endDate) {
@@ -3234,8 +3235,10 @@ exports.getOrderById = async (req, res, next) => {
       order = mergeLeadsWithMetadata(order);
     }
 
+    // Admin and lead_manager can view any order; others can only view their own
     if (
       req.user.role !== "admin" &&
+      req.user.role !== "lead_manager" &&
       order.requester._id.toString() !== req.user._id.toString()
     ) {
       return res.status(403).json({
