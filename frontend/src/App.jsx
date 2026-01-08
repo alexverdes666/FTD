@@ -69,6 +69,8 @@ import AnnouncementsPage from "./pages/AnnouncementsPage.jsx";
 import AMTargetsPage from "./pages/AMTargetsPage.jsx";
 import DepositCallsPage from "./pages/DepositCallsPage.jsx";
 import NotesPage from "./pages/NotesPage.jsx";
+import MobileApprovalPage from "./pages/MobileApprovalPage.jsx";
+import QRSetupPage from "./pages/QRSetupPage.jsx";
 
 import GlobalPen from "./components/GlobalPen.jsx";
 
@@ -307,6 +309,10 @@ function AppContent() {
           />
           <Route path="/landing" element={<LandingPage />} />
           <Route path="/disclaimer" element={<DisclaimerPage />} />
+          {/* QR Code Mobile Approval - Public route for phone */}
+          <Route path="/qr-approve/:sessionToken" element={<MobileApprovalPage />} />
+          {/* QR Code Device Setup - Public route for phone */}
+          <Route path="/qr-setup/:userId/:setupToken" element={<QRSetupPage />} />
           {}
           <Route
             path="/"

@@ -61,6 +61,21 @@ export const verify2FAAndLogin = createAsyncThunk(
     }
   }
 );
+
+// Complete login after QR code approval
+export const completeQRLogin = createAsyncThunk(
+  "auth/completeQRLogin",
+  async ({ token, user }, { rejectWithValue }) => {
+    try {
+      if (token) {
+        localStorage.setItem("token", token);
+      }
+      return { token, user };
+    } catch (error) {
+      return rejectWithValue("Failed to complete QR login");
+    }
+  }
+);
 export const fetchAgentPerformance = createAsyncThunk(
   "auth/fetchAgentPerformance",
   async (forceRefresh = false, { rejectWithValue, getState }) => {
@@ -452,6 +467,17 @@ const authSlice = createSlice({
       .addCase(verify2FAAndLogin.rejected, (state, action) => {
         state.isLoading = false;
         state.error = action.payload;
+      })
+      // QR code login
+      .addCase(completeQRLogin.fulfilled, (state, action) => {
+        state.isLoading = false;
+        state.user = action.payload.user;
+        state.token = action.payload.token;
+        state.isAuthenticated = true;
+        state.error = null;
+        state.requires2FA = false;
+        state.twoFactorUserId = null;
+        state.twoFactorToken = null;
       });
   },
 });

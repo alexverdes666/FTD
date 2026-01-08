@@ -88,7 +88,7 @@ services:
       - key: RATE_LIMIT_MAX_REQUESTS
         value: 100
       - key: CORS_ORIGIN
-        value: https://ftd-omega.vercel.app
+        value: https://ftdm2.com
       - key: PYTHONPATH
         value: /opt/render/project/src
       - key: PATH
