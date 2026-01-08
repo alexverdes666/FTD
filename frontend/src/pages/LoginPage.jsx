@@ -18,7 +18,6 @@ import * as yup from 'yup';
 import { login, verify2FAAndLogin, completeQRLogin, clearError, clear2FAState, selectAuth } from '../store/slices/authSlice';
 import TwoFactorVerification from '../components/TwoFactorVerification';
 import QRCodeLogin from '../components/QRCodeLogin';
-import api from '../services/api';
 import './LoginPage.css';
 const schema = yup.object({
   email: yup
@@ -34,11 +33,10 @@ const LoginPage = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const location = useLocation();
-  const { isLoading, error, isAuthenticated, requires2FA, twoFactorUserId } = useSelector(selectAuth);
+  const { isLoading, error, isAuthenticated, requires2FA, twoFactorUserId, useQRAuth } = useSelector(selectAuth);
   const [showPassword, setShowPassword] = useState(false);
   const [show2FADialog, setShow2FADialog] = useState(false);
   const [showQRDialog, setShowQRDialog] = useState(false);
-  const [useQRAuth, setUseQRAuth] = useState(false);
   const [twoFactorError, setTwoFactorError] = useState('');
   const {
     register,
@@ -58,31 +56,19 @@ const LoginPage = () => {
   }, [dispatch]);
 
   useEffect(() => {
-    // Show 2FA dialog when 2FA is required
-    // First check if user has QR auth enabled
-    const checkQRAuthStatus = async () => {
-      if (requires2FA && twoFactorUserId) {
-        try {
-          // Check if this user has QR auth enabled
-          const response = await api.get(`/qr-auth/check-enabled/${twoFactorUserId}`);
-          if (response.data.success && response.data.data.qrAuthEnabled) {
-            setUseQRAuth(true);
-            setShowQRDialog(true);
-          } else {
-            setShow2FADialog(true);
-          }
-        } catch (err) {
-          // If error, fallback to regular 2FA
-          console.log('QR auth check failed, using regular 2FA');
-          setShow2FADialog(true);
-        }
+    // Show appropriate dialog when 2FA is required
+    if (requires2FA && twoFactorUserId) {
+      if (useQRAuth) {
+        // User has QR auth enabled - show QR code dialog
+        setShowQRDialog(true);
+        setShow2FADialog(false);
+      } else {
+        // User has regular 2FA enabled - show code dialog
+        setShow2FADialog(true);
+        setShowQRDialog(false);
       }
-    };
-    
-    if (requires2FA) {
-      checkQRAuthStatus();
     }
-  }, [requires2FA, twoFactorUserId]);
+  }, [requires2FA, twoFactorUserId, useQRAuth]);
   const onSubmit = async (data) => {
     try {
       const result = await dispatch(login(data)).unwrap();
@@ -155,7 +141,6 @@ const LoginPage = () => {
 
   const handleFallbackTo2FA = () => {
     setShowQRDialog(false);
-    setUseQRAuth(false);
     setShow2FADialog(true);
   };
   const handleTogglePasswordVisibility = () => {
