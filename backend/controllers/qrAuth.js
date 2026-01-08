@@ -156,10 +156,12 @@ exports.checkSessionStatus = async (req, res, next) => {
 /**
  * Get session details (for mobile approval page)
  * GET /api/qr-auth/session/:sessionToken
+ * If deviceId/deviceInfo query params are provided and match, auto-approves the session
  */
 exports.getSessionDetails = async (req, res, next) => {
   try {
     const { sessionToken } = req.params;
+    const { deviceId, deviceInfo } = req.query;
 
     const session = await QRLoginSession.findOne({ sessionToken }).populate(
       "userId",
@@ -189,6 +191,57 @@ exports.getSessionDetails = async (req, res, next) => {
       });
     }
 
+    // If deviceId/deviceInfo provided, attempt auto-approval
+    if (deviceId) {
+      const user = await User.findById(
+        session.userId._id || session.userId
+      ).select("+qrAuthDeviceId qrAuthDeviceInfo");
+
+      if (user && user.qrAuthEnabled) {
+        // Check if device matches - allow by exact deviceId OR by matching device name/info
+        const deviceIdMatches = user.qrAuthDeviceId === deviceId;
+        const deviceInfoMatches =
+          deviceInfo &&
+          user.qrAuthDeviceInfo &&
+          user.qrAuthDeviceInfo.toLowerCase() === deviceInfo.toLowerCase();
+
+        if (deviceIdMatches || deviceInfoMatches) {
+          // Auto-approve the session
+          await session.approve(deviceId, deviceInfo);
+
+          // If deviceInfo matched but deviceId didn't, update the stored deviceId
+          if (!deviceIdMatches && deviceInfoMatches) {
+            console.log(
+              `📱 QR Auth: Updating deviceId for ${user.email} (matched by device name: ${deviceInfo})`
+            );
+            await User.findByIdAndUpdate(user._id, {
+              qrAuthDeviceId: deviceId,
+            });
+          }
+
+          console.log(
+            `✅ QR Auth: Auto-approved login for ${user.email} from device ${
+              deviceInfo || deviceId.substring(0, 8) + "..."
+            }`
+          );
+
+          return res.status(200).json({
+            success: true,
+            autoApproved: true,
+            message: "Login automatically approved - device recognized",
+            data: {
+              sessionToken: session.sessionToken,
+              user: {
+                email: session.userId.email,
+                fullName: session.userId.fullName,
+              },
+            },
+          });
+        }
+      }
+    }
+
+    // Return session details for manual approval
     res.status(200).json({
       success: true,
       data: {

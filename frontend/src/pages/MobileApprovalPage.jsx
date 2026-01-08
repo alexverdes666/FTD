@@ -89,15 +89,27 @@ const MobileApprovalPage = () => {
 
   const deviceInfo = getDeviceInfo();
 
-  // Fetch session details
+  // Fetch session details (with auto-approval if device matches)
   const fetchSession = useCallback(async () => {
     try {
       setLoading(true);
       setError('');
       
-      const response = await api.get(`/qr-auth/session/${sessionToken}`);
+      // Pass device info as query params for auto-approval
+      const response = await api.get(`/qr-auth/session/${sessionToken}`, {
+        params: {
+          deviceId: deviceInfo.deviceId,
+          deviceInfo: deviceInfo.deviceName
+        }
+      });
       
       if (response.data.success) {
+        // Check if auto-approved
+        if (response.data.autoApproved) {
+          setStatus('approved');
+          return;
+        }
+        
         setSession(response.data.data);
         setStatus('pending');
       }
@@ -117,7 +129,7 @@ const MobileApprovalPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [sessionToken]);
+  }, [sessionToken, deviceInfo.deviceId, deviceInfo.deviceName]);
 
   useEffect(() => {
     if (sessionToken) {
