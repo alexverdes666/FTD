@@ -1010,7 +1010,6 @@ const OrdersPage = () => {
           setCreateDialogOpen(false);
           reset();
         } else {
-          notificationService.playOrderCreatedSound();
           setNotification({
             message: "Order created successfully!",
             severity: "success",
