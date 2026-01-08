@@ -71,6 +71,8 @@ import AMTargetsPage from "./pages/AMTargetsPage.jsx";
 import DepositCallsPage from "./pages/DepositCallsPage.jsx";
 import NotesPage from "./pages/NotesPage.jsx";
 import PerformancePage from "./pages/PerformancePage.jsx";
+import MobileApprovalPage from "./pages/MobileApprovalPage.jsx";
+import QRSetupPage from "./pages/QRSetupPage.jsx";
 
 import GlobalPen from "./components/GlobalPen.jsx";
 
@@ -159,14 +161,12 @@ function AppContent() {
   const [warningSecondsRemaining, setWarningSecondsRemaining] = useState(60);
   const user = useSelector(selectUser);
   const isAuthenticated = useSelector(selectIsAuthenticated);
-  
+
   // Initialize background sync service when user is authenticated
   useEffect(() => {
     if (isAuthenticated && user) {
-
       backgroundSyncService.start();
     } else {
-
       backgroundSyncService.stop();
     }
 
@@ -207,10 +207,10 @@ function AppContent() {
     handleRouteChange();
 
     // Listen for popstate (back/forward navigation)
-    window.addEventListener('popstate', handleRouteChange);
+    window.addEventListener("popstate", handleRouteChange);
 
     return () => {
-      window.removeEventListener('popstate', handleRouteChange);
+      window.removeEventListener("popstate", handleRouteChange);
     };
   }, []);
 
@@ -221,14 +221,15 @@ function AppContent() {
       const handleAutoLogout = (reason) => {
         console.log(`🚪 Auto-logout triggered: ${reason}`);
         setInactivityWarningOpen(false);
-        
-        let message = 'You have been logged out.';
-        if (reason === 'inactivity') {
-          message = 'You have been logged out due to 15 minutes of inactivity.';
-        } else if (reason === 'midnight') {
-          message = 'Daily automatic logout at midnight (00:00 GMT+2). Please log in again.';
+
+        let message = "You have been logged out.";
+        if (reason === "inactivity") {
+          message = "You have been logged out due to 15 minutes of inactivity.";
+        } else if (reason === "midnight") {
+          message =
+            "Daily automatic logout at midnight (00:00 GMT+2). Please log in again.";
         }
-        
+
         toast.error(message, { duration: 5000 });
         dispatch(logout());
         chatService.disconnect();
@@ -236,7 +237,9 @@ function AppContent() {
 
       // Define warning handler
       const handleInactivityWarning = (secondsRemaining) => {
-        console.log(`⚠️ Inactivity warning: ${secondsRemaining} seconds until logout`);
+        console.log(
+          `⚠️ Inactivity warning: ${secondsRemaining} seconds until logout`
+        );
         setWarningSecondsRemaining(secondsRemaining);
         setInactivityWarningOpen(true);
       };
@@ -265,7 +268,7 @@ function AppContent() {
     let countdownInterval;
     if (inactivityWarningOpen && warningSecondsRemaining > 0) {
       countdownInterval = setInterval(() => {
-        setWarningSecondsRemaining(prev => {
+        setWarningSecondsRemaining((prev) => {
           if (prev <= 1) {
             clearInterval(countdownInterval);
             return 0;
@@ -296,24 +299,28 @@ function AppContent() {
   // Listen for force logout event (session kicked by admin)
   useEffect(() => {
     const handleForceLogout = (data) => {
-      console.log('🚪 Force logout triggered:', data);
+      console.log("🚪 Force logout triggered:", data);
       // Show toast notification
-      toast.error(data?.message || 'Your session has been terminated by an administrator.', {
-        duration: 5000,
-      });
+      toast.error(
+        data?.message ||
+          "Your session has been terminated by an administrator.",
+        {
+          duration: 5000,
+        }
+      );
       // Dispatch logout action
       dispatch(logout());
       // Disconnect chat service
       chatService.disconnect();
     };
 
-    chatService.on('auth:force_logout', handleForceLogout);
+    chatService.on("auth:force_logout", handleForceLogout);
 
     return () => {
-      chatService.off('auth:force_logout', handleForceLogout);
+      chatService.off("auth:force_logout", handleForceLogout);
     };
   }, [dispatch]);
-  
+
   useEffect(() => {
     if (isAuthenticated && user && !user.eulaAccepted) {
       setDisclaimerOpen(true);
@@ -347,6 +354,16 @@ function AppContent() {
           />
           <Route path="/landing" element={<LandingPage />} />
           <Route path="/disclaimer" element={<DisclaimerPage />} />
+          {/* QR Code Mobile Approval - Public route for phone */}
+          <Route
+            path="/qr-approve/:sessionToken"
+            element={<MobileApprovalPage />}
+          />
+          {/* QR Code Device Setup - Public route for phone */}
+          <Route
+            path="/qr-setup/:userId/:setupToken"
+            element={<QRSetupPage />}
+          />
           {}
           <Route
             path="/"
@@ -373,115 +390,124 @@ function AppContent() {
               element={<AffiliateManagersPage />}
             />
             <Route path="my-table" element={<AffiliateManagerTableView />} />
-            <Route 
-              path="agent-comments" 
+            <Route
+              path="agent-comments"
               element={
                 <ProtectedRoute allowedRoles={["admin", "affiliate_manager"]}>
                   <AgentCommentsPage />
                 </ProtectedRoute>
-              } 
+              }
             />
             <Route path="profile" element={<ProfilePage />} />
-            <Route 
-              path="refunds" 
+            <Route
+              path="refunds"
               element={
                 <ProtectedRoute allowedRoles={["refunds_manager", "admin"]}>
                   <RefundsPage />
                 </ProtectedRoute>
-              } 
+              }
             />
-            <Route 
-              path="verifications" 
+            <Route
+              path="verifications"
               element={
                 <ProtectedRoute allowedRoles={["admin", "lead_manager"]}>
                   <VerificationsPage />
                 </ProtectedRoute>
-              } 
+              }
             />
             <Route path="tickets" element={<TicketsPage />} />
             <Route path="notifications" element={<NotificationsPage />} />
-            <Route 
-              path="simcards" 
+            <Route
+              path="simcards"
               element={
                 <ProtectedRoute allowedRoles={["inventory_manager", "admin"]}>
                   <SimCardsPage />
                 </ProtectedRoute>
-              } 
+              }
             />
-            <Route 
-              path="account-management" 
+            <Route
+              path="account-management"
               element={
                 <ProtectedRoute allowedRoles={["admin"]}>
                   <AccountManagementPage />
                 </ProtectedRoute>
-              } 
+              }
             />
-            <Route 
-              path="gateway-devices" 
+            <Route
+              path="gateway-devices"
               element={
                 <ProtectedRoute allowedRoles={["inventory_manager", "admin"]}>
                   <GatewayManagementPage />
                 </ProtectedRoute>
-              } 
+              }
             />
-            <Route 
-              path="agent-schedule" 
+            <Route
+              path="agent-schedule"
               element={
-                <ProtectedRoute allowedRoles={["agent", "affiliate_manager", "admin"]}>
+                <ProtectedRoute
+                  allowedRoles={["agent", "affiliate_manager", "admin"]}
+                >
                   <AgentSchedulePage />
                 </ProtectedRoute>
-              } 
+              }
             />
-            <Route 
-              path="agent-call-calendar" 
+            <Route
+              path="agent-call-calendar"
               element={
-                <ProtectedRoute allowedRoles={["agent", "affiliate_manager", "admin"]}>
+                <ProtectedRoute
+                  allowedRoles={["agent", "affiliate_manager", "admin"]}
+                >
                   <AgentCallsCalendarPage />
                 </ProtectedRoute>
-              } 
+              }
             />
-            <Route 
-              path="approve-am-calls" 
+            <Route
+              path="approve-am-calls"
               element={
                 <ProtectedRoute allowedRoles={["affiliate_manager", "admin"]}>
                   <ApproveAMCallsPage />
                 </ProtectedRoute>
-              } 
+              }
             />
-            <Route 
-              path="announcements" 
+            <Route
+              path="announcements"
               element={
-                <ProtectedRoute allowedRoles={["agent", "affiliate_manager", "admin"]}>
+                <ProtectedRoute
+                  allowedRoles={["agent", "affiliate_manager", "admin"]}
+                >
                   <AnnouncementsPage />
                 </ProtectedRoute>
-              } 
+              }
             />
-            <Route 
-              path="am-targets" 
+            <Route
+              path="am-targets"
               element={
-                <ProtectedRoute allowedRoles={["affiliate_manager", "admin", "lead_manager"]}>
+                <ProtectedRoute
+                  allowedRoles={["affiliate_manager", "admin", "lead_manager"]}
+                >
                   <AMTargetsPage />
                 </ProtectedRoute>
-              } 
+              }
             />
-            <Route 
-              path="deposit-calls" 
+            <Route
+              path="deposit-calls"
               element={
-                <ProtectedRoute allowedRoles={["agent", "affiliate_manager", "admin"]}>
+                <ProtectedRoute
+                  allowedRoles={["agent", "affiliate_manager", "admin"]}
+                >
                   <DepositCallsPage />
                 </ProtectedRoute>
-              } 
+              }
             />
             <Route path="notes" element={<NotesPage />} />
-            <Route 
-              path="performance" 
+            <Route
+              path="performance"
               element={
                 <ProtectedRoute allowedRoles={["admin"]}>
                   <PerformancePage />
                 </ProtectedRoute>
-              } 
+              }
             />
-
           </Route>
           {}
           <Route path="*" element={<NotFoundPage />} />
@@ -507,7 +533,7 @@ function AppContent() {
       />
       <GlobalPen />
       <DisclaimerModal open={disclaimerOpen} onAgree={handleAgree} />
-      
+
       {/* Inactivity Warning Dialog */}
       <Dialog
         open={inactivityWarningOpen}
@@ -517,46 +543,50 @@ function AppContent() {
         PaperProps={{
           sx: {
             borderRadius: 2,
-            boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
-          }
+            boxShadow: "0 8px 32px rgba(0,0,0,0.2)",
+          },
         }}
       >
-        <DialogTitle sx={{ 
-          bgcolor: 'warning.main', 
-          color: 'warning.contrastText',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 1
-        }}>
+        <DialogTitle
+          sx={{
+            bgcolor: "warning.main",
+            color: "warning.contrastText",
+            display: "flex",
+            alignItems: "center",
+            gap: 1,
+          }}
+        >
           ⚠️ Session Timeout Warning
         </DialogTitle>
         <DialogContent sx={{ pt: 3, pb: 2 }}>
           <Typography variant="body1" gutterBottom>
             You will be automatically logged out due to inactivity in:
           </Typography>
-          <Typography 
-            variant="h2" 
-            sx={{ 
-              textAlign: 'center', 
-              my: 2, 
-              color: warningSecondsRemaining <= 30 ? 'error.main' : 'text.primary',
-              fontWeight: 'bold'
+          <Typography
+            variant="h2"
+            sx={{
+              textAlign: "center",
+              my: 2,
+              color:
+                warningSecondsRemaining <= 30 ? "error.main" : "text.primary",
+              fontWeight: "bold",
             }}
           >
             {warningSecondsRemaining}s
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            Click "Stay Logged In" or interact with the page to continue your session.
+            Click "Stay Logged In" or interact with the page to continue your
+            session.
           </Typography>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button 
+          <Button
             onClick={handleDismissInactivityWarning}
             variant="contained"
             color="primary"
             size="large"
             fullWidth
-            sx={{ fontWeight: 'bold' }}
+            sx={{ fontWeight: "bold" }}
           >
             Stay Logged In
           </Button>

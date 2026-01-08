@@ -412,6 +412,7 @@ const MainLayout = () => {
     } else if (user?.role === "lead_manager") {
       return [
         ...commonItems,
+        { text: "Orders", icon: <OrdersIcon />, path: "/orders" },
         { text: "Lead Management", icon: <LeadsIcon />, path: "/leads" },
         {
           text: "Verifications",

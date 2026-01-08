@@ -40,6 +40,9 @@ const {
   unassignLeadsFromAgent,
   getLeadsByAgent,
   searchLeadsByEmails,
+  archiveLead,
+  unarchiveLead,
+  getArchivedLeads,
 } = require("../controllers/leads");
 const router = express.Router();
 router.get(
@@ -132,6 +135,32 @@ router.get(
   ],
   getClientBrokerAnalytics
 );
+
+// Get archived leads
+router.get(
+  "/archived",
+  [
+    protect,
+    authorize("admin"),
+    query("page")
+      .optional()
+      .isInt({ min: 1 })
+      .withMessage("Page must be a positive integer"),
+    query("limit")
+      .optional()
+      .isInt({ min: 1, max: 100 })
+      .withMessage("Limit must be between 1 and 100"),
+    query("search")
+      .optional()
+      .trim(),
+    query("leadType")
+      .optional()
+      .isIn(["ftd", "filler", "cold"])
+      .withMessage("Lead type must be ftd, filler, or cold"),
+  ],
+  getArchivedLeads
+);
+
 router.get(
   "/:id",
   [protect, authorize("admin", "affiliate_manager", "agent")],
@@ -162,6 +191,21 @@ router.put(
   ],
   updateLeadStatus
 );
+
+// Archive a lead
+router.put(
+  "/:id/archive",
+  [protect, authorize("admin")],
+  archiveLead
+);
+
+// Unarchive a lead
+router.put(
+  "/:id/unarchive",
+  [protect, authorize("admin")],
+  unarchiveLead
+);
+
 router.put(
   "/:id/assign-client-broker",
   [

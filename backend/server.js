@@ -11,6 +11,7 @@ const socketIo = require("socket.io");
 const connectDB = require("./config/db");
 const authRoutes = require("./routes/auth");
 const twoFactorRoutes = require("./routes/twoFactor");
+const qrAuthRoutes = require("./routes/qrAuth");
 const orderRoutes = require("./routes/orders");
 const leadRoutes = require("./routes/leads");
 const userRoutes = require("./routes/users");
@@ -541,6 +542,7 @@ app.use(deviceDetectionMiddleware());
 // Define routes AFTER Socket.IO setup so req.io is available
 app.use("/api/auth", authRoutes);
 app.use("/api/two-factor", twoFactorRoutes);
+app.use("/api/qr-auth", qrAuthRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/leads", leadRoutes);
 app.use("/api/users", userRoutes);

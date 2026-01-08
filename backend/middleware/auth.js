@@ -140,6 +140,16 @@ exports.isManager = (req, res, next) => {
   }
   next();
 };
+// Middleware for routes that allow viewing by managers and lead_manager (read-only access for lead_manager)
+exports.canViewOrders = (req, res, next) => {
+  if (!["admin", "affiliate_manager", "lead_manager"].includes(req.user.role)) {
+    return res.status(403).json({
+      success: false,
+      message: "Access denied - insufficient permissions",
+    });
+  }
+  next();
+};
 exports.isLeadManager = (req, res, next) => {
   if (req.user.role !== "lead_manager") {
     return res.status(403).json({

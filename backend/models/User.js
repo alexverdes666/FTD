@@ -100,6 +100,28 @@ const userSchema = new mongoose.Schema({
   tokenInvalidatedAt: {
     type: Date,
     default: null
+  },
+  // QR Code Authentication - Device binding for admin
+  // The registered device ID that can approve QR logins
+  qrAuthDeviceId: {
+    type: String,
+    default: null,
+    select: false // Don't include in normal queries for security
+  },
+  // Device info for the registered device (for display/verification)
+  qrAuthDeviceInfo: {
+    type: String,
+    default: null
+  },
+  // When the device was registered
+  qrAuthDeviceRegisteredAt: {
+    type: Date,
+    default: null
+  },
+  // Whether QR auth is enabled (alternative to TOTP 2FA)
+  qrAuthEnabled: {
+    type: Boolean,
+    default: false
   }
 }, {
   timestamps: true,

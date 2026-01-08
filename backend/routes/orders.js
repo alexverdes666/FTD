@@ -4,6 +4,7 @@ const { body, query } = require("express-validator");
 const {
   protect,
   isManager,
+  canViewOrders,
   hasPermission,
   authorize,
 } = require("../middleware/auth");
@@ -178,7 +179,7 @@ router.get(
   "/",
   [
     protect,
-    isManager,
+    canViewOrders,
     query("page")
       .optional()
       .isInt({ min: 1 })
@@ -190,8 +191,8 @@ router.get(
   ],
   getOrders
 );
-router.get("/stats", [protect, isManager], getOrderStats);
-router.get("/:id", [protect, isManager], getOrderById);
+router.get("/stats", [protect, canViewOrders], getOrderStats);
+router.get("/:id", [protect, canViewOrders], getOrderById);
 router.put("/:id", [
   protect, 
   isManager,

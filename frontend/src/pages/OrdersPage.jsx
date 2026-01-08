@@ -1010,7 +1010,6 @@ const OrdersPage = () => {
           setCreateDialogOpen(false);
           reset();
         } else {
-          notificationService.playOrderCreatedSound();
           setNotification({
             message: "Order created successfully!",
             severity: "success",
@@ -2202,6 +2201,17 @@ const OrdersPage = () => {
                 </TableCell>
                 <TableCell
                   sx={{
+                    display: { xs: "none", md: "table-cell" },
+                    fontWeight: "bold",
+                    backgroundColor: "grey.200",
+                    textAlign: "center",
+                    minWidth: 100,
+                  }}
+                >
+                  ON
+                </TableCell>
+                <TableCell
+                  sx={{
                     fontWeight: "bold",
                     backgroundColor: "grey.200",
                     textAlign: "center",
@@ -2355,6 +2365,14 @@ const OrdersPage = () => {
                               )}
                           </Box>
                         </TableCell>
+                        <TableCell
+                          align="center"
+                          sx={{ display: { xs: "none", md: "table-cell" } }}
+                        >
+                          <Typography variant="body2">
+                            {order.selectedOurNetwork?.name || "-"}
+                          </Typography>
+                        </TableCell>
                         <TableCell align="center">
                           <Typography variant="body2">
                             {`${order.requests?.ftd || 0}/${
@@ -2494,7 +2512,7 @@ const OrdersPage = () => {
                       <TableRow>
                         <TableCell
                           sx={{ p: 0, borderBottom: "none" }}
-                          colSpan={9}
+                          colSpan={10}
                         >
                           <Collapse
                             in={isExpanded}
@@ -2502,16 +2520,6 @@ const OrdersPage = () => {
                             unmountOnExit
                           >
                             <Box sx={{ p: 3, bgcolor: "grey.50" }}>
-                              <Typography
-                                variant="h6"
-                                sx={{
-                                  mb: 3,
-                                  fontWeight: 600,
-                                  color: "primary.main",
-                                }}
-                              >
-                                Order Details
-                              </Typography>
                               {expandedDetails ? (
                                 <Grid container spacing={2}>
                                   {/* Status Reason Alerts */}
@@ -2952,32 +2960,49 @@ const OrdersPage = () => {
                                             >
                                               Client Brokers:
                                             </Typography>
-                                            <Button
-                                              size="small"
-                                              variant="outlined"
-                                              onClick={() =>
-                                                handleOpenClientBrokerManagement(
-                                                  expandedDetails
+                                            {user?.role !== "lead_manager" ? (
+                                              <Button
+                                                size="small"
+                                                variant="outlined"
+                                                onClick={() =>
+                                                  handleOpenClientBrokerManagement(
+                                                    expandedDetails
+                                                  )
+                                                }
+                                                startIcon={<BusinessIcon />}
+                                                sx={{
+                                                  height: "26px",
+                                                  fontSize: "0.7rem",
+                                                  px: 1,
+                                                }}
+                                              >
+                                                Manage (
+                                                {expandedDetails.leads?.filter(
+                                                  (lead) =>
+                                                    lead.assignedClientBrokers
+                                                      ?.length > 0
+                                                ).length || 0}
+                                                /
+                                                {expandedDetails.leads?.length ||
+                                                  0}
                                                 )
-                                              }
-                                              startIcon={<BusinessIcon />}
-                                              sx={{
-                                                height: "26px",
-                                                fontSize: "0.7rem",
-                                                px: 1,
-                                              }}
-                                            >
-                                              Manage (
-                                              {expandedDetails.leads?.filter(
-                                                (lead) =>
-                                                  lead.assignedClientBrokers
-                                                    ?.length > 0
-                                              ).length || 0}
-                                              /
-                                              {expandedDetails.leads?.length ||
-                                                0}
-                                              )
-                                            </Button>
+                                              </Button>
+                                            ) : (
+                                              <Chip
+                                                label={`${expandedDetails.leads?.filter(
+                                                  (lead) =>
+                                                    lead.assignedClientBrokers
+                                                      ?.length > 0
+                                                ).length || 0}/${expandedDetails.leads?.length || 0} assigned`}
+                                                size="small"
+                                                color="info"
+                                                variant="outlined"
+                                                sx={{
+                                                  height: "22px",
+                                                  fontSize: "0.75rem",
+                                                }}
+                                              />
+                                            )}
                                           </Box>
                                         </Grid>
                                       </Grid>
@@ -5079,7 +5104,8 @@ const OrdersPage = () => {
               {console.log("Rendering popover for:", hoveredLead.firstName)}
               <LeadQuickView
                 lead={hoveredLead}
-                onLeadUpdate={handleLeadUpdate}
+                onLeadUpdate={user?.role !== "lead_manager" ? handleLeadUpdate : undefined}
+                readOnly={user?.role === "lead_manager"}
               />
             </>
           )}
@@ -5129,25 +5155,26 @@ const OrdersPage = () => {
               filteredLeads[assignedLeadsModal.currentIndex] && (
                 <LeadQuickView
                   lead={filteredLeads[assignedLeadsModal.currentIndex]}
-                  onLeadUpdate={handleLeadUpdate}
-                  onConvertLeadType={(lead) =>
+                  onLeadUpdate={user?.role !== "lead_manager" ? handleLeadUpdate : undefined}
+                  readOnly={user?.role === "lead_manager"}
+                  onConvertLeadType={user?.role !== "lead_manager" ? (lead) =>
                     handleConvertLeadType(
                       orders.find((o) => o._id === assignedLeadsModal.orderId),
                       lead
-                    )
+                    ) : undefined
                   }
-                  onChangeFTDLead={(lead) =>
+                  onChangeFTDLead={user?.role !== "lead_manager" ? (lead) =>
                     handleOpenChangeFTDDialog(
                       orders.find((o) => o._id === assignedLeadsModal.orderId),
                       lead
-                    )
+                    ) : undefined
                   }
-                  onAssignLeadToAgent={handleOpenAssignLeadDialog}
-                  onAssignDepositCall={(lead) =>
+                  onAssignLeadToAgent={user?.role !== "lead_manager" ? handleOpenAssignLeadDialog : undefined}
+                  onAssignDepositCall={user?.role !== "lead_manager" ? (lead) =>
                     handleOpenAssignDepositCallDialog(
                       orders.find((o) => o._id === assignedLeadsModal.orderId),
                       lead
-                    )
+                    ) : undefined
                   }
                   titleExtra={
                     <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>

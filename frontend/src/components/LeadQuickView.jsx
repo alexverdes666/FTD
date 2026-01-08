@@ -51,6 +51,7 @@ const LeadQuickView = ({
   onChangeFTDLead,
   onAssignLeadToAgent,
   onAssignDepositCall,
+  readOnly = false,
 }) => {
   const [editingClientBroker, setEditingClientBroker] = useState(false);
   const [clientBrokers, setClientBrokers] = useState([]);
@@ -480,7 +481,7 @@ const LeadQuickView = ({
                         Client Broker
                       </Typography>
                     </Box>
-                    {!editingClientBroker && (
+                    {!editingClientBroker && !readOnly && (
                       <IconButton
                         size="small"
                         onClick={handleStartEditClientBroker}

@@ -94,8 +94,8 @@ exports.login = async (req, res, next) => {
       }
     }
 
-    // Check if 2FA is enabled for admin users
-    if (user.role === "admin" && user.twoFactorEnabled) {
+    // Check if 2FA or QR Auth is enabled for admin users
+    if (user.role === "admin" && (user.twoFactorEnabled || user.qrAuthEnabled)) {
       // Generate a temporary token that's only valid for 2FA verification
       const tempToken = jwt.sign(
         { id: user._id, temp2FA: true },
@@ -105,9 +105,10 @@ exports.login = async (req, res, next) => {
 
       return res.status(200).json({
         success: true,
-        message: "2FA verification required",
+        message: user.qrAuthEnabled ? "QR authentication required" : "2FA verification required",
         data: {
           requires2FA: true,
+          useQRAuth: user.qrAuthEnabled || false,
           tempToken: tempToken,
           userId: user._id,
         },
