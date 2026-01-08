@@ -75,6 +75,8 @@ import {
   Cancel as CancelIcon,
   Phone as PhoneIcon,
   ShoppingCart as ShoppingCartIcon,
+  Archive as ArchiveIcon,
+  Unarchive as UnarchiveIcon,
 } from "@mui/icons-material";
 import AddLeadForm from "../components/AddLeadForm";
 import DocumentPreview from "../components/DocumentPreview";
@@ -1136,6 +1138,16 @@ const LeadsPage = () => {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [addLeadDialogOpen, setAddLeadDialogOpen] = useState(false);
   const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
+  const [archivedLeadsDialogOpen, setArchivedLeadsDialogOpen] = useState(false);
+  const [archivedLeads, setArchivedLeads] = useState([]);
+  const [archivedLeadsLoading, setArchivedLeadsLoading] = useState(false);
+  const [archivedLeadsPagination, setArchivedLeadsPagination] = useState({
+    page: 1,
+    limit: 10,
+    total: 0,
+    pages: 0,
+  });
+  const [archivedLeadsSearch, setArchivedLeadsSearch] = useState("");
   const [bulkDeleteFilters, setBulkDeleteFilters] = useState({
     leadType: "",
     country: "",
@@ -1580,6 +1592,89 @@ const LeadsPage = () => {
       setError(err.response?.data?.message || "Failed to delete leads");
     }
   };
+
+  // Fetch archived leads
+  const fetchArchivedLeads = useCallback(async (page = 1, search = "") => {
+    if (user?.role !== ROLES.ADMIN) return;
+    
+    setArchivedLeadsLoading(true);
+    try {
+      const response = await api.get("/leads/archived", {
+        params: {
+          page,
+          limit: archivedLeadsPagination.limit,
+          search: search || undefined,
+        },
+      });
+      if (response.data.success) {
+        setArchivedLeads(response.data.data.leads);
+        setArchivedLeadsPagination(response.data.data.pagination);
+      }
+    } catch (err) {
+      console.error("Failed to fetch archived leads:", err);
+      setError(err.response?.data?.message || "Failed to fetch archived leads");
+    } finally {
+      setArchivedLeadsLoading(false);
+    }
+  }, [user?.role, archivedLeadsPagination.limit]);
+
+  // Archive a lead
+  const handleArchiveLead = useCallback(async (leadId) => {
+    try {
+      setError(null);
+      await api.put(`/leads/${leadId}/archive`);
+      setSuccess("Lead archived successfully");
+      fetchLeads();
+      fetchLeadStats();
+    } catch (err) {
+      setError(err.response?.data?.message || "Failed to archive lead");
+    }
+  }, [fetchLeads, fetchLeadStats]);
+
+  // Unarchive a lead (from archived leads dialog)
+  const handleUnarchiveLead = useCallback(async (leadId) => {
+    try {
+      setError(null);
+      await api.put(`/leads/${leadId}/unarchive`);
+      setSuccess("Lead unarchived successfully");
+      fetchArchivedLeads(archivedLeadsPagination.page, archivedLeadsSearch);
+      fetchLeads();
+      fetchLeadStats();
+    } catch (err) {
+      setError(err.response?.data?.message || "Failed to unarchive lead");
+    }
+  }, [fetchArchivedLeads, fetchLeads, fetchLeadStats, archivedLeadsPagination.page, archivedLeadsSearch]);
+
+  // Unarchive a lead (from main leads table)
+  const handleUnarchiveLeadFromTable = useCallback(async (leadId) => {
+    try {
+      setError(null);
+      await api.put(`/leads/${leadId}/unarchive`);
+      setSuccess("Lead unarchived successfully");
+      fetchLeads();
+      fetchLeadStats();
+    } catch (err) {
+      setError(err.response?.data?.message || "Failed to unarchive lead");
+    }
+  }, [fetchLeads, fetchLeadStats]);
+
+  // Open archived leads dialog
+  const handleOpenArchivedLeadsDialog = useCallback(() => {
+    setArchivedLeadsDialogOpen(true);
+    fetchArchivedLeads(1, "");
+  }, [fetchArchivedLeads]);
+
+  // Handle archived leads pagination
+  const handleArchivedLeadsPageChange = useCallback((event, newPage) => {
+    fetchArchivedLeads(newPage + 1, archivedLeadsSearch);
+  }, [fetchArchivedLeads, archivedLeadsSearch]);
+
+  // Handle archived leads search
+  const handleArchivedLeadsSearchChange = useCallback((value) => {
+    setArchivedLeadsSearch(value);
+    fetchArchivedLeads(1, value);
+  }, [fetchArchivedLeads]);
+
   useEffect(() => {
     fetchLeads();
   }, [fetchLeads]);
@@ -1990,6 +2085,22 @@ const LeadsPage = () => {
                 </IconButton>
               </Tooltip>
             )}
+            {user?.role === ROLES.ADMIN && (
+              <Tooltip title="View Archived Leads">
+                <IconButton
+                  size="small"
+                  onClick={handleOpenArchivedLeadsDialog}
+                  sx={{
+                    color: 'warning.main',
+                    '&:hover': {
+                      bgcolor: 'warning.lighter',
+                    },
+                  }}
+                >
+                  <ArchiveIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            )}
           </Box>
         </Box>
         <Collapse in={showFilters}>
@@ -2002,7 +2113,7 @@ const LeadsPage = () => {
                 onChange={(e) =>
                   handleSearchChange(e.target.value)
                 }
-                placeholder="Search by name, email, phone, country (UK, US, etc.), gender, status, lead type, order status, order priority, agent, or use 'assigned', 'unassigned'..."
+                placeholder="Search by name, email, phone, country, gender, status, lead type, agent, or use 'assigned', 'unassigned', 'archived'..."
                 InputProps={{
                   startAdornment: (
                     <SearchIcon sx={{ mr: 1, color: "action.active" }} />
@@ -2359,6 +2470,8 @@ const LeadsPage = () => {
                           handleFilterChange("orderId", orderId)
                         }
                         onDeleteLead={handleDeleteLead}
+                        onArchiveLead={handleArchiveLead}
+                        onUnarchiveLead={handleUnarchiveLeadFromTable}
                         handleEditLead={handleEditLead}
                         updateCallNumber={updateCallNumber}
                       />
@@ -2823,6 +2936,125 @@ const LeadsPage = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Archived Leads Dialog */}
+      <Dialog
+        open={archivedLeadsDialogOpen}
+        onClose={() => setArchivedLeadsDialogOpen(false)}
+        maxWidth="lg"
+        fullWidth
+      >
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <ArchiveIcon color="warning" />
+          Archived Leads
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ mb: 2 }}>
+            <TextField
+              fullWidth
+              size="small"
+              label="Search archived leads"
+              value={archivedLeadsSearch}
+              onChange={(e) => handleArchivedLeadsSearchChange(e.target.value)}
+              placeholder="Search by name, email, phone..."
+              InputProps={{
+                startAdornment: <SearchIcon sx={{ mr: 1, color: 'action.active' }} />,
+              }}
+            />
+          </Box>
+          
+          {archivedLeadsLoading ? (
+            <Box display="flex" justifyContent="center" py={4}>
+              <CircularProgress />
+            </Box>
+          ) : archivedLeads.length === 0 ? (
+            <Box textAlign="center" py={4}>
+              <ArchiveIcon sx={{ fontSize: 60, color: 'text.secondary', mb: 2 }} />
+              <Typography variant="h6" color="text.secondary">
+                No archived leads found
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Archived leads will appear here
+              </Typography>
+            </Box>
+          ) : (
+            <>
+              <TableContainer component={Paper} variant="outlined">
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Name</TableCell>
+                      <TableCell>Email</TableCell>
+                      <TableCell>Phone</TableCell>
+                      <TableCell>Type</TableCell>
+                      <TableCell>Country</TableCell>
+                      <TableCell>Archived By</TableCell>
+                      <TableCell>Archived At</TableCell>
+                      <TableCell align="right">Actions</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {archivedLeads.map((lead) => (
+                      <TableRow key={lead._id} hover>
+                        <TableCell>
+                          {lead.firstName} {lead.lastName}
+                        </TableCell>
+                        <TableCell>{lead.newEmail}</TableCell>
+                        <TableCell>{lead.newPhone}</TableCell>
+                        <TableCell>
+                          <Chip
+                            label={lead.leadType?.toUpperCase()}
+                            size="small"
+                            color={
+                              lead.leadType === 'ftd' ? 'success' :
+                              lead.leadType === 'filler' ? 'warning' : 'info'
+                            }
+                          />
+                        </TableCell>
+                        <TableCell>{lead.country}</TableCell>
+                        <TableCell>
+                          {lead.archivedBy?.fullName || 'Unknown'}
+                        </TableCell>
+                        <TableCell>
+                          {lead.archivedAt
+                            ? new Date(lead.archivedAt).toLocaleString()
+                            : 'N/A'}
+                        </TableCell>
+                        <TableCell align="right">
+                          <Tooltip title="Unarchive Lead">
+                            <IconButton
+                              size="small"
+                              color="success"
+                              onClick={() => {
+                                if (window.confirm("Are you sure you want to unarchive this lead?")) {
+                                  handleUnarchiveLead(lead._id);
+                                }
+                              }}
+                            >
+                              <UnarchiveIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+              <TablePagination
+                component="div"
+                count={archivedLeadsPagination.total}
+                page={archivedLeadsPagination.page - 1}
+                rowsPerPage={archivedLeadsPagination.limit}
+                onPageChange={handleArchivedLeadsPageChange}
+                rowsPerPageOptions={[10]}
+              />
+            </>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setArchivedLeadsDialogOpen(false)}>Close</Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };
@@ -3181,6 +3413,8 @@ const LeadRow = React.memo(
     onToggleExpansion,
     onFilterByOrder,
     onDeleteLead,
+    onArchiveLead,
+    onUnarchiveLead,
     user,
     handleEditLead,
     updateCallNumber,
@@ -3244,6 +3478,9 @@ const LeadRow = React.memo(
       }
       onToggleExpansion(lead._id);
     };
+    const isArchived = lead.isArchived === true;
+    const greyColor = '#9e9e9e';
+    
     const cellSx = {
       borderRight: "1px solid rgba(224, 224, 224, 1)",
       py: 0.25,
@@ -3265,24 +3502,32 @@ const LeadRow = React.memo(
         sx={{
           "&:hover": { backgroundColor: "action.hover" },
           borderLeft: (theme) =>
-            `4px solid ${
-              theme.palette[getLeadTypeColor(getDisplayLeadType(lead))]?.main ||
-              theme.palette.grey.main
-            }`,
+            isArchived 
+              ? `4px solid #bdbdbd`
+              : `4px solid ${
+                  theme.palette[getLeadTypeColor(getDisplayLeadType(lead))]?.main ||
+                  theme.palette.grey.main
+                }`,
           cursor: "pointer",
+          ...(isArchived && { 
+            bgcolor: '#f5f5f5',
+          }),
         }}
       >
         {canAssignLeads && (
           <TableCell padding="checkbox" sx={checkboxCellSx}>
             <Tooltip 
-              title={lead.leadType === 'cold' ? "Cold leads cannot be assigned to agents" : ""}
+              title={
+                isArchived ? "Archived leads cannot be assigned" :
+                lead.leadType === 'cold' ? "Cold leads cannot be assigned to agents" : ""
+              }
               arrow
             >
               <span onClick={(e) => e.stopPropagation()} style={{ display: 'flex', justifyContent: 'center' }}>
                 <Checkbox
                   checked={selectedLeads.has(lead._id)}
                   onChange={onSelectLead(lead._id)}
-                  disabled={lead.leadType === 'cold'}
+                  disabled={lead.leadType === 'cold' || isArchived}
                   sx={{ padding: "4px" }}
                 />
               </span>
@@ -3291,20 +3536,22 @@ const LeadRow = React.memo(
         )}
         <TableCell sx={{ ...cellSx, width: "70px", maxWidth: "70px" }}>
           <Chip
-            label={(getDisplayLeadType(lead) || "unknown").toUpperCase()}
-            color={getLeadTypeColor(getDisplayLeadType(lead))}
+            label={isArchived ? "ARCHIVED" : (getDisplayLeadType(lead) || "unknown").toUpperCase()}
+            color={isArchived ? "default" : getLeadTypeColor(getDisplayLeadType(lead))}
             size="small"
             sx={{
               fontWeight: "medium",
               height: "18px",
               "& .MuiChip-label": { fontSize: "0.65rem", px: 0.75 },
+              bgcolor: isArchived ? '#bdbdbd' : undefined, 
+              color: isArchived ? '#616161' : undefined,
             }}
           />
         </TableCell>
         <TableCell sx={{ ...cellSx, textAlign: "left" }}>
           <Typography
             variant="body2"
-            sx={{ fontWeight: "medium", fontSize: "0.8rem" }}
+            sx={{ fontWeight: "medium", fontSize: "0.8rem", color: isArchived ? greyColor : 'inherit' }}
           >
             {lead.fullName ||
               `${lead.firstName} ${lead.lastName || ""}`.trim()}
@@ -3319,6 +3566,7 @@ const LeadRow = React.memo(
                 alignItems: "center",
                 gap: 0.5,
                 fontSize: "0.75rem",
+                color: isArchived ? greyColor : 'inherit',
               }}
             >
               📧 {lead.newEmail}
@@ -3330,6 +3578,7 @@ const LeadRow = React.memo(
                 alignItems: "center",
                 gap: 0.5,
                 fontSize: "0.75rem",
+                color: isArchived ? greyColor : 'inherit',
               }}
             >
               📱{" "}
@@ -3347,19 +3596,21 @@ const LeadRow = React.memo(
             sx={{
               height: "18px",
               "& .MuiChip-label": { fontSize: "0.65rem", px: 0.75 },
+              borderColor: isArchived ? '#bdbdbd' : undefined, 
+              color: isArchived ? greyColor : undefined,
             }}
           />
         </TableCell>
         <TableCell sx={cellSx}>
           {lead.gender && lead.gender !== 'not_defined' ? (
-            lead.gender
+            <Typography sx={{ color: isArchived ? greyColor : 'inherit' }}>{lead.gender}</Typography>
           ) : (
-            <Typography sx={{ fontWeight: 'bold', fontSize: '1rem' }}>—</Typography>
+            <Typography sx={{ fontWeight: 'bold', fontSize: '1rem', color: isArchived ? greyColor : 'inherit' }}>—</Typography>
           )}
         </TableCell>
         {isAdminOrManager && (
           <TableCell sx={cellSx}>
-            <Typography sx={{ fontWeight: lead.assignedAgent ? 'normal' : 'bold', fontSize: lead.assignedAgent ? '0.875rem' : '1rem' }}>
+            <Typography sx={{ fontWeight: lead.assignedAgent ? 'normal' : 'bold', fontSize: lead.assignedAgent ? '0.875rem' : '1rem', color: isArchived ? greyColor : 'inherit' }}>
               {lead.assignedAgent ? lead.assignedAgent.fullName : "—"}
             </Typography>
           </TableCell>
@@ -3368,6 +3619,11 @@ const LeadRow = React.memo(
         <TableCell sx={{ ...cellSx, width: "70px", maxWidth: "70px" }}>
           {(() => {
             const cooldown = getCooldownStatus(lead);
+            if (isArchived) {
+              return (
+                <Typography sx={{ color: greyColor, fontWeight: 'bold', fontSize: '1rem' }}>—</Typography>
+              );
+            }
             
             // Show "—" for N/A
             if (cooldown.text === 'N/A') {
@@ -3511,9 +3767,47 @@ const LeadRow = React.memo(
                   </MenuItem>
                 </Box>
               )}
-              {canDeleteLeads && (
+              {user?.role === ROLES.ADMIN && (
                 <Box>
                   {isOwner && <Divider />}
+                  {isArchived ? (
+                    <MenuItem
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleMenuClose();
+                        if (window.confirm("Are you sure you want to unarchive this lead?")) {
+                          onUnarchiveLead(lead._id);
+                        }
+                      }}
+                      sx={{ fontSize: '0.75rem', py: 0.75, color: 'success.main' }}
+                    >
+                      <ListItemIcon>
+                        <UnarchiveIcon fontSize="small" sx={{ color: 'success.main' }} />
+                      </ListItemIcon>
+                      <ListItemText primary="Unarchive" />
+                    </MenuItem>
+                  ) : (
+                    <MenuItem
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleMenuClose();
+                        if (window.confirm("Are you sure you want to archive this lead? It will become inactive and won't be returned by future orders.")) {
+                          onArchiveLead(lead._id);
+                        }
+                      }}
+                      sx={{ fontSize: '0.75rem', py: 0.75, color: 'warning.main' }}
+                    >
+                      <ListItemIcon>
+                        <ArchiveIcon fontSize="small" sx={{ color: 'warning.main' }} />
+                      </ListItemIcon>
+                      <ListItemText primary="Archive" />
+                    </MenuItem>
+                  )}
+                </Box>
+              )}
+              {canDeleteLeads && (
+                <Box>
+                  <Divider />
                   <MenuItem
                     onClick={(e) => {
                       e.stopPropagation();

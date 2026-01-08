@@ -377,6 +377,20 @@ const leadSchema = new mongoose.Schema(
       enum: ["active", "contacted", "converted", "inactive"],
       default: "active",
     },
+    isArchived: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    archivedAt: {
+      type: Date,
+      default: null,
+    },
+    archivedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
     fingerprint: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Fingerprint",
@@ -1319,6 +1333,32 @@ leadSchema.methods.isAssignedToAgent = function (agentId) {
 
 leadSchema.statics.findByAssignedAgent = function (agentId, filters = {}) {
   const query = { assignedAgent: agentId, ...filters };
+  return this.find(query);
+};
+
+// Archive methods
+leadSchema.methods.archive = function (userId) {
+  this.isArchived = true;
+  this.archivedAt = new Date();
+  this.archivedBy = userId;
+  this.status = "inactive"; // Set status to inactive when archived
+  return this;
+};
+
+leadSchema.methods.unarchive = function () {
+  this.isArchived = false;
+  this.archivedAt = null;
+  this.archivedBy = null;
+  return this;
+};
+
+leadSchema.statics.findArchived = function (filters = {}) {
+  const query = { isArchived: true, ...filters };
+  return this.find(query);
+};
+
+leadSchema.statics.findNonArchived = function (filters = {}) {
+  const query = { isArchived: { $ne: true }, ...filters };
   return this.find(query);
 };
 

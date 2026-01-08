@@ -52,6 +52,10 @@ exports.getLeads = async (req, res, next) => {
       orderCreatedEnd,
     } = req.query;
     const filter = {};
+    
+    // Note: Archived leads are now included in the list but displayed with grey styling
+    // They are excluded from order selection by checking isArchived flag
+    
     if (leadType) filter.leadType = leadType;
 
     // Handle isAssigned filter - use agent assignment system only
@@ -106,7 +110,7 @@ exports.getLeads = async (req, res, next) => {
         .split(/\s+/)
         .filter((k) => k.length > 0);
       
-      // Process special parameters (assigned, unassigned) and expand country codes
+      // Process special parameters (assigned, unassigned, archived) and expand country codes
       searchKeywords = rawKeywords
         .filter((keyword) => {
           // Handle assigned:true or assigned:false
@@ -127,6 +131,16 @@ exports.getLeads = async (req, res, next) => {
           // Handle "unassigned" keyword
           if (keyword === "unassigned") {
             filter.assignedAgent = null;
+            return false; // Remove from search keywords
+          }
+          // Handle "archived" keyword - show only archived leads
+          if (keyword === "archived") {
+            filter.isArchived = true;
+            return false; // Remove from search keywords
+          }
+          // Handle "unarchived" or "active" keyword - show only non-archived leads
+          if (keyword === "unarchived" || keyword === "notarchived") {
+            filter.isArchived = { $ne: true };
             return false; // Remove from search keywords
           }
           return true; // Keep other keywords
@@ -282,6 +296,9 @@ exports.getLeads = async (req, res, next) => {
           comments: 1,
           address: 1,
           sin: 1,
+          isArchived: 1,
+          archivedAt: 1,
+          archivedBy: 1,
           // Only include callNumber and callHistory for agents
           ...(req.user.role === "agent"
             ? {
@@ -3831,6 +3848,124 @@ exports.searchLeadsByEmails = async (req, res, next) => {
     });
   } catch (error) {
     console.error("Error searching leads by emails:", error);
+    next(error);
+  }
+};
+
+// Archive a lead
+exports.archiveLead = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const lead = await Lead.findById(id);
+    if (!lead) {
+      return res.status(404).json({
+        success: false,
+        message: "Lead not found",
+      });
+    }
+
+    if (lead.isArchived) {
+      return res.status(400).json({
+        success: false,
+        message: "Lead is already archived",
+      });
+    }
+
+    lead.archive(req.user.id);
+    await lead.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Lead archived successfully",
+      data: lead,
+    });
+  } catch (error) {
+    console.error("Error archiving lead:", error);
+    next(error);
+  }
+};
+
+// Unarchive a lead
+exports.unarchiveLead = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const lead = await Lead.findById(id);
+    if (!lead) {
+      return res.status(404).json({
+        success: false,
+        message: "Lead not found",
+      });
+    }
+
+    if (!lead.isArchived) {
+      return res.status(400).json({
+        success: false,
+        message: "Lead is not archived",
+      });
+    }
+
+    lead.unarchive();
+    await lead.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Lead unarchived successfully",
+      data: lead,
+    });
+  } catch (error) {
+    console.error("Error unarchiving lead:", error);
+    next(error);
+  }
+};
+
+// Get archived leads
+exports.getArchivedLeads = async (req, res, next) => {
+  try {
+    const { page = 1, limit = 50, search, leadType, country } = req.query;
+
+    const filter = { isArchived: true };
+
+    if (leadType) filter.leadType = leadType;
+    if (country) filter.country = new RegExp(country, "i");
+
+    // Search functionality
+    if (search) {
+      const searchRegex = new RegExp(search, "i");
+      filter.$or = [
+        { firstName: searchRegex },
+        { lastName: searchRegex },
+        { newEmail: searchRegex },
+        { newPhone: searchRegex },
+      ];
+    }
+
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    const leads = await Lead.find(filter)
+      .skip(skip)
+      .limit(parseInt(limit))
+      .populate("assignedAgent", "fullName email fourDigitCode")
+      .populate("archivedBy", "fullName email")
+      .sort({ archivedAt: -1 });
+
+    const total = await Lead.countDocuments(filter);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        leads,
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total,
+          pages: Math.ceil(total / parseInt(limit)),
+        },
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching archived leads:", error);
     next(error);
   }
 };
