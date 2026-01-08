@@ -116,10 +116,6 @@ class ActivityTrackerService {
       this.snapshotInterval = setInterval(() => this.collectSnapshot(), 10000);
       
       this.isRunning = true;
-      
-      // Record initial page visit
-      this.trackPageVisit(window.location.pathname, document.title);
-      
       console.log('✅ Activity tracking started, session:', this.sessionId);
     } catch (error) {
       console.error('❌ Failed to start activity tracking:', error);
@@ -372,13 +368,8 @@ class ActivityTrackerService {
    * Track page navigation
    */
   trackPageVisit(path, title) {
-    // Don't track if same page
-    if (path === this.state.currentPage) return;
-    
-    // Record exit from previous page (only if we had a previous page)
-    if (this.state.currentPage && this.state.pageEnteredAt) {
-      this.recordPageExit();
-    }
+    // Record exit from previous page
+    this.recordPageExit();
     
     // Start tracking new page
     this.state.currentPage = path;

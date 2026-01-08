@@ -12,13 +12,11 @@ import {
   TextField,
   MenuItem,
   Chip,
-  Avatar,
   IconButton,
   Grid,
   Paper,
   List,
   ListItem,
-  ListItemAvatar,
   ListItemText,
   ListItemSecondaryAction,
   Divider,
@@ -141,7 +139,6 @@ const LinkedUsersCell = ({ users }) => {
             {users.map((user) => (
               <Chip
                 key={user._id}
-                avatar={<Avatar sx={{ width: 24, height: 24, fontSize: '0.75rem' }}>{user.fullName.charAt(0).toUpperCase()}</Avatar>}
                 label={`${user.fullName} (${getRoleDisplayName(user.role)})`}
                 size="small"
                 color={getRoleColor(user.role)}
@@ -204,7 +201,6 @@ const AccountManagementPage = () => {
       if (response.data.success) {
         const userData = response.data.data.users.map((userGroup, index) => ({
           id: userGroup.primaryUser._id,
-          index: pagination.page * pagination.pageSize + index + 1,
           ...userGroup.primaryUser,
           linkedAccounts: userGroup.linkedAccounts,
           totalAccounts: userGroup.totalAccounts
@@ -304,14 +300,6 @@ const AccountManagementPage = () => {
 
   const columns = [
     {
-      field: 'index',
-      headerName: '#',
-      minWidth: 60,
-      flex: 0.5,
-      sortable: false,
-      filterable: false,
-    },
-    {
       field: 'fullName',
       headerName: 'Full Name',
       minWidth: 150,
@@ -319,12 +307,7 @@ const AccountManagementPage = () => {
       sortable: false,
       filterable: false,
       renderCell: (params) => (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Avatar sx={{ width: 32, height: 32, fontSize: '0.875rem' }}>
-            {params.value?.charAt(0)?.toUpperCase() || 'U'}
-          </Avatar>
-          <Typography variant="body2">{params.value}</Typography>
-        </Box>
+        <Typography variant="body2" fontWeight="bold">{params.value}</Typography>
       )
     },
     {
@@ -511,9 +494,6 @@ const AccountManagementPage = () => {
               )}
               renderOption={(props, option) => (
                 <li {...props}>
-                  <Avatar sx={{ mr: 2, width: 32, height: 32 }}>
-                    {option.fullName.charAt(0).toUpperCase()}
-                  </Avatar>
                   <Box>
                     <Typography variant="body2">{option.fullName}</Typography>
                     <Typography variant="caption" color="text.secondary">
@@ -558,9 +538,6 @@ const AccountManagementPage = () => {
               }
               renderOption={(props, option) => (
                 <li {...props}>
-                  <Avatar sx={{ mr: 2, width: 32, height: 32 }}>
-                    {option.fullName.charAt(0).toUpperCase()}
-                  </Avatar>
                   <Box>
                     <Typography variant="body2">{option.fullName}</Typography>
                     <Typography variant="caption" color="text.secondary">

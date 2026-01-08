@@ -4,7 +4,6 @@ import {
   Routes,
   Route,
   Navigate,
-  useLocation,
 } from "react-router-dom";
 import { Provider, useSelector, useDispatch } from "react-redux";
 import { PersistGate } from "redux-persist/integration/react";
@@ -74,26 +73,6 @@ import NotesPage from "./pages/NotesPage.jsx";
 import PerformancePage from "./pages/PerformancePage.jsx";
 
 import GlobalPen from "./components/GlobalPen.jsx";
-
-// Activity Tracker Location Watcher - must be inside Router context
-const ActivityLocationTracker = () => {
-  const location = useLocation();
-  
-  useEffect(() => {
-    // Track page visit when location changes
-    if (activityTrackerService.isRunning) {
-      // Small delay to ensure document.title is updated
-      setTimeout(() => {
-        activityTrackerService.trackPageVisit(
-          location.pathname,
-          document.title
-        );
-      }, 100);
-    }
-  }, [location.pathname]);
-  
-  return null; // This component doesn't render anything
-};
 
 // Component to handle role-based default routing
 const RoleBasedRedirect = () => {
@@ -213,6 +192,27 @@ function AppContent() {
     };
   }, [isAuthenticated, user]);
 
+  // Track page navigation for activity tracker
+  useEffect(() => {
+    const handleRouteChange = () => {
+      if (activityTrackerService.isRunning) {
+        activityTrackerService.trackPageVisit(
+          window.location.pathname,
+          document.title
+        );
+      }
+    };
+
+    // Initial page track
+    handleRouteChange();
+
+    // Listen for popstate (back/forward navigation)
+    window.addEventListener('popstate', handleRouteChange);
+
+    return () => {
+      window.removeEventListener('popstate', handleRouteChange);
+    };
+  }, []);
 
   // Initialize inactivity tracking service for auto-logout
   useEffect(() => {
@@ -327,7 +327,6 @@ function AppContent() {
   return (
     <>
       <Router>
-        <ActivityLocationTracker />
         <Routes>
           {}
           <Route

@@ -31,7 +31,6 @@ import {
   Switch,
   FormControlLabel,
   Stack,
-  Avatar,
   Tooltip,
   Fade,
   Grow,
@@ -77,12 +76,6 @@ const AnimatedIconButton = styled(IconButton)(({ theme }) => ({
   transition: "all 0.2s ease-in-out",
   "&:hover": {
     transform: "scale(1.1)",
-  },
-}));
-const StyledAvatar = styled(Avatar)(({ theme }) => ({
-  transition: "all 0.2s ease-in-out",
-  "&:hover": {
-    transform: "scale(1.1) rotate(5deg)",
   },
 }));
 const StyledChip = styled(Chip)(({ theme }) => ({
@@ -1010,31 +1003,17 @@ const UsersPage = () => {
                     return (
                       <StyledTableRow hover key={user._id}>
                           <TableCell>
-                            <Stack
-                              direction="row"
-                              alignItems="center"
-                              spacing={1.5}
-                            >
-                              <StyledAvatar
-                                sx={{
-                                  bgcolor: `${roleInfo.color}.lighter`,
-                                  color: `${roleInfo.color}.dark`,
-                                }}
+                            <Box>
+                              <Typography variant="body2" fontWeight={500}>
+                                {user.fullName}
+                              </Typography>
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
                               >
-                                {roleInfo.icon}
-                              </StyledAvatar>
-                              <Box>
-                                <Typography variant="body2" fontWeight={500}>
-                                  {user.fullName}
-                                </Typography>
-                                <Typography
-                                  variant="caption"
-                                  color="text.secondary"
-                                >
-                                  {user.email}
-                                </Typography>
-                              </Box>
-                            </Stack>
+                                {user.email}
+                              </Typography>
+                            </Box>
                           </TableCell>
                           <TableCell align="center">
                             <StyledChip
