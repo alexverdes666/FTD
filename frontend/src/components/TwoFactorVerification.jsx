@@ -9,11 +9,18 @@ import {
   Typography,
   Box,
   CircularProgress,
-  Alert,
   Link,
-  Divider
+  Divider,
+  keyframes
 } from '@mui/material';
 import SecurityIcon from '@mui/icons-material/Security';
+
+// Shake animation keyframes
+const shake = keyframes`
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-6px); }
+  20%, 40%, 60%, 80% { transform: translateX(6px); }
+`;
 
 const TwoFactorVerification = ({ 
   open, 
@@ -27,6 +34,7 @@ const TwoFactorVerification = ({
   const [useBackupCode, setUseBackupCode] = useState(false);
   const [localError, setLocalError] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
+  const [hasError, setHasError] = useState(false);
   
   const inputRefs = useRef([]);
 
@@ -38,12 +46,12 @@ const TwoFactorVerification = ({
     const code = useBackupCode ? backupCode : verificationCode;
     
     if (!code) {
-      setLocalError('Please enter a verification code');
+      triggerErrorEffect();
       return;
     }
 
     if (!useBackupCode && code.length !== 6) {
-      setLocalError('Please enter a valid 6-digit code');
+      triggerErrorEffect();
       return;
     }
 
@@ -52,10 +60,19 @@ const TwoFactorVerification = ({
     onVerify(code, useBackupCode);
   };
 
+  const triggerErrorEffect = () => {
+    setHasError(true);
+    // Clear error state after animation completes
+    setTimeout(() => {
+      setHasError(false);
+    }, 500);
+  };
+
   // Reset and clear code when error is received (wrong code)
   useEffect(() => {
     if (error) {
       setIsVerifying(false);
+      triggerErrorEffect();
       setDigits(['', '', '', '', '', '']);
       setBackupCode('');
       // Focus first input after error
@@ -75,6 +92,7 @@ const TwoFactorVerification = ({
       setUseBackupCode(false);
       setLocalError('');
       setIsVerifying(false);
+      setHasError(false);
       // Focus first input when dialog opens
       setTimeout(() => {
         if (inputRefs.current[0]) {
@@ -90,6 +108,7 @@ const TwoFactorVerification = ({
     setUseBackupCode(false);
     setLocalError('');
     setIsVerifying(false);
+    setHasError(false);
     onClose();
   };
 
@@ -101,6 +120,7 @@ const TwoFactorVerification = ({
     newDigits[index] = digit;
     setDigits(newDigits);
     setLocalError('');
+    setHasError(false);
 
     // Auto-advance to next input
     if (digit && index < 5) {
@@ -147,6 +167,7 @@ const TwoFactorVerification = ({
       }
       setDigits(newDigits);
       setLocalError('');
+      setHasError(false);
 
       // Focus the next empty input or last input
       const nextEmptyIndex = newDigits.findIndex(d => !d);
@@ -169,6 +190,7 @@ const TwoFactorVerification = ({
     const value = e.target.value.toUpperCase().slice(0, 8);
     setBackupCode(value);
     setLocalError('');
+    setHasError(false);
 
     // Auto-submit when backup code is complete (8 characters)
     if (value.length === 8 && !loading && !isVerifying) {
@@ -184,6 +206,14 @@ const TwoFactorVerification = ({
     setDigits(['', '', '', '', '', '']);
     setBackupCode('');
     setLocalError('');
+    setHasError(false);
+  };
+
+  // Get border color based on state
+  const getInputBorderColor = (digit) => {
+    if (hasError) return 'error.main';
+    if (digit) return 'primary.main';
+    return 'divider';
   };
 
   return (
@@ -217,6 +247,7 @@ const TwoFactorVerification = ({
               value={backupCode}
               onChange={handleBackupCodeChange}
               placeholder="XXXXXXXX"
+              error={hasError}
               inputProps={{
                 maxLength: 8,
                 style: { 
@@ -226,7 +257,10 @@ const TwoFactorVerification = ({
                   fontFamily: 'monospace'
                 }
               }}
-              sx={{ my: 2 }}
+              sx={{ 
+                my: 2,
+                animation: hasError ? `${shake} 0.5s ease-in-out` : 'none'
+              }}
               autoFocus
             />
           ) : (
@@ -235,7 +269,8 @@ const TwoFactorVerification = ({
                 display: 'flex', 
                 justifyContent: 'center', 
                 gap: 1, 
-                my: 3 
+                my: 3,
+                animation: hasError ? `${shake} 0.5s ease-in-out` : 'none'
               }}
             >
               {digits.map((digit, index) => (
@@ -258,29 +293,25 @@ const TwoFactorVerification = ({
                     fontFamily: 'monospace',
                     textAlign: 'center',
                     border: '2px solid',
-                    borderColor: digit ? 'primary.main' : 'divider',
+                    borderColor: getInputBorderColor(digit),
                     borderRadius: '8px',
                     outline: 'none',
-                    transition: 'all 0.2s ease',
-                    backgroundColor: 'background.paper',
+                    transition: 'border-color 0.2s ease, box-shadow 0.2s ease',
+                    backgroundColor: hasError ? 'rgba(211, 47, 47, 0.04)' : 'background.paper',
                     color: 'text.primary',
                     '&:focus': {
-                      borderColor: 'primary.main',
-                      boxShadow: '0 0 0 3px rgba(25, 118, 210, 0.2)',
+                      borderColor: hasError ? 'error.main' : 'primary.main',
+                      boxShadow: hasError 
+                        ? '0 0 0 3px rgba(211, 47, 47, 0.2)' 
+                        : '0 0 0 3px rgba(25, 118, 210, 0.2)',
                     },
                     '&:hover': {
-                      borderColor: 'primary.light',
+                      borderColor: hasError ? 'error.dark' : 'primary.light',
                     }
                   }}
                 />
               ))}
             </Box>
-          )}
-
-          {(error || localError) && (
-            <Alert severity="error" sx={{ mb: 2 }}>
-              {error || localError}
-            </Alert>
           )}
 
           <Divider sx={{ my: 2 }} />
