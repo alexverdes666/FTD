@@ -155,6 +155,7 @@ const corsOptions = {
     "Accept",
     "X-2FA-Code", // For sensitive action 2FA verification
     "X-2FA-Backup-Code", // For sensitive action backup code verification
+    "X-QR-Verification-Token", // For QR auth sensitive action verification
     "X-Device-ID", // For device fingerprinting/audit trail
     "X-Device-Fingerprint", // For full device fingerprint data
   ],
