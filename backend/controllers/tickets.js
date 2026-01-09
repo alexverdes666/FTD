@@ -33,10 +33,25 @@ exports.getTickets = async (req, res) => {
     if (req.user.role !== 'admin') {
       // Non-admins can only see their own tickets
       filter.createdBy = req.user._id;
+      // Non-admins should never see deleted tickets
+      filter.status = { $ne: 'deleted' };
     }
 
     // Apply filters
-    if (status) filter.status = status;
+    if (status) {
+      // If user explicitly requests a status, use that
+      // Only admins can view deleted tickets
+      if (status === 'deleted' && req.user.role !== 'admin') {
+        return res.status(403).json({
+          success: false,
+          message: 'Only admins can view deleted tickets'
+        });
+      }
+      filter.status = status;
+    } else if (req.user.role === 'admin') {
+      // For admins without status filter, exclude deleted tickets by default
+      filter.status = { $ne: 'deleted' };
+    }
     if (category) filter.category = category;
     if (priority) filter.priority = priority;
     // Only admins can filter by createdBy (since they see all tickets)
@@ -304,7 +319,7 @@ exports.updateTicket = async (req, res) => {
   }
 };
 
-// @desc    Delete ticket
+// @desc    Delete ticket (soft delete - sets status to 'deleted')
 // @route   DELETE /api/tickets/:id
 // @access  Private (Admin only)
 exports.deleteTicket = async (req, res) => {
@@ -326,7 +341,11 @@ exports.deleteTicket = async (req, res) => {
       });
     }
 
-    await Ticket.findByIdAndDelete(req.params.id);
+    // Soft delete - set status to 'deleted' instead of removing from database
+    ticket.status = 'deleted';
+    ticket.lastActivityAt = new Date();
+    ticket.lastActivityBy = req.user._id;
+    await ticket.save();
 
     res.status(200).json({
       success: true,

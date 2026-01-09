@@ -99,7 +99,8 @@ export const formatTicketStatus = (status) => {
     in_progress: 'In Progress',
     waiting_response: 'Waiting Response',
     resolved: 'Resolved',
-    closed: 'Closed'
+    closed: 'Closed',
+    deleted: 'Deleted'
   };
   return statusMap[status] || status;
 };
@@ -110,7 +111,8 @@ export const getStatusColor = (status) => {
     in_progress: 'warning',
     waiting_response: 'secondary',
     resolved: 'success',
-    closed: 'default'
+    closed: 'default',
+    deleted: 'error'
   };
   return colorMap[status] || 'default';
 };
@@ -219,7 +221,7 @@ export const formatTimeAgo = (date) => {
 };
 
 export const isTicketOverdue = (ticket) => {
-  if (!ticket.dueDate || ticket.status === 'resolved' || ticket.status === 'closed') {
+  if (!ticket.dueDate || ticket.status === 'resolved' || ticket.status === 'closed' || ticket.status === 'deleted') {
     return false;
   }
   

@@ -65,7 +65,7 @@ const updateTicketValidation = [
     .withMessage('Invalid priority'),
   body('status')
     .optional()
-    .isIn(['open', 'in_progress', 'waiting_response', 'resolved', 'closed'])
+    .isIn(['open', 'in_progress', 'waiting_response', 'resolved', 'closed', 'deleted'])
     .withMessage('Invalid status'),
   body('tags')
     .optional()

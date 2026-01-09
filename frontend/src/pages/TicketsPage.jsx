@@ -5,13 +5,8 @@ import {
   Typography,
   Card,
   CardContent,
+  CardActions,
   Grid,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
   Paper,
   Button,
   Alert,
@@ -35,30 +30,28 @@ import {
   FormControlLabel,
   Switch,
   Collapse,
-  Menu,
-  ListItemIcon,
-  ListItemText,
-  Divider
+  Divider,
+  alpha,
+  Fade,
+  Zoom
 } from '@mui/material';
 import {
   Add as AddIcon,
-  Edit as EditIcon,
   Delete as DeleteIcon,
-  Visibility as ViewIcon,
-  Assignment as AssignIcon,
   CheckCircle as ResolveIcon,
   Comment as CommentIcon,
   FilterList as FilterIcon,
   Clear as ClearIcon,
   Refresh as RefreshIcon,
   Search as SearchIcon,
-  MoreVert as MoreVertIcon,
   Schedule as ScheduleIcon,
-  Person as PersonIcon,
-  Category as CategoryIcon,
-  AttachFile as AttachFileIcon,
   Image as ImageIcon,
-  Close as CloseIcon
+  Close as CloseIcon,
+  AccessTime as AccessTimeIcon,
+  ChatBubbleOutline as ChatBubbleOutlineIcon,
+  DoneAll as DoneAllIcon,
+  ConfirmationNumber as TicketIcon,
+  TrendingUp as TrendingUpIcon
 } from '@mui/icons-material';
 import { toast } from 'react-hot-toast';
 import { selectUser } from '../store/slices/authSlice';
@@ -99,9 +92,6 @@ const TicketsPage = () => {
     sortOrder: 'desc'
   });
 
-  // Menu state
-  const [menuAnchorEl, setMenuAnchorEl] = useState(null);
-  const [menuTicket, setMenuTicket] = useState(null);
 
   // Form data
   const [newTicket, setNewTicket] = useState({
@@ -325,19 +315,8 @@ const TicketsPage = () => {
     }
   };
 
-  const handleMenuOpen = (event, ticket) => {
-    setMenuAnchorEl(event.currentTarget);
-    setMenuTicket(ticket);
-  };
-
-  const handleMenuClose = () => {
-    setMenuAnchorEl(null);
-    setMenuTicket(null);
-  };
-
   const openDialog = (dialogType, ticket = null) => {
     setSelectedTicket(ticket);
-    handleMenuClose();
     
     switch (dialogType) {
       case 'view':
@@ -368,29 +347,56 @@ const TicketsPage = () => {
   return (
     <Box sx={{ width: "100%", typography: "body1" }}>
       {/* Header */}
-      <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Typography variant="h4" component="h1">
-          Support Tickets
-        </Typography>
-        <Stack direction="row" spacing={2}>
+      <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
+        <Box>
+          <Typography variant="h4" component="h1" fontWeight={700}>
+            Support Tickets
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+            Manage and track support requests
+          </Typography>
+        </Box>
+        <Stack direction="row" spacing={1.5} flexWrap="wrap" useFlexGap>
           <Button
             startIcon={<FilterIcon />}
             onClick={() => setShowFilters(!showFilters)}
             variant={showFilters ? 'contained' : 'outlined'}
+            sx={{ 
+              borderRadius: 2,
+              textTransform: 'none',
+              px: 2
+            }}
           >
             Filters
           </Button>
-          <Button
-            startIcon={<RefreshIcon />}
-            onClick={loadTickets}
-            variant="outlined"
-          >
-            Refresh
-          </Button>
+          <Tooltip title="Refresh tickets">
+            <IconButton
+              onClick={loadTickets}
+              sx={{ 
+                border: `1px solid ${alpha(theme.palette.divider, 0.3)}`,
+                borderRadius: 2,
+                '&:hover': {
+                  bgcolor: alpha(theme.palette.primary.main, 0.05),
+                  borderColor: 'primary.main'
+                }
+              }}
+            >
+              <RefreshIcon />
+            </IconButton>
+          </Tooltip>
           <Button
             startIcon={<AddIcon />}
             onClick={() => setCreateDialogOpen(true)}
             variant="contained"
+            sx={{ 
+              borderRadius: 2,
+              textTransform: 'none',
+              px: 2.5,
+              boxShadow: `0 4px 14px ${alpha(theme.palette.primary.main, 0.35)}`,
+              '&:hover': {
+                boxShadow: `0 6px 20px ${alpha(theme.palette.primary.main, 0.4)}`,
+              }
+            }}
           >
             Create Ticket
           </Button>
@@ -399,52 +405,97 @@ const TicketsPage = () => {
 
       {/* Stats Cards - Only for Admins */}
       {isAdmin && stats && (
-        <Grid container spacing={3} sx={{ mb: 3 }}>
-          <Grid item xs={12} sm={6} md={3}>
-            <Card>
-              <CardContent>
-                <Typography color="textSecondary" gutterBottom variant="body2">
-                  Total Tickets
-                </Typography>
-                <Typography variant="h4">
-                  {stats.summary?.total || 0}
-                </Typography>
+        <Grid container spacing={2} sx={{ mb: 3 }}>
+          <Grid item xs={6} sm={6} md={3}>
+            <Card 
+              sx={{ 
+                borderRadius: 3,
+                background: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.1)} 0%, ${alpha(theme.palette.primary.main, 0.05)} 100%)`,
+                border: `1px solid ${alpha(theme.palette.primary.main, 0.15)}`
+              }}
+            >
+              <CardContent sx={{ py: 2, px: 2.5 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Box>
+                    <Typography color="text.secondary" variant="caption" fontWeight={500}>
+                      Total Tickets
+                    </Typography>
+                    <Typography variant="h4" fontWeight={700} color="primary.main">
+                      {stats.summary?.total || 0}
+                    </Typography>
+                  </Box>
+                  <TicketIcon sx={{ fontSize: 40, color: alpha(theme.palette.primary.main, 0.3) }} />
+                </Box>
               </CardContent>
             </Card>
           </Grid>
-          <Grid item xs={12} sm={6} md={3}>
-            <Card>
-              <CardContent>
-                <Typography color="textSecondary" gutterBottom variant="body2">
-                  Open
-                </Typography>
-                <Typography variant="h4" color="info.main">
-                  {stats.summary?.open || 0}
-                </Typography>
+          <Grid item xs={6} sm={6} md={3}>
+            <Card 
+              sx={{ 
+                borderRadius: 3,
+                background: `linear-gradient(135deg, ${alpha(theme.palette.info.main, 0.1)} 0%, ${alpha(theme.palette.info.main, 0.05)} 100%)`,
+                border: `1px solid ${alpha(theme.palette.info.main, 0.15)}`
+              }}
+            >
+              <CardContent sx={{ py: 2, px: 2.5 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Box>
+                    <Typography color="text.secondary" variant="caption" fontWeight={500}>
+                      Open
+                    </Typography>
+                    <Typography variant="h4" fontWeight={700} color="info.main">
+                      {stats.summary?.open || 0}
+                    </Typography>
+                  </Box>
+                  <ChatBubbleOutlineIcon sx={{ fontSize: 40, color: alpha(theme.palette.info.main, 0.3) }} />
+                </Box>
               </CardContent>
             </Card>
           </Grid>
-          <Grid item xs={12} sm={6} md={3}>
-            <Card>
-              <CardContent>
-                  <Typography color="textSecondary" gutterBottom variant="body2">
-                  Overdue
-                </Typography>
-                <Typography variant="h4" color="warning.main">
-                  {stats.summary?.overdue || 0}
-                </Typography>
+          <Grid item xs={6} sm={6} md={3}>
+            <Card 
+              sx={{ 
+                borderRadius: 3,
+                background: `linear-gradient(135deg, ${alpha(theme.palette.warning.main, 0.1)} 0%, ${alpha(theme.palette.warning.main, 0.05)} 100%)`,
+                border: `1px solid ${alpha(theme.palette.warning.main, 0.15)}`
+              }}
+            >
+              <CardContent sx={{ py: 2, px: 2.5 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Box>
+                    <Typography color="text.secondary" variant="caption" fontWeight={500}>
+                      Overdue
+                    </Typography>
+                    <Typography variant="h4" fontWeight={700} color="warning.main">
+                      {stats.summary?.overdue || 0}
+                    </Typography>
+                  </Box>
+                  <ScheduleIcon sx={{ fontSize: 40, color: alpha(theme.palette.warning.main, 0.3) }} />
+                </Box>
               </CardContent>
             </Card>
           </Grid>
-          <Grid item xs={12} sm={6} md={3}>
-            <Card>
-              <CardContent>
-                <Typography color="textSecondary" gutterBottom variant="body2">
-                  Avg Resolution (hrs)
-                </Typography>
-                <Typography variant="h4" color="success.main">
-                  {stats.summary?.avgResolutionTimeHours || 0}
-                </Typography>
+          <Grid item xs={6} sm={6} md={3}>
+            <Card 
+              sx={{ 
+                borderRadius: 3,
+                background: `linear-gradient(135deg, ${alpha(theme.palette.success.main, 0.1)} 0%, ${alpha(theme.palette.success.main, 0.05)} 100%)`,
+                border: `1px solid ${alpha(theme.palette.success.main, 0.15)}`
+              }}
+            >
+              <CardContent sx={{ py: 2, px: 2.5 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Box>
+                    <Typography color="text.secondary" variant="caption" fontWeight={500}>
+                      Avg Resolution
+                    </Typography>
+                    <Typography variant="h4" fontWeight={700} color="success.main">
+                      {stats.summary?.avgResolutionTimeHours || 0}
+                      <Typography component="span" variant="caption" color="text.secondary"> hrs</Typography>
+                    </Typography>
+                  </Box>
+                  <TrendingUpIcon sx={{ fontSize: 40, color: alpha(theme.palette.success.main, 0.3) }} />
+                </Box>
               </CardContent>
             </Card>
           </Grid>
@@ -453,47 +504,65 @@ const TicketsPage = () => {
 
       {/* Filters */}
       <Collapse in={showFilters}>
-        <Card sx={{ mb: 3 }}>
-          <CardContent>
+        <Card 
+          sx={{ 
+            mb: 3, 
+            borderRadius: 3,
+            border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+            bgcolor: alpha(theme.palette.background.paper, 0.7)
+          }}
+        >
+          <CardContent sx={{ py: 2 }}>
             <Grid container spacing={2} alignItems="center">
-              <Grid item xs={12} sm={6} md={2}>
+              <Grid item xs={12} sm={6} md={3}>
                 <TextField
                   fullWidth
-                  label="Search"
+                  placeholder="Search tickets..."
                   value={filters.search}
                   onChange={(e) => handleFilterChange('search', e.target.value)}
                   InputProps={{
                     startAdornment: <SearchIcon sx={{ mr: 1, color: 'text.secondary' }} />
                   }}
                   size="small"
+                  sx={{
+                    '& .MuiOutlinedInput-root': {
+                      borderRadius: 2,
+                      bgcolor: 'background.paper'
+                    }
+                  }}
                 />
               </Grid>
-              <Grid item xs={12} sm={6} md={2}>
+              <Grid item xs={6} sm={6} md={2}>
                 <FormControl fullWidth size="small">
                   <InputLabel>Status</InputLabel>
                   <Select
                     value={filters.status}
                     onChange={(e) => handleFilterChange('status', e.target.value)}
                     label="Status"
+                    sx={{ borderRadius: 2, bgcolor: 'background.paper' }}
                   >
-                    <MenuItem value="">All</MenuItem>
+                    <MenuItem value="">All Statuses</MenuItem>
                     <MenuItem value="open">Open</MenuItem>
                     <MenuItem value="in_progress">In Progress</MenuItem>
                     <MenuItem value="waiting_response">Waiting Response</MenuItem>
                     <MenuItem value="resolved">Resolved</MenuItem>
                     <MenuItem value="closed">Closed</MenuItem>
+                    {user?.role === 'admin' && (
+                      <MenuItem value="deleted">Deleted</MenuItem>
+                    )}
                   </Select>
                 </FormControl>
               </Grid>
-              <Grid item xs={12} sm={6} md={2}>
+              <Grid item xs={6} sm={6} md={2}>
                 <FormControl fullWidth size="small">
                   <InputLabel>Category</InputLabel>
                   <Select
                     value={filters.category}
                     onChange={(e) => handleFilterChange('category', e.target.value)}
                     label="Category"
+                    sx={{ borderRadius: 2, bgcolor: 'background.paper' }}
                   >
-                    <MenuItem value="">All</MenuItem>
+                    <MenuItem value="">All Categories</MenuItem>
                     <MenuItem value="leads_request">Leads Request</MenuItem>
                     <MenuItem value="salary_issue">Salary Issue</MenuItem>
                     <MenuItem value="technical_support">Technical Support</MenuItem>
@@ -505,15 +574,16 @@ const TicketsPage = () => {
                   </Select>
                 </FormControl>
               </Grid>
-              <Grid item xs={12} sm={6} md={2}>
+              <Grid item xs={6} sm={6} md={2}>
                 <FormControl fullWidth size="small">
                   <InputLabel>Priority</InputLabel>
                   <Select
                     value={filters.priority}
                     onChange={(e) => handleFilterChange('priority', e.target.value)}
                     label="Priority"
+                    sx={{ borderRadius: 2, bgcolor: 'background.paper' }}
                   >
-                    <MenuItem value="">All</MenuItem>
+                    <MenuItem value="">All Priorities</MenuItem>
                     <MenuItem value="low">Low</MenuItem>
                     <MenuItem value="medium">Medium</MenuItem>
                     <MenuItem value="high">High</MenuItem>
@@ -521,209 +591,419 @@ const TicketsPage = () => {
                   </Select>
                 </FormControl>
               </Grid>
-              {/* Assignee filter removed - only admins handle all tickets */}
-              <Grid item xs={12} sm={6} md={2}>
-                <Stack direction="row" spacing={1}>
-                  <Button
-                    startIcon={<ClearIcon />}
-                    onClick={clearFilters}
-                    variant="outlined"
-                    size="small"
-                  >
-                    Clear
-                  </Button>
-                </Stack>
+              <Grid item xs={6} sm={6} md={3}>
+                <Button
+                  startIcon={<ClearIcon />}
+                  onClick={clearFilters}
+                  variant="outlined"
+                  size="small"
+                  sx={{ 
+                    borderRadius: 2,
+                    textTransform: 'none',
+                    px: 2
+                  }}
+                >
+                  Clear Filters
+                </Button>
               </Grid>
             </Grid>
           </CardContent>
         </Card>
       </Collapse>
 
-      {/* Tickets Table */}
-      <Card>
-        <TableContainer>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>Title</TableCell>
-                <TableCell>Category</TableCell>
-                <TableCell>Status</TableCell>
-                <TableCell>Priority</TableCell>
-                <TableCell>Created By</TableCell>
-                {isAdmin && <TableCell>Assigned To</TableCell>}
-                <TableCell>Created</TableCell>
-                <TableCell>Last Activity</TableCell>
-                <TableCell align="center">Actions</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell colSpan={isAdmin ? 9 : 8} align="center" sx={{ py: 4 }}>
-                    <CircularProgress />
-                  </TableCell>
-                </TableRow>
-              ) : tickets.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={isAdmin ? 9 : 8} align="center" sx={{ py: 4 }}>
-                    <Typography color="textSecondary">
-                      No tickets found
-                    </Typography>
-                  </TableCell>
-                </TableRow>
-              ) : (
-                tickets.map((ticket) => (
-                  <TableRow key={ticket._id} hover>
-                    <TableCell>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+      {/* Tickets Grid */}
+      {loading ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
+          <CircularProgress size={48} />
+        </Box>
+      ) : tickets.length === 0 ? (
+        <Paper 
+          sx={{ 
+            py: 8, 
+            px: 4, 
+            textAlign: 'center',
+            bgcolor: alpha(theme.palette.background.paper, 0.6),
+            borderRadius: 3
+          }}
+        >
+          <TicketIcon sx={{ fontSize: 64, color: 'text.disabled', mb: 2 }} />
+          <Typography variant="h6" color="textSecondary" gutterBottom>
+            No tickets found
+          </Typography>
+          <Typography variant="body2" color="textSecondary">
+            Create a new ticket or adjust your filters
+          </Typography>
+        </Paper>
+      ) : (
+        <>
+          <Grid container spacing={2.5}>
+            {tickets.map((ticket, index) => {
+              const isOverdue = ticketsService.isTicketOverdue(ticket);
+              const isResolved = ticket.status === 'resolved' || ticket.status === 'closed';
+              const priorityColor = ticketsService.getPriorityColor(ticket.priority);
+              const statusColor = ticketsService.getStatusColor(ticket.status);
+              
+              return (
+                <Grid item xs={12} sm={6} lg={4} xl={3} key={ticket._id}>
+                  <Fade in timeout={300 + index * 50}>
+                    <Card
+                      onClick={() => openDialog('view', ticket)}
+                      sx={{
+                        height: '100%',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        borderRadius: 3,
+                        border: `1px solid ${alpha(theme.palette.divider, 0.08)}`,
+                        bgcolor: alpha(theme.palette.background.paper, 0.9),
+                        position: 'relative',
+                        overflow: 'visible',
+                        cursor: 'pointer',
+                        ...(isOverdue && {
+                          borderColor: alpha(theme.palette.warning.main, 0.5),
+                          '&::before': {
+                            content: '""',
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            height: 4,
+                            bgcolor: 'warning.main',
+                            borderRadius: '12px 12px 0 0'
+                          }
+                        }),
+                        ...(ticket.priority === 'urgent' && !isResolved && {
+                          animation: 'urgentPulse 2s ease-in-out infinite',
+                          '@keyframes urgentPulse': {
+                            '0%, 100%': { boxShadow: `0 0 0 0 ${alpha(theme.palette.error.main, 0.4)}` },
+                            '50%': { boxShadow: `0 0 0 8px ${alpha(theme.palette.error.main, 0)}` }
+                          }
+                        })
+                      }}
+                    >
+                      {/* Priority Indicator Strip */}
+                      <Box
+                        sx={{
+                          position: 'absolute',
+                          top: 12,
+                          left: 0,
+                          width: 4,
+                          height: 40,
+                          borderRadius: '0 4px 4px 0',
+                          bgcolor: `${priorityColor}.main`,
+                          opacity: 0.9
+                        }}
+                      />
+
+                      <CardContent sx={{ flex: 1, pb: 1, pt: 2 }}>
+                        {/* Header with status and priority chips */}
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1.5 }}>
+                          <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
+                            <Chip
+                              label={ticketsService.formatTicketStatus(ticket.status)}
+                              color={statusColor}
+                              size="small"
+                              sx={{ 
+                                height: 24, 
+                                fontSize: '0.7rem',
+                                fontWeight: 600,
+                                '& .MuiChip-label': { px: 1 }
+                              }}
+                            />
+                            <Chip
+                              label={ticketsService.formatTicketPriority(ticket.priority)}
+                              color={priorityColor}
+                              variant="outlined"
+                              size="small"
+                              sx={{ 
+                                height: 24, 
+                                fontSize: '0.7rem',
+                                fontWeight: 500,
+                                '& .MuiChip-label': { px: 1 }
+                              }}
+                            />
+                          </Stack>
+                          {isOverdue && (
+                            <Tooltip title="Overdue!" arrow>
+                              <ScheduleIcon 
+                                sx={{ 
+                                  fontSize: 20, 
+                                  color: 'warning.main',
+                                  animation: 'bounce 1s ease infinite',
+                                  '@keyframes bounce': {
+                                    '0%, 100%': { transform: 'translateY(0)' },
+                                    '50%': { transform: 'translateY(-3px)' }
+                                  }
+                                }} 
+                              />
+                            </Tooltip>
+                          )}
+                        </Box>
+
+                        {/* Title */}
                         <Typography 
-                          variant="subtitle2" 
-                          noWrap 
+                          variant="subtitle1" 
+                          fontWeight={600}
                           sx={{ 
-                            maxWidth: 200,
-                            cursor: 'pointer',
-                            color: 'primary.main',
-                            '&:hover': {
-                              textDecoration: 'underline'
-                            }
+                            mb: 1,
+                            display: '-webkit-box',
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: 'vertical',
+                            overflow: 'hidden',
+                            lineHeight: 1.3,
+                            minHeight: '2.6em'
                           }}
-                          onClick={() => openDialog('view', ticket)}
                         >
                           {ticket.title}
                         </Typography>
-                        {ticketsService.isTicketOverdue(ticket) && (
-                          <Tooltip title="Overdue">
-                            <ScheduleIcon color="warning" fontSize="small" />
+
+                        {/* Category Badge */}
+                        <Chip
+                          label={ticketsService.formatTicketCategory(ticket.category)}
+                          variant="outlined"
+                          size="small"
+                          sx={{ 
+                            height: 22, 
+                            fontSize: '0.65rem',
+                            mb: 1.5,
+                            bgcolor: alpha(theme.palette.background.default, 0.5),
+                            borderColor: alpha(theme.palette.divider, 0.3)
+                          }}
+                        />
+
+                        {/* Description Preview */}
+                        <Typography 
+                          variant="body2" 
+                          color="text.secondary"
+                          sx={{ 
+                            display: '-webkit-box',
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: 'vertical',
+                            overflow: 'hidden',
+                            fontSize: '0.8rem',
+                            lineHeight: 1.5,
+                            mb: 2,
+                            minHeight: '2.4em'
+                          }}
+                        >
+                          {ticket.description}
+                        </Typography>
+
+                        {/* Meta info */}
+                        <Stack spacing={0.75}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Avatar 
+                              sx={{ 
+                                width: 22, 
+                                height: 22, 
+                                fontSize: '0.7rem',
+                                bgcolor: alpha(theme.palette.primary.main, 0.15),
+                                color: 'primary.main'
+                              }}
+                            >
+                              {ticket.createdBy?.fullName?.charAt(0)}
+                            </Avatar>
+                            <Typography variant="caption" color="text.secondary" fontWeight={500}>
+                              {ticket.createdBy?.fullName}
+                            </Typography>
+                          </Box>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                              <AccessTimeIcon sx={{ fontSize: 14, color: 'text.disabled' }} />
+                              <Typography variant="caption" color="text.disabled">
+                                {ticketsService.formatTimeAgo(ticket.createdAt)}
+                              </Typography>
+                            </Box>
+                            {ticket.comments && ticket.comments.length > 0 && (
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                <ChatBubbleOutlineIcon sx={{ fontSize: 14, color: 'text.disabled' }} />
+                                <Typography variant="caption" color="text.disabled">
+                                  {ticket.comments.length}
+                                </Typography>
+                              </Box>
+                            )}
+                          </Box>
+                        </Stack>
+                      </CardContent>
+
+                      {/* Action Buttons */}
+                      <CardActions 
+                        sx={{ 
+                          px: 2, 
+                          pb: 2, 
+                          pt: 0,
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center'
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                          <Tooltip title="Add Comment" arrow>
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              onClick={() => openDialog('comment', ticket)}
+                              sx={{ 
+                                minWidth: 'auto',
+                                px: 1.5,
+                                py: 0.5,
+                                borderRadius: 2,
+                                fontSize: '0.75rem',
+                                textTransform: 'none',
+                                borderColor: alpha(theme.palette.divider, 0.3),
+                                '&:hover': {
+                                  borderColor: 'info.main',
+                                  bgcolor: alpha(theme.palette.info.main, 0.05)
+                                }
+                              }}
+                              startIcon={<CommentIcon sx={{ fontSize: 16 }} />}
+                            >
+                              Comment
+                            </Button>
+                          </Tooltip>
+
+                          {isAdmin && !isResolved && (
+                            <Tooltip title="Resolve Ticket" arrow>
+                              <Button
+                                size="small"
+                                variant="contained"
+                                color="success"
+                                onClick={() => openDialog('resolve', ticket)}
+                                sx={{ 
+                                  minWidth: 'auto',
+                                  px: 1.5,
+                                  py: 0.5,
+                                  borderRadius: 2,
+                                  fontSize: '0.75rem',
+                                  textTransform: 'none',
+                                  boxShadow: `0 4px 12px ${alpha(theme.palette.success.main, 0.3)}`,
+                                  '&:hover': {
+                                    boxShadow: `0 6px 16px ${alpha(theme.palette.success.main, 0.4)}`,
+                                  }
+                                }}
+                                startIcon={<DoneAllIcon sx={{ fontSize: 16 }} />}
+                              >
+                                Resolve
+                              </Button>
+                            </Tooltip>
+                          )}
+
+                          {isResolved && (
+                            <Chip
+                              icon={<ResolveIcon sx={{ fontSize: 16 }} />}
+                              label="Resolved"
+                              color="success"
+                              variant="outlined"
+                              size="small"
+                              sx={{ 
+                                height: 28,
+                                fontSize: '0.75rem'
+                              }}
+                            />
+                          )}
+                        </Box>
+
+                        {isAdmin && (
+                          <Tooltip title="Delete Ticket" arrow>
+                            <IconButton
+                              size="small"
+                              onClick={() => handleDeleteTicket(ticket)}
+                              sx={{ 
+                                color: 'text.disabled',
+                                '&:hover': {
+                                  color: 'error.main',
+                                  bgcolor: alpha(theme.palette.error.main, 0.1)
+                                }
+                              }}
+                            >
+                              <DeleteIcon sx={{ fontSize: 18 }} />
+                            </IconButton>
                           </Tooltip>
                         )}
-                      </Box>
-                    </TableCell>
-                    <TableCell>
-                      <Chip
-                        label={ticketsService.formatTicketCategory(ticket.category)}
-                        size="small"
-                        variant="outlined"
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Chip
-                        label={ticketsService.formatTicketStatus(ticket.status)}
-                        color={ticketsService.getStatusColor(ticket.status)}
-                        size="small"
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Chip
-                        label={ticketsService.formatTicketPriority(ticket.priority)}
-                        color={ticketsService.getPriorityColor(ticket.priority)}
-                        size="small"
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Avatar sx={{ width: 24, height: 24 }}>
-                          {ticket.createdBy?.fullName?.charAt(0)}
-                        </Avatar>
-                        <Typography variant="body2">
-                          {ticket.createdBy?.fullName}
-                        </Typography>
-                      </Box>
-                    </TableCell>
-                    {isAdmin && (
-                      <TableCell>
-                        <Typography variant="body2" color="textSecondary">
-                          Admin Handled
-                        </Typography>
-                      </TableCell>
-                    )}
-                    <TableCell>
-                      <Typography variant="body2" color="textSecondary">
-                        {ticketsService.formatTimeAgo(ticket.createdAt)}
-                      </Typography>
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="body2" color="textSecondary">
-                        {ticketsService.formatTimeAgo(ticket.lastActivityAt)}
-                      </Typography>
-                    </TableCell>
-                    <TableCell align="center">
-                      <IconButton
-                        onClick={(e) => handleMenuOpen(e, ticket)}
-                        size="small"
-                      >
-                        <MoreVertIcon />
-                      </IconButton>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </TableContainer>
+                      </CardActions>
+                    </Card>
+                  </Fade>
+                </Grid>
+              );
+            })}
+          </Grid>
 
-        {/* Pagination */}
-        {pagination.pages > 1 && (
-          <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
-            <Pagination
-              count={pagination.pages}
-              page={pagination.page}
-              onChange={handlePageChange}
-              color="primary"
-            />
-          </Box>
-        )}
-      </Card>
-
-      {/* Action Menu */}
-      <Menu
-        anchorEl={menuAnchorEl}
-        open={Boolean(menuAnchorEl)}
-        onClose={handleMenuClose}
-      >
-        <MenuItem onClick={() => openDialog('view', menuTicket)}>
-          <ListItemIcon>
-            <ViewIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText>View Details</ListItemText>
-        </MenuItem>
-        <MenuItem onClick={() => openDialog('comment', menuTicket)}>
-          <ListItemIcon>
-            <CommentIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText>Add Comment</ListItemText>
-        </MenuItem>
-        {isAdmin && (
-          <MenuItem onClick={() => openDialog('resolve', menuTicket)}>
-            <ListItemIcon>
-              <ResolveIcon fontSize="small" />
-            </ListItemIcon>
-            <ListItemText>Resolve</ListItemText>
-          </MenuItem>
-        )}
-        {isAdmin && (
-          <>
-            <Divider />
-            <MenuItem onClick={() => handleDeleteTicket(menuTicket)} sx={{ color: 'error.main' }}>
-              <ListItemIcon>
-                <DeleteIcon fontSize="small" color="error" />
-              </ListItemIcon>
-              <ListItemText>Delete</ListItemText>
-            </MenuItem>
-          </>
-        )}
-      </Menu>
+          {/* Pagination */}
+          {pagination.pages > 1 && (
+            <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
+              <Pagination
+                count={pagination.pages}
+                page={pagination.page}
+                onChange={handlePageChange}
+                color="primary"
+                size="large"
+                sx={{
+                  '& .MuiPaginationItem-root': {
+                    borderRadius: 2
+                  }
+                }}
+              />
+            </Box>
+          )}
+        </>
+      )}
 
       {/* Create Ticket Dialog */}
-      <Dialog open={createDialogOpen} onClose={() => setCreateDialogOpen(false)} maxWidth="md" fullWidth>
-        <DialogTitle>Create New Ticket</DialogTitle>
-        <DialogContent>
-          <Stack spacing={3} sx={{ mt: 1 }}>
+      <Dialog 
+        open={createDialogOpen} 
+        onClose={() => setCreateDialogOpen(false)} 
+        maxWidth="md" 
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            overflow: 'hidden'
+          }
+        }}
+      >
+        <Box 
+          sx={{ 
+            bgcolor: alpha(theme.palette.primary.main, 0.1),
+            p: 3,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 2
+          }}
+        >
+          <Box
+            sx={{
+              width: 56,
+              height: 56,
+              borderRadius: '50%',
+              bgcolor: 'primary.main',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+          >
+            <AddIcon sx={{ fontSize: 28, color: 'white' }} />
+          </Box>
+          <Box>
+            <Typography variant="h6" fontWeight={700}>
+              Create New Ticket
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Submit a new support request
+            </Typography>
+          </Box>
+        </Box>
+        <DialogContent sx={{ pt: 3 }}>
+          <Stack spacing={2.5}>
             <TextField
               label="Title"
               value={newTicket.title}
               onChange={(e) => setNewTicket(prev => ({ ...prev, title: e.target.value }))}
               fullWidth
               required
+              placeholder="Brief summary of your issue"
+              sx={{
+                '& .MuiOutlinedInput-root': { borderRadius: 2 }
+              }}
             />
             <TextField
               label="Description"
@@ -733,47 +1013,95 @@ const TicketsPage = () => {
               rows={4}
               fullWidth
               required
+              placeholder="Provide detailed information about your issue..."
+              sx={{
+                '& .MuiOutlinedInput-root': { borderRadius: 2 }
+              }}
             />
-            <FormControl fullWidth required>
-              <InputLabel>Category</InputLabel>
-              <Select
-                value={newTicket.category}
-                onChange={(e) => setNewTicket(prev => ({ ...prev, category: e.target.value }))}
-                label="Category"
-              >
-                <MenuItem value="leads_request">Leads Request</MenuItem>
-                <MenuItem value="salary_issue">Salary Issue</MenuItem>
-                <MenuItem value="technical_support">Technical Support</MenuItem>
-                <MenuItem value="account_access">Account Access</MenuItem>
-                <MenuItem value="payment_issue">Payment Issue</MenuItem>
-                <MenuItem value="feature_request">Feature Request</MenuItem>
-                <MenuItem value="bug_report">Bug Report</MenuItem>
-                <MenuItem value="other">Other</MenuItem>
-              </Select>
-            </FormControl>
-            <FormControl fullWidth>
-              <InputLabel>Priority</InputLabel>
-              <Select
-                value={newTicket.priority}
-                onChange={(e) => setNewTicket(prev => ({ ...prev, priority: e.target.value }))}
-                label="Priority"
-              >
-                <MenuItem value="low">Low</MenuItem>
-                <MenuItem value="medium">Medium</MenuItem>
-                <MenuItem value="high">High</MenuItem>
-                <MenuItem value="urgent">Urgent</MenuItem>
-              </Select>
-            </FormControl>
+            <Grid container spacing={2}>
+              <Grid item xs={12} sm={6}>
+                <FormControl fullWidth required>
+                  <InputLabel>Category</InputLabel>
+                  <Select
+                    value={newTicket.category}
+                    onChange={(e) => setNewTicket(prev => ({ ...prev, category: e.target.value }))}
+                    label="Category"
+                    sx={{ borderRadius: 2 }}
+                  >
+                    <MenuItem value="leads_request">Leads Request</MenuItem>
+                    <MenuItem value="salary_issue">Salary Issue</MenuItem>
+                    <MenuItem value="technical_support">Technical Support</MenuItem>
+                    <MenuItem value="account_access">Account Access</MenuItem>
+                    <MenuItem value="payment_issue">Payment Issue</MenuItem>
+                    <MenuItem value="feature_request">Feature Request</MenuItem>
+                    <MenuItem value="bug_report">Bug Report</MenuItem>
+                    <MenuItem value="other">Other</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <FormControl fullWidth>
+                  <InputLabel>Priority</InputLabel>
+                  <Select
+                    value={newTicket.priority}
+                    onChange={(e) => setNewTicket(prev => ({ ...prev, priority: e.target.value }))}
+                    label="Priority"
+                    sx={{ borderRadius: 2 }}
+                  >
+                    <MenuItem value="low">
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'success.main' }} />
+                        Low
+                      </Box>
+                    </MenuItem>
+                    <MenuItem value="medium">
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'info.main' }} />
+                        Medium
+                      </Box>
+                    </MenuItem>
+                    <MenuItem value="high">
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'warning.main' }} />
+                        High
+                      </Box>
+                    </MenuItem>
+                    <MenuItem value="urgent">
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'error.main' }} />
+                        Urgent
+                      </Box>
+                    </MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+            </Grid>
             <TextField
-              label="Tags (comma separated)"
+              label="Tags"
               value={newTicket.tags}
               onChange={(e) => setNewTicket(prev => ({ ...prev, tags: e.target.value }))}
               fullWidth
-              placeholder="urgent, leads, payment"
+              placeholder="urgent, leads, payment (comma separated)"
+              helperText="Optional: Add tags to help categorize this ticket"
+              sx={{
+                '& .MuiOutlinedInput-root': { borderRadius: 2 }
+              }}
             />
             
             {/* Image Upload Section */}
-            <Box>
+            <Box 
+              sx={{ 
+                p: 2, 
+                borderRadius: 2, 
+                border: `2px dashed ${alpha(theme.palette.divider, 0.3)}`,
+                bgcolor: alpha(theme.palette.background.default, 0.5),
+                transition: 'all 0.2s',
+                '&:hover': {
+                  borderColor: alpha(theme.palette.primary.main, 0.5),
+                  bgcolor: alpha(theme.palette.primary.main, 0.02)
+                }
+              }}
+            >
               <input
                 accept="image/*"
                 style={{ display: 'none' }}
@@ -790,46 +1118,62 @@ const TicketsPage = () => {
                   startIcon={uploadingImages ? <CircularProgress size={20} /> : <ImageIcon />}
                   disabled={uploadingImages}
                   fullWidth
+                  sx={{
+                    borderRadius: 2,
+                    textTransform: 'none',
+                    py: 1.5,
+                    borderStyle: 'dashed'
+                  }}
                 >
-                  {uploadingImages ? 'Uploading...' : 'Attach Images'}
+                  {uploadingImages ? 'Uploading...' : 'Click to attach images'}
                 </Button>
               </label>
               
               {/* Display selected images */}
               {selectedImages.length > 0 && (
                 <Box sx={{ mt: 2 }}>
-                  <Typography variant="body2" color="textSecondary" gutterBottom>
+                  <Typography variant="caption" color="text.secondary" fontWeight={500}>
                     Attached Images ({selectedImages.length}):
                   </Typography>
-                  <Stack direction="row" spacing={1} flexWrap="wrap" gap={1}>
+                  <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mt: 1 }}>
                     {selectedImages.map((img) => (
-                      <Card key={img.id} variant="outlined" sx={{ position: 'relative', width: 100, height: 100 }}>
-                        <CardContent sx={{ p: 0, height: '100%', position: 'relative' }}>
-                          <Box
-                            component="img"
-                            src={img.url}
-                            alt={img.name}
-                            sx={{
-                              width: '100%',
-                              height: '100%',
-                              objectFit: 'cover'
-                            }}
-                          />
-                          <IconButton
-                            size="small"
-                            onClick={() => handleRemoveImage(img.id)}
-                            sx={{
-                              position: 'absolute',
-                              top: 2,
-                              right: 2,
-                              bgcolor: 'background.paper',
-                              '&:hover': { bgcolor: 'error.light' }
-                            }}
-                          >
-                            <CloseIcon fontSize="small" />
-                          </IconButton>
-                        </CardContent>
-                      </Card>
+                      <Box 
+                        key={img.id} 
+                        sx={{ 
+                          position: 'relative', 
+                          width: 80, 
+                          height: 80,
+                          borderRadius: 2,
+                          overflow: 'hidden',
+                          border: `1px solid ${alpha(theme.palette.divider, 0.3)}`
+                        }}
+                      >
+                        <Box
+                          component="img"
+                          src={img.url}
+                          alt={img.name}
+                          sx={{
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'cover'
+                          }}
+                        />
+                        <IconButton
+                          size="small"
+                          onClick={() => handleRemoveImage(img.id)}
+                          sx={{
+                            position: 'absolute',
+                            top: 4,
+                            right: 4,
+                            bgcolor: 'error.main',
+                            color: 'white',
+                            p: 0.25,
+                            '&:hover': { bgcolor: 'error.dark' }
+                          }}
+                        >
+                          <CloseIcon sx={{ fontSize: 14 }} />
+                        </IconButton>
+                      </Box>
                     ))}
                   </Stack>
                 </Box>
@@ -837,29 +1181,104 @@ const TicketsPage = () => {
             </Box>
           </Stack>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => {
-            setCreateDialogOpen(false);
-            setSelectedImages([]);
-            setUploadedImageIds([]);
-          }}>Cancel</Button>
-          <Button onClick={handleCreateTicket} variant="contained">Create Ticket</Button>
+        <DialogActions sx={{ px: 3, py: 2, gap: 1 }}>
+          <Button 
+            onClick={() => {
+              setCreateDialogOpen(false);
+              setSelectedImages([]);
+              setUploadedImageIds([]);
+            }}
+            sx={{ 
+              borderRadius: 2,
+              textTransform: 'none',
+              px: 3
+            }}
+          >
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleCreateTicket} 
+            variant="contained"
+            startIcon={<AddIcon />}
+            sx={{ 
+              borderRadius: 2,
+              textTransform: 'none',
+              px: 3,
+              boxShadow: `0 4px 14px ${alpha(theme.palette.primary.main, 0.35)}`,
+            }}
+          >
+            Create Ticket
+          </Button>
         </DialogActions>
       </Dialog>
 
       {/* Add Comment Dialog */}
-      <Dialog open={commentDialogOpen} onClose={() => setCommentDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Add Comment</DialogTitle>
-        <DialogContent>
-          <Stack spacing={3} sx={{ mt: 1 }}>
+      <Dialog 
+        open={commentDialogOpen} 
+        onClose={() => setCommentDialogOpen(false)} 
+        maxWidth="sm" 
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            overflow: 'hidden'
+          }
+        }}
+      >
+        <Box 
+          sx={{ 
+            bgcolor: alpha(theme.palette.info.main, 0.1),
+            p: 3,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 2
+          }}
+        >
+          <Box
+            sx={{
+              width: 56,
+              height: 56,
+              borderRadius: '50%',
+              bgcolor: 'info.main',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+          >
+            <CommentIcon sx={{ fontSize: 28, color: 'white' }} />
+          </Box>
+          <Box>
+            <Typography variant="h6" fontWeight={700}>
+              Add Comment
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Add a response or note to this ticket
+            </Typography>
+          </Box>
+        </Box>
+        <DialogContent sx={{ pt: 3 }}>
+          {selectedTicket && (
+            <Alert severity="info" sx={{ mb: 3, borderRadius: 2 }}>
+              <Typography variant="subtitle2" fontWeight={600}>
+                {selectedTicket.title}
+              </Typography>
+            </Alert>
+          )}
+          <Stack spacing={2.5}>
             <TextField
-              label="Comment"
+              label="Your Comment"
               value={commentData.message}
               onChange={(e) => setCommentData(prev => ({ ...prev, message: e.target.value }))}
               multiline
               rows={4}
               fullWidth
               required
+              placeholder="Write your comment here..."
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: 2
+                }
+              }}
             />
             {isAdmin && (
               <FormControlLabel
@@ -867,41 +1286,156 @@ const TicketsPage = () => {
                   <Switch
                     checked={commentData.isInternal}
                     onChange={(e) => setCommentData(prev => ({ ...prev, isInternal: e.target.checked }))}
+                    color="warning"
                   />
                 }
-                label="Internal comment (visible to admins only)"
+                label={
+                  <Box>
+                    <Typography variant="body2" fontWeight={500}>
+                      Internal comment
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Only visible to admins
+                    </Typography>
+                  </Box>
+                }
+                sx={{
+                  mx: 0,
+                  p: 1.5,
+                  borderRadius: 2,
+                  bgcolor: commentData.isInternal ? alpha(theme.palette.warning.main, 0.1) : 'transparent',
+                  border: `1px solid ${commentData.isInternal ? alpha(theme.palette.warning.main, 0.3) : 'transparent'}`,
+                  transition: 'all 0.2s'
+                }}
               />
             )}
           </Stack>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setCommentDialogOpen(false)}>Cancel</Button>
-          <Button onClick={handleAddComment} variant="contained">Add Comment</Button>
+        <DialogActions sx={{ px: 3, py: 2, gap: 1 }}>
+          <Button 
+            onClick={() => setCommentDialogOpen(false)}
+            sx={{ 
+              borderRadius: 2,
+              textTransform: 'none',
+              px: 3
+            }}
+          >
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleAddComment} 
+            variant="contained"
+            startIcon={<CommentIcon />}
+            sx={{ 
+              borderRadius: 2,
+              textTransform: 'none',
+              px: 3,
+              boxShadow: `0 4px 14px ${alpha(theme.palette.primary.main, 0.35)}`,
+            }}
+          >
+            Add Comment
+          </Button>
         </DialogActions>
       </Dialog>
 
       {/* Assignment dialog removed - only admins handle all tickets */}
 
       {/* Resolve Dialog */}
-      <Dialog open={resolveDialogOpen} onClose={() => setResolveDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Resolve Ticket</DialogTitle>
-        <DialogContent>
+      <Dialog 
+        open={resolveDialogOpen} 
+        onClose={() => setResolveDialogOpen(false)} 
+        maxWidth="sm" 
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            overflow: 'hidden'
+          }
+        }}
+      >
+        <Box 
+          sx={{ 
+            bgcolor: alpha(theme.palette.success.main, 0.1),
+            p: 3,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 2
+          }}
+        >
+          <Box
+            sx={{
+              width: 56,
+              height: 56,
+              borderRadius: '50%',
+              bgcolor: 'success.main',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+          >
+            <DoneAllIcon sx={{ fontSize: 28, color: 'white' }} />
+          </Box>
+          <Box>
+            <Typography variant="h6" fontWeight={700}>
+              Resolve Ticket
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Mark this ticket as resolved
+            </Typography>
+          </Box>
+        </Box>
+        <DialogContent sx={{ pt: 3 }}>
+          {selectedTicket && (
+            <Alert severity="info" sx={{ mb: 3, borderRadius: 2 }}>
+              <Typography variant="subtitle2" fontWeight={600}>
+                {selectedTicket.title}
+              </Typography>
+            </Alert>
+          )}
           <TextField
-            label="Resolution Note (optional)"
+            label="Resolution Note"
             value={resolveData.resolutionNote}
             onChange={(e) => setResolveData(prev => ({ ...prev, resolutionNote: e.target.value }))}
             multiline
             rows={4}
             fullWidth
-            sx={{ mt: 2 }}
-            placeholder="Describe how the ticket was resolved..."
+            placeholder="Describe how the ticket was resolved (optional)..."
+            helperText="Add a note explaining how this issue was resolved"
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                borderRadius: 2
+              }
+            }}
           />
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setResolveDialogOpen(false)}>Cancel</Button>
-          <Button onClick={handleResolveTicket} variant="contained" color="success">
-                      Resolve Ticket
-        </Button>
+        <DialogActions sx={{ px: 3, py: 2, gap: 1 }}>
+          <Button 
+            onClick={() => setResolveDialogOpen(false)}
+            sx={{ 
+              borderRadius: 2,
+              textTransform: 'none',
+              px: 3
+            }}
+          >
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleResolveTicket} 
+            variant="contained" 
+            color="success"
+            startIcon={<ResolveIcon />}
+            sx={{ 
+              borderRadius: 2,
+              textTransform: 'none',
+              px: 3,
+              boxShadow: `0 4px 14px ${alpha(theme.palette.success.main, 0.35)}`,
+              '&:hover': {
+                boxShadow: `0 6px 20px ${alpha(theme.palette.success.main, 0.4)}`,
+              }
+            }}
+          >
+            Resolve Ticket
+          </Button>
         </DialogActions>
       </Dialog>
 
