@@ -1,9 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Box, Paper, Typography, Modal, IconButton, Portal, CircularProgress } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import CloseIcon from '@mui/icons-material/Close';
 import ImageIcon from '@mui/icons-material/Image';
 import BrokenImageIcon from '@mui/icons-material/BrokenImage';
+
+// Global image cache to track preloaded images across all DocumentPreview instances
+const imageCache = new Map(); // url -> 'loading' | 'loaded' | 'error'
+const imageCacheListeners = new Map(); // url -> Set of callbacks
 
 const PreviewPopup = styled(Paper)(({ theme }) => ({
   position: 'fixed',
@@ -117,23 +121,135 @@ const getDirectImageUrl = (url) => {
   return url;
 };
 
+// Preload an image and update the cache
+const preloadImage = (url) => {
+  if (!url || imageCache.has(url)) return;
+  
+  imageCache.set(url, 'loading');
+  
+  const img = new Image();
+  img.referrerPolicy = 'no-referrer';
+  
+  img.onload = () => {
+    imageCache.set(url, 'loaded');
+    // Notify all listeners
+    const listeners = imageCacheListeners.get(url);
+    if (listeners) {
+      listeners.forEach(cb => cb('loaded'));
+      imageCacheListeners.delete(url);
+    }
+  };
+  
+  img.onerror = () => {
+    imageCache.set(url, 'error');
+    // Notify all listeners
+    const listeners = imageCacheListeners.get(url);
+    if (listeners) {
+      listeners.forEach(cb => cb('error'));
+      imageCacheListeners.delete(url);
+    }
+  };
+  
+  // Start loading with low priority to not block main content
+  img.fetchPriority = 'low';
+  img.src = url;
+};
+
+// Subscribe to image cache updates
+const subscribeToImageCache = (url, callback) => {
+  if (!imageCacheListeners.has(url)) {
+    imageCacheListeners.set(url, new Set());
+  }
+  imageCacheListeners.get(url).add(callback);
+  
+  return () => {
+    const listeners = imageCacheListeners.get(url);
+    if (listeners) {
+      listeners.delete(callback);
+      if (listeners.size === 0) {
+        imageCacheListeners.delete(url);
+      }
+    }
+  };
+};
+
 const DocumentPreview = ({ url, type, children, forceImage = false }) => {
   const [showPreview, setShowPreview] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [imageLoading, setImageLoading] = useState(true);
   const [imageError, setImageError] = useState(false);
+  const preloadedRef = useRef(false);
   
-  // Get the direct image URL
-  const directUrl = getDirectImageUrl(url);
+  // Get the direct image URL - memoized to prevent unnecessary recalculations
+  const directUrl = useMemo(() => getDirectImageUrl(url), [url]);
+  
+  // Check if this URL is considered an image
+  const isImage = useMemo(() => {
+    return forceImage || 
+      url?.match(/\.(jpg|jpeg|png|gif|webp)$/i) || 
+      url?.startsWith('data:image/') || 
+      url?.includes('cloudinary') || 
+      url?.includes('imgur') || 
+      url?.includes('blob') || 
+      url?.includes('s3.');
+  }, [url, forceImage]);
 
-  // Reset loading/error state when URL changes or preview opens
+  // Preload image on mount and sync with cache
   useEffect(() => {
-    if (showPreview && directUrl) {
-      setImageLoading(true);
+    if (!directUrl || !isImage || preloadedRef.current) return;
+    
+    preloadedRef.current = true;
+    
+    // Check if already in cache
+    const cachedStatus = imageCache.get(directUrl);
+    if (cachedStatus === 'loaded') {
+      setImageLoading(false);
       setImageError(false);
+      return;
+    } else if (cachedStatus === 'error') {
+      setImageLoading(false);
+      setImageError(true);
+      return;
     }
-  }, [showPreview, directUrl]);
+    
+    // Subscribe to cache updates
+    const unsubscribe = subscribeToImageCache(directUrl, (status) => {
+      if (status === 'loaded') {
+        setImageLoading(false);
+        setImageError(false);
+      } else if (status === 'error') {
+        setImageLoading(false);
+        setImageError(true);
+      }
+    });
+    
+    // Start preloading if not already in progress
+    if (!cachedStatus) {
+      preloadImage(directUrl);
+    }
+    
+    return unsubscribe;
+  }, [directUrl, isImage]);
+
+  // Sync loading state with cache when preview opens
+  useEffect(() => {
+    if (showPreview && directUrl && isImage) {
+      const cachedStatus = imageCache.get(directUrl);
+      if (cachedStatus === 'loaded') {
+        setImageLoading(false);
+        setImageError(false);
+      } else if (cachedStatus === 'error') {
+        setImageLoading(false);
+        setImageError(true);
+      } else if (!cachedStatus) {
+        // Start loading if not in cache yet
+        setImageLoading(true);
+        setImageError(false);
+        preloadImage(directUrl);
+      }
+    }
+  }, [showPreview, directUrl, isImage]);
 
   const handleMouseEnter = (event) => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -171,18 +287,24 @@ const DocumentPreview = ({ url, type, children, forceImage = false }) => {
     setShowModal(false);
   };
 
-  const handleImageLoad = () => {
+  const handleImageLoad = useCallback(() => {
     setImageLoading(false);
     setImageError(false);
-  };
+    // Update cache
+    if (directUrl) {
+      imageCache.set(directUrl, 'loaded');
+    }
+  }, [directUrl]);
 
-  const handleImageError = () => {
+  const handleImageError = useCallback(() => {
     console.error('Image failed to load:', directUrl, '(original:', url, ')');
     setImageLoading(false);
     setImageError(true);
-  };
-
-  const isImage = forceImage || url?.match(/\.(jpg|jpeg|png|gif|webp)$/i) || url?.startsWith('data:image/') || url?.includes('cloudinary') || url?.includes('imgur') || url?.includes('blob') || url?.includes('s3.');
+    // Update cache
+    if (directUrl) {
+      imageCache.set(directUrl, 'error');
+    }
+  }, [directUrl, url]);
 
   const renderContent = (inModal = false) => {
     const styles = inModal ? {
