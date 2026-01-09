@@ -53,7 +53,14 @@ import {
   Note as NoteIcon,
   Speed as PerformanceIcon,
 } from "@mui/icons-material";
-import { logout, selectUser } from "../store/slices/authSlice";
+import {
+  logout,
+  selectUser,
+  selectAuth,
+  verify2FAAndLogin,
+  completeQRLogin,
+  clear2FAState
+} from "../store/slices/authSlice";
 import Footer from "./Footer";
 import ChatButton from "../components/ChatButton";
 import UserSwitcher from "../components/UserSwitcher";
@@ -61,6 +68,8 @@ import QuickSwitcher from "../components/QuickSwitcher";
 import NotificationBell from "../components/NotificationBell";
 import Force2FASetup from "../components/Force2FASetup";
 import AnnouncementPopup from "../components/AnnouncementPopup";
+import TwoFactorVerification from "../components/TwoFactorVerification";
+import QRCodeLogin from "../components/QRCodeLogin";
 const drawerWidth = 240;
 const MainLayout = () => {
   const theme = useTheme();
@@ -81,6 +90,65 @@ const MainLayout = () => {
   const location = useLocation();
   const dispatch = useDispatch();
   const user = useSelector(selectUser);
+  const { requires2FA, twoFactorUserId, useQRAuth, isLoading } = useSelector(selectAuth);
+  const [show2FADialog, setShow2FADialog] = useState(false);
+  const [showQRDialog, setShowQRDialog] = useState(false);
+  const [twoFactorError, setTwoFactorError] = useState('');
+
+  // Handle 2FA/QR Dialog visibility based on Redux state
+  useEffect(() => {
+    if (requires2FA && twoFactorUserId) {
+      if (useQRAuth) {
+        setShowQRDialog(true);
+        setShow2FADialog(false);
+      } else {
+        setShow2FADialog(true);
+        setShowQRDialog(false);
+      }
+    } else {
+      setShow2FADialog(false);
+      setShowQRDialog(false);
+    }
+  }, [requires2FA, twoFactorUserId, useQRAuth]);
+
+  const handle2FAClose = () => {
+    setShow2FADialog(false);
+    setTwoFactorError('');
+    dispatch(clear2FAState());
+  };
+
+  const handleQRClose = () => {
+    setShowQRDialog(false);
+    dispatch(clear2FAState());
+  };
+
+  const handle2FAVerification = async (code, useBackupCode) => {
+    setTwoFactorError('');
+    try {
+      const result = await dispatch(verify2FAAndLogin({
+        userId: twoFactorUserId,
+        token: code,
+        useBackupCode
+      })).unwrap();
+      
+      if (result.token) {
+        setShow2FADialog(false);
+      }
+    } catch (error) {
+       setTwoFactorError(error || '2FA verification failed');
+    }
+  };
+
+  const handleQRLoginSuccess = async (token, user) => {
+    await dispatch(completeQRLogin({ token, user }));
+    setShowQRDialog(false);
+  };
+  
+  const handleFallbackTo2FA = () => {
+    setShowQRDialog(false);
+    setShow2FADialog(true);
+  };
+
   const handleDrawerToggle = () => {
     if (isMobile) {
       setMobileOpen(!mobileOpen);
@@ -760,6 +828,24 @@ const MainLayout = () => {
 
       {/* Announcement Popup for agents and affiliate managers */}
       <AnnouncementPopup />
+
+      {/* 2FA Verification Dialog */}
+      <TwoFactorVerification
+        open={show2FADialog}
+        onClose={handle2FAClose}
+        onVerify={handle2FAVerification}
+        loading={isLoading}
+        error={twoFactorError}
+      />
+
+      {/* QR Code Login Dialog */}
+      <QRCodeLogin
+        open={showQRDialog}
+        onClose={handleQRClose}
+        userId={twoFactorUserId}
+        onLoginSuccess={handleQRLoginSuccess}
+        onFallbackTo2FA={handleFallbackTo2FA}
+      />
     </Box>
   );
 };

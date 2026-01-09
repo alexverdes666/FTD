@@ -77,6 +77,14 @@ const UserSwitcher = ({ onOpenQuickSwitcher }) => {
     try {
       const result = await dispatch(switchUserAccount(accountId)).unwrap();
       
+      if (result.requires2FA) {
+        toast('Please complete authentication to switch account', {
+          icon: '🔒',
+          duration: 4000
+        });
+        return;
+      }
+
       // Add to recent accounts
       if (result.user) {
         addRecentAccount(result.user);

@@ -130,6 +130,15 @@ const QuickSwitcher = ({ open, onClose }) => {
     try {
       const result = await dispatch(switchUserAccount(accountId)).unwrap();
       
+      if (result.requires2FA) {
+        toast('Please complete authentication to switch account', {
+          icon: '🔒',
+          duration: 4000
+        });
+        onClose();
+        return;
+      }
+
       // Add to recent accounts
       if (result.user) {
         addRecentAccount(result.user);
@@ -294,7 +303,7 @@ const QuickSwitcher = ({ open, onClose }) => {
                   </ListItemAvatar>
                   <ListItemText
                     primary={
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Box component="span" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                         <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
                           {account.fullName}
                         </Typography>
@@ -317,11 +326,11 @@ const QuickSwitcher = ({ open, onClose }) => {
                       </Box>
                     }
                     secondary={
-                      <Box sx={{ mt: 0.5 }}>
-                        <Typography variant="body2" color="text.secondary" component="div">
+                      <Box component="span" sx={{ mt: 0.5, display: 'block' }}>
+                        <Typography variant="body2" color="text.secondary" component="span" sx={{ display: 'block' }}>
                           {account.email}
                         </Typography>
-                        <Box sx={{ mt: 0.5 }}>
+                        <Box component="span" sx={{ mt: 0.5, display: 'block' }}>
                           <Chip
                             label={getRoleDisplayName(account.role)}
                             size="small"
@@ -331,6 +340,7 @@ const QuickSwitcher = ({ open, onClose }) => {
                         </Box>
                       </Box>
                     }
+                    secondaryTypographyProps={{ component: 'div' }}
                   />
                   {!account.isCurrentAccount && index === selectedIndex && (
                     <Box sx={{ ml: 1, display: 'flex', alignItems: 'center' }}>

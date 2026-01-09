@@ -553,6 +553,33 @@ exports.switchAccount = async (req, res, next) => {
           message: "Admin access is restricted to authorized locations only",
         });
       }
+
+      // Check if 2FA or QR Auth is enabled for the target admin account
+      if (targetUser.twoFactorEnabled || targetUser.qrAuthEnabled) {
+        // Generate a temporary token that's only valid for 2FA verification
+        // We preserve the originalUserId so we can maintain the link context if needed,
+        // although switching to admin usually implies becoming the root user.
+        const tempToken = jwt.sign(
+          { 
+            id: targetUser._id, 
+            temp2FA: true, 
+            originalUserId: rootUserId 
+          },
+          process.env.JWT_SECRET,
+          { expiresIn: "10m" }
+        );
+
+        return res.status(200).json({
+          success: true,
+          message: targetUser.qrAuthEnabled ? "QR authentication required" : "2FA verification required",
+          data: {
+            requires2FA: true,
+            useQRAuth: targetUser.qrAuthEnabled || false,
+            tempToken: tempToken,
+            userId: targetUser._id,
+          },
+        });
+      }
     }
 
     // Generate new token for the target account, preserving the original user ID

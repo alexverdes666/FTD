@@ -437,6 +437,17 @@ const authSlice = createSlice({
       })
       .addCase(switchUserAccount.fulfilled, (state, action) => {
         state.switchingAccount = false;
+        
+        // Check if 2FA is required
+        if (action.payload.requires2FA) {
+          state.requires2FA = true;
+          state.useQRAuth = action.payload.useQRAuth || false;
+          state.twoFactorUserId = action.payload.userId;
+          state.twoFactorToken = action.payload.tempToken;
+          state.error = null;
+          return;
+        }
+
         state.user = action.payload.user;
         state.token = action.payload.token;
         state.isAuthenticated = true;
