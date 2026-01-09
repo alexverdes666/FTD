@@ -50,6 +50,7 @@ const SensitiveActionModal = ({
   const [verificationCode, setVerificationCode] = useState("");
   const [useBackupCode, setUseBackupCode] = useState(false);
   const [localError, setLocalError] = useState("");
+  const [isVerifying, setIsVerifying] = useState(false);
 
   // Reset state when modal opens
   useEffect(() => {
@@ -57,11 +58,19 @@ const SensitiveActionModal = ({
       setVerificationCode("");
       setUseBackupCode(false);
       setLocalError("");
+      setIsVerifying(false);
     }
   }, [open]);
 
+  // Reset isVerifying when error is received (wrong code)
+  useEffect(() => {
+    if (error) {
+      setIsVerifying(false);
+    }
+  }, [error]);
+
   const handleSubmit = (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
 
     if (!verificationCode) {
       setLocalError("Please enter a verification code");
@@ -79,6 +88,7 @@ const SensitiveActionModal = ({
     }
 
     setLocalError("");
+    setIsVerifying(true);
     onVerify(verificationCode, useBackupCode);
   };
 
@@ -87,6 +97,7 @@ const SensitiveActionModal = ({
       setVerificationCode("");
       setUseBackupCode(false);
       setLocalError("");
+      setIsVerifying(false);
       onClose();
     }
   };
@@ -107,6 +118,16 @@ const SensitiveActionModal = ({
 
     setVerificationCode(value);
     setLocalError("");
+
+    // Auto-submit when code is complete
+    const requiredLength = useBackupCode ? 8 : 6;
+    if (value.length === requiredLength && !loading && !isVerifying) {
+      setIsVerifying(true);
+      // Small delay to show the complete code before submitting
+      setTimeout(() => {
+        onVerify(value, useBackupCode);
+      }, 100);
+    }
   };
 
   const toggleBackupCode = () => {

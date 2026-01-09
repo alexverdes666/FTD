@@ -26,9 +26,10 @@ const TwoFactorVerification = ({
   const [verificationCode, setVerificationCode] = useState('');
   const [useBackupCode, setUseBackupCode] = useState(false);
   const [localError, setLocalError] = useState('');
+  const [isVerifying, setIsVerifying] = useState(false);
 
   const handleSubmit = (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
     
     if (!verificationCode) {
       setLocalError('Please enter a verification code');
@@ -41,13 +42,32 @@ const TwoFactorVerification = ({
     }
 
     setLocalError('');
+    setIsVerifying(true);
     onVerify(verificationCode, useBackupCode);
   };
+
+  // Reset isVerifying when error is received (wrong code)
+  React.useEffect(() => {
+    if (error) {
+      setIsVerifying(false);
+    }
+  }, [error]);
+
+  // Reset state when dialog opens
+  React.useEffect(() => {
+    if (open) {
+      setVerificationCode('');
+      setUseBackupCode(false);
+      setLocalError('');
+      setIsVerifying(false);
+    }
+  }, [open]);
 
   const handleClose = () => {
     setVerificationCode('');
     setUseBackupCode(false);
     setLocalError('');
+    setIsVerifying(false);
     onClose();
   };
 
@@ -64,6 +84,16 @@ const TwoFactorVerification = ({
     
     setVerificationCode(value);
     setLocalError('');
+
+    // Auto-submit when code is complete
+    const requiredLength = useBackupCode ? 8 : 6;
+    if (value.length === requiredLength && !loading && !isVerifying) {
+      setIsVerifying(true);
+      // Small delay to show the complete code before submitting
+      setTimeout(() => {
+        onVerify(value, useBackupCode);
+      }, 100);
+    }
   };
 
   const toggleBackupCode = () => {

@@ -30,10 +30,16 @@ const TwoFactorSetup = ({ open, onClose, onSuccess }) => {
   const [verificationCode, setVerificationCode] = useState('');
   const [error, setError] = useState('');
   const [copiedSecret, setCopiedSecret] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
 
   useEffect(() => {
     if (open && !setupData) {
       initiate2FASetup();
+    }
+    if (open) {
+      setVerificationCode('');
+      setError('');
+      setIsVerifying(false);
     }
   }, [open]);
 
@@ -53,9 +59,10 @@ const TwoFactorSetup = ({ open, onClose, onSuccess }) => {
     }
   };
 
-  const handleVerify = async () => {
-    if (!verificationCode || verificationCode.length !== 6) {
+  const handleVerify = async (code = verificationCode) => {
+    if (!code || code.length !== 6) {
       setError('Please enter a valid 6-digit code');
+      setIsVerifying(false);
       return;
     }
 
@@ -63,7 +70,7 @@ const TwoFactorSetup = ({ open, onClose, onSuccess }) => {
     setError('');
     try {
       const response = await api.post('/two-factor/verify-setup', {
-        token: verificationCode
+        token: code
       });
       if (response.data.success) {
         toast.success('2FA enabled successfully!');
@@ -81,6 +88,7 @@ const TwoFactorSetup = ({ open, onClose, onSuccess }) => {
     } catch (err) {
       setError(err.response?.data?.message || 'Invalid verification code');
       toast.error('Invalid verification code');
+      setIsVerifying(false);
     } finally {
       setLoading(false);
     }
@@ -98,6 +106,7 @@ const TwoFactorSetup = ({ open, onClose, onSuccess }) => {
     setVerificationCode('');
     setError('');
     setCopiedSecret(false);
+    setIsVerifying(false);
     onClose();
   };
 
@@ -158,6 +167,15 @@ const TwoFactorSetup = ({ open, onClose, onSuccess }) => {
                 const value = e.target.value.replace(/\D/g, '').slice(0, 6);
                 setVerificationCode(value);
                 setError('');
+
+                // Auto-submit when 6 digits are entered
+                if (value.length === 6 && !loading && !isVerifying) {
+                  setIsVerifying(true);
+                  // Small delay to show the complete code before submitting
+                  setTimeout(() => {
+                    handleVerify(value);
+                  }, 100);
+                }
               }}
               placeholder="000000"
               inputProps={{
@@ -171,6 +189,7 @@ const TwoFactorSetup = ({ open, onClose, onSuccess }) => {
               }}
               sx={{ my: 2 }}
               autoFocus={!!setupData}
+              disabled={loading || isVerifying}
             />
 
             {error && (
@@ -186,15 +205,15 @@ const TwoFactorSetup = ({ open, onClose, onSuccess }) => {
         ) : null}
       </DialogContent>
       <DialogActions>
-        <Button onClick={handleClose} disabled={loading}>
+        <Button onClick={handleClose} disabled={loading || isVerifying}>
           Cancel
         </Button>
         <Button
-          onClick={handleVerify}
+          onClick={() => handleVerify()}
           variant="contained"
-          disabled={loading || !setupData || verificationCode.length !== 6}
+          disabled={loading || isVerifying || !setupData || verificationCode.length !== 6}
         >
-          {loading ? <CircularProgress size={24} /> : 'Enable 2FA'}
+          {(loading || isVerifying) ? <CircularProgress size={24} /> : 'Enable 2FA'}
         </Button>
       </DialogActions>
     </Dialog>
