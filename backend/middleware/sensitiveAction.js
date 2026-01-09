@@ -40,6 +40,9 @@ const SENSITIVE_ACTIONS = {
 
   // System configuration
   SYSTEM_CONFIG_UPDATE: "Update system configuration",
+
+  // Client network operations
+  CLIENT_NETWORK_DELETE: "Delete client network",
 };
 
 /**

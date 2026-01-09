@@ -8,6 +8,9 @@ const {
   deleteClientNetwork,
 } = require("../controllers/clientNetworks");
 const { protect, isAdmin } = require("../middleware/auth");
+const {
+  requireSensitiveActionVerification,
+} = require("../middleware/sensitiveAction");
 
 const router = express.Router();
 
@@ -55,6 +58,10 @@ router.put(
   updateClientNetwork
 );
 
-router.delete("/:id", [protect, isAdmin], deleteClientNetwork);
+router.delete(
+  "/:id",
+  [protect, isAdmin, requireSensitiveActionVerification("CLIENT_NETWORK_DELETE")],
+  deleteClientNetwork
+);
 
 module.exports = router;

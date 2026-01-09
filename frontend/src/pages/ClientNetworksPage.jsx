@@ -39,6 +39,8 @@ import * as yup from "yup";
 import api from "../services/api";
 import { useSelector } from "react-redux";
 import { selectUser } from "../store/slices/authSlice";
+import useSensitiveAction from "../hooks/useSensitiveAction";
+import SensitiveActionModal from "../components/SensitiveActionModal";
 
 const clientNetworkSchema = yup.object({
   name: yup
@@ -54,6 +56,8 @@ const ClientNetworksPage = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
   const user = useSelector(selectUser);
+  const { executeSensitiveAction, sensitiveActionState, resetSensitiveAction } =
+    useSensitiveAction();
 
   const [clientNetworks, setClientNetworks] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -166,20 +170,36 @@ const ClientNetworksPage = () => {
   };
 
   const handleDelete = async (networkId) => {
+    const networkToDelete = clientNetworks.find((n) => n._id === networkId);
+    const networkName = networkToDelete?.name || "this network";
+
     if (
-      !window.confirm("Are you sure you want to delete this client network?")
+      !window.confirm(
+        `Are you sure you want to delete "${networkName}"? This action requires 2FA verification.`
+      )
     ) {
       return;
     }
 
     try {
-      await api.delete(`/client-networks/${networkId}`);
+      // Use sensitive action verification for deleting client networks
+      await executeSensitiveAction({
+        actionName: "Delete Client Network",
+        actionDescription: `This will permanently delete the client network "${networkName}".`,
+        apiCall: async (headers) => {
+          return await api.delete(`/client-networks/${networkId}`, { headers });
+        },
+      });
       setNotification({
         message: "Client network deleted successfully!",
         severity: "success",
       });
       fetchClientNetworks();
     } catch (error) {
+      // Don't show error if user cancelled the action
+      if (error.message === "User cancelled sensitive action") {
+        return;
+      }
       setNotification({
         message:
           error.response?.data?.message || "Failed to delete client network",
@@ -547,6 +567,23 @@ const ClientNetworksPage = () => {
           <Button onClick={() => setOpenViewDialog(false)}>Close</Button>
         </DialogActions>
       </Dialog>
+
+      {/* Sensitive Action 2FA/QR Verification Modal */}
+      <SensitiveActionModal
+        open={sensitiveActionState.showModal}
+        onClose={resetSensitiveAction}
+        onVerify={(code, useBackup) =>
+          sensitiveActionState.handleVerify(code, useBackup)
+        }
+        onQRVerify={(token) => sensitiveActionState.handleQRVerify(token)}
+        actionName={sensitiveActionState.actionName}
+        actionDescription={sensitiveActionState.actionDescription}
+        loading={sensitiveActionState.verifying}
+        error={sensitiveActionState.error}
+        requires2FASetup={sensitiveActionState.requires2FASetup}
+        userId={sensitiveActionState.userId}
+        qrAuthEnabled={sensitiveActionState.qrAuthEnabled}
+      />
     </Box>
   );
 };
