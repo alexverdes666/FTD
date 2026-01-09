@@ -8,8 +8,8 @@ import { toast } from "react-hot-toast";
  * This hook handles the flow of:
  * 1. Attempting the sensitive action
  * 2. Detecting if 2FA is required
- * 3. Prompting user for 2FA code
- * 4. Retrying the action with the 2FA code
+ * 3. Prompting user for 2FA code or QR scan
+ * 4. Retrying the action with the 2FA code or QR verification token
  *
  * Usage:
  * ```jsx
@@ -33,11 +33,14 @@ import { toast } from "react-hot-toast";
  *   open={sensitiveActionState.showModal}
  *   onClose={resetSensitiveAction}
  *   onVerify={(code, useBackup) => sensitiveActionState.handleVerify(code, useBackup)}
+ *   onQRVerify={(token) => sensitiveActionState.handleQRVerify(token)}
  *   actionName={sensitiveActionState.actionName}
  *   actionDescription={sensitiveActionState.actionDescription}
  *   loading={sensitiveActionState.verifying}
  *   error={sensitiveActionState.error}
  *   requires2FASetup={sensitiveActionState.requires2FASetup}
+ *   userId={sensitiveActionState.userId}
+ *   qrAuthEnabled={sensitiveActionState.qrAuthEnabled}
  * />
  * ```
  */
@@ -54,6 +57,9 @@ const useSensitiveAction = () => {
     pendingApiCall: null,
     pendingResolve: null,
     pendingReject: null,
+    // QR Auth states
+    userId: null,
+    qrAuthEnabled: false,
   });
 
   /**
@@ -75,6 +81,8 @@ const useSensitiveAction = () => {
       pendingApiCall: null,
       pendingResolve: null,
       pendingReject: null,
+      userId: null,
+      qrAuthEnabled: false,
     });
   }, [state.pendingReject]);
 
@@ -113,6 +121,8 @@ const useSensitiveAction = () => {
           pendingApiCall: null,
           pendingResolve: null,
           pendingReject: null,
+          userId: null,
+          qrAuthEnabled: false,
         });
 
         if (state.pendingResolve) {
@@ -133,6 +143,63 @@ const useSensitiveAction = () => {
         }));
 
         // Don't reject yet - let user try again
+      }
+    },
+    [state.pendingApiCall, state.pendingResolve]
+  );
+
+  /**
+   * Handle QR verification (when QR session is approved)
+   */
+  const handleQRVerify = useCallback(
+    async (verificationToken) => {
+      if (!state.pendingApiCall) {
+        console.error("No pending API call to verify");
+        return;
+      }
+
+      setState((prev) => ({ ...prev, verifying: true, error: "" }));
+
+      try {
+        // Build headers with QR verification token
+        const headers = {
+          "X-QR-Verification-Token": verificationToken,
+        };
+
+        // Execute the API call with QR verification header
+        const result = await state.pendingApiCall(headers);
+
+        // Success - close modal and resolve promise
+        setState({
+          showModal: false,
+          actionName: "",
+          actionDescription: "",
+          verifying: false,
+          error: "",
+          requires2FASetup: false,
+          pendingApiCall: null,
+          pendingResolve: null,
+          pendingReject: null,
+          userId: null,
+          qrAuthEnabled: false,
+        });
+
+        if (state.pendingResolve) {
+          state.pendingResolve(result);
+        }
+
+        toast.success("Action verified and completed successfully");
+      } catch (error) {
+        const errorMessage =
+          error.response?.data?.message ||
+          error.message ||
+          "QR Verification failed. Please try again.";
+
+        setState((prev) => ({
+          ...prev,
+          verifying: false,
+          error: errorMessage,
+        }));
       }
     },
     [state.pendingApiCall, state.pendingResolve]
@@ -179,6 +246,8 @@ const useSensitiveAction = () => {
               pendingApiCall: apiCall,
               pendingResolve: resolve,
               pendingReject: reject,
+              userId: user?._id || user?.id || null,
+              qrAuthEnabled: user?.qrAuthEnabled || false,
             });
           });
         }
@@ -195,6 +264,8 @@ const useSensitiveAction = () => {
             pendingApiCall: apiCall,
             pendingResolve: resolve,
             pendingReject: reject,
+            userId: user?._id || user?.id || null,
+            qrAuthEnabled: user?.qrAuthEnabled || false,
           });
         });
       }
@@ -209,6 +280,7 @@ const useSensitiveAction = () => {
     sensitiveActionState: {
       ...state,
       handleVerify,
+      handleQRVerify,
     },
     resetSensitiveAction,
   };

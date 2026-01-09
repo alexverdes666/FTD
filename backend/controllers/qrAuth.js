@@ -1,4 +1,5 @@
 const QRLoginSession = require("../models/QRLoginSession");
+const QRSensitiveActionSession = require("../models/QRSensitiveActionSession");
 const User = require("../models/User");
 const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
@@ -650,5 +651,429 @@ exports.checkQRAuthEnabled = async (req, res, next) => {
   } catch (error) {
     console.error("Error checking QR auth status:", error);
     next(error);
+  }
+};
+
+// ========================================
+// SENSITIVE ACTION QR AUTHENTICATION
+// ========================================
+
+/**
+ * Create a QR session for sensitive action verification
+ * POST /api/qr-auth/create-sensitive-action-session
+ */
+exports.createSensitiveActionSession = async (req, res, next) => {
+  try {
+    const { userId, actionType } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: "User ID is required",
+      });
+    }
+
+    // Verify user exists and has QR auth enabled
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    if (!user.qrAuthEnabled) {
+      return res.status(400).json({
+        success: false,
+        message: "QR authentication is not enabled for this user",
+      });
+    }
+
+    // Create a new sensitive action session
+    const loginIP = getClientIP(req);
+    const loginUserAgent = req.headers["user-agent"] || "Unknown";
+
+    const session = await QRSensitiveActionSession.createSession(
+      userId,
+      actionType || "Sensitive Action",
+      loginIP,
+      loginUserAgent
+    );
+
+    // Generate the QR code URL - this will be the URL the phone scans
+    const baseUrl = process.env.FRONTEND_URL || "https://ftdm2.com";
+    const qrUrl = `${baseUrl}/qr-approve-action/${session.sessionToken}`;
+
+    res.status(200).json({
+      success: true,
+      data: {
+        sessionToken: session.sessionToken,
+        qrUrl,
+        expiresAt: session.expiresAt,
+      },
+    });
+  } catch (error) {
+    console.error("Error creating sensitive action QR session:", error);
+    next(error);
+  }
+};
+
+/**
+ * Check sensitive action session status (polling endpoint)
+ * GET /api/qr-auth/sensitive-action-status/:sessionToken
+ */
+exports.checkSensitiveActionStatus = async (req, res, next) => {
+  try {
+    const { sessionToken } = req.params;
+
+    const session = await QRSensitiveActionSession.findOne({ sessionToken });
+
+    if (!session) {
+      return res.status(404).json({
+        success: false,
+        message: "Session not found",
+      });
+    }
+
+    // Check if expired
+    if (session.expiresAt < new Date()) {
+      return res.status(200).json({
+        success: true,
+        data: {
+          status: "expired",
+          message: "Session has expired",
+        },
+      });
+    }
+
+    if (session.status === "approved") {
+      return res.status(200).json({
+        success: true,
+        data: {
+          status: "approved",
+          verificationToken: session.verificationToken,
+          message: "Action approved",
+        },
+      });
+    }
+
+    if (session.status === "rejected") {
+      return res.status(200).json({
+        success: true,
+        data: {
+          status: "rejected",
+          message: "Action was rejected",
+        },
+      });
+    }
+
+    // Still pending
+    res.status(200).json({
+      success: true,
+      data: {
+        status: "pending",
+        expiresAt: session.expiresAt,
+      },
+    });
+  } catch (error) {
+    console.error("Error checking sensitive action session status:", error);
+    next(error);
+  }
+};
+
+/**
+ * Get sensitive action session details (for mobile approval page)
+ * GET /api/qr-auth/sensitive-action/:sessionToken
+ */
+exports.getSensitiveActionDetails = async (req, res, next) => {
+  try {
+    const { sessionToken } = req.params;
+    const { deviceId, deviceInfo } = req.query;
+
+    const session = await QRSensitiveActionSession.findOne({ sessionToken }).populate(
+      "userId",
+      "email fullName"
+    );
+
+    if (!session) {
+      return res.status(404).json({
+        success: false,
+        message: "Session not found or expired",
+      });
+    }
+
+    // Check if expired
+    if (session.expiresAt < new Date()) {
+      return res.status(400).json({
+        success: false,
+        message: "Session has expired",
+      });
+    }
+
+    // Check if already resolved
+    if (session.status !== "pending") {
+      return res.status(400).json({
+        success: false,
+        message: `Session has already been ${session.status}`,
+      });
+    }
+
+    // If deviceId/deviceInfo provided, attempt auto-approval
+    if (deviceId) {
+      const user = await User.findById(
+        session.userId._id || session.userId
+      ).select("+qrAuthDeviceId qrAuthDeviceInfo qrAuthEnabled");
+
+      if (user && user.qrAuthEnabled) {
+        const deviceIdMatches = user.qrAuthDeviceId === deviceId;
+        const storedInfoLower = user.qrAuthDeviceInfo?.toLowerCase() || "";
+        const providedInfoLower = deviceInfo?.toLowerCase() || "";
+        const deviceInfoMatches =
+          deviceInfo &&
+          user.qrAuthDeviceInfo &&
+          (storedInfoLower.includes(providedInfoLower) ||
+            providedInfoLower.includes(storedInfoLower) ||
+            storedInfoLower === providedInfoLower);
+
+        if (deviceIdMatches || deviceInfoMatches) {
+          // Auto-approve the session
+          await session.approve(deviceId, deviceInfo);
+
+          if (!deviceIdMatches && deviceInfoMatches) {
+            await User.findByIdAndUpdate(user._id, {
+              qrAuthDeviceId: deviceId,
+            });
+          }
+
+          console.log(
+            `✅ QR Auth: Auto-approved sensitive action for ${user.email} from device ${
+              deviceInfo || deviceId.substring(0, 8) + "..."
+            }`
+          );
+
+          return res.status(200).json({
+            success: true,
+            autoApproved: true,
+            message: "Action automatically approved - device recognized",
+            data: {
+              sessionToken: session.sessionToken,
+              actionType: session.actionType,
+              user: {
+                email: session.userId.email,
+                fullName: session.userId.fullName,
+              },
+            },
+          });
+        }
+      }
+    }
+
+    // Return session details for manual approval
+    res.status(200).json({
+      success: true,
+      data: {
+        sessionToken: session.sessionToken,
+        actionType: session.actionType,
+        user: {
+          email: session.userId.email,
+          fullName: session.userId.fullName,
+        },
+        loginIP: session.requestIP,
+        loginUserAgent: session.requestUserAgent,
+        expiresAt: session.expiresAt,
+        createdAt: session.createdAt,
+      },
+    });
+  } catch (error) {
+    console.error("Error getting sensitive action session details:", error);
+    next(error);
+  }
+};
+
+/**
+ * Approve a sensitive action session from mobile device
+ * POST /api/qr-auth/approve-sensitive-action
+ */
+exports.approveSensitiveAction = async (req, res, next) => {
+  try {
+    const { sessionToken, deviceId, deviceInfo } = req.body;
+
+    if (!sessionToken || !deviceId) {
+      return res.status(400).json({
+        success: false,
+        message: "Session token and device ID are required",
+      });
+    }
+
+    const session = await QRSensitiveActionSession.findValidSession(sessionToken);
+    if (!session) {
+      return res.status(404).json({
+        success: false,
+        message: "Session not found, expired, or already resolved",
+      });
+    }
+
+    const user = await User.findById(session.userId).select(
+      "+qrAuthDeviceId qrAuthDeviceInfo"
+    );
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    // Check if device is registered
+    if (!user.qrAuthDeviceId && !user.qrAuthDeviceInfo) {
+      return res.status(403).json({
+        success: false,
+        message: "No device is registered for QR authentication.",
+        requiresRegistration: true,
+      });
+    }
+
+    // Check device match
+    const deviceIdMatches = user.qrAuthDeviceId === deviceId;
+    const storedInfoLower = user.qrAuthDeviceInfo?.toLowerCase() || "";
+    const providedInfoLower = deviceInfo?.toLowerCase() || "";
+    const deviceInfoMatches =
+      deviceInfo &&
+      user.qrAuthDeviceInfo &&
+      (storedInfoLower.includes(providedInfoLower) ||
+        providedInfoLower.includes(storedInfoLower) ||
+        storedInfoLower === providedInfoLower);
+
+    if (!deviceIdMatches && !deviceInfoMatches) {
+      console.warn(
+        `⚠️ QR Auth: Device mismatch for sensitive action by ${user.email}`
+      );
+      return res.status(403).json({
+        success: false,
+        message: "This device is not authorized. Only your registered device can approve.",
+      });
+    }
+
+    if (!deviceIdMatches && deviceInfoMatches) {
+      await User.findByIdAndUpdate(user._id, { qrAuthDeviceId: deviceId });
+    }
+
+    // Approve the session
+    await session.approve(deviceId, deviceInfo);
+
+    console.log(
+      `✅ QR Auth: Sensitive action "${session.actionType}" approved for ${user.email}`
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "Action approved successfully",
+    });
+  } catch (error) {
+    console.error("Error approving sensitive action:", error);
+    next(error);
+  }
+};
+
+/**
+ * Reject a sensitive action session from mobile device
+ * POST /api/qr-auth/reject-sensitive-action
+ */
+exports.rejectSensitiveAction = async (req, res, next) => {
+  try {
+    const { sessionToken, deviceId, deviceInfo } = req.body;
+
+    if (!sessionToken || !deviceId) {
+      return res.status(400).json({
+        success: false,
+        message: "Session token and device ID are required",
+      });
+    }
+
+    const session = await QRSensitiveActionSession.findValidSession(sessionToken);
+    if (!session) {
+      return res.status(404).json({
+        success: false,
+        message: "Session not found, expired, or already resolved",
+      });
+    }
+
+    const user = await User.findById(session.userId).select(
+      "+qrAuthDeviceId qrAuthDeviceInfo"
+    );
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    // Check device match
+    const deviceIdMatches = user.qrAuthDeviceId === deviceId;
+    const storedInfoLower = user.qrAuthDeviceInfo?.toLowerCase() || "";
+    const providedInfoLower = deviceInfo?.toLowerCase() || "";
+    const deviceInfoMatches =
+      deviceInfo &&
+      user.qrAuthDeviceInfo &&
+      (storedInfoLower.includes(providedInfoLower) ||
+        providedInfoLower.includes(storedInfoLower) ||
+        storedInfoLower === providedInfoLower);
+
+    if (user.qrAuthDeviceId && !deviceIdMatches && !deviceInfoMatches) {
+      return res.status(403).json({
+        success: false,
+        message: "Only the registered device can reject actions",
+      });
+    }
+
+    // Reject the session
+    await session.reject("User rejected from mobile");
+
+    console.log(`❌ QR Auth: Sensitive action "${session.actionType}" rejected for ${user.email}`);
+
+    res.status(200).json({
+      success: true,
+      message: "Action rejected",
+    });
+  } catch (error) {
+    console.error("Error rejecting sensitive action:", error);
+    next(error);
+  }
+};
+
+/**
+ * Validate a QR verification token (used by sensitive action middleware)
+ * This is an internal function, not an API endpoint
+ */
+exports.validateQRVerificationToken = async (token, userId) => {
+  try {
+    const session = await QRSensitiveActionSession.findOne({
+      verificationToken: token,
+      userId: userId,
+      status: "approved",
+    });
+
+    if (!session) {
+      return { valid: false, reason: "Token not found or not approved" };
+    }
+
+    // Check if token has expired (verification tokens are valid for 5 minutes after approval)
+    const tokenExpiresAt = new Date(session.resolvedAt.getTime() + 5 * 60 * 1000);
+    if (tokenExpiresAt < new Date()) {
+      return { valid: false, reason: "Verification token has expired" };
+    }
+
+    // Check if token has already been used
+    if (session.tokenUsed) {
+      return { valid: false, reason: "Verification token has already been used" };
+    }
+
+    // Mark token as used
+    session.tokenUsed = true;
+    await session.save();
+
+    return { valid: true, session };
+  } catch (error) {
+    console.error("Error validating QR verification token:", error);
+    return { valid: false, reason: "Validation error" };
   }
 };

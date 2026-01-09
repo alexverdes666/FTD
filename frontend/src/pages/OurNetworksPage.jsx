@@ -2020,11 +2020,14 @@ const OurNetworksPage = () => {
         open={sensitiveActionState.showModal}
         onClose={resetSensitiveAction}
         onVerify={sensitiveActionState.handleVerify}
+        onQRVerify={sensitiveActionState.handleQRVerify}
         actionName={sensitiveActionState.actionName}
         actionDescription={sensitiveActionState.actionDescription}
         loading={sensitiveActionState.verifying}
         error={sensitiveActionState.error}
         requires2FASetup={sensitiveActionState.requires2FASetup}
+        userId={sensitiveActionState.userId}
+        qrAuthEnabled={sensitiveActionState.qrAuthEnabled}
       />
     </Box>
   );

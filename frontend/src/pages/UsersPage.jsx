@@ -1165,11 +1165,14 @@ const UsersPage = () => {
         onVerify={(code, useBackup) =>
           sensitiveActionState.handleVerify(code, useBackup)
         }
+        onQRVerify={(token) => sensitiveActionState.handleQRVerify(token)}
         actionName={sensitiveActionState.actionName}
         actionDescription={sensitiveActionState.actionDescription}
         loading={sensitiveActionState.verifying}
         error={sensitiveActionState.error}
         requires2FASetup={sensitiveActionState.requires2FASetup}
+        userId={sensitiveActionState.userId}
+        qrAuthEnabled={sensitiveActionState.qrAuthEnabled}
       />
       <Dialog
         open={dialogState.type === "delete"}

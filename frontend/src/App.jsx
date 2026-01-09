@@ -72,6 +72,7 @@ import DepositCallsPage from "./pages/DepositCallsPage.jsx";
 import NotesPage from "./pages/NotesPage.jsx";
 import PerformancePage from "./pages/PerformancePage.jsx";
 import MobileApprovalPage from "./pages/MobileApprovalPage.jsx";
+import MobileActionApprovalPage from "./pages/MobileActionApprovalPage.jsx";
 import QRSetupPage from "./pages/QRSetupPage.jsx";
 
 import GlobalPen from "./components/GlobalPen.jsx";
@@ -358,6 +359,11 @@ function AppContent() {
           <Route
             path="/qr-approve/:sessionToken"
             element={<MobileApprovalPage />}
+          />
+          {/* QR Code Sensitive Action Approval - Public route for phone */}
+          <Route
+            path="/qr-approve-action/:sessionToken"
+            element={<MobileActionApprovalPage />}
           />
           {/* QR Code Device Setup - Public route for phone */}
           <Route

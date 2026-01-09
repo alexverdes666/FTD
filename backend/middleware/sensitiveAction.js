@@ -2,6 +2,7 @@ const speakeasy = require("speakeasy");
 const User = require("../models/User");
 const { decrypt } = require("../utils/encryption");
 const SensitiveActionAuditLog = require("../models/SensitiveActionAuditLog");
+const { validateQRVerificationToken } = require("../controllers/qrAuth");
 
 /**
  * Sensitive Action Verification Middleware
@@ -115,9 +116,10 @@ const requireSensitiveActionVerification = (actionType, options = {}) => {
       const userEmail = req.user.email;
       const actionDescription = SENSITIVE_ACTIONS[actionType] || actionType;
 
-      // Get 2FA codes from headers
+      // Get verification codes from headers
       const totpCode = req.headers["x-2fa-code"];
       const backupCode = req.headers["x-2fa-backup-code"];
+      const qrVerificationToken = req.headers["x-qr-verification-token"];
 
       // Fetch user with 2FA secrets
       const user = await User.findById(userId).select(
@@ -177,8 +179,8 @@ const requireSensitiveActionVerification = (actionType, options = {}) => {
         return next();
       }
 
-      // 2FA is enabled - verify the code
-      if (!totpCode && !backupCode) {
+      // 2FA is enabled - verify the code (TOTP, backup code, or QR verification token)
+      if (!totpCode && !backupCode && !qrVerificationToken) {
         await logSensitiveAction({
           userId,
           userEmail,
@@ -204,7 +206,18 @@ const requireSensitiveActionVerification = (actionType, options = {}) => {
       let verified = false;
       let verificationMethod = "totp";
 
-      if (backupCode) {
+      // Check QR verification token first (if provided)
+      if (qrVerificationToken) {
+        verificationMethod = "qr";
+        const qrValidation = await validateQRVerificationToken(qrVerificationToken, userId);
+        
+        if (qrValidation.valid) {
+          verified = true;
+          console.log(`✅ QR Auth: Sensitive action verified via QR token for ${userEmail}`);
+        } else {
+          console.warn(`⚠️ QR Auth: Invalid verification token for ${userEmail}: ${qrValidation.reason}`);
+        }
+      } else if (backupCode) {
         // Verify backup code
         verificationMethod = "backup";
         const bcrypt = require("bcryptjs");

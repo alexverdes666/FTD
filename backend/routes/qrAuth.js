@@ -11,8 +11,18 @@ const {
   enableQRAuth,
   getStatus,
   disableQRAuth,
-  checkQRAuthEnabled
+  checkQRAuthEnabled,
+  // Sensitive action QR auth
+  createSensitiveActionSession,
+  checkSensitiveActionStatus,
+  getSensitiveActionDetails,
+  approveSensitiveAction,
+  rejectSensitiveAction,
 } = require('../controllers/qrAuth');
+
+// ========================================
+// LOGIN QR AUTH ROUTES
+// ========================================
 
 // Public routes (no auth required)
 // Create a new QR login session
@@ -45,5 +55,24 @@ router.post('/enable', protect, enableQRAuth);
 
 // Disable QR auth
 router.post('/disable', protect, disableQRAuth);
+
+// ========================================
+// SENSITIVE ACTION QR AUTH ROUTES
+// ========================================
+
+// Create a QR session for sensitive action verification
+router.post('/create-sensitive-action-session', createSensitiveActionSession);
+
+// Check sensitive action session status (polling from desktop)
+router.get('/sensitive-action-status/:sessionToken', checkSensitiveActionStatus);
+
+// Get sensitive action session details (for mobile approval page)
+router.get('/sensitive-action/:sessionToken', getSensitiveActionDetails);
+
+// Approve a sensitive action (from mobile)
+router.post('/approve-sensitive-action', approveSensitiveAction);
+
+// Reject a sensitive action (from mobile)
+router.post('/reject-sensitive-action', rejectSensitiveAction);
 
 module.exports = router;
