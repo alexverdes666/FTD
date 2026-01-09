@@ -3211,6 +3211,10 @@ exports.getOrderById = async (req, res, next) => {
             path: "clientBrokerHistory.clientBroker",
             select: "name domain description",
           },
+          {
+            path: "clientNetworkHistory.clientNetwork",
+            select: "name description",
+          },
         ],
       });
     } else {

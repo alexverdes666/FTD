@@ -43,6 +43,7 @@ import {
   ToggleButtonGroup,
   Divider,
   alpha,
+  Link,
 } from "@mui/material";
 import {
   Add as AddIcon,
@@ -68,6 +69,7 @@ import {
   ChevronLeft as ChevronLeftIcon,
   ChevronRight as ChevronRightIcon,
   Search as SearchIcon,
+  Image as ImageIcon,
 } from "@mui/icons-material";
 import { useForm, Controller } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
@@ -77,6 +79,7 @@ import notificationService from "../services/notificationService";
 import { selectUser } from "../store/slices/authSlice";
 import { getSortedCountries } from "../constants/countries";
 import LeadQuickView from "../components/LeadQuickView";
+import DocumentPreview from "../components/DocumentPreview";
 import ChangeFTDDialog from "../components/ChangeFTDDialog";
 import AssignLeadToAgentDialog from "../components/AssignLeadToAgentDialog";
 import SessionAccessButton from "../components/SessionAccessButton";
@@ -4089,9 +4092,10 @@ const OrdersPage = () => {
                               />
                             )}
                             renderTags={(tagValue, getTagProps) =>
-                              tagValue.map((option, index) => (
-                                <Chip label={option.name} {...getTagProps({ index })} size="small" />
-                              ))
+                              tagValue.map((option, index) => {
+                                const { key, ...chipProps } = getTagProps({ index });
+                                return <Chip key={key} label={option.name} {...chipProps} size="small" />;
+                              })
                             }
                           />
                         )}
@@ -5380,8 +5384,11 @@ const OrdersPage = () => {
       <Dialog
         open={leadsPreviewModal.open}
         onClose={handleCloseLeadsPreviewModal}
-        maxWidth="md"
+        maxWidth="xl"
         fullWidth
+        PaperProps={{
+          sx: { maxHeight: '90vh' }
+        }}
       >
         <DialogTitle>
           <Box
@@ -5401,31 +5408,56 @@ const OrdersPage = () => {
             </IconButton>
           </Box>
         </DialogTitle>
-        <DialogContent dividers>
-          <TableContainer>
-            <Table size="small">
+        <DialogContent dividers sx={{ p: 1, overflow: 'auto' }}>
+          <TableContainer sx={{ maxHeight: 'calc(90vh - 180px)', overflow: 'auto' }}>
+            <Table size="small" stickyHeader sx={{ tableLayout: 'auto', minWidth: 900 }}>
               <TableHead>
                 <TableRow>
                   <TableCell
-                    sx={{ fontWeight: "bold", backgroundColor: "grey.100" }}
+                    sx={{ fontWeight: "bold", backgroundColor: "grey.100", whiteSpace: "nowrap", py: 0.5, px: 1, fontSize: "0.75rem" }}
                   >
-                    Lead Name
+                    Name
                   </TableCell>
                   <TableCell
-                    sx={{ fontWeight: "bold", backgroundColor: "grey.100" }}
+                    sx={{ fontWeight: "bold", backgroundColor: "grey.100", whiteSpace: "nowrap", py: 0.5, px: 1, fontSize: "0.75rem" }}
                   >
-                    Assigned Agent
+                    Phone
                   </TableCell>
                   <TableCell
-                    sx={{ fontWeight: "bold", backgroundColor: "grey.100" }}
+                    sx={{ fontWeight: "bold", backgroundColor: "grey.100", whiteSpace: "nowrap", py: 0.5, px: 1, fontSize: "0.75rem" }}
                   >
-                    Client Broker
+                    Email
+                  </TableCell>
+                  <TableCell
+                    sx={{ fontWeight: "bold", backgroundColor: "grey.100", whiteSpace: "nowrap", py: 0.5, px: 1, fontSize: "0.75rem" }}
+                  >
+                    Agent
+                  </TableCell>
+                  <TableCell
+                    sx={{ fontWeight: "bold", backgroundColor: "grey.100", whiteSpace: "nowrap", textAlign: "center", py: 0.5, px: 0.5, fontSize: "0.75rem" }}
+                  >
+                    ID Front
+                  </TableCell>
+                  <TableCell
+                    sx={{ fontWeight: "bold", backgroundColor: "grey.100", whiteSpace: "nowrap", textAlign: "center", py: 0.5, px: 0.5, fontSize: "0.75rem" }}
+                  >
+                    ID Back
+                  </TableCell>
+                  <TableCell
+                    sx={{ fontWeight: "bold", backgroundColor: "grey.100", whiteSpace: "nowrap", textAlign: "center", py: 0.5, px: 0.5, fontSize: "0.75rem" }}
+                  >
+                    Selfie
+                  </TableCell>
+                  <TableCell
+                    sx={{ fontWeight: "bold", backgroundColor: "grey.100", whiteSpace: "nowrap", py: 0.5, px: 1, fontSize: "0.75rem" }}
+                  >
+                    Broker
                   </TableCell>
                   {user.role === "admin" && (
                     <TableCell
-                      sx={{ fontWeight: "bold", backgroundColor: "grey.100" }}
+                      sx={{ fontWeight: "bold", backgroundColor: "grey.100", whiteSpace: "nowrap", py: 0.5, px: 0.5, fontSize: "0.75rem" }}
                     >
-                      Actions
+                      
                     </TableCell>
                   )}
                 </TableRow>
@@ -5434,10 +5466,10 @@ const OrdersPage = () => {
                 {leadsPreviewModal.leads.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={user.role === "admin" ? 4 : 3}
+                      colSpan={user.role === "admin" ? 9 : 8}
                       align="center"
                     >
-                      <Typography color="text.secondary">
+                      <Typography color="text.secondary" variant="body2">
                         No leads found
                       </Typography>
                     </TableCell>
@@ -5445,9 +5477,22 @@ const OrdersPage = () => {
                 ) : (
                   leadsPreviewModal.leads.map((lead, index) => {
                     const leadType = getDisplayLeadType(lead);
+                    // Extract document URLs from documents array
+                    const documents = lead.documents || [];
+                    const idFrontDoc = documents.find(
+                      (doc) => doc.description?.toLowerCase().includes("id front") && !doc.description?.toLowerCase().includes("selfie")
+                    );
+                    const idBackDoc = documents.find(
+                      (doc) => doc.description?.toLowerCase().includes("id back") && !doc.description?.toLowerCase().includes("selfie")
+                    );
+                    const selfieDoc = documents.find(
+                      (doc) => doc.description?.toLowerCase().includes("selfie")
+                    );
+                    
                     return (
-                      <TableRow key={lead._id || index} hover>
-                        <TableCell sx={{ pl: 0.5 }}>
+                      <TableRow key={lead._id || index} hover sx={{ '& td': { py: 0.5 } }}>
+                        {/* Name */}
+                        <TableCell sx={{ py: 0.5, px: 1 }}>
                           <Box
                             sx={{
                               display: "flex",
@@ -5468,35 +5513,85 @@ const OrdersPage = () => {
                                   : "default"
                               }
                               sx={{
-                                height: 20,
-                                fontSize: "0.65rem",
+                                height: 18,
+                                fontSize: "0.6rem",
                                 "& .MuiChip-label": {
                                   padding: "0 4px",
                                 },
                               }}
                             />
-                            <Typography variant="body2">
+                            <Typography variant="body2" sx={{ whiteSpace: "nowrap", fontSize: "0.75rem" }}>
                               {lead.firstName} {lead.lastName}
                             </Typography>
                           </Box>
                         </TableCell>
-                        <TableCell>
-                          {lead.assignedAgent?.fullName || "-"}
+                        {/* Phone */}
+                        <TableCell sx={{ py: 0.5, px: 1 }}>
+                          <Typography variant="body2" sx={{ whiteSpace: "nowrap", fontSize: "0.75rem" }}>
+                            {lead.newPhone || lead.phone || "-"}
+                          </Typography>
                         </TableCell>
-                        <TableCell>
-                          {lead.assignedClientBrokers?.[0]?.name ||
-                            lead.clientBroker ||
-                            "-"}
+                        {/* Email */}
+                        <TableCell sx={{ py: 0.5, px: 1 }}>
+                          <Typography variant="body2" sx={{ fontSize: "0.7rem", maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis" }}>
+                            {lead.newEmail || lead.email || "-"}
+                          </Typography>
                         </TableCell>
+                        {/* Assigned Agent */}
+                        <TableCell sx={{ py: 0.5, px: 1 }}>
+                          <Typography variant="body2" sx={{ whiteSpace: "nowrap", fontSize: "0.75rem" }}>
+                            {lead.assignedAgent?.fullName || "-"}
+                          </Typography>
+                        </TableCell>
+                        {/* ID Front */}
+                        <TableCell align="center" sx={{ py: 0.5, px: 0.5 }}>
+                          {idFrontDoc?.url ? (
+                            <DocumentPreview url={idFrontDoc.url} type="ID Front" forceImage>
+                              <ImageIcon sx={{ fontSize: 16, color: 'primary.main', cursor: 'pointer' }} />
+                            </DocumentPreview>
+                          ) : (
+                            <Typography variant="body2" color="text.secondary" sx={{ fontSize: "0.75rem" }}>-</Typography>
+                          )}
+                        </TableCell>
+                        {/* ID Back */}
+                        <TableCell align="center" sx={{ py: 0.5, px: 0.5 }}>
+                          {idBackDoc?.url ? (
+                            <DocumentPreview url={idBackDoc.url} type="ID Back" forceImage>
+                              <ImageIcon sx={{ fontSize: 16, color: 'primary.main', cursor: 'pointer' }} />
+                            </DocumentPreview>
+                          ) : (
+                            <Typography variant="body2" color="text.secondary" sx={{ fontSize: "0.75rem" }}>-</Typography>
+                          )}
+                        </TableCell>
+                        {/* Selfie */}
+                        <TableCell align="center" sx={{ py: 0.5, px: 0.5 }}>
+                          {selfieDoc?.url ? (
+                            <DocumentPreview url={selfieDoc.url} type="Selfie" forceImage>
+                              <ImageIcon sx={{ fontSize: 16, color: 'primary.main', cursor: 'pointer' }} />
+                            </DocumentPreview>
+                          ) : (
+                            <Typography variant="body2" color="text.secondary" sx={{ fontSize: "0.75rem" }}>-</Typography>
+                          )}
+                        </TableCell>
+                        {/* Client Broker */}
+                        <TableCell sx={{ py: 0.5, px: 1 }}>
+                          <Typography variant="body2" sx={{ whiteSpace: "nowrap", fontSize: "0.75rem" }}>
+                            {lead.assignedClientBrokers?.[0]?.name ||
+                              lead.clientBroker ||
+                              "-"}
+                          </Typography>
+                        </TableCell>
+                        {/* Actions */}
                         {user.role === "admin" && (
-                          <TableCell>
+                          <TableCell sx={{ py: 0.5, px: 0.5 }}>
                             <IconButton
                               size="small"
                               color="error"
                               onClick={() => handleCancelLead(lead._id)}
                               title="Remove from order"
+                              sx={{ p: 0.25 }}
                             >
-                              <DeleteIcon fontSize="small" />
+                              <DeleteIcon sx={{ fontSize: 18 }} />
                             </IconButton>
                           </TableCell>
                         )}
