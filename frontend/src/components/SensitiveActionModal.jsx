@@ -62,10 +62,11 @@ const SensitiveActionModal = ({
     }
   }, [open]);
 
-  // Reset isVerifying when error is received (wrong code)
+  // Reset and clear code when error is received (wrong code)
   useEffect(() => {
     if (error) {
       setIsVerifying(false);
+      setVerificationCode("");
     }
   }, [error]);
 
@@ -240,7 +241,6 @@ const SensitiveActionModal = ({
             }}
             sx={{ my: 2 }}
             autoFocus
-            disabled={loading}
           />
 
           {(error || localError) && (

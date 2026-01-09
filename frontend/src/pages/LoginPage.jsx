@@ -58,6 +58,12 @@ const LoginPage = () => {
   useEffect(() => {
     // Show appropriate dialog when 2FA is required
     if (requires2FA && twoFactorUserId) {
+      // Blur the currently focused element so the dialog can receive focus
+      // This fixes the issue where pressing Enter keeps focus on the login input
+      if (document.activeElement instanceof HTMLElement) {
+        document.activeElement.blur();
+      }
+      
       if (useQRAuth) {
         // User has QR auth enabled - show QR code dialog
         setShowQRDialog(true);

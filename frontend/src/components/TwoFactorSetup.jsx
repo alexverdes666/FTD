@@ -89,6 +89,7 @@ const TwoFactorSetup = ({ open, onClose, onSuccess }) => {
       setError(err.response?.data?.message || 'Invalid verification code');
       toast.error('Invalid verification code');
       setIsVerifying(false);
+      setVerificationCode('');
     } finally {
       setLoading(false);
     }
@@ -189,7 +190,6 @@ const TwoFactorSetup = ({ open, onClose, onSuccess }) => {
               }}
               sx={{ my: 2 }}
               autoFocus={!!setupData}
-              disabled={loading || isVerifying}
             />
 
             {error && (
