@@ -5,7 +5,7 @@ import React, {
   useMemo,
   useRef,
 } from "react";
-import { useSelector } from "react-redux";
+import { useSelector, useDispatch } from "react-redux";
 import { useSearchParams } from "react-router-dom";
 import { useForm, Controller } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
@@ -93,6 +93,19 @@ import AssignLeadToAgentDialog from "../components/AssignLeadToAgentDialog";
 
 import api from "../services/api";
 import { selectUser } from "../store/slices/authSlice";
+import {
+  selectLeads,
+  selectTotalLeads,
+  selectLeadsLoading,
+  selectLeadsBackgroundRefresh,
+  setLeads,
+  startLoading,
+  startBackgroundRefresh,
+  setError as setLeadsError,
+  isCacheValid,
+  updateLeadInCache,
+  removeLeadFromCache,
+} from "../store/slices/leadsSlice";
 import { getSortedCountries } from "../constants/countries";
 import ImportLeadsDialog from "../components/ImportLeadsDialog";
 import EditLeadForm from "../components/EditLeadForm";
@@ -1161,12 +1174,22 @@ const LeadDetails = React.memo(({ lead }) => (
 ));
 
 const LeadsPage = () => {
+  const dispatch = useDispatch();
   const user = useSelector(selectUser);
   const [searchParams, setSearchParams] = useSearchParams();
-  const [loading, setLoading] = useState(true);
+
+  // Use Redux state for leads (persisted for instant loading)
+  const leads = useSelector(selectLeads);
+  const totalLeads = useSelector(selectTotalLeads);
+  const reduxLoading = useSelector(selectLeadsLoading);
+  const isBackgroundRefresh = useSelector(selectLeadsBackgroundRefresh);
+  const reduxState = useSelector((state) => state.leads);
+
+  // Show loading only when we have no cached data
+  const loading = reduxLoading && leads.length === 0;
+
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
-  const [leads, setLeads] = useState([]);
   const [agents, setAgents] = useState([]);
   const [orders, setOrders] = useState([]);
   const [commentDialogOpen, setCommentDialogOpen] = useState(false);
@@ -1200,7 +1223,7 @@ const LeadsPage = () => {
   });
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(50);
-  const [totalLeads, setTotalLeads] = useState(0);
+  // totalLeads comes from Redux selector (see above)
   // Initialize filters from URL params (for global search integration)
   const [filters, setFilters] = useState(() => {
     const urlSearch = searchParams.get("search") || "";
@@ -1325,8 +1348,19 @@ const LeadsPage = () => {
   );
 
   const fetchLeads = useCallback(async () => {
-    setLoading(true);
     setError(null);
+
+    // Check if we have valid cached data for this exact request
+    const cacheValid = isCacheValid(reduxState, page, rowsPerPage, filters);
+
+    if (cacheValid) {
+      // Cache hit: show cached data immediately, fetch fresh data in background
+      dispatch(startBackgroundRefresh());
+    } else {
+      // Cache miss: show loading only if we have no data to show
+      dispatch(startLoading());
+    }
+
     try {
       const params = new URLSearchParams({
         page: page + 1,
@@ -1342,8 +1376,17 @@ const LeadsPage = () => {
         throw new Error(response.data.message || "Failed to fetch leads");
       }
       const leadsData = response.data.data;
-      setLeads(leadsData);
-      setTotalLeads(response.data.pagination.totalLeads);
+
+      // Update Redux store with fresh data
+      dispatch(
+        setLeads({
+          leads: leadsData,
+          totalLeads: response.data.pagination.totalLeads,
+          page,
+          rowsPerPage,
+          filters,
+        })
+      );
 
       // Fetch pending requests for agents
       if (isAgent && leadsData.length > 0) {
@@ -1355,8 +1398,7 @@ const LeadsPage = () => {
         err.message ||
         "An unexpected error occurred.";
       setError(errorMessage);
-    } finally {
-      setLoading(false);
+      dispatch(setLeadsError(errorMessage));
     }
   }, [
     page,
@@ -1367,6 +1409,8 @@ const LeadsPage = () => {
     isLeadManager,
     isAgent,
     fetchPendingRequests,
+    dispatch,
+    reduxState,
   ]);
   const fetchAgents = useCallback(async () => {
     try {
@@ -1532,28 +1576,8 @@ const LeadsPage = () => {
           );
         } else {
           // For admin/affiliate_manager, update was successful
-          // Optimistically update the local state
-          setLeads((prevLeads) =>
-            prevLeads.map((groupedLead) => {
-              if (
-                groupedLead.leadId &&
-                groupedLead.leadId.toString() === leadId.toString()
-              ) {
-                return {
-                  ...groupedLead,
-                  orders: groupedLead.orders.map((order) =>
-                    order.orderId.toString() === orderId.toString()
-                      ? {
-                          ...order,
-                          callNumber: callNumber === "" ? null : callNumber,
-                        }
-                      : order
-                  ),
-                };
-              }
-              return groupedLead;
-            })
-          );
+          // Refresh leads to get updated data
+          fetchLeads();
           setSuccess("Call number updated successfully!");
         }
       } catch (err) {
@@ -1601,25 +1625,8 @@ const LeadsPage = () => {
           );
         } else {
           // For admin/affiliate_manager, update was successful
-          // Optimistically update the local state
-          setLeads((prevLeads) =>
-            prevLeads.map((groupedLead) => {
-              if (
-                groupedLead.leadId &&
-                groupedLead.leadId.toString() === leadId.toString()
-              ) {
-                return {
-                  ...groupedLead,
-                  orders: groupedLead.orders.map((order) =>
-                    order.orderId.toString() === orderId.toString()
-                      ? { ...order, verified: verified }
-                      : order
-                  ),
-                };
-              }
-              return groupedLead;
-            })
-          );
+          // Refresh leads to get updated data
+          fetchLeads();
           setSuccess("Verification status updated successfully!");
         }
       } catch (err) {
@@ -1888,6 +1895,26 @@ const LeadsPage = () => {
   };
   return (
     <Box sx={{ position: "relative" }}>
+      {/* Background refresh indicator - subtle visual feedback when data is refreshing */}
+      {isBackgroundRefresh && (
+        <Box
+          sx={{
+            position: "fixed",
+            top: 64,
+            left: 0,
+            right: 0,
+            height: 3,
+            zIndex: 1300,
+            background:
+              "linear-gradient(90deg, transparent, primary.main, transparent)",
+            animation: "shimmer 1.5s infinite",
+            "@keyframes shimmer": {
+              "0%": { transform: "translateX(-100%)" },
+              "100%": { transform: "translateX(100%)" },
+            },
+          }}
+        />
+      )}
       {/* Floating action bar for selected leads */}
       {(canAssignLeads && numSelected > 0 && numAssignableSelected === 0) ||
       (isAdminOrManager && numAssignableSelected > 0) ? (

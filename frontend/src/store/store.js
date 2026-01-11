@@ -12,7 +12,7 @@ import notificationSlice from "./slices/notificationSlice";
 const persistConfig = {
   key: "root",
   storage,
-  whitelist: ["auth"],
+  whitelist: ["auth", "leads"],
 };
 const rootReducer = combineReducers({
   auth: authSlice,
