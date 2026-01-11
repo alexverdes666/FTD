@@ -2183,15 +2183,14 @@ const LeadsPage = () => {
         </Collapse>
       </Paper>
       {}
-      <Box sx={{ display: { xs: "none", md: "block" } }}>
-        <Paper>
-          <TableContainer sx={{ width: "100%", minWidth: "100%" }}>
+      <Box sx={{ display: { xs: "none", md: "block" }, width: "100%" }}>
+        <Paper sx={{ width: "100%" }}>
+          <TableContainer sx={{ width: "100%", overflowX: "auto" }}>
             <Table
               size="small"
               sx={{
                 width: "100%",
-                minWidth: "100%",
-                tableLayout: "fixed",
+                tableLayout: "auto",
                 "& .MuiTableCell-root": {
                   padding: "2px 6px",
                   fontSize: "0.75rem",
@@ -2280,6 +2279,7 @@ const LeadsPage = () => {
                       fontSize: "0.875rem",
                       py: 1,
                       textAlign: "left",
+                      width: "25%",
                     }}
                   >
                     Name
@@ -2292,6 +2292,7 @@ const LeadsPage = () => {
                         fontSize: "0.875rem",
                         py: 1,
                         textAlign: "center",
+                        width: "25%",
                       }}
                     >
                       Contact
@@ -2389,6 +2390,7 @@ const LeadsPage = () => {
                     <TableCell
                       colSpan={isAgent ? 7 : isAdminOrManager ? 10 : 9}
                       align="center"
+                      sx={{ height: 200 }}
                     >
                       <CircularProgress />
                     </TableCell>
