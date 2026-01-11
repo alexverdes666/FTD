@@ -122,6 +122,20 @@ const userSchema = new mongoose.Schema({
   qrAuthEnabled: {
     type: Boolean,
     default: false
+  },
+  // User preferences (UI settings, copy preferences, etc.)
+  preferences: {
+    // Copy preferences for orders page
+    ordersCopyConfig: {
+      fields: {
+        type: [String],
+        default: ["leadType", "fullName", "newEmail", "newPhone", "country"]
+      },
+      separator: {
+        type: String,
+        default: "\t"
+      }
+    }
   }
 }, {
   timestamps: true,

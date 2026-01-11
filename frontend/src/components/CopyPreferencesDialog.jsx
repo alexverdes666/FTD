@@ -15,6 +15,7 @@ import {
   Paper,
   Tooltip,
   Alert,
+  CircularProgress,
 } from "@mui/material";
 import {
   Close as CloseIcon,
@@ -24,6 +25,7 @@ import {
   RestartAlt as ResetIcon,
 } from "@mui/icons-material";
 import { Reorder, useDragControls } from "framer-motion";
+import api from "../services/api";
 
 // Available fields for copying with display names
 const AVAILABLE_FIELDS = [
@@ -34,13 +36,33 @@ const AVAILABLE_FIELDS = [
   { id: "country", label: "Country", description: "Lead's country" },
   { id: "address", label: "Address", description: "Lead's address" },
   { id: "assignedAgent", label: "Agent", description: "Assigned agent name" },
-  { id: "ourNetwork", label: "Our Network (ON)", description: "Assigned our network" },
+  {
+    id: "ourNetwork",
+    label: "Our Network (ON)",
+    description: "Assigned our network",
+  },
   { id: "campaign", label: "Campaign", description: "Assigned campaign" },
-  { id: "clientNetwork", label: "Client Network", description: "Assigned client network" },
-  { id: "clientBrokers", label: "Client Brokers", description: "All assigned client brokers" },
+  {
+    id: "clientNetwork",
+    label: "Client Network",
+    description: "Assigned client network",
+  },
+  {
+    id: "clientBrokers",
+    label: "Client Brokers",
+    description: "All assigned client brokers",
+  },
   { id: "requester", label: "Requester", description: "Order requester name" },
-  { id: "createdAt", label: "Created Date", description: "Order creation date" },
-  { id: "plannedDate", label: "Planned Date", description: "Order planned date" },
+  {
+    id: "createdAt",
+    label: "Created Date",
+    description: "Order creation date",
+  },
+  {
+    id: "plannedDate",
+    label: "Planned Date",
+    description: "Order planned date",
+  },
 ];
 
 // Default configuration
@@ -51,29 +73,63 @@ const DEFAULT_CONFIG = {
 
 const STORAGE_KEY = "ordersCopyPreferences";
 
-// Load preferences from localStorage
-export const loadCopyPreferences = () => {
+// Load preferences from localStorage (cache/fallback)
+const loadFromLocalStorage = () => {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
       const parsed = JSON.parse(stored);
-      // Validate stored data
       if (parsed.fields && Array.isArray(parsed.fields)) {
         return parsed;
       }
     }
   } catch (err) {
-    console.error("Failed to load copy preferences:", err);
+    console.error("Failed to load copy preferences from localStorage:", err);
   }
   return DEFAULT_CONFIG;
 };
 
-// Save preferences to localStorage
-export const saveCopyPreferences = (config) => {
+// Save preferences to localStorage (cache)
+const saveToLocalStorage = (config) => {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
   } catch (err) {
-    console.error("Failed to save copy preferences:", err);
+    console.error("Failed to save copy preferences to localStorage:", err);
+  }
+};
+
+// Load preferences from API (with localStorage fallback)
+export const loadCopyPreferences = async () => {
+  try {
+    const response = await api.get("/users/preferences/copy");
+    if (response.data.success && response.data.data) {
+      const config = response.data.data;
+      // Cache to localStorage
+      saveToLocalStorage(config);
+      return config;
+    }
+  } catch (err) {
+    // Silent fail, fallback to local storage
+  }
+  // Fallback to localStorage
+  return loadFromLocalStorage();
+};
+
+// Sync version for copy function (uses cached localStorage)
+export const loadCopyPreferencesSync = () => {
+  return loadFromLocalStorage();
+};
+
+// Save preferences to API (and localStorage cache)
+export const saveCopyPreferences = async (config) => {
+  // Always save to localStorage as cache
+  saveToLocalStorage(config);
+
+  try {
+    const response = await api.put("/users/preferences/copy", config);
+    return response.data.success;
+  } catch (err) {
+    return false;
   }
 };
 
@@ -154,35 +210,50 @@ const DraggableFieldItem = ({ field, isEnabled, onToggle }) => {
 const CopyPreferencesDialog = ({ open, onClose, onSave }) => {
   const [fields, setFields] = useState([]);
   const [enabledFields, setEnabledFields] = useState(new Set());
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
 
-  // Initialize from localStorage
+  // Initialize from API
   useEffect(() => {
     if (open) {
-      const config = loadCopyPreferences();
-      
-      // Build fields array with order
-      const orderedFields = [];
-      const enabledSet = new Set(config.fields);
-      
-      // First, add enabled fields in their saved order
-      config.fields.forEach((fieldId, index) => {
-        const fieldInfo = AVAILABLE_FIELDS.find((f) => f.id === fieldId);
-        if (fieldInfo) {
-          orderedFields.push({ id: fieldId, order: index });
+      const fetchPreferences = async () => {
+        setLoading(true);
+        try {
+          const config = await loadCopyPreferences();
+          initializeFields(config);
+        } catch (err) {
+          initializeFields(DEFAULT_CONFIG);
+        } finally {
+          setLoading(false);
         }
-      });
-      
-      // Then add disabled fields
-      AVAILABLE_FIELDS.forEach((field) => {
-        if (!enabledSet.has(field.id)) {
-          orderedFields.push({ id: field.id, order: orderedFields.length });
-        }
-      });
-      
-      setFields(orderedFields);
-      setEnabledFields(enabledSet);
+      };
+      fetchPreferences();
     }
   }, [open]);
+
+  // Helper to initialize fields from config
+  const initializeFields = (config) => {
+    const orderedFields = [];
+    const enabledSet = new Set(config.fields);
+
+    // First, add enabled fields in their saved order
+    config.fields.forEach((fieldId, index) => {
+      const fieldInfo = AVAILABLE_FIELDS.find((f) => f.id === fieldId);
+      if (fieldInfo) {
+        orderedFields.push({ id: fieldId, order: index });
+      }
+    });
+
+    // Then add disabled fields
+    AVAILABLE_FIELDS.forEach((field) => {
+      if (!enabledSet.has(field.id)) {
+        orderedFields.push({ id: field.id, order: orderedFields.length });
+      }
+    });
+
+    setFields(orderedFields);
+    setEnabledFields(enabledSet);
+  };
 
   // Handle toggling a field
   const handleToggle = (fieldId) => {
@@ -207,7 +278,7 @@ const CopyPreferencesDialog = ({ open, onClose, onSave }) => {
   };
 
   // Handle save
-  const handleSave = () => {
+  const handleSave = async () => {
     // Get enabled fields in order
     const orderedEnabledFields = fields
       .filter((f) => enabledFields.has(f.id))
@@ -219,9 +290,16 @@ const CopyPreferencesDialog = ({ open, onClose, onSave }) => {
       separator: "\t",
     };
 
-    saveCopyPreferences(config);
-    onSave?.(config);
-    onClose();
+    setSaving(true);
+    try {
+      await saveCopyPreferences(config);
+      onSave?.(config);
+      onClose();
+    } catch (err) {
+      console.error("Failed to save preferences:", err);
+    } finally {
+      setSaving(false);
+    }
   };
 
   // Handle reset to defaults
@@ -230,13 +308,13 @@ const CopyPreferencesDialog = ({ open, onClose, onSave }) => {
       id: fieldId,
       order: index,
     }));
-    
+
     AVAILABLE_FIELDS.forEach((field) => {
       if (!DEFAULT_CONFIG.fields.includes(field.id)) {
         orderedFields.push({ id: field.id, order: orderedFields.length });
       }
     });
-    
+
     setFields(orderedFields);
     setEnabledFields(new Set(DEFAULT_CONFIG.fields));
   };
@@ -288,57 +366,75 @@ const CopyPreferencesDialog = ({ open, onClose, onSave }) => {
       </DialogTitle>
 
       <DialogContent dividers>
-        <Alert severity="info" sx={{ mb: 2 }}>
-          Select and drag fields to customize what gets copied. Fields are copied in order, separated by tabs (for easy pasting into spreadsheets).
-        </Alert>
-
-        {/* Preview */}
-        <Paper
-          variant="outlined"
-          sx={{
-            p: 2,
-            mb: 2,
-            bgcolor: "grey.50",
-            borderRadius: 1,
-          }}
-        >
-          <Typography variant="caption" color="text.secondary" gutterBottom>
-            Copy Format Preview:
-          </Typography>
-          <Typography
-            variant="body2"
+        {loading ? (
+          <Box
             sx={{
-              fontFamily: "monospace",
-              wordBreak: "break-word",
-              color: enabledFields.size > 0 ? "text.primary" : "text.secondary",
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+              py: 6,
             }}
           >
-            {getPreview()}
-          </Typography>
-        </Paper>
+            <CircularProgress />
+          </Box>
+        ) : (
+          <>
+            <Alert severity="info" sx={{ mb: 2 }}>
+              Select and drag fields to customize what gets copied. Fields are
+              copied in order, separated by tabs (for easy pasting into
+              spreadsheets).
+            </Alert>
 
-        <Divider sx={{ mb: 2 }} />
+            {/* Preview */}
+            <Paper
+              variant="outlined"
+              sx={{
+                p: 2,
+                mb: 2,
+                bgcolor: "grey.50",
+                borderRadius: 1,
+              }}
+            >
+              <Typography variant="caption" color="text.secondary" gutterBottom>
+                Copy Format Preview:
+              </Typography>
+              <Typography
+                variant="body2"
+                sx={{
+                  fontFamily: "monospace",
+                  wordBreak: "break-word",
+                  color:
+                    enabledFields.size > 0 ? "text.primary" : "text.secondary",
+                }}
+              >
+                {getPreview()}
+              </Typography>
+            </Paper>
 
-        <Typography variant="subtitle2" gutterBottom>
-          Available Fields (drag to reorder, check to include)
-        </Typography>
+            <Divider sx={{ mb: 2 }} />
 
-        {/* Draggable list */}
-        <Reorder.Group
-          axis="y"
-          values={fields}
-          onReorder={handleReorder}
-          style={{ padding: 0, margin: 0 }}
-        >
-          {fields.map((field) => (
-            <DraggableFieldItem
-              key={field.id}
-              field={field}
-              isEnabled={enabledFields.has(field.id)}
-              onToggle={handleToggle}
-            />
-          ))}
-        </Reorder.Group>
+            <Typography variant="subtitle2" gutterBottom>
+              Available Fields (drag to reorder, check to include)
+            </Typography>
+
+            {/* Draggable list */}
+            <Reorder.Group
+              axis="y"
+              values={fields}
+              onReorder={handleReorder}
+              style={{ padding: 0, margin: 0 }}
+            >
+              {fields.map((field) => (
+                <DraggableFieldItem
+                  key={field.id}
+                  field={field}
+                  isEnabled={enabledFields.has(field.id)}
+                  onToggle={handleToggle}
+                />
+              ))}
+            </Reorder.Group>
+          </>
+        )}
       </DialogContent>
 
       <DialogActions sx={{ px: 3, py: 2 }}>
@@ -347,19 +443,28 @@ const CopyPreferencesDialog = ({ open, onClose, onSave }) => {
             onClick={handleReset}
             startIcon={<ResetIcon />}
             color="inherit"
+            disabled={loading || saving}
           >
             Reset
           </Button>
         </Tooltip>
         <Box sx={{ flex: 1 }} />
-        <Button onClick={onClose}>Cancel</Button>
+        <Button onClick={onClose} disabled={saving}>
+          Cancel
+        </Button>
         <Button
           onClick={handleSave}
           variant="contained"
-          startIcon={<CopyIcon />}
-          disabled={enabledFields.size === 0}
+          startIcon={
+            saving ? (
+              <CircularProgress size={18} color="inherit" />
+            ) : (
+              <CopyIcon />
+            )
+          }
+          disabled={enabledFields.size === 0 || loading || saving}
         >
-          Save Preferences
+          {saving ? "Saving..." : "Save Preferences"}
         </Button>
       </DialogActions>
     </Dialog>
@@ -381,13 +486,18 @@ const formatDate = (date) => {
 
 // Helper function to copy leads with preferences
 // orderData is optional and used for order-level fields (requester, createdAt, plannedDate)
-export const copyLeadsWithPreferences = (leads, orderData, getDisplayLeadType) => {
-  const config = loadCopyPreferences();
-  
+// Uses sync version (localStorage cache) for immediate copying
+export const copyLeadsWithPreferences = (
+  leads,
+  orderData,
+  getDisplayLeadType
+) => {
+  const config = loadCopyPreferencesSync();
+
   if (!leads || leads.length === 0) {
     return { success: false, message: "No leads to copy" };
   }
-  
+
   if (!config.fields || config.fields.length === 0) {
     return { success: false, message: "No fields configured for copying" };
   }
@@ -396,7 +506,9 @@ export const copyLeadsWithPreferences = (leads, orderData, getDisplayLeadType) =
     const values = config.fields.map((fieldId) => {
       switch (fieldId) {
         case "leadType":
-          return getDisplayLeadType ? getDisplayLeadType(lead)?.toUpperCase() : (lead.leadType?.toUpperCase() || "");
+          return getDisplayLeadType
+            ? getDisplayLeadType(lead)?.toUpperCase()
+            : lead.leadType?.toUpperCase() || "";
         case "fullName":
           return `${lead.firstName || ""} ${lead.lastName || ""}`.trim();
         case "newEmail":
@@ -412,7 +524,10 @@ export const copyLeadsWithPreferences = (leads, orderData, getDisplayLeadType) =
         case "ourNetwork":
           // First try order-level, then lead-level
           if (orderData?.selectedOurNetwork) {
-            if (typeof orderData.selectedOurNetwork === "object" && orderData.selectedOurNetwork?.name) {
+            if (
+              typeof orderData.selectedOurNetwork === "object" &&
+              orderData.selectedOurNetwork?.name
+            ) {
               return orderData.selectedOurNetwork.name;
             }
             return orderData.selectedOurNetwork;
@@ -424,7 +539,10 @@ export const copyLeadsWithPreferences = (leads, orderData, getDisplayLeadType) =
         case "campaign":
           // First try order-level, then lead-level
           if (orderData?.selectedCampaign) {
-            if (typeof orderData.selectedCampaign === "object" && orderData.selectedCampaign?.name) {
+            if (
+              typeof orderData.selectedCampaign === "object" &&
+              orderData.selectedCampaign?.name
+            ) {
               return orderData.selectedCampaign.name;
             }
             return orderData.selectedCampaign;
@@ -436,37 +554,61 @@ export const copyLeadsWithPreferences = (leads, orderData, getDisplayLeadType) =
         case "clientNetwork":
           // First try order-level, then lead-level
           if (orderData?.selectedClientNetwork) {
-            if (typeof orderData.selectedClientNetwork === "object" && orderData.selectedClientNetwork?.name) {
+            if (
+              typeof orderData.selectedClientNetwork === "object" &&
+              orderData.selectedClientNetwork?.name
+            ) {
               return orderData.selectedClientNetwork.name;
             }
             return orderData.selectedClientNetwork;
           }
-          if (typeof lead.clientNetwork === "object" && lead.clientNetwork?.name) {
+          if (
+            typeof lead.clientNetwork === "object" &&
+            lead.clientNetwork?.name
+          ) {
             return lead.clientNetwork.name;
           }
           return lead.clientNetwork || "";
         case "clientBrokers":
           // First try order-level, then lead-level
-          if (Array.isArray(orderData?.selectedClientBrokers) && orderData.selectedClientBrokers.length > 0) {
+          if (
+            Array.isArray(orderData?.selectedClientBrokers) &&
+            orderData.selectedClientBrokers.length > 0
+          ) {
             return orderData.selectedClientBrokers
-              .map((broker) => (typeof broker === "object" ? broker.name : broker) || "")
+              .map(
+                (broker) =>
+                  (typeof broker === "object" ? broker.name : broker) || ""
+              )
               .filter(Boolean)
               .join(", ");
           }
-          if (Array.isArray(lead.assignedClientBrokers) && lead.assignedClientBrokers.length > 0) {
+          if (
+            Array.isArray(lead.assignedClientBrokers) &&
+            lead.assignedClientBrokers.length > 0
+          ) {
             return lead.assignedClientBrokers
-              .map((broker) => (typeof broker === "object" ? broker.name : broker) || "")
+              .map(
+                (broker) =>
+                  (typeof broker === "object" ? broker.name : broker) || ""
+              )
               .filter(Boolean)
               .join(", ");
           }
-          if (typeof lead.clientBroker === "object" && lead.clientBroker?.name) {
+          if (
+            typeof lead.clientBroker === "object" &&
+            lead.clientBroker?.name
+          ) {
             return lead.clientBroker.name;
           }
           return lead.clientBroker || "";
         case "requester":
           // Order-level field
           if (orderData?.requester) {
-            if (typeof orderData.requester === "object" && orderData.requester?.fullName) {
+            if (
+              typeof orderData.requester === "object" &&
+              orderData.requester?.fullName
+            ) {
               return orderData.requester.fullName;
             }
             return orderData.requester;
@@ -482,17 +624,19 @@ export const copyLeadsWithPreferences = (leads, orderData, getDisplayLeadType) =
           return "";
       }
     });
-    
+
     return values.join(config.separator || "\t");
   });
 
   const copyText = lines.join("\n");
-  
+
   navigator.clipboard.writeText(copyText);
-  
+
   return {
     success: true,
-    message: `Copied ${leads.length} lead${leads.length > 1 ? "s" : ""} to clipboard`,
+    message: `Copied ${leads.length} lead${
+      leads.length > 1 ? "s" : ""
+    } to clipboard`,
     count: leads.length,
   };
 };

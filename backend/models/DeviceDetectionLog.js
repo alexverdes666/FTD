@@ -132,7 +132,7 @@ const deviceDetectionLogSchema = new mongoose.Schema(
         version: String,
       },
       device: {
-        type: String, // "desktop", "mobile", "tablet", "bot"
+        type: { type: String }, // "desktop", "mobile", "tablet", "bot"
         vendor: String,
         model: String,
       },
@@ -194,7 +194,7 @@ const deviceDetectionLogSchema = new mongoose.Schema(
     // ============================================
     proxy: {
       isProxy: { type: Boolean, index: true },
-      type: String, // "HTTP Proxy", "Cloudflare", etc.
+      type: { type: String }, // "HTTP Proxy", "Cloudflare", etc.
       indicators: [String],
       proxyHeaders: mongoose.Schema.Types.Mixed,
     },

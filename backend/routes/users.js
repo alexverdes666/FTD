@@ -90,6 +90,101 @@ router.post(
   [protect],
   getAgentsWithFilteredLeadStats
 );
+
+// ===== User Preferences Routes =====
+// IMPORTANT: These must come BEFORE /:id routes or Express will treat "preferences" as an ID
+const User = require("../models/User");
+
+// Get user's copy preferences for orders
+router.get("/preferences/copy", protect, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id).select("preferences");
+    
+    
+    // Return defaults if no preferences set
+    const copyConfig = user?.preferences?.ordersCopyConfig || {
+      fields: ["leadType", "fullName", "newEmail", "newPhone", "country"],
+      separator: "\t"
+    };
+    
+    res.json({
+      success: true,
+      data: copyConfig
+    });
+  } catch (error) {
+    console.error("Get copy preferences error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to get copy preferences"
+    });
+  }
+});
+
+// Save user's copy preferences for orders
+router.put(
+  "/preferences/copy",
+  [
+    protect,
+    body("fields")
+      .isArray({ min: 1 })
+      .withMessage("Fields must be a non-empty array"),
+    body("separator")
+      .optional()
+      .isString()
+      .withMessage("Separator must be a string")
+  ],
+  async (req, res) => {
+    try {
+      const { fields, separator = "\t" } = req.body;
+      
+      // Validate fields
+      const validFields = [
+        "leadType", "fullName", "newEmail", "newPhone", "country",
+        "address", "assignedAgent", "ourNetwork", "campaign",
+        "clientNetwork", "clientBrokers", "requester", "createdAt", "plannedDate"
+      ];
+      
+      const invalidFields = fields.filter(f => !validFields.includes(f));
+      if (invalidFields.length > 0) {
+        return res.status(400).json({
+          success: false,
+          message: `Invalid fields: ${invalidFields.join(", ")}`
+        });
+      }
+      
+      // Update user preferences - use the full nested object to ensure it's created
+      const updatedUser = await User.findByIdAndUpdate(
+        req.user._id,
+        {
+          $set: {
+            preferences: {
+              ordersCopyConfig: {
+                fields: fields,
+                separator: separator
+              }
+            }
+          }
+        },
+        { new: true, runValidators: true }
+      ).select("preferences");
+      
+      
+      res.json({
+        success: true,
+        message: "Copy preferences saved successfully",
+        data: { fields, separator }
+      });
+    } catch (error) {
+      console.error("Save copy preferences error:", error);
+      res.status(500).json({
+        success: false,
+        message: "Failed to save copy preferences",
+        error: error.message
+      });
+    }
+  }
+);
+
 router.get("/:id", [protect, ownerOrAdmin], getUserById);
 router.post(
   "/",
@@ -354,4 +449,5 @@ router.put(
   ],
   approveLeadManager
 );
+
 module.exports = router;

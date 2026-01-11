@@ -414,6 +414,15 @@ const deviceDetectionMiddleware = () => {
           })}`
         );
       } catch (error) {
+        // Skip logging error on localhost/dev to reduce noise
+        const isLocalhost =
+          process.env.NODE_ENV === "development" ||
+          (req.headers &&
+            req.headers.host &&
+            req.headers.host.includes("localhost"));
+
+        if (isLocalhost) return;
+
         // Don't fail the request if logging fails
         console.error(
           "[DeviceDetection] ❌ Failed to log device detection:",
