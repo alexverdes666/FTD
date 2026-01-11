@@ -656,14 +656,15 @@ const MainLayout = () => {
           >
             <MenuIcon />
           </IconButton>
-          <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1, display: { xs: "none", sm: "block" } }}>
+          <Typography variant="h6" noWrap component="div" sx={{ display: { xs: "none", sm: "block" } }}>
             {allNavigationPaths.find((item) => item.path === location.pathname)
               ?.text || "Dashboard"}
           </Typography>
           {/* Global Search Bar */}
-          <Box sx={{ flexGrow: 1, display: "flex", justifyContent: "center", mx: 2 }}>
+          <Box sx={{ ml: 2, display: { xs: "none", md: "block" } }}>
             <GlobalSearch />
           </Box>
+          <Box sx={{ flexGrow: 1 }} />
           {}
           <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
             <UserSwitcher onOpenQuickSwitcher={handleOpenQuickSwitcher} />

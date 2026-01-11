@@ -331,12 +331,12 @@ const GlobalSearch = () => {
             ),
             sx: {
               borderRadius: 2,
-              bgcolor: alpha(theme.palette.common.white, 0.15),
+              bgcolor: "transparent",
               "&:hover": {
-                bgcolor: alpha(theme.palette.common.white, 0.25),
+                bgcolor: "transparent",
               },
               "&.Mui-focused": {
-                bgcolor: alpha(theme.palette.common.white, 0.25),
+                bgcolor: "transparent",
               },
               "& .MuiOutlinedInput-notchedOutline": {
                 border: "none",
@@ -349,7 +349,7 @@ const GlobalSearch = () => {
                   opacity: 0.7,
                 },
               },
-              minWidth: { xs: 200, sm: 280, md: 320 },
+              width: { xs: 320, sm: 400 },
             },
           }}
         />
@@ -371,6 +371,12 @@ const GlobalSearch = () => {
                   maxHeight: 480,
                   overflow: "auto",
                   borderRadius: 2,
+                  // Hide scrollbar
+                  "&::-webkit-scrollbar": {
+                    display: "none",
+                  },
+                  msOverflowStyle: "none",
+                  scrollbarWidth: "none",
                 }}
               >
                 {loading && !hasResults ? (
