@@ -1,4 +1,10 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  useRef,
+} from "react";
 import { useSelector } from "react-redux";
 import { useSearchParams } from "react-router-dom";
 import { useForm, Controller } from "react-hook-form";
@@ -78,6 +84,8 @@ import {
   ShoppingCart as ShoppingCartIcon,
   Archive as ArchiveIcon,
   Unarchive as UnarchiveIcon,
+  Male as MaleIcon,
+  Female as FemaleIcon,
 } from "@mui/icons-material";
 import AddLeadForm from "../components/AddLeadForm";
 import DocumentPreview from "../components/DocumentPreview";
@@ -224,13 +232,13 @@ const getDisplayLeadType = (lead) => {
 // Helper function to convert country names to abbreviations
 const getCountryAbbreviation = (country) => {
   if (!country) return "—";
-  
+
   // Split by spaces and take first letter of each word
   const words = country.trim().split(/\s+/);
   if (words.length > 1) {
-    return words.map(word => word.charAt(0).toUpperCase()).join('');
+    return words.map((word) => word.charAt(0).toUpperCase()).join("");
   }
-  
+
   // If single word, return as is
   return country;
 };
@@ -238,22 +246,24 @@ const getCountryAbbreviation = (country) => {
 // Helper function to calculate cooldown status for FTD/Filler leads (10-day cooldown)
 const getCooldownStatus = (lead) => {
   const leadType = getDisplayLeadType(lead);
-  
+
   // Only FTD and Filler leads have cooldown
-  if (leadType !== 'ftd' && leadType !== 'filler') {
-    return { hasCooldown: false, text: 'N/A', color: 'default' };
+  if (leadType !== "ftd" && leadType !== "filler") {
+    return { hasCooldown: false, text: "N/A", color: "default" };
   }
-  
+
   // If never used in an order, no cooldown
   if (!lead.lastUsedInOrder) {
-    return { hasCooldown: false, text: 'Available', color: 'success' };
+    return { hasCooldown: false, text: "Available", color: "success" };
   }
-  
+
   const lastUsedDate = new Date(lead.lastUsedInOrder);
   const now = new Date();
-  const daysSinceUsed = Math.floor((now - lastUsedDate) / (1000 * 60 * 60 * 24));
+  const daysSinceUsed = Math.floor(
+    (now - lastUsedDate) / (1000 * 60 * 60 * 24)
+  );
   const cooldownPeriod = 10; // 10 days
-  
+
   if (daysSinceUsed < cooldownPeriod) {
     const daysRemaining = cooldownPeriod - daysSinceUsed;
     return {
@@ -261,11 +271,16 @@ const getCooldownStatus = (lead) => {
       inCooldown: true,
       daysRemaining,
       text: `${daysRemaining}d left`,
-      color: daysRemaining <= 2 ? 'warning' : 'error',
+      color: daysRemaining <= 2 ? "warning" : "error",
     };
   }
-  
-  return { hasCooldown: true, inCooldown: false, text: 'Available', color: 'success' };
+
+  return {
+    hasCooldown: true,
+    inCooldown: false,
+    text: "Available",
+    color: "success",
+  };
 };
 const getDocumentStatusColor = (status) => {
   switch (status) {
@@ -527,11 +542,31 @@ const LeadDetails = React.memo(({ lead }) => (
               <Typography variant="caption" color="text.secondary">
                 Gender
               </Typography>
-              <Typography variant="body2">
-                {lead.gender
-                  ? lead.gender.charAt(0).toUpperCase() + lead.gender.slice(1)
-                  : "Not Specified"}
-              </Typography>
+              {lead.gender && lead.gender !== "not_defined" ? (
+                <Chip
+                  icon={
+                    lead.gender === "male" ? (
+                      <MaleIcon sx={{ fontSize: "1rem !important" }} />
+                    ) : (
+                      <FemaleIcon sx={{ fontSize: "1rem !important" }} />
+                    )
+                  }
+                  label={
+                    lead.gender.charAt(0).toUpperCase() + lead.gender.slice(1)
+                  }
+                  size="small"
+                  sx={{
+                    height: "24px",
+                    "& .MuiChip-icon": { ml: 0.5 },
+                    bgcolor: lead.gender === "male" ? "#e3f2fd" : "#fff3e0",
+                    color: lead.gender === "male" ? "#1976d2" : "#e65100",
+                    borderColor: lead.gender === "male" ? "#1976d2" : "#e65100",
+                    border: "1px solid",
+                  }}
+                />
+              ) : (
+                <Typography variant="body2">Not Specified</Typography>
+              )}
             </Box>
             {lead.client && (
               <Box>
@@ -608,7 +643,10 @@ const LeadDetails = React.memo(({ lead }) => (
                 </Box>
               </Box>
               <Typography variant="body2">
-                <Link href={`mailto:${lead.assignedAgent.email}`} color="primary">
+                <Link
+                  href={`mailto:${lead.assignedAgent.email}`}
+                  color="primary"
+                >
                   {lead.assignedAgent.email}
                 </Link>
               </Typography>
@@ -1131,7 +1169,6 @@ const LeadsPage = () => {
   const [leads, setLeads] = useState([]);
   const [agents, setAgents] = useState([]);
   const [orders, setOrders] = useState([]);
-  const [leadStats, setLeadStats] = useState(null);
   const [commentDialogOpen, setCommentDialogOpen] = useState(false);
   const [selectedLead, setSelectedLead] = useState(null);
   const [selectedLeads, setSelectedLeads] = useState(new Set());
@@ -1162,7 +1199,7 @@ const LeadsPage = () => {
     phoneSearch: "",
   });
   const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [rowsPerPage, setRowsPerPage] = useState(50);
   const [totalLeads, setTotalLeads] = useState(0);
   // Initialize filters from URL params (for global search integration)
   const [filters, setFilters] = useState(() => {
@@ -1186,10 +1223,12 @@ const LeadsPage = () => {
   const [showFilters, setShowFilters] = useState(false);
   const [expandedRows, setExpandedRows] = useState(new Set());
   const [pendingRequests, setPendingRequests] = useState(new Map()); // Map<"leadId-orderId", pendingRequest>
-  
+
   // Local search input state for instant UI updates (initialized from URL params)
-  const [searchInput, setSearchInput] = useState(() => searchParams.get("search") || "");
-  
+  const [searchInput, setSearchInput] = useState(
+    () => searchParams.get("search") || ""
+  );
+
   // Clear URL params after initial load
   useEffect(() => {
     if (searchParams.get("search")) {
@@ -1200,7 +1239,7 @@ const LeadsPage = () => {
     }
   }, []);
   const searchDebounceTimer = useRef(null);
-  
+
   const isAdminOrManager = useMemo(
     () => user?.role === ROLES.ADMIN || user?.role === ROLES.AFFILIATE_MANAGER,
     [user?.role]
@@ -1220,13 +1259,13 @@ const LeadsPage = () => {
     [user?.role]
   );
   const numSelected = useMemo(() => selectedLeads.size, [selectedLeads]);
-  
+
   // Count only assignable leads (FTD and Filler, not Cold)
   const numAssignableSelected = useMemo(() => {
     let count = 0;
-    selectedLeads.forEach(leadId => {
-      const lead = leads.find(l => l._id === leadId);
-      if (lead && (lead.leadType === 'ftd' || lead.leadType === 'filler')) {
+    selectedLeads.forEach((leadId) => {
+      const lead = leads.find((l) => l._id === leadId);
+      if (lead && (lead.leadType === "ftd" || lead.leadType === "filler")) {
         count++;
       }
     });
@@ -1241,46 +1280,49 @@ const LeadsPage = () => {
     resolver: yupResolver(commentSchema),
     defaultValues: { text: "" },
   });
-  const fetchPendingRequests = useCallback(async (leadsData) => {
-    // Only for agents - check for pending requests for each lead/order
-    if (!isAgent) return;
-    
-    try {
-      const requestsMap = new Map();
-      
-      // For each lead/order combination, check if there's a pending request
-      for (const groupedLead of leadsData) {
-        if (groupedLead.orders) {
-          for (const order of groupedLead.orders) {
-            try {
-              const response = await api.get('/call-change-requests/check', {
-                params: {
-                  leadId: groupedLead.leadId,
-                  orderId: order.orderId,
-                },
-              });
-              
-              if (response.data.data) {
-                const key = `${groupedLead.leadId}-${order.orderId}`;
-                requestsMap.set(key, {
-                  requestId: response.data.data._id,
-                  currentCallNumber: response.data.data.currentCallNumber,
-                  requestedCallNumber: response.data.data.requestedCallNumber,
+  const fetchPendingRequests = useCallback(
+    async (leadsData) => {
+      // Only for agents - check for pending requests for each lead/order
+      if (!isAgent) return;
+
+      try {
+        const requestsMap = new Map();
+
+        // For each lead/order combination, check if there's a pending request
+        for (const groupedLead of leadsData) {
+          if (groupedLead.orders) {
+            for (const order of groupedLead.orders) {
+              try {
+                const response = await api.get("/call-change-requests/check", {
+                  params: {
+                    leadId: groupedLead.leadId,
+                    orderId: order.orderId,
+                  },
                 });
+
+                if (response.data.data) {
+                  const key = `${groupedLead.leadId}-${order.orderId}`;
+                  requestsMap.set(key, {
+                    requestId: response.data.data._id,
+                    currentCallNumber: response.data.data.currentCallNumber,
+                    requestedCallNumber: response.data.data.requestedCallNumber,
+                  });
+                }
+              } catch (err) {
+                // Silently fail for individual checks
+                console.error("Failed to check pending request:", err);
               }
-            } catch (err) {
-              // Silently fail for individual checks
-              console.error('Failed to check pending request:', err);
             }
           }
         }
+
+        setPendingRequests(requestsMap);
+      } catch (err) {
+        console.error("Failed to fetch pending requests:", err);
       }
-      
-      setPendingRequests(requestsMap);
-    } catch (err) {
-      console.error('Failed to fetch pending requests:', err);
-    }
-  }, [isAgent]);
+    },
+    [isAgent]
+  );
 
   const fetchLeads = useCallback(async () => {
     setLoading(true);
@@ -1302,7 +1344,7 @@ const LeadsPage = () => {
       const leadsData = response.data.data;
       setLeads(leadsData);
       setTotalLeads(response.data.pagination.totalLeads);
-      
+
       // Fetch pending requests for agents
       if (isAgent && leadsData.length > 0) {
         fetchPendingRequests(leadsData);
@@ -1328,7 +1370,9 @@ const LeadsPage = () => {
   ]);
   const fetchAgents = useCallback(async () => {
     try {
-      const response = await api.get("/users?role=agent&isActive=true&limit=1000");
+      const response = await api.get(
+        "/users?role=agent&isActive=true&limit=1000"
+      );
       setAgents(response.data.data);
     } catch (err) {
       setError(err.response?.data?.message || "Failed to fetch agents");
@@ -1342,16 +1386,6 @@ const LeadsPage = () => {
       setError(err.response?.data?.message || "Failed to fetch orders");
     }
   }, []);
-  const fetchLeadStats = useCallback(async () => {
-    try {
-      const response = await api.get("/leads/stats");
-      if (response.data.success) {
-        setLeadStats(response.data.data);
-      }
-    } catch (err) {
-      console.error("Failed to fetch lead stats:", err);
-    }
-  }, []);
   const onSubmitComment = useCallback(
     async (data) => {
       try {
@@ -1363,18 +1397,18 @@ const LeadsPage = () => {
             return;
           }
         }
-        
+
         // For agents, orderId is required (passed from the order row)
         if (isAgent && !selectedLead?.orderId) {
           setError("Order ID is required for comments.");
           return;
         }
-        
+
         // Include orderId in the request data
-        const requestData = isAgent 
+        const requestData = isAgent
           ? { ...data, orderId: selectedLead.orderId }
           : data;
-        
+
         await api.put(`/leads/${selectedLead._id}/comment`, requestData);
         setSuccess("Comment added successfully!");
         setCommentDialogOpen(false);
@@ -1420,66 +1454,69 @@ const LeadsPage = () => {
   );
 
   // Helper function to get available call options based on current call number
-  const getAvailableCallOptions = useCallback((currentCallNumber) => {
-    // Admins can see all options
-    if (user?.role === ROLES.ADMIN) {
-      return ["", "1st", "2nd", "3rd", "4th", "5th"];
-    }
-    
-    // For agents, show previous, current, next, and None
-    const callSequence = ["1st", "2nd", "3rd", "4th", "5th"];
-    
-    if (!currentCallNumber) {
-      // No call made yet, can only select 1st or None
-      return ["", "1st"];
-    }
-    
-    const currentIndex = callSequence.indexOf(currentCallNumber);
-    if (currentIndex === -1) {
-      // Invalid call number, show all
-      return ["", "1st", "2nd", "3rd", "4th", "5th"];
-    }
-    
-    // Build options: None, previous (if exists), current, next (if exists)
-    const options = [""];
-    
-    // Add previous call option if not at the first
-    if (currentIndex > 0) {
-      options.push(callSequence[currentIndex - 1]);
-    }
-    
-    // Add current call option
-    options.push(currentCallNumber);
-    
-    // Add next call option if not at the last
-    if (currentIndex < callSequence.length - 1) {
-      options.push(callSequence[currentIndex + 1]);
-    }
-    
-    return options;
-  }, [user?.role]);
+  const getAvailableCallOptions = useCallback(
+    (currentCallNumber) => {
+      // Admins can see all options
+      if (user?.role === ROLES.ADMIN) {
+        return ["", "1st", "2nd", "3rd", "4th", "5th"];
+      }
+
+      // For agents, show previous, current, next, and None
+      const callSequence = ["1st", "2nd", "3rd", "4th", "5th"];
+
+      if (!currentCallNumber) {
+        // No call made yet, can only select 1st or None
+        return ["", "1st"];
+      }
+
+      const currentIndex = callSequence.indexOf(currentCallNumber);
+      if (currentIndex === -1) {
+        // Invalid call number, show all
+        return ["", "1st", "2nd", "3rd", "4th", "5th"];
+      }
+
+      // Build options: None, previous (if exists), current, next (if exists)
+      const options = [""];
+
+      // Add previous call option if not at the first
+      if (currentIndex > 0) {
+        options.push(callSequence[currentIndex - 1]);
+      }
+
+      // Add current call option
+      options.push(currentCallNumber);
+
+      // Add next call option if not at the last
+      if (currentIndex < callSequence.length - 1) {
+        options.push(callSequence[currentIndex + 1]);
+      }
+
+      return options;
+    },
+    [user?.role]
+  );
 
   const updateCallNumber = useCallback(
     async (leadId, callNumber, orderId) => {
       try {
         setError(null);
-        
+
         if (!orderId) {
           setError("Order ID is required to update call number");
           return;
         }
-        
+
         // Make API call to update call number for specific order
         const response = await api.put(`/leads/${leadId}/call-number`, {
           callNumber: callNumber === "" ? null : callNumber,
           orderId: orderId,
         });
-        
+
         // Check if the request is pending (for agents)
         if (response.data.isPending) {
           // Add to pending requests map
           const key = `${leadId}-${orderId}`;
-          setPendingRequests(prev => {
+          setPendingRequests((prev) => {
             const newMap = new Map(prev);
             newMap.set(key, {
               requestId: response.data.data.requestId,
@@ -1490,18 +1527,26 @@ const LeadsPage = () => {
             });
             return newMap;
           });
-          setSuccess("Call change request submitted successfully. Waiting for approval.");
+          setSuccess(
+            "Call change request submitted successfully. Waiting for approval."
+          );
         } else {
           // For admin/affiliate_manager, update was successful
           // Optimistically update the local state
           setLeads((prevLeads) =>
             prevLeads.map((groupedLead) => {
-              if (groupedLead.leadId && groupedLead.leadId.toString() === leadId.toString()) {
+              if (
+                groupedLead.leadId &&
+                groupedLead.leadId.toString() === leadId.toString()
+              ) {
                 return {
                   ...groupedLead,
                   orders: groupedLead.orders.map((order) =>
                     order.orderId.toString() === orderId.toString()
-                      ? { ...order, callNumber: callNumber === "" ? null : callNumber }
+                      ? {
+                          ...order,
+                          callNumber: callNumber === "" ? null : callNumber,
+                        }
                       : order
                   ),
                 };
@@ -1524,23 +1569,23 @@ const LeadsPage = () => {
     async (leadId, verified, orderId) => {
       try {
         setError(null);
-        
+
         if (!orderId) {
           setError("Order ID is required to update verification status");
           return;
         }
-        
+
         // Make API call to update verification for specific order
         const response = await api.put(`/leads/${leadId}/call-number`, {
           verified: verified,
           orderId: orderId,
         });
-        
+
         // Check if the request is pending (for agents)
         if (response.data.isPending) {
           // Add to pending requests map
           const key = `${leadId}-${orderId}`;
-          setPendingRequests(prev => {
+          setPendingRequests((prev) => {
             const newMap = new Map(prev);
             newMap.set(key, {
               requestId: response.data.data.requestId,
@@ -1551,13 +1596,18 @@ const LeadsPage = () => {
             });
             return newMap;
           });
-          setSuccess("Verification change request submitted successfully. Waiting for approval.");
+          setSuccess(
+            "Verification change request submitted successfully. Waiting for approval."
+          );
         } else {
           // For admin/affiliate_manager, update was successful
           // Optimistically update the local state
           setLeads((prevLeads) =>
             prevLeads.map((groupedLead) => {
-              if (groupedLead.leadId && groupedLead.leadId.toString() === leadId.toString()) {
+              if (
+                groupedLead.leadId &&
+                groupedLead.leadId.toString() === leadId.toString()
+              ) {
                 return {
                   ...groupedLead,
                   orders: groupedLead.orders.map((order) =>
@@ -1587,12 +1637,11 @@ const LeadsPage = () => {
         await api.delete(`/leads/${leadId}`);
         setSuccess("Lead deleted successfully");
         fetchLeads();
-        fetchLeadStats();
       } catch (err) {
         setError(err.response?.data?.message || "Failed to delete lead");
       }
     },
-    [fetchLeads, fetchLeadStats, setSuccess, setError]
+    [fetchLeads, setSuccess, setError]
   );
   const handleBulkDelete = async () => {
     try {
@@ -1603,76 +1652,91 @@ const LeadsPage = () => {
       setSuccess(response.data.message);
       setBulkDeleteDialogOpen(false);
       fetchLeads();
-      fetchLeadStats();
     } catch (err) {
       setError(err.response?.data?.message || "Failed to delete leads");
     }
   };
 
   // Fetch archived leads
-  const fetchArchivedLeads = useCallback(async (page = 1, search = "") => {
-    if (user?.role !== ROLES.ADMIN) return;
-    
-    setArchivedLeadsLoading(true);
-    try {
-      const response = await api.get("/leads/archived", {
-        params: {
-          page,
-          limit: archivedLeadsPagination.limit,
-          search: search || undefined,
-        },
-      });
-      if (response.data.success) {
-        setArchivedLeads(response.data.data.leads);
-        setArchivedLeadsPagination(response.data.data.pagination);
+  const fetchArchivedLeads = useCallback(
+    async (page = 1, search = "") => {
+      if (user?.role !== ROLES.ADMIN) return;
+
+      setArchivedLeadsLoading(true);
+      try {
+        const response = await api.get("/leads/archived", {
+          params: {
+            page,
+            limit: archivedLeadsPagination.limit,
+            search: search || undefined,
+          },
+        });
+        if (response.data.success) {
+          setArchivedLeads(response.data.data.leads);
+          setArchivedLeadsPagination(response.data.data.pagination);
+        }
+      } catch (err) {
+        console.error("Failed to fetch archived leads:", err);
+        setError(
+          err.response?.data?.message || "Failed to fetch archived leads"
+        );
+      } finally {
+        setArchivedLeadsLoading(false);
       }
-    } catch (err) {
-      console.error("Failed to fetch archived leads:", err);
-      setError(err.response?.data?.message || "Failed to fetch archived leads");
-    } finally {
-      setArchivedLeadsLoading(false);
-    }
-  }, [user?.role, archivedLeadsPagination.limit]);
+    },
+    [user?.role, archivedLeadsPagination.limit]
+  );
 
   // Archive a lead
-  const handleArchiveLead = useCallback(async (leadId) => {
-    try {
-      setError(null);
-      await api.put(`/leads/${leadId}/archive`);
-      setSuccess("Lead archived successfully");
-      fetchLeads();
-      fetchLeadStats();
-    } catch (err) {
-      setError(err.response?.data?.message || "Failed to archive lead");
-    }
-  }, [fetchLeads, fetchLeadStats]);
+  const handleArchiveLead = useCallback(
+    async (leadId) => {
+      try {
+        setError(null);
+        await api.put(`/leads/${leadId}/archive`);
+        setSuccess("Lead archived successfully");
+        fetchLeads();
+      } catch (err) {
+        setError(err.response?.data?.message || "Failed to archive lead");
+      }
+    },
+    [fetchLeads]
+  );
 
   // Unarchive a lead (from archived leads dialog)
-  const handleUnarchiveLead = useCallback(async (leadId) => {
-    try {
-      setError(null);
-      await api.put(`/leads/${leadId}/unarchive`);
-      setSuccess("Lead unarchived successfully");
-      fetchArchivedLeads(archivedLeadsPagination.page, archivedLeadsSearch);
-      fetchLeads();
-      fetchLeadStats();
-    } catch (err) {
-      setError(err.response?.data?.message || "Failed to unarchive lead");
-    }
-  }, [fetchArchivedLeads, fetchLeads, fetchLeadStats, archivedLeadsPagination.page, archivedLeadsSearch]);
+  const handleUnarchiveLead = useCallback(
+    async (leadId) => {
+      try {
+        setError(null);
+        await api.put(`/leads/${leadId}/unarchive`);
+        setSuccess("Lead unarchived successfully");
+        fetchArchivedLeads(archivedLeadsPagination.page, archivedLeadsSearch);
+        fetchLeads();
+      } catch (err) {
+        setError(err.response?.data?.message || "Failed to unarchive lead");
+      }
+    },
+    [
+      fetchArchivedLeads,
+      fetchLeads,
+      archivedLeadsPagination.page,
+      archivedLeadsSearch,
+    ]
+  );
 
   // Unarchive a lead (from main leads table)
-  const handleUnarchiveLeadFromTable = useCallback(async (leadId) => {
-    try {
-      setError(null);
-      await api.put(`/leads/${leadId}/unarchive`);
-      setSuccess("Lead unarchived successfully");
-      fetchLeads();
-      fetchLeadStats();
-    } catch (err) {
-      setError(err.response?.data?.message || "Failed to unarchive lead");
-    }
-  }, [fetchLeads, fetchLeadStats]);
+  const handleUnarchiveLeadFromTable = useCallback(
+    async (leadId) => {
+      try {
+        setError(null);
+        await api.put(`/leads/${leadId}/unarchive`);
+        setSuccess("Lead unarchived successfully");
+        fetchLeads();
+      } catch (err) {
+        setError(err.response?.data?.message || "Failed to unarchive lead");
+      }
+    },
+    [fetchLeads]
+  );
 
   // Open archived leads dialog
   const handleOpenArchivedLeadsDialog = useCallback(() => {
@@ -1681,28 +1745,31 @@ const LeadsPage = () => {
   }, [fetchArchivedLeads]);
 
   // Handle archived leads pagination
-  const handleArchivedLeadsPageChange = useCallback((event, newPage) => {
-    fetchArchivedLeads(newPage + 1, archivedLeadsSearch);
-  }, [fetchArchivedLeads, archivedLeadsSearch]);
+  const handleArchivedLeadsPageChange = useCallback(
+    (event, newPage) => {
+      fetchArchivedLeads(newPage + 1, archivedLeadsSearch);
+    },
+    [fetchArchivedLeads, archivedLeadsSearch]
+  );
 
   // Handle archived leads search
-  const handleArchivedLeadsSearchChange = useCallback((value) => {
-    setArchivedLeadsSearch(value);
-    fetchArchivedLeads(1, value);
-  }, [fetchArchivedLeads]);
+  const handleArchivedLeadsSearchChange = useCallback(
+    (value) => {
+      setArchivedLeadsSearch(value);
+      fetchArchivedLeads(1, value);
+    },
+    [fetchArchivedLeads]
+  );
 
   useEffect(() => {
     fetchLeads();
   }, [fetchLeads]);
   useEffect(() => {
-    if (isAdminOrManager || isLeadManager) {
-      fetchLeadStats();
-    }
     if (isAdminOrManager) {
       fetchAgents();
       fetchOrders();
     }
-  }, [isAdminOrManager, isLeadManager, fetchAgents, fetchOrders, fetchLeadStats]);
+  }, [isAdminOrManager, fetchAgents, fetchOrders]);
   useEffect(() => {
     if (success) {
       const timer = setTimeout(() => setSuccess(null), 4000);
@@ -1712,9 +1779,8 @@ const LeadsPage = () => {
   const handleLeadAdded = useCallback(
     (lead) => {
       fetchLeads();
-      fetchLeadStats();
     },
-    [fetchLeads, fetchLeadStats]
+    [fetchLeads]
   );
   const handleChangePage = useCallback((_, newPage) => {
     setPage(newPage);
@@ -1727,24 +1793,24 @@ const LeadsPage = () => {
     setFilters((prev) => ({ ...prev, [field]: value }));
     setPage(0);
   }, []);
-  
+
   // Debounced search handler for instant typing without API lag
   const handleSearchChange = useCallback((value) => {
     // Update local state immediately for instant UI feedback
     setSearchInput(value);
-    
+
     // Clear existing timer
     if (searchDebounceTimer.current) {
       clearTimeout(searchDebounceTimer.current);
     }
-    
+
     // Set new timer to update filter state (which triggers API call)
     searchDebounceTimer.current = setTimeout(() => {
       setFilters((prev) => ({ ...prev, search: value }));
       setPage(0);
     }, 300); // 300ms debounce delay
   }, []);
-  
+
   // Cleanup debounce timer on unmount
   useEffect(() => {
     return () => {
@@ -1753,7 +1819,7 @@ const LeadsPage = () => {
       }
     };
   }, []);
-  
+
   const clearFilters = useCallback(() => {
     setFilters({
       search: "",
@@ -1821,26 +1887,27 @@ const LeadsPage = () => {
     fetchLeads();
   };
   return (
-    <Box sx={{ position: 'relative' }}>
+    <Box sx={{ position: "relative" }}>
       {/* Floating action bar for selected leads */}
-      {(canAssignLeads && numSelected > 0 && numAssignableSelected === 0) || (isAdminOrManager && numAssignableSelected > 0) ? (
+      {(canAssignLeads && numSelected > 0 && numAssignableSelected === 0) ||
+      (isAdminOrManager && numAssignableSelected > 0) ? (
         <Box
           sx={{
-            position: 'fixed',
+            position: "fixed",
             top: 80,
             right: 24,
             zIndex: 1200,
-            display: 'flex',
+            display: "flex",
             gap: 2,
-            alignItems: 'center',
-            animation: 'slideInFromRight 0.3s ease-out',
-            '@keyframes slideInFromRight': {
-              '0%': {
-                transform: 'translateX(100%)',
+            alignItems: "center",
+            animation: "slideInFromRight 0.3s ease-out",
+            "@keyframes slideInFromRight": {
+              "0%": {
+                transform: "translateX(100%)",
                 opacity: 0,
               },
-              '100%': {
-                transform: 'translateX(0)',
+              "100%": {
+                transform: "translateX(0)",
                 opacity: 1,
               },
             },
@@ -1848,7 +1915,8 @@ const LeadsPage = () => {
         >
           {canAssignLeads && numSelected > 0 && numAssignableSelected === 0 && (
             <Alert severity="info" sx={{ py: 0.5, px: 2 }}>
-              Cold leads cannot be assigned to agents. Only FTD and Filler leads can be assigned.
+              Cold leads cannot be assigned to agents. Only FTD and Filler leads
+              can be assigned.
             </Alert>
           )}
           {isAdminOrManager && numAssignableSelected > 0 && (
@@ -1889,145 +1957,6 @@ const LeadsPage = () => {
         </Alert>
       )}
       {}
-      {leadStats && (
-        <Box sx={{ mb: 2 }}>
-          <Grid container spacing={2}>
-            <Grid item xs={12} sm={6} md={3}>
-              <Paper
-                elevation={0}
-                sx={{
-                  p: 2,
-                  bgcolor: "rgba(255, 255, 255, 0.85)",
-                  backdropFilter: "blur(10px)",
-                  borderRadius: 2,
-                  border: "1px solid rgba(255, 255, 255, 0.3)",
-                  color: "text.primary",
-                  textAlign: "center",
-                  transition: "all 0.3s ease-in-out",
-                  background:
-                    "linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(240, 245, 255, 0.8) 100%)",
-                  boxShadow: "0 4px 16px rgba(0, 0, 0, 0.1)",
-                  "&:hover": {
-                    transform: "translateY(-4px)",
-                    bgcolor: "rgba(255, 255, 255, 0.95)",
-                    backdropFilter: "blur(15px)",
-                    boxShadow: "0 8px 32px rgba(0, 0, 0, 0.2)",
-                    background:
-                      "linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(240, 245, 255, 0.9) 100%)",
-                  },
-                }}
-              >
-                <Typography variant="h5" fontWeight="bold" sx={{ mb: 0.5 }}>
-                  {leadStats.leads.overall.total}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Total Leads
-                </Typography>
-              </Paper>
-            </Grid>
-            <Grid item xs={12} sm={6} md={3}>
-              <Paper
-                elevation={0}
-                sx={{
-                  p: 2,
-                  bgcolor: "rgba(255, 255, 255, 0.85)",
-                  backdropFilter: "blur(10px)",
-                  borderRadius: 2,
-                  border: "1px solid rgba(255, 255, 255, 0.3)",
-                  color: "text.primary",
-                  textAlign: "center",
-                  transition: "all 0.3s ease-in-out",
-                  background:
-                    "linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(245, 255, 245, 0.8) 100%)",
-                  boxShadow: "0 4px 16px rgba(0, 0, 0, 0.1)",
-                  "&:hover": {
-                    transform: "translateY(-4px)",
-                    bgcolor: "rgba(255, 255, 255, 0.95)",
-                    backdropFilter: "blur(15px)",
-                    boxShadow: "0 8px 32px rgba(0, 0, 0, 0.2)",
-                    background:
-                      "linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(245, 255, 245, 0.9) 100%)",
-                  },
-                }}
-              >
-                <Typography variant="h5" fontWeight="bold" sx={{ mb: 0.5 }}>
-                  {leadStats.leads.overall.assigned}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Assigned Leads
-                </Typography>
-              </Paper>
-            </Grid>
-            <Grid item xs={12} sm={6} md={3}>
-              <Paper
-                elevation={0}
-                sx={{
-                  p: 2,
-                  bgcolor: "rgba(255, 255, 255, 0.85)",
-                  backdropFilter: "blur(10px)",
-                  borderRadius: 2,
-                  border: "1px solid rgba(255, 255, 255, 0.3)",
-                  color: "text.primary",
-                  textAlign: "center",
-                  transition: "all 0.3s ease-in-out",
-                  background:
-                    "linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(255, 250, 240, 0.8) 100%)",
-                  boxShadow: "0 4px 16px rgba(0, 0, 0, 0.1)",
-                  "&:hover": {
-                    transform: "translateY(-4px)",
-                    bgcolor: "rgba(255, 255, 255, 0.95)",
-                    backdropFilter: "blur(15px)",
-                    boxShadow: "0 8px 32px rgba(0, 0, 0, 0.2)",
-                    background:
-                      "linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 250, 240, 0.9) 100%)",
-                  },
-                }}
-              >
-                <Typography variant="h5" fontWeight="bold" sx={{ mb: 0.5 }}>
-                  {leadStats.leads.overall.available}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Available Leads
-                </Typography>
-              </Paper>
-            </Grid>
-            <Grid item xs={12} sm={6} md={3}>
-              <Paper
-                elevation={0}
-                sx={{
-                  p: 2,
-                  bgcolor: "rgba(255, 255, 255, 0.85)",
-                  backdropFilter: "blur(10px)",
-                  borderRadius: 2,
-                  border: "1px solid rgba(255, 255, 255, 0.3)",
-                  color: "text.primary",
-                  textAlign: "center",
-                  transition: "all 0.3s ease-in-out",
-                  background:
-                    "linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(250, 245, 255, 0.8) 100%)",
-                  boxShadow: "0 4px 16px rgba(0, 0, 0, 0.1)",
-                  "&:hover": {
-                    transform: "translateY(-4px)",
-                    bgcolor: "rgba(255, 255, 255, 0.95)",
-                    backdropFilter: "blur(15px)",
-                    boxShadow: "0 8px 32px rgba(0, 0, 0, 0.2)",
-                    background:
-                      "linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(250, 245, 255, 0.9) 100%)",
-                  },
-                }}
-              >
-                <Typography variant="h5" fontWeight="bold" sx={{ mb: 0.5 }}>
-                  {leadStats.leads.ftd.total}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  FTD Leads
-                </Typography>
-              </Paper>
-            </Grid>
-          </Grid>
-        </Box>
-      )}
-      {}
       <Paper
         elevation={0}
         sx={{
@@ -2038,7 +1967,12 @@ const LeadsPage = () => {
           borderColor: "divider",
         }}
       >
-        <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+        <Box
+          display="flex"
+          justifyContent="space-between"
+          alignItems="center"
+          mb={2}
+        >
           <Button
             startIcon={showFilters ? <ExpandLessIcon /> : <FilterIcon />}
             onClick={() => setShowFilters(!showFilters)}
@@ -2059,9 +1993,9 @@ const LeadsPage = () => {
                   size="small"
                   onClick={() => setAddLeadDialogOpen(true)}
                   sx={{
-                    color: 'primary.main',
-                    '&:hover': {
-                      bgcolor: 'primary.lighter',
+                    color: "primary.main",
+                    "&:hover": {
+                      bgcolor: "primary.lighter",
                     },
                   }}
                 >
@@ -2075,9 +2009,9 @@ const LeadsPage = () => {
                   size="small"
                   onClick={() => setImportDialogOpen(true)}
                   sx={{
-                    color: 'info.main',
-                    '&:hover': {
-                      bgcolor: 'info.lighter',
+                    color: "info.main",
+                    "&:hover": {
+                      bgcolor: "info.lighter",
                     },
                   }}
                 >
@@ -2091,9 +2025,9 @@ const LeadsPage = () => {
                   size="small"
                   onClick={() => setBulkDeleteDialogOpen(true)}
                   sx={{
-                    color: 'error.main',
-                    '&:hover': {
-                      bgcolor: 'error.lighter',
+                    color: "error.main",
+                    "&:hover": {
+                      bgcolor: "error.lighter",
                     },
                   }}
                 >
@@ -2107,9 +2041,9 @@ const LeadsPage = () => {
                   size="small"
                   onClick={handleOpenArchivedLeadsDialog}
                   sx={{
-                    color: 'warning.main',
-                    '&:hover': {
-                      bgcolor: 'warning.lighter',
+                    color: "warning.main",
+                    "&:hover": {
+                      bgcolor: "warning.lighter",
                     },
                   }}
                 >
@@ -2126,9 +2060,7 @@ const LeadsPage = () => {
                 fullWidth
                 label="Search"
                 value={searchInput}
-                onChange={(e) =>
-                  handleSearchChange(e.target.value)
-                }
+                onChange={(e) => handleSearchChange(e.target.value)}
                 placeholder="Search by name, email, phone, country, gender, status, lead type, agent, or use 'assigned', 'unassigned', 'archived'..."
                 InputProps={{
                   startAdornment: (
@@ -2253,24 +2185,38 @@ const LeadsPage = () => {
       {}
       <Box sx={{ display: { xs: "none", md: "block" } }}>
         <Paper>
-          <TableContainer sx={{ 
-            maxHeight: "calc(100vh - 180px)",
-            overflowX: "auto",
-            '& .MuiTable-root': {
-              minWidth: 'auto',
-              tableLayout: 'auto'
-            }
-          }}>
-            <Table stickyHeader size="small" sx={{
-              '& .MuiTableCell-root': {
-                padding: '4px 8px',
-                fontSize: '0.8rem'
-              },
-              '& .MuiChip-root': {
-                height: '18px',
-                fontSize: '0.7rem'
-              }
-            }}>
+          <TableContainer sx={{ width: "100%", minWidth: "100%" }}>
+            <Table
+              size="small"
+              sx={{
+                width: "100%",
+                minWidth: "100%",
+                tableLayout: "fixed",
+                "& .MuiTableCell-root": {
+                  padding: "2px 6px",
+                  fontSize: "0.75rem",
+                  lineHeight: 1.2,
+                },
+                "& .MuiTableHead-root .MuiTableCell-root": {
+                  padding: "4px 6px",
+                  fontSize: "0.75rem",
+                  fontWeight: 600,
+                },
+                "& .MuiTableBody-root .MuiTableRow-root": {
+                  height: "28px",
+                },
+                "& .MuiChip-root": {
+                  height: "18px",
+                  fontSize: "0.65rem",
+                },
+                "& .MuiTypography-root": {
+                  lineHeight: 1.2,
+                },
+                "& .MuiStack-root": {
+                  gap: "0 !important",
+                },
+              }}
+            >
               <TableHead>
                 <TableRow>
                   {!isAgent && canAssignLeads && (
@@ -2286,7 +2232,9 @@ const LeadsPage = () => {
                         textAlign: "center",
                       }}
                     >
-                      <div style={{ display: 'flex', justifyContent: 'center' }}>
+                      <div
+                        style={{ display: "flex", justifyContent: "center" }}
+                      >
                         <Checkbox
                           indeterminate={
                             numSelected > 0 && numSelected < leads.length
@@ -2356,6 +2304,8 @@ const LeadsPage = () => {
                       fontSize: "0.875rem",
                       py: 1,
                       textAlign: "center",
+                      width: "70px",
+                      maxWidth: "70px",
                     }}
                   >
                     Country
@@ -2383,6 +2333,8 @@ const LeadsPage = () => {
                         fontSize: "0.875rem",
                         py: 1,
                         textAlign: "center",
+                        width: "70px",
+                        maxWidth: "70px",
                       }}
                     >
                       Gender
@@ -2396,6 +2348,8 @@ const LeadsPage = () => {
                         fontSize: "0.875rem",
                         py: 1,
                         textAlign: "center",
+                        width: "120px",
+                        maxWidth: "120px",
                       }}
                     >
                       Assigned To
@@ -2433,7 +2387,7 @@ const LeadsPage = () => {
                 {loading ? (
                   <TableRow>
                     <TableCell
-                      colSpan={isAgent ? 7 : (isAdminOrManager ? 10 : 9)}
+                      colSpan={isAgent ? 7 : isAdminOrManager ? 10 : 9}
                       align="center"
                     >
                       <CircularProgress />
@@ -2442,7 +2396,7 @@ const LeadsPage = () => {
                 ) : leads.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={isAgent ? 7 : (isAdminOrManager ? 10 : 9)}
+                      colSpan={isAgent ? 7 : isAdminOrManager ? 10 : 9}
                       align="center"
                     >
                       No leads found
@@ -2492,9 +2446,12 @@ const LeadsPage = () => {
                         updateCallNumber={updateCallNumber}
                       />
                       {expandedRows.has(lead._id) && (
-                        <TableRow>
+                        <TableRow
+                          onClick={() => toggleRowExpansion(lead._id)}
+                          sx={{ cursor: "pointer" }}
+                        >
                           <TableCell
-                            colSpan={isAdminOrManager ? 13 : 12}
+                            colSpan={9}
                             sx={{
                               bgcolor: "background.default",
                               borderBottom: "2px solid",
@@ -2513,7 +2470,7 @@ const LeadsPage = () => {
             </Table>
           </TableContainer>
           <TablePagination
-            rowsPerPageOptions={[5, 10, 25]}
+            rowsPerPageOptions={[25, 50, 100]}
             component="div"
             count={totalLeads}
             rowsPerPage={rowsPerPage}
@@ -2539,78 +2496,139 @@ const LeadsPage = () => {
             {leads.map((groupedLead) => {
               const { leadId, leadInfo = {}, orders = [] } = groupedLead || {};
               if (!leadId) return null;
-              
+
               return (
                 <Paper key={leadId} sx={{ p: 2 }}>
                   <Stack spacing={2}>
                     <Box>
                       <Typography variant="subtitle1" fontWeight="bold">
                         {leadInfo?.prefix && `${leadInfo.prefix} `}
-                        {leadInfo?.firstName || 'N/A'} {leadInfo?.lastName || ''}
+                        {leadInfo?.firstName || "N/A"}{" "}
+                        {leadInfo?.lastName || ""}
                       </Typography>
                       <Typography variant="caption" color="text.secondary">
-                        {leadInfo?.newEmail || 'No email'}
+                        {leadInfo?.newEmail || "No email"}
                       </Typography>
                     </Box>
                     <Stack direction="row" spacing={1} flexWrap="wrap">
                       <Chip
                         label={leadInfo?.leadType?.toUpperCase() || "UNKNOWN"}
                         size="small"
-                        color={leadInfo?.leadType === 'ftd' ? 'success' : leadInfo?.leadType === 'filler' ? 'info' : 'default'}
+                        color={
+                          leadInfo?.leadType === "ftd"
+                            ? "success"
+                            : leadInfo?.leadType === "filler"
+                            ? "info"
+                            : "default"
+                        }
                       />
                       <Chip
-                        label={leadInfo?.status ? leadInfo.status.charAt(0).toUpperCase() + leadInfo.status.slice(1) : "Unknown"}
+                        label={
+                          leadInfo?.status
+                            ? leadInfo.status.charAt(0).toUpperCase() +
+                              leadInfo.status.slice(1)
+                            : "Unknown"
+                        }
                         size="small"
                         variant="outlined"
                       />
                       <Chip
-                        label={`${orders.length} Order${orders.length !== 1 ? 's' : ''}`}
+                        label={`${orders.length} Order${
+                          orders.length !== 1 ? "s" : ""
+                        }`}
                         size="small"
                         color="primary"
                       />
                     </Stack>
                     {orders.length > 0 && (
                       <Box>
-                        <Typography variant="caption" fontWeight="bold" gutterBottom>
+                        <Typography
+                          variant="caption"
+                          fontWeight="bold"
+                          gutterBottom
+                        >
                           Orders:
                         </Typography>
                         <Stack spacing={1} sx={{ mt: 1 }}>
                           {orders.map((order, idx) => (
-                            <Box key={order.orderId || `order-${idx}`} sx={{ pl: 2, borderLeft: '2px solid', borderColor: 'divider' }}>
-                              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
+                            <Box
+                              key={order.orderId || `order-${idx}`}
+                              sx={{
+                                pl: 2,
+                                borderLeft: "2px solid",
+                                borderColor: "divider",
+                              }}
+                            >
+                              <Box
+                                sx={{
+                                  display: "flex",
+                                  justifyContent: "space-between",
+                                  alignItems: "center",
+                                  mb: 0.5,
+                                }}
+                              >
                                 <Typography variant="caption" display="block">
-                                  {new Date(order.orderCreatedAt).toLocaleDateString()}
+                                  {new Date(
+                                    order.orderCreatedAt
+                                  ).toLocaleDateString()}
                                 </Typography>
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                <Box
+                                  sx={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: 0.5,
+                                  }}
+                                >
                                   <IconButton
                                     size="small"
-                                    onClick={() => handleOpenCommentDialog({ _id: leadId, ...leadInfo, orderId: order.orderId })}
+                                    onClick={() =>
+                                      handleOpenCommentDialog({
+                                        _id: leadId,
+                                        ...leadInfo,
+                                        orderId: order.orderId,
+                                      })
+                                    }
                                   >
                                     <CommentIcon fontSize="small" />
                                   </IconButton>
-                                  {order.comments && order.comments.length > 0 && (
-                                    <Chip
-                                      label={order.comments.length}
-                                      size="small"
-                                      color="info"
-                                      sx={{ minWidth: 24, height: 16, fontSize: '0.65rem' }}
-                                    />
-                                  )}
+                                  {order.comments &&
+                                    order.comments.length > 0 && (
+                                      <Chip
+                                        label={order.comments.length}
+                                        size="small"
+                                        color="info"
+                                        sx={{
+                                          minWidth: 24,
+                                          height: 16,
+                                          fontSize: "0.65rem",
+                                        }}
+                                      />
+                                    )}
                                 </Box>
                               </Box>
-                              {order.clientBrokers && order.clientBrokers.length > 0 && (
-                                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
-                                  {order.clientBrokers.map((broker, bIdx) => (
-                                    <Chip
-                                      key={broker?._id || `broker-${idx}-${bIdx}`}
-                                      label={broker?.name || 'Unknown'}
-                                      size="small"
-                                      color="secondary"
-                                      variant="outlined"
-                                    />
-                                  ))}
-                                </Box>
-                              )}
+                              {order.clientBrokers &&
+                                order.clientBrokers.length > 0 && (
+                                  <Box
+                                    sx={{
+                                      display: "flex",
+                                      flexWrap: "wrap",
+                                      gap: 0.5,
+                                      mt: 0.5,
+                                    }}
+                                  >
+                                    {order.clientBrokers.map((broker, bIdx) => (
+                                      <Chip
+                                        key={
+                                          broker?._id || `broker-${idx}-${bIdx}`
+                                        }
+                                        label={broker?.name || "Unknown"}
+                                        size="small"
+                                        color="secondary"
+                                        variant="outlined"
+                                      />
+                                    ))}
+                                  </Box>
+                                )}
                               {order.comments && order.comments.length > 0 && (
                                 <Stack spacing={0.5} sx={{ mt: 1 }}>
                                   {order.comments.map((comment, cIdx) => (
@@ -2619,17 +2637,30 @@ const LeadsPage = () => {
                                       elevation={0}
                                       sx={{
                                         p: 1,
-                                        bgcolor: 'action.hover',
+                                        bgcolor: "action.hover",
                                         borderRadius: 1,
                                       }}
                                     >
-                                      <Typography variant="caption" fontWeight="medium" display="block">
-                                        {comment.author?.fullName || 'Unknown'}
+                                      <Typography
+                                        variant="caption"
+                                        fontWeight="medium"
+                                        display="block"
+                                      >
+                                        {comment.author?.fullName || "Unknown"}
                                       </Typography>
-                                      <Typography variant="caption" color="text.secondary" display="block" sx={{ fontSize: '0.65rem' }}>
-                                        {new Date(comment.createdAt).toLocaleString()}
+                                      <Typography
+                                        variant="caption"
+                                        color="text.secondary"
+                                        display="block"
+                                        sx={{ fontSize: "0.65rem" }}
+                                      >
+                                        {new Date(
+                                          comment.createdAt
+                                        ).toLocaleString()}
                                       </Typography>
-                                      <Typography variant="caption">{comment.text}</Typography>
+                                      <Typography variant="caption">
+                                        {comment.text}
+                                      </Typography>
                                     </Paper>
                                   ))}
                                 </Stack>
@@ -2644,7 +2675,7 @@ const LeadsPage = () => {
               );
             })}
             <TablePagination
-              rowsPerPageOptions={[5, 10, 25]}
+              rowsPerPageOptions={[25, 50, 100]}
               component="div"
               count={totalLeads}
               rowsPerPage={rowsPerPage}
@@ -2675,7 +2706,7 @@ const LeadsPage = () => {
               />
             ))}
             <TablePagination
-              rowsPerPageOptions={[5, 10, 25]}
+              rowsPerPageOptions={[25, 50, 100]}
               component="div"
               count={totalLeads}
               rowsPerPage={rowsPerPage}
@@ -2761,11 +2792,11 @@ const LeadsPage = () => {
       <AssignLeadToAgentDialog
         open={bulkAssignDialogOpen}
         onClose={() => setBulkAssignDialogOpen(false)}
-        lead={Array.from(selectedLeads).map(id => 
-          leads.find(lead => lead._id === id)
-        ).filter(Boolean)}
+        lead={Array.from(selectedLeads)
+          .map((id) => leads.find((lead) => lead._id === id))
+          .filter(Boolean)}
         onSuccess={() => {
-          setSuccess('Leads assigned to agent successfully!');
+          setSuccess("Leads assigned to agent successfully!");
           setSelectedLeads(new Set());
           fetchLeads();
         }}
@@ -2960,7 +2991,7 @@ const LeadsPage = () => {
         maxWidth="lg"
         fullWidth
       >
-        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1 }}>
           <ArchiveIcon color="warning" />
           Archived Leads
         </DialogTitle>
@@ -2974,18 +3005,22 @@ const LeadsPage = () => {
               onChange={(e) => handleArchivedLeadsSearchChange(e.target.value)}
               placeholder="Search by name, email, phone..."
               InputProps={{
-                startAdornment: <SearchIcon sx={{ mr: 1, color: 'action.active' }} />,
+                startAdornment: (
+                  <SearchIcon sx={{ mr: 1, color: "action.active" }} />
+                ),
               }}
             />
           </Box>
-          
+
           {archivedLeadsLoading ? (
             <Box display="flex" justifyContent="center" py={4}>
               <CircularProgress />
             </Box>
           ) : archivedLeads.length === 0 ? (
             <Box textAlign="center" py={4}>
-              <ArchiveIcon sx={{ fontSize: 60, color: 'text.secondary', mb: 2 }} />
+              <ArchiveIcon
+                sx={{ fontSize: 60, color: "text.secondary", mb: 2 }}
+              />
               <Typography variant="h6" color="text.secondary">
                 No archived leads found
               </Typography>
@@ -3022,19 +3057,22 @@ const LeadsPage = () => {
                             label={lead.leadType?.toUpperCase()}
                             size="small"
                             color={
-                              lead.leadType === 'ftd' ? 'success' :
-                              lead.leadType === 'filler' ? 'warning' : 'info'
+                              lead.leadType === "ftd"
+                                ? "success"
+                                : lead.leadType === "filler"
+                                ? "warning"
+                                : "info"
                             }
                           />
                         </TableCell>
                         <TableCell>{lead.country}</TableCell>
                         <TableCell>
-                          {lead.archivedBy?.fullName || 'Unknown'}
+                          {lead.archivedBy?.fullName || "Unknown"}
                         </TableCell>
                         <TableCell>
                           {lead.archivedAt
                             ? new Date(lead.archivedAt).toLocaleString()
-                            : 'N/A'}
+                            : "N/A"}
                         </TableCell>
                         <TableCell align="right">
                           <Tooltip title="Unarchive Lead">
@@ -3042,7 +3080,11 @@ const LeadsPage = () => {
                               size="small"
                               color="success"
                               onClick={() => {
-                                if (window.confirm("Are you sure you want to unarchive this lead?")) {
+                                if (
+                                  window.confirm(
+                                    "Are you sure you want to unarchive this lead?"
+                                  )
+                                ) {
                                   handleUnarchiveLead(lead._id);
                                 }
                               }}
@@ -3068,7 +3110,9 @@ const LeadsPage = () => {
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setArchivedLeadsDialogOpen(false)}>Close</Button>
+          <Button onClick={() => setArchivedLeadsDialogOpen(false)}>
+            Close
+          </Button>
         </DialogActions>
       </Dialog>
     </Box>
@@ -3089,10 +3133,10 @@ const GroupedLeadRow = React.memo(
     pendingRequests,
   }) => {
     const { leadId, leadInfo = {}, orders = [] } = groupedLead || {};
-    
+
     // Safety check: if no leadId, don't render
     if (!leadId) return null;
-    
+
     const isExpanded = expandedRows.has(leadId);
 
     const getLeadTypeColor = (type) => {
@@ -3117,77 +3161,97 @@ const GroupedLeadRow = React.memo(
 
     return (
       <React.Fragment key={leadId}>
-        <TableRow hover sx={{ 
-          '& > *': { borderBottom: 'unset' },
-          '& .MuiTableCell-root': {
-            py: 0.25,
-            px: 1,
-            fontSize: '0.75rem'
-          }
-        }}>
+        <TableRow
+          hover
+          sx={{
+            "& > *": { borderBottom: "unset" },
+            "& .MuiTableCell-root": {
+              py: 0.25,
+              px: 1,
+              fontSize: "0.75rem",
+            },
+          }}
+        >
           <TableCell padding="checkbox">
             <IconButton
               size="small"
               onClick={() => onToggleExpansion(leadId)}
-              sx={{ padding: '4px' }}
+              sx={{ padding: "4px" }}
             >
-              {isExpanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
+              {isExpanded ? (
+                <ExpandLessIcon fontSize="small" />
+              ) : (
+                <ExpandMoreIcon fontSize="small" />
+              )}
             </IconButton>
           </TableCell>
           <TableCell>
             <Box>
-              <Typography variant="body2" fontWeight="medium" sx={{ fontSize: '0.8rem' }}>
+              <Typography
+                variant="body2"
+                fontWeight="medium"
+                sx={{ fontSize: "0.8rem" }}
+              >
                 {leadInfo?.prefix && `${leadInfo.prefix} `}
-                {leadInfo?.firstName || 'N/A'} {leadInfo?.lastName || ''}
+                {leadInfo?.firstName || "N/A"} {leadInfo?.lastName || ""}
               </Typography>
-              <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>
-                {leadInfo?.newEmail || 'No email'}
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{ fontSize: "0.7rem" }}
+              >
+                {leadInfo?.newEmail || "No email"}
               </Typography>
             </Box>
           </TableCell>
           <TableCell>
-            <Typography variant="caption" sx={{ fontSize: '0.75rem' }}>
-              {leadInfo?.country || 'N/A'}
+            <Typography variant="caption" sx={{ fontSize: "0.75rem" }}>
+              {leadInfo?.country || "N/A"}
             </Typography>
           </TableCell>
-          <TableCell sx={{ width: "70px", maxWidth: "70px", textAlign: "center" }}>
+          <TableCell
+            sx={{ width: "70px", maxWidth: "70px", textAlign: "center" }}
+          >
             <Chip
               label={leadInfo?.leadType?.toUpperCase() || "UNKNOWN"}
               color={getLeadTypeColor(leadInfo?.leadType)}
               size="small"
               sx={{
-                height: '18px',
-                '& .MuiChip-label': { fontSize: '0.65rem', px: 0.75 }
+                height: "18px",
+                "& .MuiChip-label": { fontSize: "0.65rem", px: 0.75 },
               }}
             />
           </TableCell>
           {/* Status column hidden but still searchable/filterable */}
           <TableCell>
             <Chip
-              label={`${orders.length} Order${orders.length !== 1 ? 's' : ''}`}
+              label={`${orders.length} Order${orders.length !== 1 ? "s" : ""}`}
               color="primary"
               size="small"
               variant="outlined"
               sx={{
-                height: '18px',
-                '& .MuiChip-label': { fontSize: '0.65rem', px: 0.75 }
+                height: "18px",
+                "& .MuiChip-label": { fontSize: "0.65rem", px: 0.75 },
               }}
             />
           </TableCell>
           <TableCell>
-            <Typography variant="caption" sx={{ fontSize: '0.7rem' }}>
+            <Typography variant="caption" sx={{ fontSize: "0.7rem" }}>
               {leadInfo?.assignedAgentAt
                 ? new Date(leadInfo.assignedAgentAt).toLocaleDateString()
-                : leadInfo?.createdAt 
-                  ? new Date(leadInfo.createdAt).toLocaleDateString()
-                  : 'N/A'}
+                : leadInfo?.createdAt
+                ? new Date(leadInfo.createdAt).toLocaleDateString()
+                : "N/A"}
             </Typography>
           </TableCell>
           <TableCell>
             {/* Comments now handled per order in expanded view */}
           </TableCell>
         </TableRow>
-        <TableRow>
+        <TableRow
+          onClick={() => onToggleExpansion(leadId)}
+          sx={{ cursor: isExpanded ? "pointer" : "default" }}
+        >
           <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={8}>
             <Collapse in={isExpanded} timeout="auto" unmountOnExit>
               <Box sx={{ margin: 2 }}>
@@ -3213,33 +3277,65 @@ const GroupedLeadRow = React.memo(
                         <TableRow key={order.orderId}>
                           <TableCell>
                             <Typography variant="body2">
-                              {new Date(order.orderCreatedAt).toLocaleDateString()}
+                              {new Date(
+                                order.orderCreatedAt
+                              ).toLocaleDateString()}
                             </Typography>
-                            <Typography variant="caption" color="text.secondary">
-                              {new Date(order.orderCreatedAt).toLocaleTimeString()}
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                            >
+                              {new Date(
+                                order.orderCreatedAt
+                              ).toLocaleTimeString()}
                             </Typography>
                           </TableCell>
                           <TableCell>
                             <Chip
-                              label={order.orderedAs?.toUpperCase() || 'N/A'}
+                              label={order.orderedAs?.toUpperCase() || "N/A"}
                               size="small"
-                              color={order.orderedAs === 'ftd' ? 'success' : order.orderedAs === 'filler' ? 'info' : 'default'}
+                              color={
+                                order.orderedAs === "ftd"
+                                  ? "success"
+                                  : order.orderedAs === "filler"
+                                  ? "info"
+                                  : "default"
+                              }
                             />
                           </TableCell>
                           <TableCell>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                              {order.orderedAs === 'filler' ? (
+                            <Box
+                              sx={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 1,
+                              }}
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {order.orderedAs === "filler" ? (
                                 <Tooltip title="Call changes are not available for leads ordered as filler">
                                   <span>
-                                    <FormControl size="small" sx={{ minWidth: 100 }}>
+                                    <FormControl
+                                      size="small"
+                                      sx={{ minWidth: 100 }}
+                                    >
                                       <Select
                                         value={order.callNumber || ""}
                                         displayEmpty
                                         disabled
                                       >
-                                        {getAvailableCallOptions(order.callNumber).map((option) => (
-                                          <MenuItem key={option || "none"} value={option}>
-                                            {option === "" ? <em>None</em> : option}
+                                        {getAvailableCallOptions(
+                                          order.callNumber
+                                        ).map((option) => (
+                                          <MenuItem
+                                            key={option || "none"}
+                                            value={option}
+                                          >
+                                            {option === "" ? (
+                                              <em>None</em>
+                                            ) : (
+                                              option
+                                            )}
                                           </MenuItem>
                                         ))}
                                       </Select>
@@ -3247,36 +3343,70 @@ const GroupedLeadRow = React.memo(
                                   </span>
                                 </Tooltip>
                               ) : (
-                                <FormControl size="small" sx={{ minWidth: 100 }}>
+                                <FormControl
+                                  size="small"
+                                  sx={{ minWidth: 100 }}
+                                >
                                   <Select
                                     value={order.callNumber || ""}
-                                    onChange={(e) => updateCallNumber(leadId, e.target.value, order.orderId)}
+                                    onChange={(e) =>
+                                      updateCallNumber(
+                                        leadId,
+                                        e.target.value,
+                                        order.orderId
+                                      )
+                                    }
                                     displayEmpty
-                                    disabled={pendingRequests.has(`${leadId}-${order.orderId}`)}
+                                    disabled={pendingRequests.has(
+                                      `${leadId}-${order.orderId}`
+                                    )}
                                   >
-                                    {getAvailableCallOptions(order.callNumber).map((option) => (
-                                      <MenuItem key={option || "none"} value={option}>
+                                    {getAvailableCallOptions(
+                                      order.callNumber
+                                    ).map((option) => (
+                                      <MenuItem
+                                        key={option || "none"}
+                                        value={option}
+                                      >
                                         {option === "" ? <em>None</em> : option}
                                       </MenuItem>
                                     ))}
                                   </Select>
                                 </FormControl>
                               )}
-                              {pendingRequests.has(`${leadId}-${order.orderId}`) && pendingRequests.get(`${leadId}-${order.orderId}`).requestedCallNumber !== undefined && (
-                                <Tooltip title={`Pending: ${pendingRequests.get(`${leadId}-${order.orderId}`).requestedCallNumber || 'None'}`}>
-                                  <Chip
-                                    label="Pending"
-                                    size="small"
-                                    color="warning"
-                                    sx={{ fontSize: '0.75rem' }}
-                                  />
-                                </Tooltip>
-                              )}
+                              {pendingRequests.has(
+                                `${leadId}-${order.orderId}`
+                              ) &&
+                                pendingRequests.get(
+                                  `${leadId}-${order.orderId}`
+                                ).requestedCallNumber !== undefined && (
+                                  <Tooltip
+                                    title={`Pending: ${
+                                      pendingRequests.get(
+                                        `${leadId}-${order.orderId}`
+                                      ).requestedCallNumber || "None"
+                                    }`}
+                                  >
+                                    <Chip
+                                      label="Pending"
+                                      size="small"
+                                      color="warning"
+                                      sx={{ fontSize: "0.75rem" }}
+                                    />
+                                  </Tooltip>
+                                )}
                             </Box>
                           </TableCell>
                           <TableCell>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                              {order.orderedAs === 'filler' ? (
+                            <Box
+                              sx={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 1,
+                              }}
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {order.orderedAs === "filler" ? (
                                 <Tooltip title="Verification changes are not available for leads ordered as filler">
                                   <span>
                                     <FormControl size="small">
@@ -3294,66 +3424,119 @@ const GroupedLeadRow = React.memo(
                                 <FormControl size="small">
                                   <Select
                                     value={order.verified ? "yes" : "no"}
-                                    onChange={(e) => updateVerification(leadId, e.target.value === "yes", order.orderId)}
-                                    disabled={pendingRequests.has(`${leadId}-${order.orderId}`)}
+                                    onChange={(e) =>
+                                      updateVerification(
+                                        leadId,
+                                        e.target.value === "yes",
+                                        order.orderId
+                                      )
+                                    }
+                                    disabled={pendingRequests.has(
+                                      `${leadId}-${order.orderId}`
+                                    )}
                                   >
                                     <MenuItem value="no">No</MenuItem>
                                     <MenuItem value="yes">Yes</MenuItem>
                                   </Select>
                                 </FormControl>
                               )}
-                              {pendingRequests.has(`${leadId}-${order.orderId}`) && pendingRequests.get(`${leadId}-${order.orderId}`).requestedVerified !== undefined && (
-                                <Tooltip title={`Pending: ${pendingRequests.get(`${leadId}-${order.orderId}`).requestedVerified ? 'Yes' : 'No'}`}>
-                                  <Chip
-                                    label="Pending"
-                                    size="small"
-                                    color="warning"
-                                    sx={{ fontSize: '0.75rem' }}
-                                  />
-                                </Tooltip>
-                              )}
+                              {pendingRequests.has(
+                                `${leadId}-${order.orderId}`
+                              ) &&
+                                pendingRequests.get(
+                                  `${leadId}-${order.orderId}`
+                                ).requestedVerified !== undefined && (
+                                  <Tooltip
+                                    title={`Pending: ${
+                                      pendingRequests.get(
+                                        `${leadId}-${order.orderId}`
+                                      ).requestedVerified
+                                        ? "Yes"
+                                        : "No"
+                                    }`}
+                                  >
+                                    <Chip
+                                      label="Pending"
+                                      size="small"
+                                      color="warning"
+                                      sx={{ fontSize: "0.75rem" }}
+                                    />
+                                  </Tooltip>
+                                )}
                             </Box>
                           </TableCell>
                           <TableCell>
-                            {order.clientBrokers && order.clientBrokers.length > 0 ? (
-                              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                            {order.clientBrokers &&
+                            order.clientBrokers.length > 0 ? (
+                              <Box
+                                sx={{
+                                  display: "flex",
+                                  flexWrap: "wrap",
+                                  gap: 0.5,
+                                }}
+                              >
                                 {order.clientBrokers.map((broker, idx) => {
                                   // Determine chip color based on injection status
                                   const getStatusColor = (status) => {
                                     switch (status) {
-                                      case 'successful':
-                                        return 'success';
-                                      case 'failed':
-                                        return 'error';
-                                      case 'pending':
+                                      case "successful":
+                                        return "success";
+                                      case "failed":
+                                        return "error";
+                                      case "pending":
                                       default:
-                                        return 'secondary';
+                                        return "secondary";
                                     }
                                   };
-                                  
+
                                   return (
                                     <Chip
-                                      key={broker?._id || `broker-${order.orderId}-${idx}`}
-                                      label={broker?.name || 'Unknown Broker'}
+                                      key={
+                                        broker?._id ||
+                                        `broker-${order.orderId}-${idx}`
+                                      }
+                                      label={broker?.name || "Unknown Broker"}
                                       size="small"
-                                      color={getStatusColor(broker?.injectionStatus)}
-                                      title={broker?.injectionStatus ? `Injection: ${broker.injectionStatus}` : 'Lead-level broker assignment'}
+                                      color={getStatusColor(
+                                        broker?.injectionStatus
+                                      )}
+                                      title={
+                                        broker?.injectionStatus
+                                          ? `Injection: ${broker.injectionStatus}`
+                                          : "Lead-level broker assignment"
+                                      }
                                     />
                                   );
                                 })}
                               </Box>
                             ) : (
-                              <Typography variant="caption" color="text.secondary">
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                              >
                                 No client brokers assigned
                               </Typography>
                             )}
                           </TableCell>
                           <TableCell>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Box
+                              sx={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 1,
+                              }}
+                              onClick={(e) => e.stopPropagation()}
+                            >
                               <Tooltip title="Add Comment">
                                 <IconButton
                                   size="small"
-                                  onClick={() => onComment({ _id: leadId, ...leadInfo, orderId: order.orderId })}
+                                  onClick={() =>
+                                    onComment({
+                                      _id: leadId,
+                                      ...leadInfo,
+                                      orderId: order.orderId,
+                                    })
+                                  }
                                   color="primary"
                                 >
                                   <CommentIcon fontSize="small" />
@@ -3369,7 +3552,13 @@ const GroupedLeadRow = React.memo(
                               )}
                             </Box>
                             {order.comments && order.comments.length > 0 && (
-                              <Box sx={{ mt: 1, maxHeight: 200, overflowY: 'auto' }}>
+                              <Box
+                                sx={{
+                                  mt: 1,
+                                  maxHeight: 200,
+                                  overflowY: "auto",
+                                }}
+                              >
                                 <Stack spacing={1}>
                                   {order.comments.map((comment, idx) => (
                                     <Paper
@@ -3377,22 +3566,49 @@ const GroupedLeadRow = React.memo(
                                       elevation={0}
                                       sx={{
                                         p: 1,
-                                        bgcolor: 'action.hover',
+                                        bgcolor: "action.hover",
                                         borderRadius: 1,
                                       }}
                                     >
-                                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-                                        <Avatar sx={{ width: 20, height: 20, fontSize: '0.75rem' }}>
-                                          {comment.author?.fullName?.charAt(0) || 'U'}
+                                      <Box
+                                        sx={{
+                                          display: "flex",
+                                          alignItems: "center",
+                                          gap: 1,
+                                          mb: 0.5,
+                                        }}
+                                      >
+                                        <Avatar
+                                          sx={{
+                                            width: 20,
+                                            height: 20,
+                                            fontSize: "0.75rem",
+                                          }}
+                                        >
+                                          {comment.author?.fullName?.charAt(
+                                            0
+                                          ) || "U"}
                                         </Avatar>
-                                        <Typography variant="caption" fontWeight="medium">
-                                          {comment.author?.fullName || 'Unknown'}
+                                        <Typography
+                                          variant="caption"
+                                          fontWeight="medium"
+                                        >
+                                          {comment.author?.fullName ||
+                                            "Unknown"}
                                         </Typography>
-                                        <Typography variant="caption" color="text.secondary">
-                                          • {new Date(comment.createdAt).toLocaleString()}
+                                        <Typography
+                                          variant="caption"
+                                          color="text.secondary"
+                                        >
+                                          •{" "}
+                                          {new Date(
+                                            comment.createdAt
+                                          ).toLocaleString()}
                                         </Typography>
                                       </Box>
-                                      <Typography variant="caption">{comment.text}</Typography>
+                                      <Typography variant="caption">
+                                        {comment.text}
+                                      </Typography>
                                     </Paper>
                                   ))}
                                 </Stack>
@@ -3437,17 +3653,17 @@ const LeadRow = React.memo(
   }) => {
     const [anchorEl, setAnchorEl] = useState(null);
     const menuOpen = Boolean(anchorEl);
-    
+
     const handleMenuOpen = (event) => {
       event.stopPropagation();
       setAnchorEl(event.currentTarget);
     };
-    
+
     const handleMenuClose = (event) => {
       if (event) event.stopPropagation();
       setAnchorEl(null);
     };
-    
+
     // Helper function to check if two IDs match (handles different formats)
     const idsMatch = (id1, id2) => {
       if (!id1 || !id2) return false;
@@ -3465,7 +3681,9 @@ const LeadRow = React.memo(
 
       if (user?.role === ROLES.AGENT) {
         const assignedAgentId =
-          lead.assignedAgent?._id || lead.assignedAgent?.id || lead.assignedAgent;
+          lead.assignedAgent?._id ||
+          lead.assignedAgent?.id ||
+          lead.assignedAgent;
         const userIdToCheck = userId || user?.id;
 
         // Debug logging for agent permission check
@@ -3495,14 +3713,15 @@ const LeadRow = React.memo(
       onToggleExpansion(lead._id);
     };
     const isArchived = lead.isArchived === true;
-    const greyColor = '#9e9e9e';
-    
+    const greyColor = "#9e9e9e";
+
     const cellSx = {
       borderRight: "1px solid rgba(224, 224, 224, 1)",
-      py: 0.25,
-      px: 1,
-      fontSize: "0.875rem",
+      py: 0,
+      px: 0.5,
+      fontSize: "0.75rem",
       textAlign: "center",
+      lineHeight: 1.2,
     };
     const checkboxCellSx = {
       borderRight: "1px solid rgba(224, 224, 224, 1)",
@@ -3518,32 +3737,38 @@ const LeadRow = React.memo(
         sx={{
           "&:hover": { backgroundColor: "action.hover" },
           borderLeft: (theme) =>
-            isArchived 
+            isArchived
               ? `4px solid #bdbdbd`
               : `4px solid ${
-                  theme.palette[getLeadTypeColor(getDisplayLeadType(lead))]?.main ||
-                  theme.palette.grey.main
+                  theme.palette[getLeadTypeColor(getDisplayLeadType(lead))]
+                    ?.main || theme.palette.grey.main
                 }`,
           cursor: "pointer",
-          ...(isArchived && { 
-            bgcolor: '#f5f5f5',
+          ...(isArchived && {
+            bgcolor: "#f5f5f5",
           }),
         }}
       >
         {canAssignLeads && (
           <TableCell padding="checkbox" sx={checkboxCellSx}>
-            <Tooltip 
+            <Tooltip
               title={
-                isArchived ? "Archived leads cannot be assigned" :
-                lead.leadType === 'cold' ? "Cold leads cannot be assigned to agents" : ""
+                isArchived
+                  ? "Archived leads cannot be assigned"
+                  : lead.leadType === "cold"
+                  ? "Cold leads cannot be assigned to agents"
+                  : ""
               }
               arrow
             >
-              <span onClick={(e) => e.stopPropagation()} style={{ display: 'flex', justifyContent: 'center' }}>
+              <span
+                onClick={(e) => e.stopPropagation()}
+                style={{ display: "flex", justifyContent: "center" }}
+              >
                 <Checkbox
                   checked={selectedLeads.has(lead._id)}
                   onChange={onSelectLead(lead._id)}
-                  disabled={lead.leadType === 'cold' || isArchived}
+                  disabled={lead.leadType === "cold" || isArchived}
                   sx={{ padding: "4px" }}
                 />
               </span>
@@ -3552,37 +3777,53 @@ const LeadRow = React.memo(
         )}
         <TableCell sx={{ ...cellSx, width: "70px", maxWidth: "70px" }}>
           <Chip
-            label={isArchived ? "ARCHIVED" : (getDisplayLeadType(lead) || "unknown").toUpperCase()}
-            color={isArchived ? "default" : getLeadTypeColor(getDisplayLeadType(lead))}
+            label={
+              isArchived
+                ? "ARCHIVED"
+                : (getDisplayLeadType(lead) || "unknown").toUpperCase()
+            }
+            color={
+              isArchived
+                ? "default"
+                : getLeadTypeColor(getDisplayLeadType(lead))
+            }
             size="small"
             sx={{
               fontWeight: "medium",
               height: "18px",
               "& .MuiChip-label": { fontSize: "0.65rem", px: 0.75 },
-              bgcolor: isArchived ? '#bdbdbd' : undefined, 
-              color: isArchived ? '#616161' : undefined,
+              bgcolor: isArchived ? "#bdbdbd" : undefined,
+              color: isArchived ? "#616161" : undefined,
             }}
           />
         </TableCell>
         <TableCell sx={{ ...cellSx, textAlign: "left" }}>
           <Typography
             variant="body2"
-            sx={{ fontWeight: "medium", fontSize: "0.8rem", color: isArchived ? greyColor : 'inherit' }}
+            sx={{
+              fontWeight: "medium",
+              fontSize: "0.8rem",
+              color: isArchived ? greyColor : "inherit",
+            }}
           >
-            {lead.fullName ||
-              `${lead.firstName} ${lead.lastName || ""}`.trim()}
+            {lead.fullName || `${lead.firstName} ${lead.lastName || ""}`.trim()}
           </Typography>
         </TableCell>
         <TableCell sx={cellSx}>
-          <Stack spacing={0.25} alignItems="center">
+          <Box
+            sx={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: 0,
+            }}
+          >
             <Typography
               variant="body2"
               sx={{
-                display: "flex",
-                alignItems: "center",
-                gap: 0.5,
-                fontSize: "0.75rem",
-                color: isArchived ? greyColor : 'inherit',
+                fontSize: "0.7rem",
+                lineHeight: 1.1,
+                color: isArchived ? greyColor : "inherit",
               }}
             >
               📧 {lead.newEmail}
@@ -3590,11 +3831,9 @@ const LeadRow = React.memo(
             <Typography
               variant="body2"
               sx={{
-                display: "flex",
-                alignItems: "center",
-                gap: 0.5,
-                fontSize: "0.75rem",
-                color: isArchived ? greyColor : 'inherit',
+                fontSize: "0.7rem",
+                lineHeight: 1.1,
+                color: isArchived ? greyColor : "inherit",
               }}
             >
               📱{" "}
@@ -3602,9 +3841,9 @@ const LeadRow = React.memo(
                 ? `${lead.prefix} ${lead.newPhone}`
                 : lead.newPhone || "N/A"}
             </Typography>
-          </Stack>
+          </Box>
         </TableCell>
-        <TableCell sx={cellSx}>
+        <TableCell sx={{ ...cellSx, width: "70px", maxWidth: "70px" }}>
           <Chip
             label={getCountryAbbreviation(lead.country)}
             size="small"
@@ -3612,21 +3851,66 @@ const LeadRow = React.memo(
             sx={{
               height: "18px",
               "& .MuiChip-label": { fontSize: "0.65rem", px: 0.75 },
-              borderColor: isArchived ? '#bdbdbd' : undefined, 
+              borderColor: isArchived ? "#bdbdbd" : undefined,
               color: isArchived ? greyColor : undefined,
             }}
           />
         </TableCell>
-        <TableCell sx={cellSx}>
-          {lead.gender && lead.gender !== 'not_defined' ? (
-            <Typography sx={{ color: isArchived ? greyColor : 'inherit' }}>{lead.gender}</Typography>
+        <TableCell sx={{ ...cellSx, width: "70px", maxWidth: "70px" }}>
+          {lead.gender && lead.gender !== "not_defined" ? (
+            <Chip
+              icon={
+                lead.gender === "male" ? (
+                  <MaleIcon sx={{ fontSize: "0.9rem !important" }} />
+                ) : (
+                  <FemaleIcon sx={{ fontSize: "0.9rem !important" }} />
+                )
+              }
+              label={lead.gender.charAt(0).toUpperCase()}
+              size="small"
+              sx={{
+                height: "20px",
+                "& .MuiChip-label": { fontSize: "0.65rem", px: 0.5 },
+                "& .MuiChip-icon": { ml: 0.5 },
+                bgcolor: isArchived
+                  ? "#e0e0e0"
+                  : lead.gender === "male"
+                  ? "#e3f2fd"
+                  : "#fff3e0",
+                color: isArchived
+                  ? greyColor
+                  : lead.gender === "male"
+                  ? "#1976d2"
+                  : "#e65100",
+                borderColor: isArchived
+                  ? "#bdbdbd"
+                  : lead.gender === "male"
+                  ? "#1976d2"
+                  : "#e65100",
+                border: "1px solid",
+              }}
+            />
           ) : (
-            <Typography sx={{ fontWeight: 'bold', fontSize: '1rem', color: isArchived ? greyColor : 'inherit' }}>—</Typography>
+            <Typography
+              sx={{
+                fontWeight: "bold",
+                fontSize: "1rem",
+                color: isArchived ? greyColor : "inherit",
+              }}
+            >
+              —
+            </Typography>
           )}
         </TableCell>
         {isAdminOrManager && (
-          <TableCell sx={cellSx}>
-            <Typography sx={{ fontWeight: lead.assignedAgent ? 'normal' : 'bold', fontSize: lead.assignedAgent ? '0.875rem' : '1rem', color: isArchived ? greyColor : 'inherit' }}>
+          <TableCell sx={{ ...cellSx, width: "120px", maxWidth: "120px" }}>
+            <Typography
+              sx={{
+                fontWeight: lead.assignedAgent ? "normal" : "bold",
+                fontSize: lead.assignedAgent ? "0.8rem" : "1rem",
+                color: isArchived ? greyColor : "inherit",
+              }}
+            >
               {lead.assignedAgent ? lead.assignedAgent.fullName : "—"}
             </Typography>
           </TableCell>
@@ -3637,30 +3921,42 @@ const LeadRow = React.memo(
             const cooldown = getCooldownStatus(lead);
             if (isArchived) {
               return (
-                <Typography sx={{ color: greyColor, fontWeight: 'bold', fontSize: '1rem' }}>—</Typography>
+                <Typography
+                  sx={{
+                    color: greyColor,
+                    fontWeight: "bold",
+                    fontSize: "1rem",
+                  }}
+                >
+                  —
+                </Typography>
               );
             }
-            
+
             // Show "—" for N/A
-            if (cooldown.text === 'N/A') {
-              return <Typography sx={{ fontSize: '1rem', fontWeight: 'bold' }}>—</Typography>;
+            if (cooldown.text === "N/A") {
+              return (
+                <Typography sx={{ fontSize: "1rem", fontWeight: "bold" }}>
+                  —
+                </Typography>
+              );
             }
-            
+
             // Show green dot for Available
-            if (cooldown.text === 'Available') {
+            if (cooldown.text === "Available") {
               return (
                 <Box
                   sx={{
                     width: 10,
                     height: 10,
-                    borderRadius: '50%',
-                    bgcolor: 'success.main',
-                    margin: '0 auto',
+                    borderRadius: "50%",
+                    bgcolor: "success.main",
+                    margin: "0 auto",
                   }}
                 />
               );
             }
-            
+
             // Show chip for cooldown days remaining
             return (
               <Chip
@@ -3675,8 +3971,21 @@ const LeadRow = React.memo(
             );
           })()}
         </TableCell>
-        <TableCell sx={{ py: 0.25, px: 0.5, width: "70px", maxWidth: "70px", textAlign: "right" }}>
-          <Stack direction="row" spacing={0.5} alignItems="center" justifyContent="flex-end">
+        <TableCell
+          sx={{
+            py: 0.25,
+            px: 0.5,
+            width: "70px",
+            maxWidth: "70px",
+            textAlign: "right",
+          }}
+        >
+          <Stack
+            direction="row"
+            spacing={0.5}
+            alignItems="center"
+            justifyContent="flex-end"
+          >
             {(user?.role === ROLES.ADMIN || isLeadManager) && (
               <IconButton
                 size="small"
@@ -3685,7 +3994,7 @@ const LeadRow = React.memo(
                   handleEditLead(lead);
                 }}
                 title="Edit Lead"
-                sx={{ padding: '4px' }}
+                sx={{ padding: "4px" }}
               >
                 <EditIcon sx={{ fontSize: "1rem" }} />
               </IconButton>
@@ -3694,7 +4003,7 @@ const LeadRow = React.memo(
               size="small"
               onClick={handleMenuOpen}
               disabled={!isOwner && !canDeleteLeads}
-              sx={{ padding: '4px' }}
+              sx={{ padding: "4px" }}
               title="More actions"
             >
               <MoreVertIcon sx={{ fontSize: "1rem" }} />
@@ -3705,12 +4014,12 @@ const LeadRow = React.memo(
               onClose={handleMenuClose}
               onClick={(e) => e.stopPropagation()}
               anchorOrigin={{
-                vertical: 'bottom',
-                horizontal: 'right',
+                vertical: "bottom",
+                horizontal: "right",
               }}
               transformOrigin={{
-                vertical: 'top',
-                horizontal: 'right',
+                vertical: "top",
+                horizontal: "right",
               }}
             >
               {isOwner && (
@@ -3721,10 +4030,13 @@ const LeadRow = React.memo(
                       onUpdateStatus(lead._id, LEAD_STATUSES.ACTIVE);
                       handleMenuClose();
                     }}
-                    sx={{ fontSize: '0.75rem', py: 0.75 }}
+                    sx={{ fontSize: "0.75rem", py: 0.75 }}
                   >
                     <ListItemIcon>
-                      <CheckCircleIcon fontSize="small" sx={{ color: 'success.main' }} />
+                      <CheckCircleIcon
+                        fontSize="small"
+                        sx={{ color: "success.main" }}
+                      />
                     </ListItemIcon>
                     <ListItemText primary="Active" />
                   </MenuItem>
@@ -3734,10 +4046,10 @@ const LeadRow = React.memo(
                       onUpdateStatus(lead._id, LEAD_STATUSES.CONTACTED);
                       handleMenuClose();
                     }}
-                    sx={{ fontSize: '0.75rem', py: 0.75 }}
+                    sx={{ fontSize: "0.75rem", py: 0.75 }}
                   >
                     <ListItemIcon>
-                      <PhoneIcon fontSize="small" sx={{ color: 'info.main' }} />
+                      <PhoneIcon fontSize="small" sx={{ color: "info.main" }} />
                     </ListItemIcon>
                     <ListItemText primary="Contacted" />
                   </MenuItem>
@@ -3747,10 +4059,13 @@ const LeadRow = React.memo(
                       onUpdateStatus(lead._id, LEAD_STATUSES.CONVERTED);
                       handleMenuClose();
                     }}
-                    sx={{ fontSize: '0.75rem', py: 0.75 }}
+                    sx={{ fontSize: "0.75rem", py: 0.75 }}
                   >
                     <ListItemIcon>
-                      <ShoppingCartIcon fontSize="small" sx={{ color: 'success.main' }} />
+                      <ShoppingCartIcon
+                        fontSize="small"
+                        sx={{ color: "success.main" }}
+                      />
                     </ListItemIcon>
                     <ListItemText primary="Converted" />
                   </MenuItem>
@@ -3760,10 +4075,13 @@ const LeadRow = React.memo(
                       onUpdateStatus(lead._id, LEAD_STATUSES.INACTIVE);
                       handleMenuClose();
                     }}
-                    sx={{ fontSize: '0.75rem', py: 0.75 }}
+                    sx={{ fontSize: "0.75rem", py: 0.75 }}
                   >
                     <ListItemIcon>
-                      <CancelIcon fontSize="small" sx={{ color: 'error.main' }} />
+                      <CancelIcon
+                        fontSize="small"
+                        sx={{ color: "error.main" }}
+                      />
                     </ListItemIcon>
                     <ListItemText primary="Inactive" />
                   </MenuItem>
@@ -3774,7 +4092,7 @@ const LeadRow = React.memo(
                       onComment(lead);
                       handleMenuClose();
                     }}
-                    sx={{ fontSize: '0.75rem', py: 0.75 }}
+                    sx={{ fontSize: "0.75rem", py: 0.75 }}
                   >
                     <ListItemIcon>
                       <CommentIcon fontSize="small" />
@@ -3791,14 +4109,25 @@ const LeadRow = React.memo(
                       onClick={(e) => {
                         e.stopPropagation();
                         handleMenuClose();
-                        if (window.confirm("Are you sure you want to unarchive this lead?")) {
+                        if (
+                          window.confirm(
+                            "Are you sure you want to unarchive this lead?"
+                          )
+                        ) {
                           onUnarchiveLead(lead._id);
                         }
                       }}
-                      sx={{ fontSize: '0.75rem', py: 0.75, color: 'success.main' }}
+                      sx={{
+                        fontSize: "0.75rem",
+                        py: 0.75,
+                        color: "success.main",
+                      }}
                     >
                       <ListItemIcon>
-                        <UnarchiveIcon fontSize="small" sx={{ color: 'success.main' }} />
+                        <UnarchiveIcon
+                          fontSize="small"
+                          sx={{ color: "success.main" }}
+                        />
                       </ListItemIcon>
                       <ListItemText primary="Unarchive" />
                     </MenuItem>
@@ -3807,14 +4136,25 @@ const LeadRow = React.memo(
                       onClick={(e) => {
                         e.stopPropagation();
                         handleMenuClose();
-                        if (window.confirm("Are you sure you want to archive this lead? It will become inactive and won't be returned by future orders.")) {
+                        if (
+                          window.confirm(
+                            "Are you sure you want to archive this lead? It will become inactive and won't be returned by future orders."
+                          )
+                        ) {
                           onArchiveLead(lead._id);
                         }
                       }}
-                      sx={{ fontSize: '0.75rem', py: 0.75, color: 'warning.main' }}
+                      sx={{
+                        fontSize: "0.75rem",
+                        py: 0.75,
+                        color: "warning.main",
+                      }}
                     >
                       <ListItemIcon>
-                        <ArchiveIcon fontSize="small" sx={{ color: 'warning.main' }} />
+                        <ArchiveIcon
+                          fontSize="small"
+                          sx={{ color: "warning.main" }}
+                        />
                       </ListItemIcon>
                       <ListItemText primary="Archive" />
                     </MenuItem>
@@ -3828,11 +4168,15 @@ const LeadRow = React.memo(
                     onClick={(e) => {
                       e.stopPropagation();
                       handleMenuClose();
-                      if (window.confirm("Are you sure you want to delete this lead?")) {
+                      if (
+                        window.confirm(
+                          "Are you sure you want to delete this lead?"
+                        )
+                      ) {
                         onDeleteLead(lead._id);
                       }
                     }}
-                    sx={{ fontSize: '0.75rem', py: 0.75, color: 'error.main' }}
+                    sx={{ fontSize: "0.75rem", py: 0.75, color: "error.main" }}
                   >
                     <ListItemIcon>
                       <DeleteIcon fontSize="small" color="error" />
@@ -3866,17 +4210,17 @@ const LeadCard = React.memo(
   }) => {
     const [anchorEl, setAnchorEl] = useState(null);
     const menuOpen = Boolean(anchorEl);
-    
+
     const handleMenuOpen = (event) => {
       event.stopPropagation();
       setAnchorEl(event.currentTarget);
     };
-    
+
     const handleMenuClose = (event) => {
       if (event) event.stopPropagation();
       setAnchorEl(null);
     };
-    
+
     const handleCardClick = (event) => {
       if (
         event.target.closest(
@@ -3949,9 +4293,16 @@ const LeadCard = React.memo(
             <Divider />
           </Grid>
           <Grid item xs={12}>
-            <Stack direction="row" spacing={1} justifyContent="space-between" alignItems="center">
+            <Stack
+              direction="row"
+              spacing={1}
+              justifyContent="space-between"
+              alignItems="center"
+            >
               <Chip
-                label={lead.status.charAt(0).toUpperCase() + lead.status.slice(1)}
+                label={
+                  lead.status.charAt(0).toUpperCase() + lead.status.slice(1)
+                }
                 color={getStatusColor(lead.status)}
                 size="small"
                 sx={{ fontWeight: "medium" }}
@@ -3996,12 +4347,12 @@ const LeadCard = React.memo(
                   onClose={handleMenuClose}
                   onClick={(e) => e.stopPropagation()}
                   anchorOrigin={{
-                    vertical: 'bottom',
-                    horizontal: 'right',
+                    vertical: "bottom",
+                    horizontal: "right",
                   }}
                   transformOrigin={{
-                    vertical: 'top',
-                    horizontal: 'right',
+                    vertical: "top",
+                    horizontal: "right",
                   }}
                 >
                   <MenuItem
@@ -4012,7 +4363,10 @@ const LeadCard = React.memo(
                     }}
                   >
                     <ListItemIcon>
-                      <CheckCircleIcon fontSize="small" sx={{ color: 'success.main' }} />
+                      <CheckCircleIcon
+                        fontSize="small"
+                        sx={{ color: "success.main" }}
+                      />
                     </ListItemIcon>
                     <ListItemText primary="Active" />
                   </MenuItem>
@@ -4024,7 +4378,7 @@ const LeadCard = React.memo(
                     }}
                   >
                     <ListItemIcon>
-                      <PhoneIcon fontSize="small" sx={{ color: 'info.main' }} />
+                      <PhoneIcon fontSize="small" sx={{ color: "info.main" }} />
                     </ListItemIcon>
                     <ListItemText primary="Contacted" />
                   </MenuItem>
@@ -4036,7 +4390,10 @@ const LeadCard = React.memo(
                     }}
                   >
                     <ListItemIcon>
-                      <ShoppingCartIcon fontSize="small" sx={{ color: 'success.main' }} />
+                      <ShoppingCartIcon
+                        fontSize="small"
+                        sx={{ color: "success.main" }}
+                      />
                     </ListItemIcon>
                     <ListItemText primary="Converted" />
                   </MenuItem>
@@ -4048,7 +4405,10 @@ const LeadCard = React.memo(
                     }}
                   >
                     <ListItemIcon>
-                      <CancelIcon fontSize="small" sx={{ color: 'error.main' }} />
+                      <CancelIcon
+                        fontSize="small"
+                        sx={{ color: "error.main" }}
+                      />
                     </ListItemIcon>
                     <ListItemText primary="Inactive" />
                   </MenuItem>
@@ -4072,11 +4432,15 @@ const LeadCard = React.memo(
                         onClick={(e) => {
                           e.stopPropagation();
                           handleMenuClose();
-                          if (window.confirm("Are you sure you want to delete this lead?")) {
+                          if (
+                            window.confirm(
+                              "Are you sure you want to delete this lead?"
+                            )
+                          ) {
                             onDeleteLead(lead._id);
                           }
                         }}
-                        sx={{ color: 'error.main' }}
+                        sx={{ color: "error.main" }}
                       >
                         <ListItemIcon>
                           <DeleteIcon fontSize="small" color="error" />
@@ -4089,7 +4453,14 @@ const LeadCard = React.memo(
               </Stack>
             </Stack>
           </Grid>
-          <Collapse in={expandedRows.has(lead._id)} sx={{ width: "100%" }}>
+          <Collapse
+            in={expandedRows.has(lead._id)}
+            sx={{ width: "100%", cursor: "pointer" }}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleExpansion(lead._id);
+            }}
+          >
             <Grid item xs={12}>
               <Box sx={{ mt: 2, pb: 2, overflowX: "hidden" }}>
                 <LeadDetails lead={lead} />

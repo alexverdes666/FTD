@@ -310,7 +310,7 @@ const OrdersPage = () => {
   const [selectedOrderForManagement, setSelectedOrderForManagement] =
     useState(null);
   const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [rowsPerPage, setRowsPerPage] = useState(50);
   const [totalOrders, setTotalOrders] = useState(0);
   // Initialize filters from URL params (for global search integration)
   const [filters, setFilters] = useState(() => {
@@ -3261,7 +3261,7 @@ const OrdersPage = () => {
           </Table>
         </TableContainer>
         <TablePagination
-          rowsPerPageOptions={[5, 10, 25]}
+          rowsPerPageOptions={[25, 50, 100]}
           component="div"
           count={totalOrders}
           rowsPerPage={rowsPerPage}
