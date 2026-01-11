@@ -269,7 +269,17 @@ const ResultCard = ({ result, query, view, onNavigate, onCopyDetails }) => {
         </Typography>
       </CardContent>
       <CardActions sx={{ justifyContent: "space-between", px: 2, pb: 2 }}>
-        <Tooltip title={result.type === "lead" ? "Copy details (Name, Email, Phone, Country)" : "Copy ID"}>
+        <Tooltip title={
+            result.type === "lead" ? "Copy details (Name, Email, Phone, Country)" :
+            result.type === "user" ? "Copy details (Name, Email)" :
+            result.type === "campaign" ? "Copy name" :
+            result.type === "ticket" ? "Copy title" :
+            result.type === "announcement" ? "Copy title" :
+            result.type === "clientBroker" ? "Copy details (Name, Domain)" :
+            result.type === "clientNetwork" ? "Copy name" :
+            result.type === "ourNetwork" ? "Copy details (Name, Assigned Manager)" :
+            "Copy ID"
+          }>
           <IconButton
             size="small"
             onClick={(e) => {
@@ -492,18 +502,52 @@ const SearchResultsPage = () => {
 
   // Copy details to clipboard (tab-separated for Google Sheets)
   const handleCopyDetails = useCallback((result) => {
-    // For leads, copy: Full Name, Email, Phone, Country (tab-separated)
-    if (result.type === "lead") {
-      const fullName = result.title || "";
-      const email = result.subtitle || "";
-      const phone = result.meta?.phone || "";
-      const country = result.meta?.country || "";
-      const copyText = [fullName, email, phone, country].join("\t");
-      navigator.clipboard.writeText(copyText);
-    } else {
-      // For other types, just copy the ID
-      navigator.clipboard.writeText(result._id);
+    let copyText = "";
+    
+    switch (result.type) {
+      case "lead":
+        // Copy: Full Name, Email, Phone, Country
+        copyText = [
+          result.title || "",
+          result.subtitle || "",
+          result.meta?.phone || "",
+          result.meta?.country || ""
+        ].join("\t");
+        break;
+      case "user":
+        // Copy: Name, Email
+        copyText = [result.title || "", result.subtitle || ""].join("\t");
+        break;
+      case "campaign":
+        // Copy: Name
+        copyText = result.title || "";
+        break;
+      case "ticket":
+        // Copy: Name/Title
+        copyText = result.title || "";
+        break;
+      case "announcement":
+        // Copy: Name/Title
+        copyText = result.title || "";
+        break;
+      case "clientBroker":
+        // Copy: Name, Domain
+        copyText = [result.title || "", result.meta?.domain || result.subtitle || ""].join("\t");
+        break;
+      case "clientNetwork":
+        // Copy: Name
+        copyText = result.title || "";
+        break;
+      case "ourNetwork":
+        // Copy: Name, Assigned Manager
+        copyText = [result.title || "", result.meta?.assignedManager || ""].join("\t");
+        break;
+      default:
+        // For other types, just copy the ID
+        copyText = result._id;
     }
+    
+    navigator.clipboard.writeText(copyText);
   }, []);
 
   return (

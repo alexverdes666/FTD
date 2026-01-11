@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Box,
   Paper,
@@ -60,6 +61,7 @@ const CampaignsPage = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const user = useSelector(selectUser);
+  const [searchParams, setSearchParams] = useSearchParams();
   const [campaigns, setCampaigns] = useState([]);
   const [affiliateManagers, setAffiliateManagers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -67,7 +69,8 @@ const CampaignsPage = () => {
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [totalCount, setTotalCount] = useState(0);
-  const [searchTerm, setSearchTerm] = useState('');
+  // Initialize search from URL params (for global search integration)
+  const [searchTerm, setSearchTerm] = useState(() => searchParams.get('search') || '');
   const [showActiveOnly, setShowActiveOnly] = useState(true);
   const [statusFilter, setStatusFilter] = useState('');
   const [openDialog, setOpenDialog] = useState(false);
@@ -156,6 +159,12 @@ const CampaignsPage = () => {
   useEffect(() => {
     fetchAffiliateManagers();
   }, [fetchAffiliateManagers]);
+  // Clear URL params after search is initialized (for global search integration)
+  useEffect(() => {
+    if (searchParams.get('search')) {
+      setSearchParams({}, { replace: true });
+    }
+  }, []); // Only run once on mount
   useEffect(() => {
     if (notification.message) {
       const timer = setTimeout(() => {

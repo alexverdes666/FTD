@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   Box,
   Paper,
@@ -56,6 +57,7 @@ const ClientNetworksPage = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
   const user = useSelector(selectUser);
+  const [searchParams, setSearchParams] = useSearchParams();
   const { executeSensitiveAction, sensitiveActionState, resetSensitiveAction } =
     useSensitiveAction();
 
@@ -64,7 +66,8 @@ const ClientNetworksPage = () => {
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [totalCount, setTotalCount] = useState(0);
-  const [searchTerm, setSearchTerm] = useState("");
+  // Initialize search from URL params (for global search integration)
+  const [searchTerm, setSearchTerm] = useState(() => searchParams.get("search") || "");
   const [showActiveOnly, setShowActiveOnly] = useState(true);
   const [openDialog, setOpenDialog] = useState(false);
   const [editingNetwork, setEditingNetwork] = useState(null);
@@ -115,6 +118,13 @@ const ClientNetworksPage = () => {
   useEffect(() => {
     fetchClientNetworks();
   }, [fetchClientNetworks]);
+
+  // Clear URL params after search is initialized (for global search integration)
+  useEffect(() => {
+    if (searchParams.get("search")) {
+      setSearchParams({}, { replace: true });
+    }
+  }, []); // Only run once on mount
 
   const handleOpenDialog = (network = null) => {
     setEditingNetwork(network);

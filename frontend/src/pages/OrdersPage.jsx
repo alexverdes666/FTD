@@ -71,6 +71,7 @@ import {
   ChevronRight as ChevronRightIcon,
   Search as SearchIcon,
   Image as ImageIcon,
+  Settings as SettingsIcon,
 } from "@mui/icons-material";
 import { useForm, Controller } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
@@ -92,6 +93,7 @@ import ClientBrokerManagementDialog from "../components/ClientBrokerManagementDi
 import GenderFallbackModal from "../components/GenderFallbackModal";
 import AssignDepositCallDialog from "../components/AssignDepositCallDialog";
 import depositCallsService from "../services/depositCallsService";
+import CopyPreferencesDialog, { copyLeadsWithPreferences } from "../components/CopyPreferencesDialog";
 
 const createOrderSchema = (userRole) => {
   return yup.object({
@@ -382,6 +384,7 @@ const OrdersPage = () => {
     lead: null,
   });
   const [processingLeads, setProcessingLeads] = useState({});
+  const [copyPreferencesOpen, setCopyPreferencesOpen] = useState(false);
   const [copyNotification, setCopyNotification] = useState({
     open: false,
     message: "",
@@ -1375,6 +1378,44 @@ const OrdersPage = () => {
     }
   }, [handleOpenLeadsPreviewModal]);
 
+  // Copy leads for a specific order by fetching them first
+  const handleCopyOrderLeadsById = useCallback(async (orderId) => {
+    try {
+      setNotification({ message: "Loading leads...", severity: "info" });
+      const response = await api.get(`/orders/${orderId}`);
+      const orderData = response.data.data;
+      const leads = orderData.leads || [];
+      
+      if (leads.length === 0) {
+        setNotification({
+          message: "No leads to copy in this order",
+          severity: "warning",
+        });
+        return;
+      }
+      
+      // Pass the full order data for order-level fields (requester, dates, networks, etc.)
+      const result = copyLeadsWithPreferences(leads, orderData, getDisplayLeadType);
+      
+      if (result.success) {
+        setNotification({
+          message: result.message,
+          severity: "success",
+        });
+      } else {
+        setNotification({
+          message: result.message,
+          severity: "error",
+        });
+      }
+    } catch (err) {
+      setNotification({
+        message: "Could not load order leads for copying.",
+        severity: "error",
+      });
+    }
+  }, []);
+
   const handleCancelLead = async (leadId) => {
     const orderId = leadsPreviewModal.orderId;
     if (!orderId) return;
@@ -1528,6 +1569,23 @@ const OrdersPage = () => {
     } catch (err) {
       setNotification({
         message: err.response?.data?.message || "Failed to export leads",
+        severity: "error",
+      });
+    }
+  }, []);
+
+  // Copy leads from order to clipboard with user preferences
+  const handleCopyOrderLeads = useCallback((leads, orderData) => {
+    const result = copyLeadsWithPreferences(leads, orderData, getDisplayLeadType);
+    
+    if (result.success) {
+      setNotification({
+        message: result.message,
+        severity: "success",
+      });
+    } else {
+      setNotification({
+        message: result.message,
         severity: "error",
       });
     }
@@ -2148,6 +2206,11 @@ const OrdersPage = () => {
                   )}
                 </Box>
               )}
+              <Tooltip title="Configure copy format for leads">
+                <IconButton onClick={() => setCopyPreferencesOpen(true)}>
+                  <SettingsIcon />
+                </IconButton>
+              </Tooltip>
               <IconButton onClick={() => setShowFilters(!showFilters)}>
                 {showFilters ? <ExpandLessIcon /> : <ExpandMoreIcon />}
               </IconButton>
@@ -2522,6 +2585,16 @@ const OrdersPage = () => {
                               title="Export Leads as CSV"
                             >
                               <DownloadIcon fontSize="small" />
+                            </IconButton>
+                            <IconButton
+                              size="small"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleCopyOrderLeadsById(order._id);
+                              }}
+                              title="Copy Leads to Clipboard"
+                            >
+                              <ContentCopyIcon fontSize="small" />
                             </IconButton>
 
                             {(user?.role === "admin" ||
@@ -3158,6 +3231,16 @@ const OrdersPage = () => {
                                                   variant="outlined"
                                                 >
                                                   Export CSV
+                                                </Button>
+                                                <Button
+                                                  size="small"
+                                                  startIcon={<ContentCopyIcon />}
+                                                  onClick={() =>
+                                                    handleCopyOrderLeads(expandedDetails.leads, expandedDetails)
+                                                  }
+                                                  variant="outlined"
+                                                >
+                                                  Copy Leads
                                                 </Button>
                                                 {(user?.role === "admin" ||
                                                   user?.role ===
@@ -5441,7 +5524,9 @@ const OrdersPage = () => {
               alignItems: "center",
             }}
           >
-            <Typography variant="h6">Leads Preview</Typography>
+            <Typography variant="h6">
+              Leads Preview ({leadsPreviewModal.leads.length} leads)
+            </Typography>
             <IconButton
               aria-label="close"
               onClick={handleCloseLeadsPreviewModal}
@@ -5652,6 +5737,18 @@ const OrdersPage = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Copy Preferences Dialog */}
+      <CopyPreferencesDialog
+        open={copyPreferencesOpen}
+        onClose={() => setCopyPreferencesOpen(false)}
+        onSave={() => {
+          setNotification({
+            message: "Copy preferences saved",
+            severity: "success",
+          });
+        }}
+      />
     </Box>
   );
 };

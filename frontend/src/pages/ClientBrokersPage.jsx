@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useSelector } from "react-redux";
 import {
   Box,
@@ -45,13 +46,15 @@ const ClientBrokersPage = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
   const user = useSelector(selectUser);
+  const [searchParams, setSearchParams] = useSearchParams();
   const [clientBrokers, setClientBrokers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [notification, setNotification] = useState({
     message: "",
     severity: "info",
   });
-  const [searchTerm, setSearchTerm] = useState("");
+  // Initialize search from URL params (for global search integration)
+  const [searchTerm, setSearchTerm] = useState(() => searchParams.get("search") || "");
 
   // Dialog states
   const [createBrokerDialog, setCreateBrokerDialog] = useState({
@@ -211,7 +214,15 @@ const ClientBrokersPage = () => {
     handleCloseDeleteBrokerDialog,
   ]);
 
-  // Filter brokers based on search term
+  // Sync URL params when search changes
+  useEffect(() => {
+    if (searchParams.get("search")) {
+      // Clear search param from URL after it's been used
+      setSearchParams({}, { replace: true });
+    }
+  }, []); // Only run once on mount
+
+  // Filter brokers based on search term (including ID for global search integration)
   const filteredBrokers = React.useMemo(() => {
     if (!searchTerm.trim()) {
       return clientBrokers;
@@ -220,6 +231,7 @@ const ClientBrokersPage = () => {
     const searchLower = searchTerm.toLowerCase();
     return clientBrokers.filter(
       (broker) =>
+        broker._id?.toLowerCase().includes(searchLower) ||
         broker.name?.toLowerCase().includes(searchLower) ||
         broker.domain?.toLowerCase().includes(searchLower)
     );
