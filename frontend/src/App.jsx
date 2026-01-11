@@ -75,6 +75,7 @@ import MobileApprovalPage from "./pages/MobileApprovalPage.jsx";
 import MobileActionApprovalPage from "./pages/MobileActionApprovalPage.jsx";
 import QRSetupPage from "./pages/QRSetupPage.jsx";
 import SearchResultsPage from "./pages/SearchResultsPage.jsx";
+import SheetsPage from "./pages/SheetsPage.jsx";
 
 import GlobalPen from "./components/GlobalPen.jsx";
 
@@ -516,6 +517,7 @@ function AppContent() {
               }
             />
             <Route path="search" element={<SearchResultsPage />} />
+            <Route path="sheets" element={<SheetsPage />} />
           </Route>
           {}
           <Route path="*" element={<NotFoundPage />} />

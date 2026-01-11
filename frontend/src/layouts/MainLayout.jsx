@@ -52,6 +52,7 @@ import {
   Security as SecurityIcon,
   Note as NoteIcon,
   Speed as PerformanceIcon,
+  GridOn as SheetsIcon,
 } from "@mui/icons-material";
 import {
   logout,
@@ -348,6 +349,7 @@ const MainLayout = () => {
         },
         { text: "Support Tickets", icon: <TicketIcon />, path: "/tickets" },
         { text: "Performance", icon: <PerformanceIcon />, path: "/performance" },
+        { text: "Sheets", icon: <SheetsIcon />, path: "/sheets" },
       ];
     } else if (user?.role === "affiliate_manager") {
       const affiliateManagerItems = [
@@ -414,6 +416,7 @@ const MainLayout = () => {
           path: "/announcements",
         },
         { text: "Support Tickets", icon: <TicketIcon />, path: "/tickets" },
+        { text: "Sheets", icon: <SheetsIcon />, path: "/sheets" },
       ];
 
       // Add refunds management if user has permission
@@ -477,6 +480,7 @@ const MainLayout = () => {
           path: "/announcements",
         },
         { text: "Support Tickets", icon: <TicketIcon />, path: "/tickets" },
+        { text: "Sheets", icon: <SheetsIcon />, path: "/sheets" },
       ];
     } else if (user?.role === "lead_manager") {
       return [
