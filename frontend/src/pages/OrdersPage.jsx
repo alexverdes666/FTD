@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useSelector } from "react-redux";
+import { useSearchParams } from "react-router-dom";
 import {
   Box,
   Typography,
@@ -265,6 +266,7 @@ const OrdersPage = () => {
   const user = useSelector(selectUser);
   const theme = useTheme();
   const isSmallScreen = useMediaQuery(theme.breakpoints.down("sm"));
+  const [searchParams, setSearchParams] = useSearchParams();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [notification, setNotification] = useState({
@@ -307,11 +309,26 @@ const OrdersPage = () => {
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [totalOrders, setTotalOrders] = useState(0);
-  const [filters, setFilters] = useState({
-    startDate: "",
-    endDate: "",
-    search: "",
+  // Initialize filters from URL params (for global search integration)
+  const [filters, setFilters] = useState(() => {
+    const urlSearch = searchParams.get("search") || "";
+    return {
+      startDate: "",
+      endDate: "",
+      search: urlSearch,
+    };
   });
+
+  // Clear URL params after initial load to avoid persisting
+  useEffect(() => {
+    if (searchParams.get("search")) {
+      // Clear the search param from URL after a short delay
+      const timer = setTimeout(() => {
+        setSearchParams({}, { replace: true });
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, []);
   const debouncedFilters = useDebounce(filters, 500);
   const [showFilters, setShowFilters] = useState(false);
   const [expandedRowData, setExpandedRowData] = useState({});
@@ -1342,6 +1359,19 @@ const OrdersPage = () => {
     setLeadsPreviewModal({ open: false, leads: [], orderId: null });
   }, []);
 
+  const handlePreviewOrderLeads = useCallback(async (orderId) => {
+    try {
+      const response = await api.get(`/orders/${orderId}`);
+      const orderData = response.data.data;
+      handleOpenLeadsPreviewModal(orderData.leads || [], orderId);
+    } catch (err) {
+      setNotification({
+        message: "Could not load order leads for preview.",
+        severity: "error",
+      });
+    }
+  }, [handleOpenLeadsPreviewModal]);
+
   const handleCancelLead = async (leadId) => {
     const orderId = leadsPreviewModal.orderId;
     if (!orderId) return;
@@ -2176,14 +2206,15 @@ const OrdersPage = () => {
       {}
       <Paper>
         <TableContainer>
-          <Table size={isSmallScreen ? "small" : "medium"}>
+          <Table size="small" sx={{ tableLayout: "fixed" }}>
             <TableHead>
               <TableRow>
                 <TableCell
                   sx={{
                     fontWeight: "bold",
                     backgroundColor: "grey.200",
-                    minWidth: 100,
+                    width: "10%",
+                    py: 1,
                   }}
                 >
                   Order ID
@@ -2194,7 +2225,8 @@ const OrdersPage = () => {
                     fontWeight: "bold",
                     backgroundColor: "grey.200",
                     textAlign: "center",
-                    minWidth: 150,
+                    width: "13%",
+                    py: 1,
                   }}
                 >
                   Requester
@@ -2205,7 +2237,8 @@ const OrdersPage = () => {
                     fontWeight: "bold",
                     backgroundColor: "grey.200",
                     textAlign: "center",
-                    minWidth: 100,
+                    width: "10%",
+                    py: 1,
                   }}
                 >
                   ON
@@ -2215,28 +2248,19 @@ const OrdersPage = () => {
                     fontWeight: "bold",
                     backgroundColor: "grey.200",
                     textAlign: "center",
-                    minWidth: 160,
+                    width: "14%",
+                    py: 1,
                   }}
                 >
-                  Requests (F/Fi/C/L)
-                </TableCell>
-                <TableCell
-                  sx={{
-                    display: { xs: "none", md: "table-cell" },
-                    fontWeight: "bold",
-                    backgroundColor: "grey.200",
-                    textAlign: "center",
-                    minWidth: 160,
-                  }}
-                >
-                  Fulfilled (F/Fi/C/L)
+                  Fulfilled
                 </TableCell>
                 <TableCell
                   sx={{
                     fontWeight: "bold",
                     backgroundColor: "grey.200",
                     textAlign: "center",
-                    minWidth: 120,
+                    width: "10%",
+                    py: 1,
                   }}
                 >
                   Status
@@ -2247,7 +2271,8 @@ const OrdersPage = () => {
                     fontWeight: "bold",
                     backgroundColor: "grey.200",
                     textAlign: "center",
-                    minWidth: 100,
+                    width: "10%",
+                    py: 1,
                   }}
                 >
                   GEO
@@ -2258,7 +2283,8 @@ const OrdersPage = () => {
                     fontWeight: "bold",
                     backgroundColor: "grey.200",
                     textAlign: "center",
-                    minWidth: 100,
+                    width: "10%",
+                    py: 1,
                   }}
                 >
                   Priority
@@ -2269,7 +2295,8 @@ const OrdersPage = () => {
                     fontWeight: "bold",
                     backgroundColor: "grey.200",
                     textAlign: "center",
-                    minWidth: 130,
+                    width: "12%",
+                    py: 1,
                   }}
                 >
                   Planned Date
@@ -2279,7 +2306,8 @@ const OrdersPage = () => {
                     fontWeight: "bold",
                     backgroundColor: "grey.200",
                     textAlign: "right",
-                    minWidth: 150,
+                    width: "11%",
+                    py: 1,
                   }}
                 >
                   Actions
@@ -2289,13 +2317,13 @@ const OrdersPage = () => {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={10} align="center">
+                  <TableCell colSpan={9} align="center">
                     <CircularProgress />
                   </TableCell>
                 </TableRow>
               ) : orders.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={10} align="center">
+                  <TableCell colSpan={9} align="center">
                     No orders found
                   </TableCell>
                 </TableRow>
@@ -2308,10 +2336,10 @@ const OrdersPage = () => {
                       <TableRow
                         hover
                         onClick={() => toggleRowExpansion(order._id)}
-                        sx={{ cursor: "pointer" }}
+                        sx={{ cursor: "pointer", "& td": { py: 0.5 } }}
                       >
                         <TableCell>
-                          <Typography variant="body2">
+                          <Typography variant="body2" noWrap>
                             {order._id.slice(-8)}
                           </Typography>
                         </TableCell>
@@ -2330,7 +2358,7 @@ const OrdersPage = () => {
                               },
                             }}
                           >
-                            <Typography variant="body2">
+                            <Typography variant="body2" noWrap sx={{ maxWidth: "100%" }}>
                               {order.requester?.fullName}
                             </Typography>
                             {user?.role === "admin" && (
@@ -2369,26 +2397,31 @@ const OrdersPage = () => {
                           align="center"
                           sx={{ display: { xs: "none", md: "table-cell" } }}
                         >
-                          <Typography variant="body2">
+                          <Typography variant="body2" noWrap>
                             {order.selectedOurNetwork?.name || "-"}
                           </Typography>
                         </TableCell>
                         <TableCell align="center">
-                          <Typography variant="body2">
-                            {`${order.requests?.ftd || 0}/${
-                              order.requests?.filler || 0
-                            }/${order.requests?.cold || 0}`}
-                          </Typography>
-                        </TableCell>
-                        <TableCell
-                          align="center"
-                          sx={{ display: { xs: "none", md: "table-cell" } }}
-                        >
-                          <Typography variant="body2">
-                            {`${order.fulfilled?.ftd || 0}/${
-                              order.fulfilled?.filler || 0
-                            }/${order.fulfilled?.cold || 0}`}
-                          </Typography>
+                          <Box sx={{ display: "flex", justifyContent: "center", gap: 0.5 }}>
+                            {[
+                              { fulfilled: order.fulfilled?.ftd || 0, requested: order.requests?.ftd || 0 },
+                              { fulfilled: order.fulfilled?.filler || 0, requested: order.requests?.filler || 0 },
+                              { fulfilled: order.fulfilled?.cold || 0, requested: order.requests?.cold || 0 },
+                            ].map((item, idx) => {
+                              const isUnfulfilled = (order.status === "cancelled" || order.status === "partial") && item.fulfilled < item.requested;
+                              return (
+                                <React.Fragment key={idx}>
+                                  {idx > 0 && <Typography variant="body2" component="span" sx={{ color: "primary.main", fontWeight: 900, mx: 0.5 }}>|</Typography>}
+                                  <Typography variant="caption" component="span" noWrap>
+                                    <Box component="span" sx={{ color: isUnfulfilled ? "error.main" : "inherit" }}>
+                                      {item.fulfilled}
+                                    </Box>
+                                    /{item.requested}
+                                  </Typography>
+                                </React.Fragment>
+                              );
+                            })}
+                          </Box>
                         </TableCell>
                         <TableCell align="center">
                           <Tooltip
@@ -2436,7 +2469,7 @@ const OrdersPage = () => {
                           align="center"
                           sx={{ display: { xs: "none", sm: "table-cell" } }}
                         >
-                          <Typography variant="body2">
+                          <Typography variant="body2" noWrap>
                             {order.countryFilter || "Any"}
                           </Typography>
                         </TableCell>
@@ -2454,7 +2487,7 @@ const OrdersPage = () => {
                           align="center"
                           sx={{ display: { xs: "none", sm: "table-cell" } }}
                         >
-                          <Typography variant="body2">
+                          <Typography variant="body2" noWrap>
                             {order.plannedDate
                               ? new Date(order.plannedDate).toLocaleDateString()
                               : "N/A"}
@@ -2464,9 +2497,19 @@ const OrdersPage = () => {
                           <Box
                             display="flex"
                             flexDirection="row"
-                            gap={1}
+                            gap={0.5}
                             justifyContent="flex-end"
                           >
+                            <IconButton
+                              size="small"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handlePreviewOrderLeads(order._id);
+                              }}
+                              title="Preview Leads"
+                            >
+                              <ViewIcon fontSize="small" />
+                            </IconButton>
                             <IconButton
                               size="small"
                               onClick={(e) => {
@@ -2512,7 +2555,7 @@ const OrdersPage = () => {
                       <TableRow>
                         <TableCell
                           sx={{ p: 0, borderBottom: "none" }}
-                          colSpan={10}
+                          colSpan={9}
                         >
                           <Collapse
                             in={isExpanded}

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useSelector } from "react-redux";
+import { useSearchParams } from "react-router-dom";
 import { useForm, Controller } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
 import * as yup from "yup";
@@ -1123,6 +1124,7 @@ const LeadDetails = React.memo(({ lead }) => (
 
 const LeadsPage = () => {
   const user = useSelector(selectUser);
+  const [searchParams, setSearchParams] = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
@@ -1162,27 +1164,41 @@ const LeadsPage = () => {
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [totalLeads, setTotalLeads] = useState(0);
-  const [filters, setFilters] = useState({
-    search: "", // Unified search field for name, email, phone, country, gender, status, lead type, order status, order priority
-    nameSearch: "",
-    emailSearch: "",
-    phoneSearch: "",
-    isAssigned: "",
-    gender: "",
-    documentStatus: "",
-    includeConverted: true,
-    order: "newest",
-    orderId: "",
-    assignedToMe: false,
-    orderCreatedStart: "",
-    orderCreatedEnd: "",
+  // Initialize filters from URL params (for global search integration)
+  const [filters, setFilters] = useState(() => {
+    const urlSearch = searchParams.get("search") || "";
+    return {
+      search: urlSearch, // Unified search field for name, email, phone, country, gender, status, lead type, order status, order priority
+      nameSearch: "",
+      emailSearch: "",
+      phoneSearch: "",
+      isAssigned: "",
+      gender: "",
+      documentStatus: "",
+      includeConverted: true,
+      order: "newest",
+      orderId: "",
+      assignedToMe: false,
+      orderCreatedStart: "",
+      orderCreatedEnd: "",
+    };
   });
   const [showFilters, setShowFilters] = useState(false);
   const [expandedRows, setExpandedRows] = useState(new Set());
   const [pendingRequests, setPendingRequests] = useState(new Map()); // Map<"leadId-orderId", pendingRequest>
   
-  // Local search input state for instant UI updates
-  const [searchInput, setSearchInput] = useState("");
+  // Local search input state for instant UI updates (initialized from URL params)
+  const [searchInput, setSearchInput] = useState(() => searchParams.get("search") || "");
+  
+  // Clear URL params after initial load
+  useEffect(() => {
+    if (searchParams.get("search")) {
+      const timer = setTimeout(() => {
+        setSearchParams({}, { replace: true });
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, []);
   const searchDebounceTimer = useRef(null);
   
   const isAdminOrManager = useMemo(
