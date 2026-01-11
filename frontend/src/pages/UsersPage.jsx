@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useSelector } from "react-redux";
+import { useSearchParams } from "react-router-dom";
 import {
   Box,
   Typography,
@@ -470,6 +471,7 @@ const UsersPage = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
   const currentUser = useSelector(selectUser);
+  const [searchParams, setSearchParams] = useSearchParams();
   const { executeSensitiveAction, sensitiveActionState, resetSensitiveAction } =
     useSensitiveAction();
   const [users, setUsers] = useState([]);
@@ -483,7 +485,18 @@ const UsersPage = () => {
     isActive: "true",
     status: "",
   });
-  const [searchValue, setSearchValue] = useState("");
+  // Initialize search from URL params (for global search integration)
+  const [searchValue, setSearchValue] = useState(() => searchParams.get("search") || "");
+  
+  // Clear URL params after initial load
+  useEffect(() => {
+    if (searchParams.get("search")) {
+      const timer = setTimeout(() => {
+        setSearchParams({}, { replace: true });
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, []);
 
   const {
     control,

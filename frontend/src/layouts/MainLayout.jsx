@@ -66,6 +66,7 @@ import ChatButton from "../components/ChatButton";
 import UserSwitcher from "../components/UserSwitcher";
 import QuickSwitcher from "../components/QuickSwitcher";
 import NotificationBell from "../components/NotificationBell";
+import GlobalSearch from "../components/GlobalSearch";
 import Force2FASetup from "../components/Force2FASetup";
 import AnnouncementPopup from "../components/AnnouncementPopup";
 import TwoFactorVerification from "../components/TwoFactorVerification";
@@ -655,10 +656,14 @@ const MainLayout = () => {
           >
             <MenuIcon />
           </IconButton>
-          <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
+          <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1, display: { xs: "none", sm: "block" } }}>
             {allNavigationPaths.find((item) => item.path === location.pathname)
               ?.text || "Dashboard"}
           </Typography>
+          {/* Global Search Bar */}
+          <Box sx={{ flexGrow: 1, display: "flex", justifyContent: "center", mx: 2 }}>
+            <GlobalSearch />
+          </Box>
           {}
           <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
             <UserSwitcher onOpenQuickSwitcher={handleOpenQuickSwitcher} />
