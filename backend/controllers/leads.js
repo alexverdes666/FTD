@@ -100,10 +100,20 @@ exports.getLeads = async (req, res, next) => {
 
     // Store search keywords for use in aggregation pipeline (for assignedAgent search)
     let searchKeywords = [];
+    // Flag to indicate if we're searching by ID
+    let searchById = null;
 
     // Handle unified search - multi-keyword search with AND logic
     // Split search into multiple keywords and trim each (similar to Orders page)
     if (search) {
+      // Check if the search query is a MongoDB ObjectId (24 hex characters)
+      const trimmedSearch = search.trim();
+      if (/^[0-9a-fA-F]{24}$/.test(trimmedSearch)) {
+        // Search by lead ID directly
+        searchById = new mongoose.Types.ObjectId(trimmedSearch);
+        filter._id = searchById;
+      }
+
       const rawKeywords = search
         .toLowerCase()
         .trim()
@@ -219,8 +229,8 @@ exports.getLeads = async (req, res, next) => {
           assignedAgentInfo: { $arrayElemAt: ["$assignedAgentDetails", 0] },
         },
       },
-      // Filter by assignedAgent name if search keywords are provided
-      ...(searchKeywords.length > 0
+      // Filter by assignedAgent name if search keywords are provided (skip if searching by ID)
+      ...(searchKeywords.length > 0 && !searchById
         ? [
             {
               $match: {
@@ -352,8 +362,8 @@ exports.getLeads = async (req, res, next) => {
           assignedAgentInfo: { $arrayElemAt: ["$assignedAgentDetails", 0] },
         },
       },
-      // Filter by assignedAgent name if search keywords are provided
-      ...(searchKeywords.length > 0
+      // Filter by assignedAgent name if search keywords are provided (skip if searching by ID)
+      ...(searchKeywords.length > 0 && !searchById
         ? [
             {
               $match: {

@@ -89,6 +89,11 @@ campaignSchema.index({ assignedAffiliateManagers: 1 });
 campaignSchema.index({ createdBy: 1 });
 campaignSchema.index({ isActive: 1 });
 campaignSchema.index({ "dateRange.startDate": 1, "dateRange.endDate": 1 });
+// Text index for global search
+campaignSchema.index(
+  { name: "text", description: "text" },
+  { weights: { name: 10, description: 5 }, name: "campaign_search_index" }
+);
 campaignSchema.virtual("assignedManagersCount").get(function () {
   return this.assignedAffiliateManagers
     ? this.assignedAffiliateManagers.length

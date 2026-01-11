@@ -86,6 +86,7 @@ import {
   Unarchive as UnarchiveIcon,
   Male as MaleIcon,
   Female as FemaleIcon,
+  ContentCopy as CopyIcon,
 } from "@mui/icons-material";
 import AddLeadForm from "../components/AddLeadForm";
 import DocumentPreview from "../components/DocumentPreview";
@@ -2376,8 +2377,8 @@ const LeadsPage = () => {
                       fontSize: "0.875rem",
                       py: 1,
                       textAlign: "right",
-                      width: "70px",
-                      maxWidth: "70px",
+                      width: "85px",
+                      maxWidth: "85px",
                     }}
                   >
                     Actions
@@ -3988,6 +3989,24 @@ const LeadRow = React.memo(
             alignItems="center"
             justifyContent="flex-end"
           >
+            <Tooltip title="Copy details (Name, Email, Phone, Country)">
+              <IconButton
+                size="small"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const fullName = `${lead.firstName} ${lead.lastName}`;
+                  const email = lead.newEmail || "";
+                  const phone = lead.newPhone || "";
+                  const country = lead.country || "";
+                  const copyText = [fullName, email, phone, country].join("\t");
+                  navigator.clipboard.writeText(copyText);
+                }}
+                title="Copy details"
+                sx={{ padding: "4px" }}
+              >
+                <CopyIcon sx={{ fontSize: "1rem" }} />
+              </IconButton>
+            </Tooltip>
             {(user?.role === ROLES.ADMIN || isLeadManager) && (
               <IconButton
                 size="small"
@@ -4310,6 +4329,24 @@ const LeadCard = React.memo(
                 sx={{ fontWeight: "medium" }}
               />
               <Stack direction="row" spacing={1}>
+                <Tooltip title="Copy details">
+                  <IconButton
+                    size="small"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const fullName = `${lead.firstName} ${lead.lastName}`;
+                      const email = lead.newEmail || "";
+                      const phone = lead.newPhone || "";
+                      const country = lead.country || "";
+                      const copyText = [fullName, email, phone, country].join(
+                        "\t"
+                      );
+                      navigator.clipboard.writeText(copyText);
+                    }}
+                  >
+                    <CopyIcon />
+                  </IconButton>
+                </Tooltip>
                 <IconButton
                   size="small"
                   onClick={(e) => {

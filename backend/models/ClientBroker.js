@@ -53,6 +53,11 @@ clientBrokerSchema.index({ isActive: 1 });
 clientBrokerSchema.index({ assignedLeads: 1 });
 clientBrokerSchema.index({ createdBy: 1 });
 clientBrokerSchema.index({ lastAssignedAt: -1 });
+// Text index for global search
+clientBrokerSchema.index(
+  { name: "text", domain: "text", description: "text" },
+  { weights: { name: 10, domain: 5, description: 3 }, name: "client_broker_search_index" }
+);
 clientBrokerSchema.virtual("activeLeadsCount").get(function () {
   return this.assignedLeads ? this.assignedLeads.length : 0;
 });

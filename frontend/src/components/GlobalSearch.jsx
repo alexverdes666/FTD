@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Box,
@@ -16,11 +16,13 @@ import {
   Divider,
   IconButton,
   useTheme,
-  alpha,
   Popper,
   ClickAwayListener,
   Dialog,
   Button,
+  Tooltip,
+  Skeleton,
+  Stack,
 } from "@mui/material";
 import {
   Search as SearchIcon,
@@ -30,9 +32,23 @@ import {
   Contacts as LeadIcon,
   KeyboardArrowRight as ArrowIcon,
   OpenInNew as OpenInNewIcon,
+  Campaign as CampaignIcon,
+  ConfirmationNumber as TicketIcon,
+  Announcement as AnnouncementIcon,
+  Business as BusinessIcon,
+  Hub as HubIcon,
+  AccountTree as NetworkIcon,
+  History as HistoryIcon,
+  ContentCopy as CopyIcon,
+  Edit as EditIcon,
+  Visibility as ViewIcon,
+  DeleteOutline as DeleteIcon,
+  TrendingUp as TrendingIcon,
 } from "@mui/icons-material";
-import api from "../services/api";
+import { quickSearch, getEntityTypeConfig, highlightText, formatSearchDate } from "../services/searchService";
+import useSearchHistory from "../hooks/useSearchHistory";
 import LeadQuickView from "./LeadQuickView";
+import api from "../services/api";
 
 // Debounce hook
 const useDebounce = (value, delay) => {
@@ -51,6 +67,142 @@ const useDebounce = (value, delay) => {
   return debouncedValue;
 };
 
+// Icon mapping
+const getResultIcon = (type) => {
+  const icons = {
+    lead: LeadIcon,
+    order: OrderIcon,
+    user: PersonIcon,
+    campaign: CampaignIcon,
+    ticket: TicketIcon,
+    announcement: AnnouncementIcon,
+    clientBroker: BusinessIcon,
+    clientNetwork: HubIcon,
+    ourNetwork: NetworkIcon,
+  };
+  const Icon = icons[type] || SearchIcon;
+  return Icon;
+};
+
+// Status color mapping
+const getStatusColor = (status) => {
+  const colors = {
+    active: "success",
+    contacted: "info",
+    converted: "warning",
+    inactive: "default",
+    fulfilled: "success",
+    partial: "warning",
+    pending: "info",
+    cancelled: "error",
+    open: "warning",
+    in_progress: "info",
+    resolved: "success",
+    closed: "default",
+    paused: "warning",
+    completed: "success",
+    draft: "default",
+  };
+  return colors[status] || "default";
+};
+
+// Role color mapping
+const getRoleColor = (role) => {
+  const colors = {
+    admin: "error",
+    affiliate_manager: "primary",
+    agent: "success",
+    lead_manager: "info",
+    refunds_manager: "warning",
+    inventory_manager: "secondary",
+  };
+  return colors[role] || "default";
+};
+
+const formatRole = (role) => {
+  return role
+    ?.split("_")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+};
+
+// Highlighted text component
+const HighlightedText = ({ text, query }) => {
+  const segments = highlightText(text, query);
+  
+  return (
+    <>
+      {segments.map((segment, index) => (
+        <span
+          key={index}
+          style={{
+            backgroundColor: segment.highlight ? "rgba(255, 235, 59, 0.4)" : "transparent",
+            fontWeight: segment.highlight ? 600 : "inherit",
+            borderRadius: segment.highlight ? 2 : 0,
+            padding: segment.highlight ? "0 2px" : 0,
+          }}
+        >
+          {segment.text}
+        </span>
+      ))}
+    </>
+  );
+};
+
+// Category section header
+const CategoryHeader = ({ label, count, color, onSeeAll }) => {
+  const theme = useTheme();
+  
+  return (
+    <Box
+      sx={{
+        px: 2,
+        py: 1,
+        bgcolor: "action.hover",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+      }}
+    >
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+        <Typography variant="caption" fontWeight={600} color="text.secondary">
+          {label.toUpperCase()}
+        </Typography>
+        <Chip
+          label={count}
+          size="small"
+          color={color}
+          sx={{ height: 18, fontSize: "0.7rem" }}
+        />
+      </Box>
+      {onSeeAll && (
+        <Button
+          size="small"
+          onClick={onSeeAll}
+          sx={{ fontSize: "0.7rem", textTransform: "none", minWidth: "auto" }}
+        >
+          See all
+        </Button>
+      )}
+    </Box>
+  );
+};
+
+// Loading skeleton
+const SearchSkeleton = () => (
+  <Box sx={{ p: 2 }}>
+    {[1, 2, 3].map((i) => (
+      <Box key={i} sx={{ display: "flex", alignItems: "center", gap: 2, mb: 2 }}>
+        <Skeleton variant="circular" width={24} height={24} />
+        <Box sx={{ flex: 1 }}>
+          <Skeleton variant="text" width="60%" height={20} />
+          <Skeleton variant="text" width="40%" height={16} />
+        </Box>
+      </Box>
+    ))}
+  </Box>
+);
+
 const GlobalSearch = () => {
   const navigate = useNavigate();
   const theme = useTheme();
@@ -59,45 +211,102 @@ const GlobalSearch = () => {
 
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [results, setResults] = useState({ leads: [], orders: [], users: [] });
+  const [results, setResults] = useState({
+    leads: [],
+    orders: [],
+    users: [],
+    campaigns: [],
+    tickets: [],
+    announcements: [],
+    clientBrokers: [],
+    clientNetworks: [],
+    ourNetworks: [],
+  });
   const [loading, setLoading] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const [focused, setFocused] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [activeFilters, setActiveFilters] = useState([]);
+  const [hoveredResult, setHoveredResult] = useState(null);
 
   // Lead detail dialog state
   const [leadDialogOpen, setLeadDialogOpen] = useState(false);
   const [selectedLead, setSelectedLead] = useState(null);
   const [loadingLead, setLoadingLead] = useState(false);
 
+  // Search history
+  const { history, deleteEntry, clearAll } = useSearchHistory();
+
   const debouncedQuery = useDebounce(searchQuery, 300);
 
   // Flatten results for keyboard navigation
-  const flatResults = [
-    ...results.leads.map((r) => ({ ...r, category: "leads" })),
-    ...results.orders.map((r) => ({ ...r, category: "orders" })),
-    ...results.users.map((r) => ({ ...r, category: "users" })),
-  ];
+  const flatResults = useMemo(() => {
+    const flat = [];
+    const categories = [
+      "leads", "orders", "users", "campaigns", "tickets",
+      "announcements", "clientBrokers", "clientNetworks", "ourNetworks"
+    ];
+    categories.forEach((cat) => {
+      results[cat]?.forEach((r) => flat.push({ ...r, category: cat }));
+    });
+    return flat;
+  }, [results]);
+
+  // Category configs for rendering
+  const categoryConfigs = useMemo(() => [
+    { key: "leads", label: "Leads", color: "primary", type: "lead" },
+    { key: "orders", label: "Orders", color: "warning", type: "order" },
+    { key: "users", label: "Users", color: "success", type: "user" },
+    { key: "campaigns", label: "Campaigns", color: "info", type: "campaign" },
+    { key: "tickets", label: "Tickets", color: "error", type: "ticket" },
+    { key: "announcements", label: "Announcements", color: "secondary", type: "announcement" },
+    { key: "clientBrokers", label: "Client Brokers", color: "default", type: "clientBroker" },
+    { key: "clientNetworks", label: "Client Networks", color: "default", type: "clientNetwork" },
+    { key: "ourNetworks", label: "Our Networks", color: "default", type: "ourNetwork" },
+  ], []);
 
   // Search API
   const performSearch = useCallback(async (query) => {
     if (!query || query.length < 2) {
-      setResults({ leads: [], orders: [], users: [] });
+      setResults({
+        leads: [],
+        orders: [],
+        users: [],
+        campaigns: [],
+        tickets: [],
+        announcements: [],
+        clientBrokers: [],
+        clientNetworks: [],
+        ourNetworks: [],
+      });
       return;
     }
 
     setLoading(true);
+    setShowHistory(false);
     try {
-      const response = await api.get(`/global-search?q=${encodeURIComponent(query)}&limit=5`);
-      if (response.data.success) {
-        setResults(response.data.data);
+      const types = activeFilters.length > 0 ? activeFilters : null;
+      const response = await quickSearch(query, 5, types);
+      if (response.success) {
+        setResults(response.data);
       }
     } catch (error) {
       console.error("Global search error:", error);
-      setResults({ leads: [], orders: [], users: [] });
+      setResults({
+        leads: [],
+        orders: [],
+        users: [],
+        campaigns: [],
+        tickets: [],
+        announcements: [],
+        clientBrokers: [],
+        clientNetworks: [],
+        ourNetworks: [],
+      });
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [activeFilters]);
 
   // Trigger search on debounced query change
   useEffect(() => {
@@ -115,7 +324,6 @@ const GlobalSearch = () => {
       }
     } catch (error) {
       console.error("Failed to fetch lead details:", error);
-      // Fallback to navigating to leads page
       navigate(`/leads?search=${encodeURIComponent(leadId)}`);
     } finally {
       setLoadingLead(false);
@@ -127,12 +335,21 @@ const GlobalSearch = () => {
     (result) => {
       setOpen(false);
       setSearchQuery("");
-      setResults({ leads: [], orders: [], users: [] });
+      setResults({
+        leads: [],
+        orders: [],
+        users: [],
+        campaigns: [],
+        tickets: [],
+        announcements: [],
+        clientBrokers: [],
+        clientNetworks: [],
+        ourNetworks: [],
+      });
       setSelectedIndex(-1);
 
       switch (result.type) {
         case "lead":
-          // Open lead details in a dialog
           fetchLeadDetails(result._id);
           break;
         case "order":
@@ -141,12 +358,48 @@ const GlobalSearch = () => {
         case "user":
           navigate(`/users?search=${encodeURIComponent(result.title)}`);
           break;
+        case "campaign":
+          navigate(`/campaigns?search=${encodeURIComponent(result.title)}`);
+          break;
+        case "ticket":
+          navigate(`/tickets?id=${encodeURIComponent(result._id)}`);
+          break;
+        case "announcement":
+          navigate(`/announcements`);
+          break;
+        case "clientBroker":
+          navigate(`/client-brokers?search=${encodeURIComponent(result.title)}`);
+          break;
+        case "clientNetwork":
+          navigate(`/client-networks?search=${encodeURIComponent(result.title)}`);
+          break;
+        case "ourNetwork":
+          navigate(`/our-networks?search=${encodeURIComponent(result.title)}`);
+          break;
         default:
           break;
       }
     },
     [navigate, fetchLeadDetails]
   );
+
+  // Handle "See all" for a category
+  const handleSeeAll = useCallback((type) => {
+    setOpen(false);
+    navigate(`/search?q=${encodeURIComponent(searchQuery)}&types=${type}`);
+  }, [navigate, searchQuery]);
+
+  // Handle "See all results"
+  const handleSeeAllResults = useCallback(() => {
+    setOpen(false);
+    navigate(`/search?q=${encodeURIComponent(searchQuery)}`);
+  }, [navigate, searchQuery]);
+
+  // Handle clicking a history item
+  const handleHistoryClick = useCallback((query) => {
+    setSearchQuery(query);
+    setShowHistory(false);
+  }, []);
 
   // Handle closing lead dialog and navigating to leads page
   const handleViewInLeadsPage = useCallback(() => {
@@ -161,10 +414,65 @@ const GlobalSearch = () => {
     setSelectedLead(updatedLead);
   }, []);
 
+  // Copy lead details to clipboard (tab-separated for Google Sheets)
+  const handleCopyDetails = useCallback((e, result) => {
+    e.stopPropagation();
+    
+    // For leads, copy: Full Name, Email, Phone, Country (tab-separated)
+    if (result.type === "lead") {
+      const fullName = result.title || "";
+      const email = result.subtitle || "";
+      const phone = result.meta?.phone || "";
+      const country = result.meta?.country || "";
+      const copyText = [fullName, email, phone, country].join("\t");
+      navigator.clipboard.writeText(copyText);
+    } else {
+      // For other types, just copy the ID
+      navigator.clipboard.writeText(result._id);
+    }
+  }, []);
+
   // Keyboard navigation
   const handleKeyDown = useCallback(
     (event) => {
-      if (!open || flatResults.length === 0) return;
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setOpen(false);
+        setSearchQuery("");
+        inputRef.current?.blur();
+        return;
+      }
+
+      if (!open) return;
+
+      if (showHistory && history.length > 0) {
+        // Navigate history
+        switch (event.key) {
+          case "ArrowDown":
+            event.preventDefault();
+            setSelectedIndex((prev) =>
+              prev < history.length - 1 ? prev + 1 : 0
+            );
+            break;
+          case "ArrowUp":
+            event.preventDefault();
+            setSelectedIndex((prev) =>
+              prev > 0 ? prev - 1 : history.length - 1
+            );
+            break;
+          case "Enter":
+            event.preventDefault();
+            if (selectedIndex >= 0 && history[selectedIndex]) {
+              handleHistoryClick(history[selectedIndex].query);
+            }
+            break;
+          default:
+            break;
+        }
+        return;
+      }
+
+      if (flatResults.length === 0) return;
 
       switch (event.key) {
         case "ArrowDown":
@@ -183,25 +491,30 @@ const GlobalSearch = () => {
           event.preventDefault();
           if (selectedIndex >= 0 && flatResults[selectedIndex]) {
             handleNavigate(flatResults[selectedIndex]);
+          } else if (searchQuery.length >= 2) {
+            handleSeeAllResults();
           }
           break;
-        case "Escape":
+        case "Tab":
           event.preventDefault();
-          setOpen(false);
-          setSearchQuery("");
-          inputRef.current?.blur();
+          // Cycle through categories
           break;
         default:
           break;
       }
     },
-    [open, flatResults, selectedIndex, handleNavigate]
+    [open, flatResults, selectedIndex, handleNavigate, showHistory, history, handleHistoryClick, searchQuery, handleSeeAllResults]
   );
 
-  // Global keyboard shortcut (Ctrl/Cmd + K)
+  // Global keyboard shortcut (Ctrl/Cmd + K or /)
   useEffect(() => {
     const handleGlobalKeyDown = (event) => {
       if ((event.ctrlKey || event.metaKey) && event.key === "k") {
+        event.preventDefault();
+        inputRef.current?.focus();
+        setOpen(true);
+      }
+      if (event.key === "/" && !["INPUT", "TEXTAREA"].includes(document.activeElement?.tagName)) {
         event.preventDefault();
         inputRef.current?.focus();
         setOpen(true);
@@ -216,6 +529,10 @@ const GlobalSearch = () => {
     setFocused(true);
     if (searchQuery.length >= 2) {
       setOpen(true);
+      setShowHistory(false);
+    } else if (searchQuery.length === 0 && history.length > 0) {
+      setOpen(true);
+      setShowHistory(true);
     }
   };
 
@@ -229,6 +546,10 @@ const GlobalSearch = () => {
     setSelectedIndex(-1);
     if (value.length >= 2) {
       setOpen(true);
+      setShowHistory(false);
+    } else if (value.length === 0 && history.length > 0) {
+      setOpen(true);
+      setShowHistory(true);
     } else {
       setOpen(false);
     }
@@ -236,7 +557,17 @@ const GlobalSearch = () => {
 
   const handleClear = () => {
     setSearchQuery("");
-    setResults({ leads: [], orders: [], users: [] });
+    setResults({
+      leads: [],
+      orders: [],
+      users: [],
+      campaigns: [],
+      tickets: [],
+      announcements: [],
+      clientBrokers: [],
+      clientNetworks: [],
+      ourNetworks: [],
+    });
     setOpen(false);
     setSelectedIndex(-1);
     inputRef.current?.focus();
@@ -246,594 +577,399 @@ const GlobalSearch = () => {
     setOpen(false);
   };
 
-  const getResultIcon = (type) => {
-    switch (type) {
-      case "lead":
-        return <LeadIcon fontSize="small" />;
-      case "order":
-        return <OrderIcon fontSize="small" />;
-      case "user":
-        return <PersonIcon fontSize="small" />;
-      default:
-        return <SearchIcon fontSize="small" />;
-    }
-  };
-
-  const getStatusColor = (status) => {
-    const colors = {
-      active: "success",
-      contacted: "info",
-      converted: "warning",
-      inactive: "default",
-      fulfilled: "success",
-      partial: "warning",
-      pending: "info",
-      cancelled: "error",
-    };
-    return colors[status] || "default";
-  };
-
-  const getRoleColor = (role) => {
-    const colors = {
-      admin: "error",
-      affiliate_manager: "primary",
-      agent: "success",
-      lead_manager: "info",
-      refunds_manager: "warning",
-      inventory_manager: "secondary",
-    };
-    return colors[role] || "default";
-  };
-
-  const formatRole = (role) => {
-    return role
-      ?.split("_")
-      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(" ");
-  };
-
-  const totalResults =
-    results.leads.length + results.orders.length + results.users.length;
+  const totalResults = Object.values(results).reduce((sum, arr) => sum + arr.length, 0);
   const hasResults = totalResults > 0;
+
+  // Calculate global index for a result in a category
+  const getGlobalIndex = (categoryKey, localIndex) => {
+    let globalIndex = 0;
+    for (const config of categoryConfigs) {
+      if (config.key === categoryKey) {
+        return globalIndex + localIndex;
+      }
+      globalIndex += (results[config.key]?.length || 0);
+    }
+    return -1;
+  };
+
+  // Render a single result item
+  const renderResultItem = (result, categoryKey, localIndex) => {
+    const globalIndex = getGlobalIndex(categoryKey, localIndex);
+    const Icon = getResultIcon(result.type);
+    const typeConfig = getEntityTypeConfig(result.type);
+    const isSelected = selectedIndex === globalIndex;
+    const isHovered = hoveredResult === result._id;
+
+    return (
+      <ListItem
+        key={result._id}
+        button
+        selected={isSelected}
+        onClick={() => handleNavigate(result)}
+        onMouseEnter={() => setHoveredResult(result._id)}
+        onMouseLeave={() => setHoveredResult(null)}
+        sx={{
+          "&.Mui-selected": {
+            bgcolor: "primary.main",
+            color: "primary.contrastText",
+            "&:hover": { bgcolor: "primary.dark" },
+          },
+          position: "relative",
+        }}
+      >
+        <ListItemIcon sx={{ minWidth: 36 }}>
+          <Icon
+            fontSize="small"
+            color={isSelected ? "inherit" : typeConfig.color}
+          />
+        </ListItemIcon>
+        <ListItemText
+          primary={
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+              <Typography variant="body2" fontWeight={500} noWrap sx={{ maxWidth: 200 }}>
+                <HighlightedText text={result.title} query={searchQuery} />
+              </Typography>
+              {result.meta?.status && (
+                <Chip
+                  label={result.meta.status}
+                  size="small"
+                  color={getStatusColor(result.meta.status)}
+                  sx={{ height: 18, fontSize: "0.65rem" }}
+                />
+              )}
+              {result.meta?.role && (
+                <Chip
+                  label={formatRole(result.meta.role)}
+                  size="small"
+                  color={getRoleColor(result.meta.role)}
+                  sx={{ height: 18, fontSize: "0.65rem" }}
+                />
+              )}
+              {result.meta?.leadType && (
+                <Chip
+                  label={result.meta.leadType.toUpperCase()}
+                  size="small"
+                  sx={{ height: 18, fontSize: "0.65rem" }}
+                />
+              )}
+              {result.meta?.priority && (
+                <Chip
+                  label={result.meta.priority}
+                  size="small"
+                  color={result.meta.priority === "urgent" ? "error" : result.meta.priority === "high" ? "warning" : "default"}
+                  sx={{ height: 18, fontSize: "0.65rem" }}
+                />
+              )}
+            </Box>
+          }
+          secondary={
+            <Typography variant="caption" noWrap color={isSelected ? "inherit" : "text.secondary"}>
+              <HighlightedText text={result.subtitle} query={searchQuery} />
+              {result.meta?.country && ` • ${result.meta.country}`}
+              {result.meta?.createdAt && ` • ${formatSearchDate(result.meta.createdAt)}`}
+            </Typography>
+          }
+        />
+        {/* Quick actions on hover */}
+        {isHovered && !isSelected && (
+          <Stack direction="row" spacing={0.5} sx={{ position: "absolute", right: 8 }}>
+            <Tooltip title={result.type === "lead" ? "Copy details (Name, Email, Phone, Country)" : "Copy ID"}>
+              <IconButton size="small" onClick={(e) => handleCopyDetails(e, result)}>
+                <CopyIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          </Stack>
+        )}
+        {!isHovered && <ArrowIcon fontSize="small" sx={{ opacity: 0.5 }} />}
+      </ListItem>
+    );
+  };
 
   return (
     <>
-    <ClickAwayListener onClickAway={handleClickAway}>
-      <Box ref={anchorRef} sx={{ position: "relative" }}>
-        <TextField
-          ref={inputRef}
-          size="small"
-          placeholder="Search leads, orders, users... (Ctrl+K)"
-          value={searchQuery}
-          onChange={handleInputChange}
-          onFocus={handleFocus}
-          onBlur={handleBlur}
-          onKeyDown={handleKeyDown}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                {loading || loadingLead ? (
-                  <CircularProgress size={18} color="inherit" />
-                ) : (
-                  <SearchIcon
-                    fontSize="small"
-                    sx={{ color: focused ? "primary.main" : "action.active" }}
-                  />
-                )}
-              </InputAdornment>
-            ),
-            endAdornment: searchQuery && (
-              <InputAdornment position="end">
-                <IconButton size="small" onClick={handleClear} edge="end">
-                  <CloseIcon fontSize="small" />
-                </IconButton>
-              </InputAdornment>
-            ),
-            sx: {
-              borderRadius: 2,
-              bgcolor: "transparent",
-              "&:hover": {
+      <ClickAwayListener onClickAway={handleClickAway}>
+        <Box ref={anchorRef} sx={{ position: "relative" }}>
+          <TextField
+            inputRef={inputRef}
+            size="small"
+            placeholder="Search everything... (Ctrl+K or /)"
+            value={searchQuery}
+            onChange={handleInputChange}
+            onFocus={handleFocus}
+            onBlur={handleBlur}
+            onKeyDown={handleKeyDown}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  {loading || loadingLead ? (
+                    <CircularProgress size={18} color="inherit" />
+                  ) : (
+                    <SearchIcon
+                      fontSize="small"
+                      sx={{ color: focused ? "primary.main" : "action.active" }}
+                    />
+                  )}
+                </InputAdornment>
+              ),
+              endAdornment: searchQuery && (
+                <InputAdornment position="end">
+                  <IconButton size="small" onClick={handleClear} edge="end">
+                    <CloseIcon fontSize="small" />
+                  </IconButton>
+                </InputAdornment>
+              ),
+              sx: {
+                borderRadius: 2,
                 bgcolor: "transparent",
-              },
-              "&.Mui-focused": {
-                bgcolor: "transparent",
-              },
-              "& .MuiOutlinedInput-notchedOutline": {
-                border: "none",
-              },
-              color: "inherit",
-              "& input": {
+                "&:hover": { bgcolor: "transparent" },
+                "&.Mui-focused": { bgcolor: "transparent" },
+                "& .MuiOutlinedInput-notchedOutline": { border: "none" },
                 color: "inherit",
-                "&::placeholder": {
+                "& input": {
                   color: "inherit",
-                  opacity: 0.7,
+                  "&::placeholder": { color: "inherit", opacity: 0.7 },
                 },
+                width: { xs: 320, sm: 400 },
               },
-              width: { xs: 320, sm: 400 },
-            },
-          }}
-        />
+            }}
+          />
 
-        <Popper
-          open={open && (hasResults || loading || searchQuery.length >= 2)}
-          anchorEl={anchorRef.current}
-          placement="bottom-start"
-          transition
-          style={{ zIndex: 1300, width: anchorRef.current?.offsetWidth || 320 }}
-        >
-          {({ TransitionProps }) => (
-            <Fade {...TransitionProps} timeout={200}>
-              <Paper
-                elevation={8}
-                sx={{
-                  mt: 1,
-                  width: { xs: 320, sm: 400 },
-                  maxHeight: 480,
-                  overflow: "auto",
-                  borderRadius: 2,
-                  // Hide scrollbar
-                  "&::-webkit-scrollbar": {
-                    display: "none",
-                  },
-                  msOverflowStyle: "none",
-                  scrollbarWidth: "none",
-                }}
-              >
-                {loading && !hasResults ? (
-                  <Box sx={{ p: 3, textAlign: "center" }}>
-                    <CircularProgress size={24} />
-                    <Typography
-                      variant="body2"
-                      color="text.secondary"
-                      sx={{ mt: 1 }}
-                    >
-                      Searching...
-                    </Typography>
-                  </Box>
-                ) : !hasResults && searchQuery.length >= 2 ? (
-                  <Box sx={{ p: 3, textAlign: "center" }}>
-                    <Typography variant="body2" color="text.secondary">
-                      No results found for "{searchQuery}"
-                    </Typography>
-                  </Box>
-                ) : (
-                  <>
-                    {/* Leads Section */}
-                    {results.leads.length > 0 && (
-                      <>
-                        <Box
-                          sx={{
-                            px: 2,
-                            py: 1,
-                            bgcolor: "action.hover",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                          }}
-                        >
-                          <Typography
-                            variant="caption"
-                            fontWeight={600}
-                            color="text.secondary"
-                          >
-                            LEADS
-                          </Typography>
-                          <Chip
-                            label={results.leads.length}
-                            size="small"
-                            sx={{ height: 18, fontSize: "0.7rem" }}
-                          />
-                        </Box>
-                        <List dense disablePadding>
-                          {results.leads.map((lead, index) => {
-                            const globalIndex = index;
-                            return (
-                              <ListItem
-                                key={lead._id}
-                                button
-                                selected={selectedIndex === globalIndex}
-                                onClick={() => handleNavigate(lead)}
-                                sx={{
-                                  "&.Mui-selected": {
-                                    bgcolor: "primary.main",
-                                    color: "primary.contrastText",
-                                    "&:hover": { bgcolor: "primary.dark" },
-                                  },
-                                }}
-                              >
-                                <ListItemIcon sx={{ minWidth: 36 }}>
-                                  <LeadIcon
-                                    fontSize="small"
-                                    color={
-                                      selectedIndex === globalIndex
-                                        ? "inherit"
-                                        : "primary"
-                                    }
-                                  />
-                                </ListItemIcon>
-                                <ListItemText
-                                  primary={
-                                    <Box
-                                      sx={{
-                                        display: "flex",
-                                        alignItems: "center",
-                                        gap: 1,
-                                      }}
-                                    >
-                                      <Typography
-                                        variant="body2"
-                                        fontWeight={500}
-                                      >
-                                        {lead.title}
-                                      </Typography>
-                                      <Chip
-                                        label={lead.meta?.leadType?.toUpperCase()}
-                                        size="small"
-                                        sx={{
-                                          height: 18,
-                                          fontSize: "0.65rem",
-                                        }}
-                                      />
-                                    </Box>
-                                  }
-                                  secondary={
-                                    <Typography variant="caption" noWrap>
-                                      {lead.subtitle} • {lead.meta?.country}
-                                    </Typography>
-                                  }
-                                />
-                                <ArrowIcon
-                                  fontSize="small"
-                                  sx={{ opacity: 0.5 }}
-                                />
-                              </ListItem>
-                            );
-                          })}
-                        </List>
-                      </>
-                    )}
-
-                    {/* Orders Section */}
-                    {results.orders.length > 0 && (
-                      <>
-                        {results.leads.length > 0 && <Divider />}
-                        <Box
-                          sx={{
-                            px: 2,
-                            py: 1,
-                            bgcolor: "action.hover",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                          }}
-                        >
-                          <Typography
-                            variant="caption"
-                            fontWeight={600}
-                            color="text.secondary"
-                          >
-                            ORDERS
-                          </Typography>
-                          <Chip
-                            label={results.orders.length}
-                            size="small"
-                            sx={{ height: 18, fontSize: "0.7rem" }}
-                          />
-                        </Box>
-                        <List dense disablePadding>
-                          {results.orders.map((order, index) => {
-                            const globalIndex = results.leads.length + index;
-                            return (
-                              <ListItem
-                                key={order._id}
-                                button
-                                selected={selectedIndex === globalIndex}
-                                onClick={() => handleNavigate(order)}
-                                sx={{
-                                  "&.Mui-selected": {
-                                    bgcolor: "primary.main",
-                                    color: "primary.contrastText",
-                                    "&:hover": { bgcolor: "primary.dark" },
-                                  },
-                                }}
-                              >
-                                <ListItemIcon sx={{ minWidth: 36 }}>
-                                  <OrderIcon
-                                    fontSize="small"
-                                    color={
-                                      selectedIndex === globalIndex
-                                        ? "inherit"
-                                        : "warning"
-                                    }
-                                  />
-                                </ListItemIcon>
-                                <ListItemText
-                                  primary={
-                                    <Box
-                                      sx={{
-                                        display: "flex",
-                                        alignItems: "center",
-                                        gap: 1,
-                                      }}
-                                    >
-                                      <Typography
-                                        variant="body2"
-                                        fontWeight={500}
-                                      >
-                                        {order.title}
-                                      </Typography>
-                                      <Chip
-                                        label={order.meta?.status}
-                                        size="small"
-                                        color={getStatusColor(order.meta?.status)}
-                                        sx={{
-                                          height: 18,
-                                          fontSize: "0.65rem",
-                                        }}
-                                      />
-                                    </Box>
-                                  }
-                                  secondary={
-                                    <Typography variant="caption" noWrap>
-                                      {order.subtitle}
-                                      {order.meta?.country &&
-                                        ` • ${order.meta.country}`}
-                                    </Typography>
-                                  }
-                                />
-                                <ArrowIcon
-                                  fontSize="small"
-                                  sx={{ opacity: 0.5 }}
-                                />
-                              </ListItem>
-                            );
-                          })}
-                        </List>
-                      </>
-                    )}
-
-                    {/* Users Section */}
-                    {results.users.length > 0 && (
-                      <>
-                        {(results.leads.length > 0 ||
-                          results.orders.length > 0) && <Divider />}
-                        <Box
-                          sx={{
-                            px: 2,
-                            py: 1,
-                            bgcolor: "action.hover",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                          }}
-                        >
-                          <Typography
-                            variant="caption"
-                            fontWeight={600}
-                            color="text.secondary"
-                          >
-                            USERS
-                          </Typography>
-                          <Chip
-                            label={results.users.length}
-                            size="small"
-                            sx={{ height: 18, fontSize: "0.7rem" }}
-                          />
-                        </Box>
-                        <List dense disablePadding>
-                          {results.users.map((user, index) => {
-                            const globalIndex =
-                              results.leads.length +
-                              results.orders.length +
-                              index;
-                            return (
-                              <ListItem
-                                key={user._id}
-                                button
-                                selected={selectedIndex === globalIndex}
-                                onClick={() => handleNavigate(user)}
-                                sx={{
-                                  "&.Mui-selected": {
-                                    bgcolor: "primary.main",
-                                    color: "primary.contrastText",
-                                    "&:hover": { bgcolor: "primary.dark" },
-                                  },
-                                }}
-                              >
-                                <ListItemIcon sx={{ minWidth: 36 }}>
-                                  <PersonIcon
-                                    fontSize="small"
-                                    color={
-                                      selectedIndex === globalIndex
-                                        ? "inherit"
-                                        : "success"
-                                    }
-                                  />
-                                </ListItemIcon>
-                                <ListItemText
-                                  primary={
-                                    <Box
-                                      sx={{
-                                        display: "flex",
-                                        alignItems: "center",
-                                        gap: 1,
-                                      }}
-                                    >
-                                      <Typography
-                                        variant="body2"
-                                        fontWeight={500}
-                                      >
-                                        {user.title}
-                                      </Typography>
-                                      <Chip
-                                        label={formatRole(user.meta?.role)}
-                                        size="small"
-                                        color={getRoleColor(user.meta?.role)}
-                                        sx={{
-                                          height: 18,
-                                          fontSize: "0.65rem",
-                                        }}
-                                      />
-                                    </Box>
-                                  }
-                                  secondary={
-                                    <Typography variant="caption" noWrap>
-                                      {user.subtitle}
-                                    </Typography>
-                                  }
-                                />
-                                <ArrowIcon
-                                  fontSize="small"
-                                  sx={{ opacity: 0.5 }}
-                                />
-                              </ListItem>
-                            );
-                          })}
-                        </List>
-                      </>
-                    )}
-
-                    {/* Footer hint */}
-                    <Box
-                      sx={{
-                        px: 2,
-                        py: 1,
-                        bgcolor: "action.hover",
-                        borderTop: 1,
-                        borderColor: "divider",
-                      }}
-                    >
-                      <Typography
-                        variant="caption"
-                        color="text.secondary"
+          <Popper
+            open={open && (hasResults || loading || searchQuery.length >= 2 || showHistory)}
+            anchorEl={anchorRef.current}
+            placement="bottom-start"
+            transition
+            style={{ zIndex: 1300, width: anchorRef.current?.offsetWidth || 400 }}
+          >
+            {({ TransitionProps }) => (
+              <Fade {...TransitionProps} timeout={200}>
+                <Paper
+                  elevation={8}
+                  sx={{
+                    mt: 1,
+                    width: { xs: 360, sm: 450 },
+                    maxHeight: 520,
+                    overflow: "auto",
+                    borderRadius: 2,
+                    "&::-webkit-scrollbar": { display: "none" },
+                    msOverflowStyle: "none",
+                    scrollbarWidth: "none",
+                  }}
+                >
+                  {/* Search History */}
+                  {showHistory && history.length > 0 && (
+                    <>
+                      <Box
                         sx={{
+                          px: 2,
+                          py: 1,
+                          bgcolor: "action.hover",
                           display: "flex",
                           alignItems: "center",
-                          gap: 1,
+                          justifyContent: "space-between",
                         }}
                       >
-                        <kbd
-                          style={{
-                            background: theme.palette.action.selected,
-                            padding: "2px 6px",
-                            borderRadius: 4,
-                            fontSize: "0.7rem",
-                          }}
+                        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                          <HistoryIcon fontSize="small" color="action" />
+                          <Typography variant="caption" fontWeight={600} color="text.secondary">
+                            RECENT SEARCHES
+                          </Typography>
+                        </Box>
+                        <Button
+                          size="small"
+                          onClick={clearAll}
+                          sx={{ fontSize: "0.7rem", textTransform: "none" }}
                         >
-                          ↑↓
-                        </kbd>
-                        Navigate
-                        <kbd
-                          style={{
-                            background: theme.palette.action.selected,
-                            padding: "2px 6px",
-                            borderRadius: 4,
-                            fontSize: "0.7rem",
-                            marginLeft: 8,
-                          }}
-                        >
-                          Enter
-                        </kbd>
-                        Select
-                        <kbd
-                          style={{
-                            background: theme.palette.action.selected,
-                            padding: "2px 6px",
-                            borderRadius: 4,
-                            fontSize: "0.7rem",
-                            marginLeft: 8,
-                          }}
-                        >
-                          Esc
-                        </kbd>
-                        Close
+                          Clear all
+                        </Button>
+                      </Box>
+                      <List dense disablePadding>
+                        {history.slice(0, 8).map((item, index) => (
+                          <ListItem
+                            key={item._id}
+                            button
+                            selected={selectedIndex === index}
+                            onClick={() => handleHistoryClick(item.query)}
+                            secondaryAction={
+                              <IconButton
+                                edge="end"
+                                size="small"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  deleteEntry(item._id);
+                                }}
+                              >
+                                <DeleteIcon fontSize="small" />
+                              </IconButton>
+                            }
+                          >
+                            <ListItemIcon sx={{ minWidth: 36 }}>
+                              <HistoryIcon fontSize="small" color="action" />
+                            </ListItemIcon>
+                            <ListItemText
+                              primary={item.query}
+                              secondary={`${item.resultCount} results • ${formatSearchDate(item.searchedAt)}`}
+                            />
+                          </ListItem>
+                        ))}
+                      </List>
+                    </>
+                  )}
+
+                  {/* Loading State */}
+                  {loading && !hasResults && <SearchSkeleton />}
+
+                  {/* No Results */}
+                  {!loading && !hasResults && searchQuery.length >= 2 && !showHistory && (
+                    <Box sx={{ p: 3, textAlign: "center" }}>
+                      <Typography variant="body2" color="text.secondary">
+                        No results found for "{searchQuery}"
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: "block" }}>
+                        Try using different keywords or check spelling
                       </Typography>
                     </Box>
-                  </>
-                )}
-              </Paper>
-            </Fade>
-          )}
-        </Popper>
-      </Box>
-    </ClickAwayListener>
+                  )}
 
-    {/* Lead Detail Dialog */}
-    <Dialog
-      open={leadDialogOpen}
-      onClose={() => setLeadDialogOpen(false)}
-      maxWidth="lg"
-      PaperProps={{
-        sx: {
-          borderRadius: 2,
-          maxHeight: "90vh",
-          overflow: "visible",
-          bgcolor: "transparent",
-          boxShadow: "none",
-        },
-      }}
-      BackdropProps={{
-        sx: {
-          bgcolor: "rgba(0, 0, 0, 0.5)",
-        },
-      }}
-    >
-      <Box sx={{ position: "relative" }}>
-        {/* Close button */}
-        <IconButton
-          onClick={() => setLeadDialogOpen(false)}
-          size="small"
-          sx={{
-            position: "absolute",
-            top: 8,
-            right: 8,
-            zIndex: 1,
-            bgcolor: "background.paper",
-            boxShadow: 1,
-            "&:hover": {
-              bgcolor: "action.hover",
-            },
-          }}
-        >
-          <CloseIcon fontSize="small" />
-        </IconButton>
-        
-        {loadingLead ? (
-          <Paper
-            elevation={8}
+                  {/* Search Results */}
+                  {hasResults && !showHistory && (
+                    <>
+                      {categoryConfigs.map((config) => {
+                        const items = results[config.key] || [];
+                        if (items.length === 0) return null;
+
+                        return (
+                          <React.Fragment key={config.key}>
+                            {config.key !== "leads" && <Divider />}
+                            <CategoryHeader
+                              label={config.label}
+                              count={items.length}
+                              color={config.color}
+                              onSeeAll={() => handleSeeAll(config.type)}
+                            />
+                            <List dense disablePadding>
+                              {items.map((item, index) =>
+                                renderResultItem(item, config.key, index)
+                              )}
+                            </List>
+                          </React.Fragment>
+                        );
+                      })}
+
+                      {/* Footer */}
+                      <Box
+                        sx={{
+                          px: 2,
+                          py: 1.5,
+                          bgcolor: "action.hover",
+                          borderTop: 1,
+                          borderColor: "divider",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                        }}
+                      >
+                        <Typography
+                          variant="caption"
+                          color="text.secondary"
+                          sx={{ display: "flex", alignItems: "center", gap: 1 }}
+                        >
+                          <kbd style={{ background: theme.palette.action.selected, padding: "2px 6px", borderRadius: 4, fontSize: "0.7rem" }}>↑↓</kbd>
+                          Navigate
+                          <kbd style={{ background: theme.palette.action.selected, padding: "2px 6px", borderRadius: 4, fontSize: "0.7rem", marginLeft: 8 }}>Enter</kbd>
+                          Select
+                          <kbd style={{ background: theme.palette.action.selected, padding: "2px 6px", borderRadius: 4, fontSize: "0.7rem", marginLeft: 8 }}>Esc</kbd>
+                          Close
+                        </Typography>
+                        <Button
+                          size="small"
+                          endIcon={<ArrowIcon />}
+                          onClick={handleSeeAllResults}
+                          sx={{ fontSize: "0.75rem", textTransform: "none" }}
+                        >
+                          See all {totalResults} results
+                        </Button>
+                      </Box>
+                    </>
+                  )}
+                </Paper>
+              </Fade>
+            )}
+          </Popper>
+        </Box>
+      </ClickAwayListener>
+
+      {/* Lead Detail Dialog */}
+      <Dialog
+        open={leadDialogOpen}
+        onClose={() => setLeadDialogOpen(false)}
+        maxWidth="lg"
+        PaperProps={{
+          sx: {
+            borderRadius: 2,
+            maxHeight: "90vh",
+            overflow: "visible",
+            bgcolor: "transparent",
+            boxShadow: "none",
+          },
+        }}
+        BackdropProps={{
+          sx: { bgcolor: "rgba(0, 0, 0, 0.5)" },
+        }}
+      >
+        <Box sx={{ position: "relative" }}>
+          <IconButton
+            onClick={() => setLeadDialogOpen(false)}
+            size="small"
             sx={{
-              p: 4,
-              display: "flex",
-              justifyContent: "center",
-              alignItems: "center",
-              minHeight: 300,
-              minWidth: 400,
-              borderRadius: 2,
+              position: "absolute",
+              top: 8,
+              right: 8,
+              zIndex: 1,
+              bgcolor: "background.paper",
+              boxShadow: 1,
+              "&:hover": { bgcolor: "action.hover" },
             }}
           >
-            <CircularProgress />
-          </Paper>
-        ) : selectedLead ? (
-          <Box>
-            <LeadQuickView
-              lead={selectedLead}
-              onLeadUpdate={handleLeadUpdate}
-              readOnly
-              titleExtra={
-                <Button
-                  onClick={handleViewInLeadsPage}
-                  variant="outlined"
-                  size="small"
-                  startIcon={<OpenInNewIcon />}
-                >
-                  Open in Leads Page
-                </Button>
-              }
-            />
-          </Box>
-        ) : null}
-      </Box>
-    </Dialog>
+            <CloseIcon fontSize="small" />
+          </IconButton>
+
+          {loadingLead ? (
+            <Paper
+              elevation={8}
+              sx={{
+                p: 4,
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
+                minHeight: 300,
+                minWidth: 400,
+                borderRadius: 2,
+              }}
+            >
+              <CircularProgress />
+            </Paper>
+          ) : selectedLead ? (
+            <Box>
+              <LeadQuickView
+                lead={selectedLead}
+                onLeadUpdate={handleLeadUpdate}
+                readOnly
+                titleExtra={
+                  <Button
+                    onClick={handleViewInLeadsPage}
+                    variant="outlined"
+                    size="small"
+                    startIcon={<OpenInNewIcon />}
+                  >
+                    Open in Leads Page
+                  </Button>
+                }
+              />
+            </Box>
+          ) : null}
+        </Box>
+      </Dialog>
     </>
   );
 };

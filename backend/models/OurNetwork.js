@@ -87,6 +87,11 @@ ourNetworkSchema.index({ name: 1 });
 ourNetworkSchema.index({ assignedAffiliateManager: 1 });
 ourNetworkSchema.index({ createdBy: 1 });
 ourNetworkSchema.index({ isActive: 1 });
+// Text index for global search
+ourNetworkSchema.index(
+  { name: "text", description: "text" },
+  { weights: { name: 10, description: 5 }, name: "our_network_search_index" }
+);
 
 // Virtual fields
 ourNetworkSchema.virtual("hasAssignedManager").get(function () {
