@@ -93,7 +93,9 @@ import ClientBrokerManagementDialog from "../components/ClientBrokerManagementDi
 import GenderFallbackModal from "../components/GenderFallbackModal";
 import AssignDepositCallDialog from "../components/AssignDepositCallDialog";
 import depositCallsService from "../services/depositCallsService";
-import CopyPreferencesDialog, { copyLeadsWithPreferences } from "../components/CopyPreferencesDialog";
+import CopyPreferencesDialog, {
+  copyLeadsWithPreferences,
+} from "../components/CopyPreferencesDialog";
 
 const createOrderSchema = (userRole) => {
   return yup.object({
@@ -1365,18 +1367,21 @@ const OrdersPage = () => {
     setLeadsPreviewModal({ open: false, leads: [], orderId: null });
   }, []);
 
-  const handlePreviewOrderLeads = useCallback(async (orderId) => {
-    try {
-      const response = await api.get(`/orders/${orderId}`);
-      const orderData = response.data.data;
-      handleOpenLeadsPreviewModal(orderData.leads || [], orderId);
-    } catch (err) {
-      setNotification({
-        message: "Could not load order leads for preview.",
-        severity: "error",
-      });
-    }
-  }, [handleOpenLeadsPreviewModal]);
+  const handlePreviewOrderLeads = useCallback(
+    async (orderId) => {
+      try {
+        const response = await api.get(`/orders/${orderId}`);
+        const orderData = response.data.data;
+        handleOpenLeadsPreviewModal(orderData.leads || [], orderId);
+      } catch (err) {
+        setNotification({
+          message: "Could not load order leads for preview.",
+          severity: "error",
+        });
+      }
+    },
+    [handleOpenLeadsPreviewModal]
+  );
 
   // Copy leads for a specific order by fetching them first
   const handleCopyOrderLeadsById = useCallback(async (orderId) => {
@@ -1385,7 +1390,7 @@ const OrdersPage = () => {
       const response = await api.get(`/orders/${orderId}`);
       const orderData = response.data.data;
       const leads = orderData.leads || [];
-      
+
       if (leads.length === 0) {
         setNotification({
           message: "No leads to copy in this order",
@@ -1393,10 +1398,14 @@ const OrdersPage = () => {
         });
         return;
       }
-      
+
       // Pass the full order data for order-level fields (requester, dates, networks, etc.)
-      const result = copyLeadsWithPreferences(leads, orderData, getDisplayLeadType);
-      
+      const result = copyLeadsWithPreferences(
+        leads,
+        orderData,
+        getDisplayLeadType
+      );
+
       if (result.success) {
         setNotification({
           message: result.message,
@@ -1576,8 +1585,12 @@ const OrdersPage = () => {
 
   // Copy leads from order to clipboard with user preferences
   const handleCopyOrderLeads = useCallback((leads, orderData) => {
-    const result = copyLeadsWithPreferences(leads, orderData, getDisplayLeadType);
-    
+    const result = copyLeadsWithPreferences(
+      leads,
+      orderData,
+      getDisplayLeadType
+    );
+
     if (result.success) {
       setNotification({
         message: result.message,
@@ -2177,6 +2190,21 @@ const OrdersPage = () => {
             gap={2}
           >
             <Box display="flex" alignItems="center" gap={1} flex={1}>
+              <TextField
+                label="Search by keyword"
+                placeholder="Type to search..."
+                value={filters.search}
+                onChange={handleFilterChange("search")}
+                size="small"
+                sx={{ minWidth: 400, maxWidth: 600 }}
+                InputProps={{
+                  startAdornment: (
+                    <SearchIcon
+                      sx={{ color: "action.active", mr: 1, fontSize: 20 }}
+                    />
+                  ),
+                }}
+              />
               {(user?.role === "admin" ||
                 user?.role === "affiliate_manager") && (
                 <Box
@@ -2218,17 +2246,7 @@ const OrdersPage = () => {
           </Box>
           <Collapse in={showFilters}>
             <Grid container spacing={2} sx={{ mt: 1 }}>
-              <Grid item xs={12} md={5}>
-                <TextField
-                  fullWidth
-                  label="Search by keyword"
-                  placeholder="Type to search (e.g., 'armenia admin' to find orders with both keywords)"
-                  value={filters.search}
-                  onChange={handleFilterChange("search")}
-                  size="small"
-                />
-              </Grid>
-              <Grid item xs={12} sm={6} md={2.5}>
+              <Grid item xs={12} sm={6} md={4}>
                 <TextField
                   fullWidth
                   label="Planned Date (From)"
@@ -2239,7 +2257,7 @@ const OrdersPage = () => {
                   size="small"
                 />
               </Grid>
-              <Grid item xs={12} sm={6} md={2.5}>
+              <Grid item xs={12} sm={6} md={4}>
                 <TextField
                   fullWidth
                   label="Planned Date (To)"
@@ -2253,7 +2271,7 @@ const OrdersPage = () => {
               <Grid
                 item
                 xs={12}
-                md={2}
+                md={4}
                 sx={{ display: "flex", alignItems: "center" }}
               >
                 <Button
@@ -2424,7 +2442,11 @@ const OrdersPage = () => {
                               },
                             }}
                           >
-                            <Typography variant="body2" noWrap sx={{ maxWidth: "100%" }}>
+                            <Typography
+                              variant="body2"
+                              noWrap
+                              sx={{ maxWidth: "100%" }}
+                            >
                               {order.requester?.fullName}
                             </Typography>
                             {user?.role === "admin" && (
@@ -2468,18 +2490,59 @@ const OrdersPage = () => {
                           </Typography>
                         </TableCell>
                         <TableCell align="center">
-                          <Box sx={{ display: "flex", justifyContent: "center", gap: 0.5 }}>
+                          <Box
+                            sx={{
+                              display: "flex",
+                              justifyContent: "center",
+                              gap: 0.5,
+                            }}
+                          >
                             {[
-                              { fulfilled: order.fulfilled?.ftd || 0, requested: order.requests?.ftd || 0 },
-                              { fulfilled: order.fulfilled?.filler || 0, requested: order.requests?.filler || 0 },
-                              { fulfilled: order.fulfilled?.cold || 0, requested: order.requests?.cold || 0 },
+                              {
+                                fulfilled: order.fulfilled?.ftd || 0,
+                                requested: order.requests?.ftd || 0,
+                              },
+                              {
+                                fulfilled: order.fulfilled?.filler || 0,
+                                requested: order.requests?.filler || 0,
+                              },
+                              {
+                                fulfilled: order.fulfilled?.cold || 0,
+                                requested: order.requests?.cold || 0,
+                              },
                             ].map((item, idx) => {
-                              const isUnfulfilled = (order.status === "cancelled" || order.status === "partial") && item.fulfilled < item.requested;
+                              const isUnfulfilled =
+                                (order.status === "cancelled" ||
+                                  order.status === "partial") &&
+                                item.fulfilled < item.requested;
                               return (
                                 <React.Fragment key={idx}>
-                                  {idx > 0 && <Typography variant="body2" component="span" sx={{ color: "primary.main", fontWeight: 900, mx: 0.5 }}>|</Typography>}
-                                  <Typography variant="caption" component="span" noWrap>
-                                    <Box component="span" sx={{ color: isUnfulfilled ? "error.main" : "inherit" }}>
+                                  {idx > 0 && (
+                                    <Typography
+                                      variant="body2"
+                                      component="span"
+                                      sx={{
+                                        color: "primary.main",
+                                        fontWeight: 900,
+                                        mx: 0.5,
+                                      }}
+                                    >
+                                      |
+                                    </Typography>
+                                  )}
+                                  <Typography
+                                    variant="caption"
+                                    component="span"
+                                    noWrap
+                                  >
+                                    <Box
+                                      component="span"
+                                      sx={{
+                                        color: isUnfulfilled
+                                          ? "error.main"
+                                          : "inherit",
+                                      }}
+                                    >
                                       {item.fulfilled}
                                     </Box>
                                     /{item.requested}
@@ -3102,17 +3165,22 @@ const OrdersPage = () => {
                                                       ?.length > 0
                                                 ).length || 0}
                                                 /
-                                                {expandedDetails.leads?.length ||
-                                                  0}
+                                                {expandedDetails.leads
+                                                  ?.length || 0}
                                                 )
                                               </Button>
                                             ) : (
                                               <Chip
-                                                label={`${expandedDetails.leads?.filter(
-                                                  (lead) =>
-                                                    lead.assignedClientBrokers
-                                                      ?.length > 0
-                                                ).length || 0}/${expandedDetails.leads?.length || 0} assigned`}
+                                                label={`${
+                                                  expandedDetails.leads?.filter(
+                                                    (lead) =>
+                                                      lead.assignedClientBrokers
+                                                        ?.length > 0
+                                                  ).length || 0
+                                                }/${
+                                                  expandedDetails.leads
+                                                    ?.length || 0
+                                                } assigned`}
                                                 size="small"
                                                 color="info"
                                                 variant="outlined"
@@ -3234,9 +3302,14 @@ const OrdersPage = () => {
                                                 </Button>
                                                 <Button
                                                   size="small"
-                                                  startIcon={<ContentCopyIcon />}
+                                                  startIcon={
+                                                    <ContentCopyIcon />
+                                                  }
                                                   onClick={() =>
-                                                    handleCopyOrderLeads(expandedDetails.leads, expandedDetails)
+                                                    handleCopyOrderLeads(
+                                                      expandedDetails.leads,
+                                                      expandedDetails
+                                                    )
                                                   }
                                                   variant="outlined"
                                                 >
@@ -3373,18 +3446,31 @@ const OrdersPage = () => {
         maxWidth="lg"
         fullWidth
       >
-        <DialogTitle 
-          sx={{ 
+        <DialogTitle
+          sx={{
             py: 1.5,
-            background: (theme) => `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.08)} 0%, ${alpha(theme.palette.secondary.main, 0.05)} 100%)`,
-            borderBottom: '1px solid',
-            borderColor: 'divider',
+            background: (theme) =>
+              `linear-gradient(135deg, ${alpha(
+                theme.palette.primary.main,
+                0.08
+              )} 0%, ${alpha(theme.palette.secondary.main, 0.05)} 100%)`,
+            borderBottom: "1px solid",
+            borderColor: "divider",
           }}
         >
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 2,
+            }}
+          >
             {/* Left: Title and Manual Toggle */}
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-              <Typography variant="h6" fontWeight={600}>Create New Order</Typography>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+              <Typography variant="h6" fontWeight={600}>
+                Create New Order
+              </Typography>
               <Button
                 variant={manualSelectionMode ? "contained" : "outlined"}
                 size="small"
@@ -3396,24 +3482,28 @@ const OrdersPage = () => {
                   }
                 }}
                 sx={{
-                  borderRadius: '16px',
-                  textTransform: 'none',
-                  fontSize: '0.75rem',
+                  borderRadius: "16px",
+                  textTransform: "none",
+                  fontSize: "0.75rem",
                   px: 2,
                   py: 0.5,
-                  minWidth: 'auto',
+                  minWidth: "auto",
                 }}
               >
                 {manualSelectionMode ? "Auto" : "Manual"}
               </Button>
             </Box>
-            
+
             {/* Right: Quick Filters - Gender & Priority as Chips */}
             {!manualSelectionMode && (
-              <Box sx={{ display: 'flex', gap: 3, alignItems: 'center' }}>
+              <Box sx={{ display: "flex", gap: 3, alignItems: "center" }}>
                 {/* Gender Filter */}
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 500 }}>
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ fontWeight: 500 }}
+                  >
                     Gender:
                   </Typography>
                   <Controller
@@ -3423,24 +3513,26 @@ const OrdersPage = () => {
                       <ToggleButtonGroup
                         value={field.value || ""}
                         exclusive
-                        onChange={(e, newValue) => field.onChange(newValue ?? "")}
+                        onChange={(e, newValue) =>
+                          field.onChange(newValue ?? "")
+                        }
                         size="small"
                         sx={{
-                          '& .MuiToggleButton-root': {
+                          "& .MuiToggleButton-root": {
                             px: 1.5,
                             py: 0.25,
-                            fontSize: '0.7rem',
-                            textTransform: 'none',
-                            borderRadius: '16px !important',
-                            border: '1px solid',
-                            borderColor: 'divider',
+                            fontSize: "0.7rem",
+                            textTransform: "none",
+                            borderRadius: "16px !important",
+                            border: "1px solid",
+                            borderColor: "divider",
                             mx: 0.25,
-                            '&.Mui-selected': {
-                              bgcolor: 'primary.main',
-                              color: 'primary.contrastText',
-                              borderColor: 'primary.main',
-                              '&:hover': {
-                                bgcolor: 'primary.dark',
+                            "&.Mui-selected": {
+                              bgcolor: "primary.main",
+                              color: "primary.contrastText",
+                              borderColor: "primary.main",
+                              "&:hover": {
+                                bgcolor: "primary.dark",
                               },
                             },
                           },
@@ -3456,8 +3548,12 @@ const OrdersPage = () => {
                 </Box>
 
                 {/* Priority Filter */}
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 500 }}>
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ fontWeight: 500 }}
+                  >
                     Priority:
                   </Typography>
                   <Controller
@@ -3472,30 +3568,30 @@ const OrdersPage = () => {
                         }}
                         size="small"
                         sx={{
-                          '& .MuiToggleButton-root': {
+                          "& .MuiToggleButton-root": {
                             px: 1.5,
                             py: 0.25,
-                            fontSize: '0.7rem',
-                            textTransform: 'none',
-                            borderRadius: '16px !important',
-                            border: '1px solid',
-                            borderColor: 'divider',
+                            fontSize: "0.7rem",
+                            textTransform: "none",
+                            borderRadius: "16px !important",
+                            border: "1px solid",
+                            borderColor: "divider",
                             mx: 0.25,
-                            '&.Mui-selected': {
+                            "&.Mui-selected": {
                               '&[value="low"]': {
-                                bgcolor: 'success.main',
-                                color: 'success.contrastText',
-                                borderColor: 'success.main',
+                                bgcolor: "success.main",
+                                color: "success.contrastText",
+                                borderColor: "success.main",
                               },
                               '&[value="medium"]': {
-                                bgcolor: 'warning.main',
-                                color: 'warning.contrastText',
-                                borderColor: 'warning.main',
+                                bgcolor: "warning.main",
+                                color: "warning.contrastText",
+                                borderColor: "warning.main",
                               },
                               '&[value="high"]': {
-                                bgcolor: 'error.main',
-                                color: 'error.contrastText',
-                                borderColor: 'error.main',
+                                bgcolor: "error.main",
+                                color: "error.contrastText",
+                                borderColor: "error.main",
                               },
                             },
                           },
@@ -3519,8 +3615,8 @@ const OrdersPage = () => {
               <Box
                 sx={{
                   mb: 3,
-                  display: 'flex',
-                  alignItems: 'center',
+                  display: "flex",
+                  alignItems: "center",
                   gap: 2,
                 }}
               >
@@ -3536,10 +3632,10 @@ const OrdersPage = () => {
                       error={!!errors.plannedDate}
                       size="small"
                       InputLabelProps={{ shrink: true }}
-                      sx={{ 
-                        '& .MuiInputBase-input': {
+                      sx={{
+                        "& .MuiInputBase-input": {
                           py: 0.75,
-                          fontSize: '0.875rem',
+                          fontSize: "0.875rem",
                         },
                         width: 160,
                         flexShrink: 0,
@@ -3550,7 +3646,9 @@ const OrdersPage = () => {
                           : ""
                       }
                       onChange={(e) => {
-                        const dateValue = e.target.value ? new Date(e.target.value) : null;
+                        const dateValue = e.target.value
+                          ? new Date(e.target.value)
+                          : null;
                         field.onChange(dateValue);
                       }}
                     />
@@ -3566,24 +3664,24 @@ const OrdersPage = () => {
                     borderRadius: 2,
                     border: "1px solid",
                     borderColor: (theme) => alpha(theme.palette.info.main, 0.2),
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
                     gap: 2,
                     minHeight: 44,
                   }}
                 >
                   {/* Left: Title and Status */}
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
                     <Typography
                       variant="subtitle2"
-                      sx={{ 
-                        display: "flex", 
-                        alignItems: "center", 
+                      sx={{
+                        display: "flex",
+                        alignItems: "center",
                         gap: 1,
                         fontWeight: 600,
-                        color: 'info.dark',
-                        whiteSpace: 'nowrap',
+                        color: "info.dark",
+                        whiteSpace: "nowrap",
                       }}
                     >
                       📊 Fulfillment
@@ -3621,44 +3719,94 @@ const OrdersPage = () => {
                   </Box>
 
                   {/* Right: Breakdown Stats */}
-                  <Box sx={{ display: 'flex', gap: 3 }}>
+                  <Box sx={{ display: "flex", gap: 3 }}>
                     {fulfillmentSummary?.breakdown ? (
-                      Object.entries(fulfillmentSummary.breakdown).map(([type, stats]) =>
-                        stats.requested > 0 ? (
-                          <Box key={type} sx={{ textAlign: 'center', minWidth: 45 }}>
-                            <Typography 
-                              variant="caption" 
-                              fontWeight="bold" 
-                              display="block" 
-                              sx={{ textTransform: 'uppercase', color: 'text.secondary', fontSize: '0.65rem' }}
+                      Object.entries(fulfillmentSummary.breakdown).map(
+                        ([type, stats]) =>
+                          stats.requested > 0 ? (
+                            <Box
+                              key={type}
+                              sx={{ textAlign: "center", minWidth: 45 }}
                             >
-                              {type}
-                            </Typography>
-                            <Typography
-                              variant="body2"
-                              fontWeight={600}
-                              color={stats.available < stats.requested ? "error.main" : "success.main"}
-                            >
-                              {stats.available}/{stats.requested}
-                            </Typography>
-                          </Box>
-                        ) : null
+                              <Typography
+                                variant="caption"
+                                fontWeight="bold"
+                                display="block"
+                                sx={{
+                                  textTransform: "uppercase",
+                                  color: "text.secondary",
+                                  fontSize: "0.65rem",
+                                }}
+                              >
+                                {type}
+                              </Typography>
+                              <Typography
+                                variant="body2"
+                                fontWeight={600}
+                                color={
+                                  stats.available < stats.requested
+                                    ? "error.main"
+                                    : "success.main"
+                                }
+                              >
+                                {stats.available}/{stats.requested}
+                              </Typography>
+                            </Box>
+                          ) : null
                       )
                     ) : (
                       <>
-                        <Box sx={{ textAlign: 'center', minWidth: 45, opacity: 0.4 }}>
-                          <Typography variant="caption" fontWeight="bold" display="block" sx={{ textTransform: 'uppercase', color: 'text.secondary', fontSize: '0.65rem' }}>
+                        <Box
+                          sx={{
+                            textAlign: "center",
+                            minWidth: 45,
+                            opacity: 0.4,
+                          }}
+                        >
+                          <Typography
+                            variant="caption"
+                            fontWeight="bold"
+                            display="block"
+                            sx={{
+                              textTransform: "uppercase",
+                              color: "text.secondary",
+                              fontSize: "0.65rem",
+                            }}
+                          >
                             FTD
                           </Typography>
-                          <Typography variant="body2" fontWeight={600} color="text.disabled">
+                          <Typography
+                            variant="body2"
+                            fontWeight={600}
+                            color="text.disabled"
+                          >
                             -/-
                           </Typography>
                         </Box>
-                        <Box sx={{ textAlign: 'center', minWidth: 45, opacity: 0.4 }}>
-                          <Typography variant="caption" fontWeight="bold" display="block" sx={{ textTransform: 'uppercase', color: 'text.secondary', fontSize: '0.65rem' }}>
+                        <Box
+                          sx={{
+                            textAlign: "center",
+                            minWidth: 45,
+                            opacity: 0.4,
+                          }}
+                        >
+                          <Typography
+                            variant="caption"
+                            fontWeight="bold"
+                            display="block"
+                            sx={{
+                              textTransform: "uppercase",
+                              color: "text.secondary",
+                              fontSize: "0.65rem",
+                            }}
+                          >
                             Filler
                           </Typography>
-                          <Typography variant="body2" fontWeight={600} color="text.disabled">
+                          <Typography
+                            variant="body2"
+                            fontWeight={600}
+                            color="text.disabled"
+                          >
                             -/-
                           </Typography>
                         </Box>
@@ -3814,13 +3962,21 @@ const OrdersPage = () => {
                     <Box
                       sx={{
                         p: 2,
-                        bgcolor: (theme) => alpha(theme.palette.grey[500], 0.04),
+                        bgcolor: (theme) =>
+                          alpha(theme.palette.grey[500], 0.04),
                         borderRadius: 2,
-                        border: '1px solid',
-                        borderColor: 'divider',
+                        border: "1px solid",
+                        borderColor: "divider",
                       }}
                     >
-                      <Typography variant="subtitle2" sx={{ mb: 1.5, fontWeight: 600, color: 'text.secondary' }}>
+                      <Typography
+                        variant="subtitle2"
+                        sx={{
+                          mb: 1.5,
+                          fontWeight: 600,
+                          color: "text.secondary",
+                        }}
+                      >
                         Lead Quantities
                       </Typography>
                       <Grid container spacing={2}>
@@ -3839,8 +3995,8 @@ const OrdersPage = () => {
                                 inputProps={{ min: 0 }}
                                 size="small"
                                 sx={{
-                                  '& .MuiOutlinedInput-root': {
-                                    bgcolor: 'background.paper',
+                                  "& .MuiOutlinedInput-root": {
+                                    bgcolor: "background.paper",
                                   },
                                 }}
                               />
@@ -3862,8 +4018,8 @@ const OrdersPage = () => {
                                 inputProps={{ min: 0 }}
                                 size="small"
                                 sx={{
-                                  '& .MuiOutlinedInput-root': {
-                                    bgcolor: 'background.paper',
+                                  "& .MuiOutlinedInput-root": {
+                                    bgcolor: "background.paper",
                                   },
                                 }}
                               />
@@ -3885,8 +4041,8 @@ const OrdersPage = () => {
                                 inputProps={{ min: 0 }}
                                 size="small"
                                 sx={{
-                                  '& .MuiOutlinedInput-root': {
-                                    bgcolor: 'background.paper',
+                                  "& .MuiOutlinedInput-root": {
+                                    bgcolor: "background.paper",
                                   },
                                 }}
                               />
@@ -3898,13 +4054,16 @@ const OrdersPage = () => {
                             name="countryFilter"
                             control={control}
                             render={({ field }) => {
-                              const [inputValue, setInputValue] = React.useState("");
+                              const [inputValue, setInputValue] =
+                                React.useState("");
                               const [isOpen, setIsOpen] = React.useState(false);
-                              
+
                               return (
                                 <Autocomplete
                                   {...field}
-                                  options={getSortedCountries().map((country) => country.name)}
+                                  options={getSortedCountries().map(
+                                    (country) => country.name
+                                  )}
                                   value={field.value || null}
                                   inputValue={inputValue}
                                   open={isOpen}
@@ -3912,11 +4071,21 @@ const OrdersPage = () => {
                                     if (inputValue.length > 0) setIsOpen(true);
                                   }}
                                   onClose={() => setIsOpen(false)}
-                                  onInputChange={(event, newInputValue, reason) => {
+                                  onInputChange={(
+                                    event,
+                                    newInputValue,
+                                    reason
+                                  ) => {
                                     setInputValue(newInputValue);
-                                    if (reason === "input" && newInputValue.length > 0) {
+                                    if (
+                                      reason === "input" &&
+                                      newInputValue.length > 0
+                                    ) {
                                       setIsOpen(true);
-                                    } else if (reason === "clear" || newInputValue.length === 0) {
+                                    } else if (
+                                      reason === "clear" ||
+                                      newInputValue.length === 0
+                                    ) {
                                       setIsOpen(false);
                                     }
                                   }}
@@ -3929,7 +4098,11 @@ const OrdersPage = () => {
                                       return [];
                                     }
                                     return options.filter((option) =>
-                                      option.toLowerCase().includes(state.inputValue.toLowerCase())
+                                      option
+                                        .toLowerCase()
+                                        .includes(
+                                          state.inputValue.toLowerCase()
+                                        )
                                     );
                                   }}
                                   renderInput={(params) => (
@@ -3940,8 +4113,8 @@ const OrdersPage = () => {
                                       error={!!errors.countryFilter}
                                       helperText={errors.countryFilter?.message}
                                       sx={{
-                                        '& .MuiOutlinedInput-root': {
-                                          bgcolor: 'background.paper',
+                                        "& .MuiOutlinedInput-root": {
+                                          bgcolor: "background.paper",
                                         },
                                       }}
                                     />
@@ -3970,16 +4143,20 @@ const OrdersPage = () => {
                     p: 2,
                     bgcolor: (theme) => alpha(theme.palette.grey[500], 0.04),
                     borderRadius: 2,
-                    border: '1px solid',
-                    borderColor: 'divider',
+                    border: "1px solid",
+                    borderColor: "divider",
                   }}
                 >
-                  <Typography variant="subtitle2" sx={{ mb: 1.5, fontWeight: 600, color: 'text.secondary' }}>
+                  <Typography
+                    variant="subtitle2"
+                    sx={{ mb: 1.5, fontWeight: 600, color: "text.secondary" }}
+                  >
                     Network Configuration
                   </Typography>
                   <Grid container spacing={2}>
                     {/* Client Network Selection */}
-                    {(user?.role === "admin" || user?.role === "affiliate_manager") && (
+                    {(user?.role === "admin" ||
+                      user?.role === "affiliate_manager") && (
                       <Grid item xs={12} md={6}>
                         <Controller
                           name="selectedClientNetwork"
@@ -3988,25 +4165,38 @@ const OrdersPage = () => {
                             <Autocomplete
                               open={clientNetworkOpen}
                               onOpen={() => {
-                                if (clientNetworkInput.length > 0) setClientNetworkOpen(true);
+                                if (clientNetworkInput.length > 0)
+                                  setClientNetworkOpen(true);
                               }}
                               onClose={() => setClientNetworkOpen(false)}
                               inputValue={clientNetworkInput}
                               onInputChange={(event, newInputValue, reason) => {
                                 setClientNetworkInput(newInputValue);
-                                if (reason === "input" && newInputValue.length > 0) {
+                                if (
+                                  reason === "input" &&
+                                  newInputValue.length > 0
+                                ) {
                                   setClientNetworkOpen(true);
-                                } else if (reason === "clear" || newInputValue.length === 0) {
+                                } else if (
+                                  reason === "clear" ||
+                                  newInputValue.length === 0
+                                ) {
                                   setClientNetworkOpen(false);
                                 }
                               }}
                               options={clientNetworks}
                               getOptionLabel={(option) => option.name || ""}
-                              value={clientNetworks.find((n) => n._id === value) || null}
+                              value={
+                                clientNetworks.find((n) => n._id === value) ||
+                                null
+                              }
                               onChange={(event, newValue) => {
                                 onChange(newValue ? newValue._id : "");
                                 setFilteredAgents([]);
-                                setUnassignedLeadsStats({ ftd: null, filler: null });
+                                setUnassignedLeadsStats({
+                                  ftd: null,
+                                  filler: null,
+                                });
                               }}
                               disabled={loadingClientNetworks}
                               size="small"
@@ -4018,31 +4208,53 @@ const OrdersPage = () => {
                                   placeholder="Search..."
                                   helperText={
                                     errors.selectedClientNetwork?.message ||
-                                    (loadingClientNetworks ? "Loading..." : `${clientNetworks.length} available`)
+                                    (loadingClientNetworks
+                                      ? "Loading..."
+                                      : `${clientNetworks.length} available`)
                                   }
-                                  sx={{ '& .MuiOutlinedInput-root': { bgcolor: 'background.paper' } }}
+                                  sx={{
+                                    "& .MuiOutlinedInput-root": {
+                                      bgcolor: "background.paper",
+                                    },
+                                  }}
                                 />
                               )}
                               renderOption={(props, option) => (
                                 <li {...props} key={option._id}>
                                   <Box>
-                                    <Typography variant="body2">{option.name}</Typography>
+                                    <Typography variant="body2">
+                                      {option.name}
+                                    </Typography>
                                     {option.description && (
-                                      <Typography variant="caption" sx={{ color: "text.secondary" }}>
+                                      <Typography
+                                        variant="caption"
+                                        sx={{ color: "text.secondary" }}
+                                      >
                                         {option.description}
                                       </Typography>
                                     )}
                                   </Box>
                                 </li>
                               )}
-                              isOptionEqualToValue={(option, value) => option._id === value._id}
+                              isOptionEqualToValue={(option, value) =>
+                                option._id === value._id
+                              }
                             />
                           )}
                         />
                       </Grid>
                     )}
                     {/* Our Network Selection */}
-                    <Grid item xs={12} md={(user?.role === "admin" || user?.role === "affiliate_manager") ? 6 : 12}>
+                    <Grid
+                      item
+                      xs={12}
+                      md={
+                        user?.role === "admin" ||
+                        user?.role === "affiliate_manager"
+                          ? 6
+                          : 12
+                      }
+                    >
                       <Controller
                         name="selectedOurNetwork"
                         control={control}
@@ -4050,21 +4262,30 @@ const OrdersPage = () => {
                           <Autocomplete
                             open={ourNetworkOpen}
                             onOpen={() => {
-                              if (ourNetworkInput.length > 0) setOurNetworkOpen(true);
+                              if (ourNetworkInput.length > 0)
+                                setOurNetworkOpen(true);
                             }}
                             onClose={() => setOurNetworkOpen(false)}
                             inputValue={ourNetworkInput}
                             onInputChange={(event, newInputValue, reason) => {
                               setOurNetworkInput(newInputValue);
-                              if (reason === "input" && newInputValue.length > 0) {
+                              if (
+                                reason === "input" &&
+                                newInputValue.length > 0
+                              ) {
                                 setOurNetworkOpen(true);
-                              } else if (reason === "clear" || newInputValue.length === 0) {
+                              } else if (
+                                reason === "clear" ||
+                                newInputValue.length === 0
+                              ) {
                                 setOurNetworkOpen(false);
                               }
                             }}
                             options={ourNetworks}
                             getOptionLabel={(option) => option.name || ""}
-                            value={ourNetworks.find((n) => n._id === value) || null}
+                            value={
+                              ourNetworks.find((n) => n._id === value) || null
+                            }
                             onChange={(event, newValue) => {
                               onChange(newValue ? newValue._id : "");
                             }}
@@ -4078,24 +4299,37 @@ const OrdersPage = () => {
                                 placeholder="Search..."
                                 helperText={
                                   errors.selectedOurNetwork?.message ||
-                                  (loadingOurNetworks ? "Loading..." : `${ourNetworks.length} available`)
+                                  (loadingOurNetworks
+                                    ? "Loading..."
+                                    : `${ourNetworks.length} available`)
                                 }
-                                sx={{ '& .MuiOutlinedInput-root': { bgcolor: 'background.paper' } }}
+                                sx={{
+                                  "& .MuiOutlinedInput-root": {
+                                    bgcolor: "background.paper",
+                                  },
+                                }}
                               />
                             )}
                             renderOption={(props, option) => (
                               <li {...props} key={option._id}>
                                 <Box>
-                                  <Typography variant="body2">{option.name}</Typography>
+                                  <Typography variant="body2">
+                                    {option.name}
+                                  </Typography>
                                   {option.description && (
-                                    <Typography variant="caption" sx={{ color: "text.secondary" }}>
+                                    <Typography
+                                      variant="caption"
+                                      sx={{ color: "text.secondary" }}
+                                    >
                                       {option.description}
                                     </Typography>
                                   )}
                                 </Box>
                               </li>
                             )}
-                            isOptionEqualToValue={(option, value) => option._id === value._id}
+                            isOptionEqualToValue={(option, value) =>
+                              option._id === value._id
+                            }
                           />
                         )}
                       />
@@ -4110,11 +4344,14 @@ const OrdersPage = () => {
                     p: 2,
                     bgcolor: (theme) => alpha(theme.palette.grey[500], 0.04),
                     borderRadius: 2,
-                    border: '1px solid',
-                    borderColor: 'divider',
+                    border: "1px solid",
+                    borderColor: "divider",
                   }}
                 >
-                  <Typography variant="subtitle2" sx={{ mb: 1.5, fontWeight: 600, color: 'text.secondary' }}>
+                  <Typography
+                    variant="subtitle2"
+                    sx={{ mb: 1.5, fontWeight: 600, color: "text.secondary" }}
+                  >
                     Campaign & Broker Settings
                   </Typography>
                   <Grid container spacing={2}>
@@ -4127,21 +4364,30 @@ const OrdersPage = () => {
                           <Autocomplete
                             open={campaignOpen}
                             onOpen={() => {
-                              if (campaignInput.length > 0) setCampaignOpen(true);
+                              if (campaignInput.length > 0)
+                                setCampaignOpen(true);
                             }}
                             onClose={() => setCampaignOpen(false)}
                             inputValue={campaignInput}
                             onInputChange={(event, newInputValue, reason) => {
                               setCampaignInput(newInputValue);
-                              if (reason === "input" && newInputValue.length > 0) {
+                              if (
+                                reason === "input" &&
+                                newInputValue.length > 0
+                              ) {
                                 setCampaignOpen(true);
-                              } else if (reason === "clear" || newInputValue.length === 0) {
+                              } else if (
+                                reason === "clear" ||
+                                newInputValue.length === 0
+                              ) {
                                 setCampaignOpen(false);
                               }
                             }}
                             options={campaigns}
                             getOptionLabel={(option) => option.name || ""}
-                            value={campaigns.find((c) => c._id === value) || null}
+                            value={
+                              campaigns.find((c) => c._id === value) || null
+                            }
                             onChange={(event, newValue) => {
                               onChange(newValue ? newValue._id : "");
                             }}
@@ -4154,25 +4400,41 @@ const OrdersPage = () => {
                                 error={!!errors.selectedCampaign}
                                 helperText={
                                   errors.selectedCampaign?.message ||
-                                  (loadingCampaigns ? "Loading..." : `${campaigns.length} available`)
+                                  (loadingCampaigns
+                                    ? "Loading..."
+                                    : `${campaigns.length} available`)
                                 }
                                 placeholder="Search..."
-                                sx={{ '& .MuiOutlinedInput-root': { bgcolor: 'background.paper' } }}
+                                sx={{
+                                  "& .MuiOutlinedInput-root": {
+                                    bgcolor: "background.paper",
+                                  },
+                                }}
                               />
                             )}
                             renderOption={(props, option) => (
                               <li {...props} key={option._id}>
                                 <Box>
-                                  <Typography variant="body2">{option.name}</Typography>
+                                  <Typography variant="body2">
+                                    {option.name}
+                                  </Typography>
                                   {option.description && (
-                                    <Typography variant="caption" sx={{ display: "block", color: "text.secondary" }}>
+                                    <Typography
+                                      variant="caption"
+                                      sx={{
+                                        display: "block",
+                                        color: "text.secondary",
+                                      }}
+                                    >
                                       {option.description}
                                     </Typography>
                                   )}
                                 </Box>
                               </li>
                             )}
-                            isOptionEqualToValue={(option, value) => option._id === value._id}
+                            isOptionEqualToValue={(option, value) =>
+                              option._id === value._id
+                            }
                           />
                         )}
                       />
@@ -4187,12 +4449,19 @@ const OrdersPage = () => {
                             multiple
                             options={clientBrokers}
                             getOptionLabel={(option) => option.name || ""}
-                            value={clientBrokers.filter((broker) => (value || []).includes(broker._id))}
-                            isOptionEqualToValue={(option, value) => option._id === value._id}
+                            value={clientBrokers.filter((broker) =>
+                              (value || []).includes(broker._id)
+                            )}
+                            isOptionEqualToValue={(option, value) =>
+                              option._id === value._id
+                            }
                             onChange={(event, newValue) => {
                               onChange(newValue.map((broker) => broker._id));
                               setFilteredAgents([]);
-                              setUnassignedLeadsStats({ ftd: null, filler: null });
+                              setUnassignedLeadsStats({
+                                ftd: null,
+                                filler: null,
+                              });
                             }}
                             loading={loadingClientBrokers}
                             disabled={loadingClientBrokers}
@@ -4204,13 +4473,25 @@ const OrdersPage = () => {
                                 label="Exclude Brokers (optional)"
                                 placeholder="Select..."
                                 error={!!errors.selectedClientBrokers}
-                                helperText={errors.selectedClientBrokers?.message || "Exclude leads from these brokers"}
-                                sx={{ '& .MuiOutlinedInput-root': { bgcolor: 'background.paper' } }}
+                                helperText={
+                                  errors.selectedClientBrokers?.message ||
+                                  "Exclude leads from these brokers"
+                                }
+                                sx={{
+                                  "& .MuiOutlinedInput-root": {
+                                    bgcolor: "background.paper",
+                                  },
+                                }}
                                 InputProps={{
                                   ...params.InputProps,
                                   endAdornment: (
                                     <React.Fragment>
-                                      {loadingClientBrokers ? <CircularProgress color="inherit" size={18} /> : null}
+                                      {loadingClientBrokers ? (
+                                        <CircularProgress
+                                          color="inherit"
+                                          size={18}
+                                        />
+                                      ) : null}
                                       {params.InputProps.endAdornment}
                                     </React.Fragment>
                                   ),
@@ -4219,8 +4500,17 @@ const OrdersPage = () => {
                             )}
                             renderTags={(tagValue, getTagProps) =>
                               tagValue.map((option, index) => {
-                                const { key, ...chipProps } = getTagProps({ index });
-                                return <Chip key={key} label={option.name} {...chipProps} size="small" />;
+                                const { key, ...chipProps } = getTagProps({
+                                  index,
+                                });
+                                return (
+                                  <Chip
+                                    key={key}
+                                    label={option.name}
+                                    {...chipProps}
+                                    size="small"
+                                  />
+                                );
                               })
                             }
                           />
@@ -4540,12 +4830,12 @@ const OrdersPage = () => {
               </Alert>
             )}
           </DialogContent>
-          <DialogActions 
-            sx={{ 
-              px: 3, 
-              py: 2, 
-              borderTop: '1px solid',
-              borderColor: 'divider',
+          <DialogActions
+            sx={{
+              px: 3,
+              py: 2,
+              borderTop: "1px solid",
+              borderColor: "divider",
               bgcolor: (theme) => alpha(theme.palette.grey[500], 0.02),
             }}
           >
@@ -4562,16 +4852,20 @@ const OrdersPage = () => {
             >
               Cancel
             </Button>
-            <Button 
-              type="submit" 
-              variant="contained" 
+            <Button
+              type="submit"
+              variant="contained"
               disabled={isSubmitting}
-              sx={{ 
+              sx={{
                 px: 4,
                 fontWeight: 600,
               }}
             >
-              {isSubmitting ? <CircularProgress size={22} color="inherit" /> : "Create Order"}
+              {isSubmitting ? (
+                <CircularProgress size={22} color="inherit" />
+              ) : (
+                "Create Order"
+              )}
             </Button>
           </DialogActions>
         </form>
@@ -5234,7 +5528,9 @@ const OrdersPage = () => {
               {console.log("Rendering popover for:", hoveredLead.firstName)}
               <LeadQuickView
                 lead={hoveredLead}
-                onLeadUpdate={user?.role !== "lead_manager" ? handleLeadUpdate : undefined}
+                onLeadUpdate={
+                  user?.role !== "lead_manager" ? handleLeadUpdate : undefined
+                }
                 readOnly={user?.role === "lead_manager"}
               />
             </>
@@ -5285,26 +5581,47 @@ const OrdersPage = () => {
               filteredLeads[assignedLeadsModal.currentIndex] && (
                 <LeadQuickView
                   lead={filteredLeads[assignedLeadsModal.currentIndex]}
-                  onLeadUpdate={user?.role !== "lead_manager" ? handleLeadUpdate : undefined}
+                  onLeadUpdate={
+                    user?.role !== "lead_manager" ? handleLeadUpdate : undefined
+                  }
                   readOnly={user?.role === "lead_manager"}
-                  onConvertLeadType={user?.role !== "lead_manager" ? (lead) =>
-                    handleConvertLeadType(
-                      orders.find((o) => o._id === assignedLeadsModal.orderId),
-                      lead
-                    ) : undefined
+                  onConvertLeadType={
+                    user?.role !== "lead_manager"
+                      ? (lead) =>
+                          handleConvertLeadType(
+                            orders.find(
+                              (o) => o._id === assignedLeadsModal.orderId
+                            ),
+                            lead
+                          )
+                      : undefined
                   }
-                  onChangeFTDLead={user?.role !== "lead_manager" ? (lead) =>
-                    handleOpenChangeFTDDialog(
-                      orders.find((o) => o._id === assignedLeadsModal.orderId),
-                      lead
-                    ) : undefined
+                  onChangeFTDLead={
+                    user?.role !== "lead_manager"
+                      ? (lead) =>
+                          handleOpenChangeFTDDialog(
+                            orders.find(
+                              (o) => o._id === assignedLeadsModal.orderId
+                            ),
+                            lead
+                          )
+                      : undefined
                   }
-                  onAssignLeadToAgent={user?.role !== "lead_manager" ? handleOpenAssignLeadDialog : undefined}
-                  onAssignDepositCall={user?.role !== "lead_manager" ? (lead) =>
-                    handleOpenAssignDepositCallDialog(
-                      orders.find((o) => o._id === assignedLeadsModal.orderId),
-                      lead
-                    ) : undefined
+                  onAssignLeadToAgent={
+                    user?.role !== "lead_manager"
+                      ? handleOpenAssignLeadDialog
+                      : undefined
+                  }
+                  onAssignDepositCall={
+                    user?.role !== "lead_manager"
+                      ? (lead) =>
+                          handleOpenAssignDepositCallDialog(
+                            orders.find(
+                              (o) => o._id === assignedLeadsModal.orderId
+                            ),
+                            lead
+                          )
+                      : undefined
                   }
                   titleExtra={
                     <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
@@ -5513,7 +5830,7 @@ const OrdersPage = () => {
         maxWidth="xl"
         fullWidth
         PaperProps={{
-          sx: { maxHeight: '90vh' }
+          sx: { maxHeight: "90vh" },
         }}
       >
         <DialogTitle>
@@ -5536,57 +5853,127 @@ const OrdersPage = () => {
             </IconButton>
           </Box>
         </DialogTitle>
-        <DialogContent dividers sx={{ p: 1, overflow: 'auto' }}>
-          <TableContainer sx={{ maxHeight: 'calc(90vh - 180px)', overflow: 'auto' }}>
-            <Table size="small" stickyHeader sx={{ tableLayout: 'auto', minWidth: 900 }}>
+        <DialogContent dividers sx={{ p: 1, overflow: "auto" }}>
+          <TableContainer
+            sx={{ maxHeight: "calc(90vh - 180px)", overflow: "auto" }}
+          >
+            <Table
+              size="small"
+              stickyHeader
+              sx={{ tableLayout: "auto", minWidth: 900 }}
+            >
               <TableHead>
                 <TableRow>
                   <TableCell
-                    sx={{ fontWeight: "bold", backgroundColor: "grey.100", whiteSpace: "nowrap", py: 0.5, px: 1, fontSize: "0.75rem" }}
+                    sx={{
+                      fontWeight: "bold",
+                      backgroundColor: "grey.100",
+                      whiteSpace: "nowrap",
+                      py: 0.5,
+                      px: 1,
+                      fontSize: "0.75rem",
+                    }}
                   >
                     Name
                   </TableCell>
                   <TableCell
-                    sx={{ fontWeight: "bold", backgroundColor: "grey.100", whiteSpace: "nowrap", py: 0.5, px: 1, fontSize: "0.75rem" }}
+                    sx={{
+                      fontWeight: "bold",
+                      backgroundColor: "grey.100",
+                      whiteSpace: "nowrap",
+                      py: 0.5,
+                      px: 1,
+                      fontSize: "0.75rem",
+                    }}
                   >
                     Phone
                   </TableCell>
                   <TableCell
-                    sx={{ fontWeight: "bold", backgroundColor: "grey.100", whiteSpace: "nowrap", py: 0.5, px: 1, fontSize: "0.75rem" }}
+                    sx={{
+                      fontWeight: "bold",
+                      backgroundColor: "grey.100",
+                      whiteSpace: "nowrap",
+                      py: 0.5,
+                      px: 1,
+                      fontSize: "0.75rem",
+                    }}
                   >
                     Email
                   </TableCell>
                   <TableCell
-                    sx={{ fontWeight: "bold", backgroundColor: "grey.100", whiteSpace: "nowrap", py: 0.5, px: 1, fontSize: "0.75rem" }}
+                    sx={{
+                      fontWeight: "bold",
+                      backgroundColor: "grey.100",
+                      whiteSpace: "nowrap",
+                      py: 0.5,
+                      px: 1,
+                      fontSize: "0.75rem",
+                    }}
                   >
                     Agent
                   </TableCell>
                   <TableCell
-                    sx={{ fontWeight: "bold", backgroundColor: "grey.100", whiteSpace: "nowrap", textAlign: "center", py: 0.5, px: 0.5, fontSize: "0.75rem" }}
+                    sx={{
+                      fontWeight: "bold",
+                      backgroundColor: "grey.100",
+                      whiteSpace: "nowrap",
+                      textAlign: "center",
+                      py: 0.5,
+                      px: 0.5,
+                      fontSize: "0.75rem",
+                    }}
                   >
                     ID Front
                   </TableCell>
                   <TableCell
-                    sx={{ fontWeight: "bold", backgroundColor: "grey.100", whiteSpace: "nowrap", textAlign: "center", py: 0.5, px: 0.5, fontSize: "0.75rem" }}
+                    sx={{
+                      fontWeight: "bold",
+                      backgroundColor: "grey.100",
+                      whiteSpace: "nowrap",
+                      textAlign: "center",
+                      py: 0.5,
+                      px: 0.5,
+                      fontSize: "0.75rem",
+                    }}
                   >
                     ID Back
                   </TableCell>
                   <TableCell
-                    sx={{ fontWeight: "bold", backgroundColor: "grey.100", whiteSpace: "nowrap", textAlign: "center", py: 0.5, px: 0.5, fontSize: "0.75rem" }}
+                    sx={{
+                      fontWeight: "bold",
+                      backgroundColor: "grey.100",
+                      whiteSpace: "nowrap",
+                      textAlign: "center",
+                      py: 0.5,
+                      px: 0.5,
+                      fontSize: "0.75rem",
+                    }}
                   >
                     Selfie
                   </TableCell>
                   <TableCell
-                    sx={{ fontWeight: "bold", backgroundColor: "grey.100", whiteSpace: "nowrap", py: 0.5, px: 1, fontSize: "0.75rem" }}
+                    sx={{
+                      fontWeight: "bold",
+                      backgroundColor: "grey.100",
+                      whiteSpace: "nowrap",
+                      py: 0.5,
+                      px: 1,
+                      fontSize: "0.75rem",
+                    }}
                   >
                     Broker
                   </TableCell>
                   {user.role === "admin" && (
                     <TableCell
-                      sx={{ fontWeight: "bold", backgroundColor: "grey.100", whiteSpace: "nowrap", py: 0.5, px: 0.5, fontSize: "0.75rem" }}
-                    >
-                      
-                    </TableCell>
+                      sx={{
+                        fontWeight: "bold",
+                        backgroundColor: "grey.100",
+                        whiteSpace: "nowrap",
+                        py: 0.5,
+                        px: 0.5,
+                        fontSize: "0.75rem",
+                      }}
+                    ></TableCell>
                   )}
                 </TableRow>
               </TableHead>
@@ -5608,17 +5995,25 @@ const OrdersPage = () => {
                     // Extract document URLs from documents array
                     const documents = lead.documents || [];
                     const idFrontDoc = documents.find(
-                      (doc) => doc.description?.toLowerCase().includes("id front") && !doc.description?.toLowerCase().includes("selfie")
+                      (doc) =>
+                        doc.description?.toLowerCase().includes("id front") &&
+                        !doc.description?.toLowerCase().includes("selfie")
                     );
                     const idBackDoc = documents.find(
-                      (doc) => doc.description?.toLowerCase().includes("id back") && !doc.description?.toLowerCase().includes("selfie")
+                      (doc) =>
+                        doc.description?.toLowerCase().includes("id back") &&
+                        !doc.description?.toLowerCase().includes("selfie")
                     );
-                    const selfieDoc = documents.find(
-                      (doc) => doc.description?.toLowerCase().includes("selfie")
+                    const selfieDoc = documents.find((doc) =>
+                      doc.description?.toLowerCase().includes("selfie")
                     );
-                    
+
                     return (
-                      <TableRow key={lead._id || index} hover sx={{ '& td': { py: 0.5 } }}>
+                      <TableRow
+                        key={lead._id || index}
+                        hover
+                        sx={{ "& td": { py: 0.5 } }}
+                      >
                         {/* Name */}
                         <TableCell sx={{ py: 0.5, px: 1 }}>
                           <Box
@@ -5648,62 +6043,130 @@ const OrdersPage = () => {
                                 },
                               }}
                             />
-                            <Typography variant="body2" sx={{ whiteSpace: "nowrap", fontSize: "0.75rem" }}>
+                            <Typography
+                              variant="body2"
+                              sx={{ whiteSpace: "nowrap", fontSize: "0.75rem" }}
+                            >
                               {lead.firstName} {lead.lastName}
                             </Typography>
                           </Box>
                         </TableCell>
                         {/* Phone */}
                         <TableCell sx={{ py: 0.5, px: 1 }}>
-                          <Typography variant="body2" sx={{ whiteSpace: "nowrap", fontSize: "0.75rem" }}>
+                          <Typography
+                            variant="body2"
+                            sx={{ whiteSpace: "nowrap", fontSize: "0.75rem" }}
+                          >
                             {lead.newPhone || lead.phone || "-"}
                           </Typography>
                         </TableCell>
                         {/* Email */}
                         <TableCell sx={{ py: 0.5, px: 1 }}>
-                          <Typography variant="body2" sx={{ fontSize: "0.7rem", maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis" }}>
+                          <Typography
+                            variant="body2"
+                            sx={{
+                              fontSize: "0.7rem",
+                              maxWidth: 180,
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                            }}
+                          >
                             {lead.newEmail || lead.email || "-"}
                           </Typography>
                         </TableCell>
                         {/* Assigned Agent */}
                         <TableCell sx={{ py: 0.5, px: 1 }}>
-                          <Typography variant="body2" sx={{ whiteSpace: "nowrap", fontSize: "0.75rem" }}>
+                          <Typography
+                            variant="body2"
+                            sx={{ whiteSpace: "nowrap", fontSize: "0.75rem" }}
+                          >
                             {lead.assignedAgent?.fullName || "-"}
                           </Typography>
                         </TableCell>
                         {/* ID Front */}
                         <TableCell align="center" sx={{ py: 0.5, px: 0.5 }}>
                           {idFrontDoc?.url ? (
-                            <DocumentPreview url={idFrontDoc.url} type="ID Front" forceImage>
-                              <ImageIcon sx={{ fontSize: 16, color: 'primary.main', cursor: 'pointer' }} />
+                            <DocumentPreview
+                              url={idFrontDoc.url}
+                              type="ID Front"
+                              forceImage
+                            >
+                              <ImageIcon
+                                sx={{
+                                  fontSize: 16,
+                                  color: "primary.main",
+                                  cursor: "pointer",
+                                }}
+                              />
                             </DocumentPreview>
                           ) : (
-                            <Typography variant="body2" color="text.secondary" sx={{ fontSize: "0.75rem" }}>-</Typography>
+                            <Typography
+                              variant="body2"
+                              color="text.secondary"
+                              sx={{ fontSize: "0.75rem" }}
+                            >
+                              -
+                            </Typography>
                           )}
                         </TableCell>
                         {/* ID Back */}
                         <TableCell align="center" sx={{ py: 0.5, px: 0.5 }}>
                           {idBackDoc?.url ? (
-                            <DocumentPreview url={idBackDoc.url} type="ID Back" forceImage>
-                              <ImageIcon sx={{ fontSize: 16, color: 'primary.main', cursor: 'pointer' }} />
+                            <DocumentPreview
+                              url={idBackDoc.url}
+                              type="ID Back"
+                              forceImage
+                            >
+                              <ImageIcon
+                                sx={{
+                                  fontSize: 16,
+                                  color: "primary.main",
+                                  cursor: "pointer",
+                                }}
+                              />
                             </DocumentPreview>
                           ) : (
-                            <Typography variant="body2" color="text.secondary" sx={{ fontSize: "0.75rem" }}>-</Typography>
+                            <Typography
+                              variant="body2"
+                              color="text.secondary"
+                              sx={{ fontSize: "0.75rem" }}
+                            >
+                              -
+                            </Typography>
                           )}
                         </TableCell>
                         {/* Selfie */}
                         <TableCell align="center" sx={{ py: 0.5, px: 0.5 }}>
                           {selfieDoc?.url ? (
-                            <DocumentPreview url={selfieDoc.url} type="Selfie" forceImage>
-                              <ImageIcon sx={{ fontSize: 16, color: 'primary.main', cursor: 'pointer' }} />
+                            <DocumentPreview
+                              url={selfieDoc.url}
+                              type="Selfie"
+                              forceImage
+                            >
+                              <ImageIcon
+                                sx={{
+                                  fontSize: 16,
+                                  color: "primary.main",
+                                  cursor: "pointer",
+                                }}
+                              />
                             </DocumentPreview>
                           ) : (
-                            <Typography variant="body2" color="text.secondary" sx={{ fontSize: "0.75rem" }}>-</Typography>
+                            <Typography
+                              variant="body2"
+                              color="text.secondary"
+                              sx={{ fontSize: "0.75rem" }}
+                            >
+                              -
+                            </Typography>
                           )}
                         </TableCell>
                         {/* Client Broker */}
                         <TableCell sx={{ py: 0.5, px: 1 }}>
-                          <Typography variant="body2" sx={{ whiteSpace: "nowrap", fontSize: "0.75rem" }}>
+                          <Typography
+                            variant="body2"
+                            sx={{ whiteSpace: "nowrap", fontSize: "0.75rem" }}
+                          >
                             {lead.assignedClientBrokers?.[0]?.name ||
                               lead.clientBroker ||
                               "-"}

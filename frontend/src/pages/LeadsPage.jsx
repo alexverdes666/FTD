@@ -87,6 +87,7 @@ import {
   Male as MaleIcon,
   Female as FemaleIcon,
   ContentCopy as CopyIcon,
+  PersonRemove as PersonRemoveIcon,
 } from "@mui/icons-material";
 import AddLeadForm from "../components/AddLeadForm";
 import DocumentPreview from "../components/DocumentPreview";
@@ -1174,6 +1175,8 @@ const LeadsPage = () => {
   const [selectedLead, setSelectedLead] = useState(null);
   const [selectedLeads, setSelectedLeads] = useState(new Set());
   const [bulkAssignDialogOpen, setBulkAssignDialogOpen] = useState(false);
+  const [bulkUnassignDialogOpen, setBulkUnassignDialogOpen] = useState(false);
+  const [unassignLoading, setUnassignLoading] = useState(false);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [addLeadDialogOpen, setAddLeadDialogOpen] = useState(false);
@@ -1272,6 +1275,19 @@ const LeadsPage = () => {
     });
     return count;
   }, [selectedLeads, leads]);
+
+  // Count selected leads that are currently assigned to an agent
+  const numAssignedAgentSelected = useMemo(() => {
+    let count = 0;
+    selectedLeads.forEach((leadId) => {
+      const lead = leads.find((l) => l._id === leadId);
+      if (lead && lead.assignedAgent) {
+        count++;
+      }
+    });
+    return count;
+  }, [selectedLeads, leads]);
+
   const {
     control: commentControl,
     handleSubmit: handleCommentSubmit,
@@ -1658,6 +1674,53 @@ const LeadsPage = () => {
     }
   };
 
+  // Bulk unassign leads from agents
+  const handleBulkUnassign = async () => {
+    try {
+      setUnassignLoading(true);
+      setError(null);
+      
+      // Get only the leads that are assigned to an agent
+      const leadsToUnassign = Array.from(selectedLeads)
+        .map((id) => leads.find((lead) => lead._id === id))
+        .filter((lead) => lead && lead.assignedAgent);
+      
+      const leadIds = leadsToUnassign.map((lead) => lead._id);
+      
+      if (leadIds.length === 0) {
+        setError("No assigned leads selected to unassign");
+        setBulkUnassignDialogOpen(false);
+        setUnassignLoading(false);
+        return;
+      }
+      
+      const response = await api.post("/leads/unassign-from-agent", {
+        leadIds,
+      });
+      
+      const successCount = response.data.data?.success?.length || 0;
+      const failedCount = response.data.data?.failed?.length || 0;
+      
+      if (successCount > 0) {
+        setSuccess(
+          `Successfully unassigned ${successCount} lead(s) from agents${
+            failedCount > 0 ? `. ${failedCount} lead(s) failed.` : "."
+          }`
+        );
+      } else if (failedCount > 0) {
+        setError(`Failed to unassign ${failedCount} lead(s)`);
+      }
+      
+      setBulkUnassignDialogOpen(false);
+      setSelectedLeads(new Set());
+      fetchLeads();
+    } catch (err) {
+      setError(err.response?.data?.message || "Failed to unassign leads from agents");
+    } finally {
+      setUnassignLoading(false);
+    }
+  };
+
   // Fetch archived leads
   const fetchArchivedLeads = useCallback(
     async (page = 1, search = "") => {
@@ -1891,7 +1954,8 @@ const LeadsPage = () => {
     <Box sx={{ position: "relative" }}>
       {/* Floating action bar for selected leads */}
       {(canAssignLeads && numSelected > 0 && numAssignableSelected === 0) ||
-      (isAdminOrManager && numAssignableSelected > 0) ? (
+      (isAdminOrManager && numAssignableSelected > 0) ||
+      (isAdminOrManager && numAssignedAgentSelected > 0) ? (
         <Box
           sx={{
             position: "fixed",
@@ -1939,6 +2003,27 @@ const LeadsPage = () => {
               }}
             >
               Assign to Agent (Permanent)
+            </Button>
+          )}
+          {isAdminOrManager && numAssignedAgentSelected > 0 && (
+            <Button
+              variant="contained"
+              color="warning"
+              startIcon={<PersonRemoveIcon />}
+              onClick={() => setBulkUnassignDialogOpen(true)}
+              sx={{
+                borderRadius: 2,
+                px: 3,
+                py: 1,
+                transition: "all 0.2s",
+                boxShadow: 4,
+                "&:hover": {
+                  transform: "translateY(-2px)",
+                  boxShadow: 6,
+                },
+              }}
+            >
+              Unassign from Agent ({numAssignedAgentSelected})
             </Button>
           )}
         </Box>
@@ -2804,6 +2889,77 @@ const LeadsPage = () => {
           fetchLeads();
         }}
       />
+      {/* Bulk Unassign Confirmation Dialog */}
+      <Dialog
+        open={bulkUnassignDialogOpen}
+        onClose={() => !unassignLoading && setBulkUnassignDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+        sx={{
+          "& .MuiBackdrop-root": {
+            backdropFilter: "blur(5px)",
+          },
+        }}
+      >
+        <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+          <PersonRemoveIcon color="warning" />
+          Unassign Leads from Agents
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText sx={{ mb: 2 }}>
+            Are you sure you want to unassign <strong>{numAssignedAgentSelected}</strong> lead(s) from their assigned agents?
+          </DialogContentText>
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            These leads will become unassigned and will no longer be accessible to their current agents. You can reassign them to other agents later.
+          </Alert>
+          {numAssignedAgentSelected > 0 && (
+            <Box sx={{ maxHeight: 200, overflowY: "auto", border: "1px solid", borderColor: "divider", borderRadius: 1, p: 1 }}>
+              <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                Leads to be unassigned:
+              </Typography>
+              {Array.from(selectedLeads)
+                .map((id) => leads.find((lead) => lead._id === id))
+                .filter((lead) => lead && lead.assignedAgent)
+                .slice(0, 10)
+                .map((lead) => (
+                  <Box key={lead._id} sx={{ display: "flex", justifyContent: "space-between", py: 0.5, borderBottom: "1px solid", borderColor: "divider" }}>
+                    <Typography variant="body2">
+                      {lead.firstName} {lead.lastName}
+                    </Typography>
+                    <Chip
+                      size="small"
+                      label={lead.assignedAgent?.fullName || "Unknown Agent"}
+                      color="primary"
+                      variant="outlined"
+                    />
+                  </Box>
+                ))}
+              {numAssignedAgentSelected > 10 && (
+                <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1, textAlign: "center" }}>
+                  ... and {numAssignedAgentSelected - 10} more
+                </Typography>
+              )}
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button 
+            onClick={() => setBulkUnassignDialogOpen(false)} 
+            disabled={unassignLoading}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleBulkUnassign}
+            color="warning"
+            variant="contained"
+            disabled={unassignLoading}
+            startIcon={unassignLoading ? <CircularProgress size={20} /> : <PersonRemoveIcon />}
+          >
+            {unassignLoading ? "Unassigning..." : `Unassign ${numAssignedAgentSelected} Lead(s)`}
+          </Button>
+        </DialogActions>
+      </Dialog>
       <Dialog
         open={addLeadDialogOpen}
         onClose={() => setAddLeadDialogOpen(false)}
