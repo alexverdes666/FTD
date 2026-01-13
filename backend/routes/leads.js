@@ -47,6 +47,8 @@ const {
   getLeadFullHistory,
   confirmDeposit,
   unconfirmDeposit,
+  markAsShaved,
+  unmarkAsShaved,
 } = require("../controllers/leads");
 const router = express.Router();
 router.get(
@@ -595,6 +597,20 @@ router.put(
   "/:id/unconfirm-deposit",
   [protect, authorize("admin")],
   unconfirmDeposit
+);
+
+// Mark lead as shaved (brand didn't show deposit)
+router.put(
+  "/:id/mark-shaved",
+  [protect, authorize("admin", "affiliate_manager")],
+  markAsShaved
+);
+
+// Unmark lead as shaved (admin only)
+router.put(
+  "/:id/unmark-shaved",
+  [protect, authorize("admin")],
+  unmarkAsShaved
 );
 
 module.exports = router;

@@ -3026,7 +3026,7 @@ exports.getOrders = async (req, res, next) => {
         .populate({
           path: "leads",
           select:
-            "leadType firstName lastName country email phone orderId assignedClientBrokers clientBrokerHistory assignedAgent assignedAgentAt depositConfirmed depositConfirmedBy depositConfirmedAt",
+            "leadType firstName lastName country email phone orderId assignedClientBrokers clientBrokerHistory assignedAgent assignedAgentAt depositConfirmed depositConfirmedBy depositConfirmedAt shaved shavedBy shavedAt shavedRefundsManager shavedManagerAssignedBy shavedManagerAssignedAt",
           populate: [
             {
               path: "assignedAgent",
@@ -3046,6 +3046,18 @@ exports.getOrders = async (req, res, next) => {
             },
             {
               path: "depositConfirmedBy",
+              select: "fullName email",
+            },
+            {
+              path: "shavedBy",
+              select: "fullName email",
+            },
+            {
+              path: "shavedRefundsManager",
+              select: "fullName email",
+            },
+            {
+              path: "shavedManagerAssignedBy",
               select: "fullName email",
             },
           ],
@@ -3166,7 +3178,7 @@ exports.getOrders = async (req, res, next) => {
       .populate({
         path: "leads",
         select:
-          "leadType firstName lastName country email phone orderId assignedClientBrokers clientBrokerHistory assignedAgent assignedAgentAt depositConfirmed depositConfirmedBy depositConfirmedAt",
+          "leadType firstName lastName country email phone orderId assignedClientBrokers clientBrokerHistory assignedAgent assignedAgentAt depositConfirmed depositConfirmedBy depositConfirmedAt shaved shavedBy shavedAt shavedRefundsManager shavedManagerAssignedBy shavedManagerAssignedAt",
         populate: [
           {
             path: "assignedAgent",
@@ -3186,6 +3198,18 @@ exports.getOrders = async (req, res, next) => {
           },
           {
             path: "depositConfirmedBy",
+            select: "fullName email",
+          },
+          {
+            path: "shavedBy",
+            select: "fullName email",
+          },
+          {
+            path: "shavedRefundsManager",
+            select: "fullName email",
+          },
+          {
+            path: "shavedManagerAssignedBy",
             select: "fullName email",
           },
         ],
@@ -3253,6 +3277,18 @@ exports.getOrderById = async (req, res, next) => {
           },
           {
             path: "depositConfirmedBy",
+            select: "fullName email",
+          },
+          {
+            path: "shavedBy",
+            select: "fullName email",
+          },
+          {
+            path: "shavedRefundsManager",
+            select: "fullName email",
+          },
+          {
+            path: "shavedManagerAssignedBy",
             select: "fullName email",
           },
         ],

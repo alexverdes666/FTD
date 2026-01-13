@@ -92,6 +92,7 @@ import AssignLeadToAgentDialog from "../components/AssignLeadToAgentDialog";
 import SessionAccessButton from "../components/SessionAccessButton";
 import SessionStatusChip from "../components/SessionStatusChip";
 import AssignToRefundsManagerModal from "../components/AssignToRefundsManagerModal";
+import MarkShavedDialog from "../components/MarkShavedDialog";
 import { refundsService } from "../services/refunds";
 import CommentButton from "../components/CommentButton";
 import ClientBrokerManagementDialog from "../components/ClientBrokerManagementDialog";
@@ -496,6 +497,13 @@ const OrdersPage = () => {
   const [refundsAssignmentDialog, setRefundsAssignmentDialog] = useState({
     open: false,
     orderId: null,
+  });
+
+  // Mark Shaved Dialog State
+  const [markShavedDialog, setMarkShavedDialog] = useState({
+    open: false,
+    lead: null,
+    loading: false,
   });
 
   // Delete Order Confirmation State
@@ -2211,6 +2219,131 @@ const OrdersPage = () => {
     },
     [fetchOrders]
   );
+
+  // Mark as Shaved Handler - opens the dialog
+  const handleMarkAsShaved = useCallback((lead) => {
+    setMarkShavedDialog({
+      open: true,
+      lead: lead,
+      loading: false,
+    });
+  }, []);
+
+  // Confirm Mark as Shaved Handler - called when dialog is confirmed
+  const handleConfirmMarkAsShaved = useCallback(
+    async (refundsManagerId) => {
+      const lead = markShavedDialog.lead;
+      if (!lead) return;
+
+      setMarkShavedDialog((prev) => ({ ...prev, loading: true }));
+
+      try {
+        const response = await api.put(`/leads/${lead._id}/mark-shaved`, {
+          refundsManagerId,
+        });
+
+        // Update local state instantly
+        const updatedLeadData = {
+          shaved: true,
+          shavedBy: response.data.data?.shavedBy || user,
+          shavedAt: new Date().toISOString(),
+          shavedRefundsManager: response.data.data?.shavedRefundsManager,
+          shavedManagerAssignedBy: response.data.data?.shavedManagerAssignedBy || user,
+          shavedManagerAssignedAt: new Date().toISOString(),
+        };
+
+        setAssignedLeadsModal((prev) => ({
+          ...prev,
+          leads: prev.leads.map((l) =>
+            l._id === lead._id ? { ...l, ...updatedLeadData } : l
+          ),
+        }));
+
+        setLeadsPreviewModal((prev) => ({
+          ...prev,
+          leads: prev.leads.map((l) =>
+            l._id === lead._id ? { ...l, ...updatedLeadData } : l
+          ),
+        }));
+
+        setNotification({
+          message: "Lead marked as shaved successfully",
+          severity: "success",
+        });
+
+        // Close dialog
+        setMarkShavedDialog({ open: false, lead: null, loading: false });
+
+        // Refresh orders in background
+        fetchOrders();
+      } catch (err) {
+        console.error("Error marking lead as shaved:", err);
+        setMarkShavedDialog((prev) => ({ ...prev, loading: false }));
+        setNotification({
+          message: err.response?.data?.message || "Failed to mark lead as shaved",
+          severity: "error",
+        });
+      }
+    },
+    [markShavedDialog.lead, fetchOrders, user]
+  );
+
+  // Unmark as Shaved Handler (admin only)
+  const handleUnmarkAsShaved = useCallback(
+    async (lead) => {
+      if (!window.confirm(`Are you sure you want to unmark ${lead.firstName} ${lead.lastName} as shaved?`)) {
+        return;
+      }
+
+      try {
+        await api.put(`/leads/${lead._id}/unmark-shaved`);
+
+        // Update local state instantly
+        const updatedLeadData = {
+          shaved: false,
+          shavedBy: null,
+          shavedAt: null,
+          shavedRefundsManager: null,
+          shavedManagerAssignedBy: null,
+          shavedManagerAssignedAt: null,
+        };
+
+        setAssignedLeadsModal((prev) => ({
+          ...prev,
+          leads: prev.leads.map((l) =>
+            l._id === lead._id ? { ...l, ...updatedLeadData } : l
+          ),
+        }));
+
+        setLeadsPreviewModal((prev) => ({
+          ...prev,
+          leads: prev.leads.map((l) =>
+            l._id === lead._id ? { ...l, ...updatedLeadData } : l
+          ),
+        }));
+
+        setNotification({
+          message: "Lead unmarked as shaved successfully",
+          severity: "success",
+        });
+
+        // Refresh orders in background
+        fetchOrders();
+      } catch (err) {
+        console.error("Error unmarking lead as shaved:", err);
+        setNotification({
+          message: err.response?.data?.message || "Failed to unmark lead as shaved",
+          severity: "error",
+        });
+      }
+    },
+    [fetchOrders]
+  );
+
+  // Close Mark Shaved Dialog
+  const handleCloseMarkShavedDialog = useCallback(() => {
+    setMarkShavedDialog({ open: false, lead: null, loading: false });
+  }, []);
 
   const handleCloseCopyNotification = useCallback(() => {
     setCopyNotification({ open: false, message: "" });
@@ -5118,6 +5251,16 @@ const OrdersPage = () => {
         onSuccess={handleRefundsAssignmentSuccess}
       />
 
+      {/* Mark Shaved Dialog */}
+      <MarkShavedDialog
+        open={markShavedDialog.open}
+        lead={markShavedDialog.lead}
+        userRole={user?.role}
+        onClose={handleCloseMarkShavedDialog}
+        onConfirm={handleConfirmMarkAsShaved}
+        loading={markShavedDialog.loading}
+      />
+
       {/* Client Broker Management Dialog */}
       <ClientBrokerManagementDialog
         open={clientBrokerManagementOpen}
@@ -5350,6 +5493,16 @@ const OrdersPage = () => {
         onClose={handleCloseRefundsAssignment}
         orderId={refundsAssignmentDialog.orderId}
         onSuccess={handleRefundsAssignmentSuccess}
+      />
+
+      {/* Mark Shaved Dialog */}
+      <MarkShavedDialog
+        open={markShavedDialog.open}
+        lead={markShavedDialog.lead}
+        userRole={user?.role}
+        onClose={handleCloseMarkShavedDialog}
+        onConfirm={handleConfirmMarkAsShaved}
+        loading={markShavedDialog.loading}
       />
 
       {/* Client Broker Management Dialog */}
@@ -5588,6 +5741,19 @@ const OrdersPage = () => {
                   user?.role !== "lead_manager" ? handleLeadUpdate : undefined
                 }
                 readOnly={user?.role === "lead_manager"}
+                onConfirmDeposit={
+                  user?.role !== "lead_manager" ? handleConfirmDeposit : undefined
+                }
+                onUnconfirmDeposit={
+                  user?.role === "admin" ? handleUnconfirmDeposit : undefined
+                }
+                onMarkAsShaved={
+                  user?.role !== "lead_manager" ? handleMarkAsShaved : undefined
+                }
+                onUnmarkAsShaved={
+                  user?.role === "admin" ? handleUnmarkAsShaved : undefined
+                }
+                userRole={user?.role}
               />
             </>
           )}
@@ -5676,6 +5842,16 @@ const OrdersPage = () => {
                   onUnconfirmDeposit={
                     user?.role === "admin"
                       ? handleUnconfirmDeposit
+                      : undefined
+                  }
+                  onMarkAsShaved={
+                    user?.role !== "lead_manager"
+                      ? handleMarkAsShaved
+                      : undefined
+                  }
+                  onUnmarkAsShaved={
+                    user?.role === "admin"
+                      ? handleUnmarkAsShaved
                       : undefined
                   }
                   userRole={user?.role}

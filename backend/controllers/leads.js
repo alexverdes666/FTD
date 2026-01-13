@@ -4267,3 +4267,214 @@ exports.unconfirmDeposit = async (req, res, next) => {
     next(error);
   }
 };
+
+// Mark lead as shaved (brand didn't show deposit) and assign to refunds manager
+exports.markAsShaved = async (req, res, next) => {
+  try {
+    const leadId = req.params.id;
+    const userId = req.user._id;
+    const userRole = req.user.role;
+    const { refundsManagerId } = req.body;
+
+    // Only admin and affiliate_manager can mark as shaved
+    if (userRole !== "admin" && userRole !== "affiliate_manager") {
+      return res.status(403).json({
+        success: false,
+        message: "Only admins and affiliate managers can mark leads as shaved",
+      });
+    }
+
+    // Validate refundsManagerId is provided
+    if (!refundsManagerId) {
+      return res.status(400).json({
+        success: false,
+        message: "Please select a refunds manager",
+      });
+    }
+
+    const lead = await Lead.findById(leadId);
+
+    if (!lead) {
+      return res.status(404).json({
+        success: false,
+        message: "Lead not found",
+      });
+    }
+
+    // Check if lead is FTD type
+    if (lead.leadType !== "ftd") {
+      return res.status(400).json({
+        success: false,
+        message: "Only FTD leads can be marked as shaved",
+      });
+    }
+
+    // Check if deposit is confirmed
+    if (!lead.depositConfirmed) {
+      return res.status(400).json({
+        success: false,
+        message: "Please confirm the deposit first before marking as shaved",
+      });
+    }
+
+    // Affiliate managers can only set once (cannot change after assignment)
+    if (userRole === "affiliate_manager" && lead.shaved && lead.shavedRefundsManager) {
+      return res.status(403).json({
+        success: false,
+        message: "This lead is already marked as shaved. Only admins can modify the assignment.",
+      });
+    }
+
+    // Validate refunds manager exists and has the correct role
+    const User = require("../models/User");
+    const refundsManager = await User.findOne({
+      _id: refundsManagerId,
+      role: "refunds_manager",
+      isActive: true,
+      status: "approved",
+    });
+
+    if (!refundsManager) {
+      return res.status(400).json({
+        success: false,
+        message: "Selected refunds manager not found or is not active",
+      });
+    }
+
+    // Determine if this is a new shaved mark or a manager change
+    const isNewShaved = !lead.shaved;
+    const isManagerChange = lead.shaved && lead.shavedRefundsManager &&
+      lead.shavedRefundsManager.toString() !== refundsManagerId;
+
+    // Update lead fields
+    lead.shaved = true;
+    lead.shavedBy = userId;
+    lead.shavedAt = new Date();
+    lead.shavedRefundsManager = refundsManagerId;
+    lead.shavedManagerAssignedBy = userId;
+    lead.shavedManagerAssignedAt = new Date();
+
+    // Add to shaved history
+    if (isNewShaved) {
+      lead.shavedHistory.push({
+        action: "shaved",
+        performedBy: userId,
+        performedAt: new Date(),
+        refundsManager: refundsManagerId,
+      });
+    } else if (isManagerChange) {
+      lead.shavedHistory.push({
+        action: "manager_changed",
+        performedBy: userId,
+        performedAt: new Date(),
+        refundsManager: refundsManagerId,
+      });
+    }
+
+    await lead.save();
+
+    // Create or update RefundAssignment so the refunds manager can see this lead
+    const RefundAssignment = require("../models/RefundAssignment");
+
+    // Check if a RefundAssignment already exists for this lead
+    let refundAssignment = await RefundAssignment.findOne({ leadId: leadId });
+
+    if (refundAssignment) {
+      // Update existing assignment with new refunds manager
+      refundAssignment.refundsManager = refundsManagerId;
+      refundAssignment.modifiedBy = userId;
+      await refundAssignment.save();
+    } else {
+      // Create new RefundAssignment
+      refundAssignment = new RefundAssignment({
+        source: "order",
+        orderId: lead.orderId,
+        leadId: leadId,
+        assignedBy: userId,
+        refundsManager: refundsManagerId,
+        status: "new",
+        notes: "Marked as shaved - brand didn't show deposit",
+      });
+      await refundAssignment.save();
+    }
+
+    // Populate for response
+    await lead.populate("shavedBy", "fullName email");
+    await lead.populate("shavedRefundsManager", "fullName email");
+    await lead.populate("shavedManagerAssignedBy", "fullName email");
+    await lead.populate("assignedAgent", "fullName email fourDigitCode");
+
+    res.status(200).json({
+      success: true,
+      message: "Lead marked as shaved successfully",
+      data: lead,
+    });
+  } catch (error) {
+    console.error("Error marking lead as shaved:", error);
+    next(error);
+  }
+};
+
+// Unmark lead as shaved (admin only)
+exports.unmarkAsShaved = async (req, res, next) => {
+  try {
+    const leadId = req.params.id;
+    const userRole = req.user.role;
+
+    // Only admin can unmark shaved
+    if (userRole !== "admin") {
+      return res.status(403).json({
+        success: false,
+        message: "Only admins can unmark leads as shaved",
+      });
+    }
+
+    const lead = await Lead.findById(leadId);
+
+    if (!lead) {
+      return res.status(404).json({
+        success: false,
+        message: "Lead not found",
+      });
+    }
+
+    if (!lead.shaved) {
+      return res.status(400).json({
+        success: false,
+        message: "Lead is not marked as shaved",
+      });
+    }
+
+    // Add to history before clearing
+    lead.shavedHistory.push({
+      action: "unshaved",
+      performedBy: req.user._id,
+      performedAt: new Date(),
+    });
+
+    // Clear shaved fields
+    lead.shaved = false;
+    lead.shavedBy = null;
+    lead.shavedAt = null;
+    lead.shavedRefundsManager = null;
+    lead.shavedManagerAssignedBy = null;
+    lead.shavedManagerAssignedAt = null;
+
+    await lead.save();
+
+    // Delete the RefundAssignment for this lead
+    const RefundAssignment = require("../models/RefundAssignment");
+    await RefundAssignment.deleteOne({ leadId: leadId });
+
+    await lead.populate("assignedAgent", "fullName email fourDigitCode");
+
+    res.status(200).json({
+      success: true,
+      message: "Lead unmarked as shaved successfully",
+      data: lead,
+    });
+  } catch (error) {
+    console.error("Error unmarking lead as shaved:", error);
+    next(error);
+  }
+};

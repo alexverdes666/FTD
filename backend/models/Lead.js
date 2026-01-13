@@ -94,6 +94,57 @@ const leadSchema = new mongoose.Schema(
         },
       },
     ],
+    // Shaved tracking - when brand didn't show the deposit
+    shaved: {
+      type: Boolean,
+      default: false,
+    },
+    shavedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    shavedAt: {
+      type: Date,
+      default: null,
+    },
+    shavedRefundsManager: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    shavedManagerAssignedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    shavedManagerAssignedAt: {
+      type: Date,
+      default: null,
+    },
+    shavedHistory: [
+      {
+        action: {
+          type: String,
+          enum: ["shaved", "unshaved", "manager_assigned", "manager_changed"],
+          required: true,
+        },
+        performedBy: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+          required: true,
+        },
+        performedAt: {
+          type: Date,
+          default: Date.now,
+        },
+        refundsManager: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+        },
+        notes: String,
+      },
+    ],
     lastUsedInOrder: {
       type: Date,
       default: null,

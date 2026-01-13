@@ -35,6 +35,7 @@ import {
   AssignmentInd as AssignIcon,
   Cached as ChangeIcon,
   Call as CallIcon,
+  ContentCut as ShavedIcon,
 } from "@mui/icons-material";
 import api from "../services/api";
 import DocumentPreview from "./DocumentPreview";
@@ -52,6 +53,8 @@ const LeadQuickView = ({
   onAssignLeadToAgent,
   onConfirmDeposit,
   onUnconfirmDeposit,
+  onMarkAsShaved,
+  onUnmarkAsShaved,
   userRole,
   readOnly = false,
 }) => {
@@ -330,6 +333,57 @@ const LeadQuickView = ({
                       disabled={!lead.assignedAgent}
                     >
                       Confirm Deposit
+                    </Button>
+                  )
+                )}
+              </span>
+            </Tooltip>
+          )}
+
+          {/* Shaved Button - only for FTD with confirmed deposit */}
+          {isFtdOrFiller && lead.depositConfirmed && (
+            <Tooltip
+              title={
+                lead.shaved
+                  ? userRole === "admin"
+                    ? "Click to unmark as shaved"
+                    : "Lead is marked as shaved"
+                  : "Mark as shaved (brand didn't show deposit)"
+              }
+            >
+              <span>
+                {lead.shaved ? (
+                  userRole === "admin" && onUnmarkAsShaved ? (
+                    <Button
+                      size="small"
+                      startIcon={<ShavedIcon />}
+                      onClick={() => onUnmarkAsShaved(lead)}
+                      variant="contained"
+                      color="error"
+                    >
+                      Unmark Shaved
+                    </Button>
+                  ) : (
+                    <Button
+                      size="small"
+                      startIcon={<ShavedIcon />}
+                      variant="contained"
+                      color="error"
+                      disabled
+                    >
+                      Shaved
+                    </Button>
+                  )
+                ) : (
+                  onMarkAsShaved && (
+                    <Button
+                      size="small"
+                      startIcon={<ShavedIcon />}
+                      onClick={() => onMarkAsShaved(lead)}
+                      variant="outlined"
+                      color="error"
+                    >
+                      Mark as Shaved
                     </Button>
                   )
                 )}
@@ -648,6 +702,45 @@ const LeadQuickView = ({
                 {lead.depositConfirmedAt && (
                   <Typography variant="caption" color="text.secondary" display="block">
                     {formatDate(lead.depositConfirmedAt)}
+                  </Typography>
+                )}
+              </Box>
+            </Box>
+          </Box>
+        )}
+
+        {/* Shaved Status */}
+        {lead.shaved && (
+          <Box sx={{ flex: "1 1 200px", minWidth: 200 }}>
+            <Typography
+              variant="subtitle2"
+              sx={{ fontWeight: 600, mb: 1, color: "error.main" }}
+            >
+              Shaved Status
+            </Typography>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+              <ShavedIcon fontSize="small" color="error" />
+              <Box>
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  display="block"
+                >
+                  Brand didn't show deposit
+                </Typography>
+                <Typography variant="body2" sx={{ fontWeight: 500, color: "error.main" }}>
+                  Marked as Shaved
+                </Typography>
+                {lead.shavedRefundsManager && (
+                  <Typography variant="caption" color="text.secondary" display="block">
+                    Assigned to: {typeof lead.shavedRefundsManager === "object"
+                      ? lead.shavedRefundsManager.fullName
+                      : "Unknown"}
+                  </Typography>
+                )}
+                {lead.shavedAt && (
+                  <Typography variant="caption" color="text.secondary" display="block">
+                    {formatDate(lead.shavedAt)}
                   </Typography>
                 )}
               </Box>

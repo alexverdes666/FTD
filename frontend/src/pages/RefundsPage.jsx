@@ -1156,8 +1156,8 @@ const RefundsPage = () => {
               <Grid item xs={12} md={6}>
                 <Typography variant="h6" gutterBottom>Assignment Information</Typography>
                 <Typography><strong>Source:</strong> {selectedAssignment.source === 'csv' ? 'CSV Import' : 'Order Assignment'}</Typography>
-                <Typography><strong>Status:</strong> <Chip label={getStatusLabel(selectedAssignment.status)} color={getStatusColor(selectedAssignment.status)} size="small" /></Typography>
-                <Typography>
+                <Typography component="div"><strong>Status:</strong> <Chip label={getStatusLabel(selectedAssignment.status)} color={getStatusColor(selectedAssignment.status)} size="small" /></Typography>
+                <Typography component="div">
                   <strong>PSP Email:</strong>{' '}
                   {selectedAssignment.pspEmailSent ? (
                     <Chip label="Included" color="success" size="small" />
