@@ -49,7 +49,9 @@ import {
   Edit,
   Delete,
   Add,
-  Visibility
+  Visibility,
+  CheckCircle,
+  Cancel
 } from '@mui/icons-material';
 import api from '../services/api';
 import dayjs from 'dayjs';
@@ -502,6 +504,74 @@ const LeadAuditHistoryModal = ({ open, onClose, leadId, leadName }) => {
           </TableContainer>
         ) : (
           <Typography color="text.secondary">No call tracking data</Typography>
+        )}
+
+        <Divider sx={{ my: 3 }} />
+
+        <Typography variant="h6" gutterBottom>
+          Deposit Status
+        </Typography>
+
+        {/* Current deposit status */}
+        <Card variant="outlined" sx={{ mb: 2, bgcolor: fullHistory.lead?.depositConfirmed ? 'success.50' : 'grey.50' }}>
+          <CardContent>
+            <Box display="flex" alignItems="center" gap={1} mb={1}>
+              {fullHistory.lead?.depositConfirmed ? (
+                <CheckCircle color="success" />
+              ) : (
+                <Cancel color="disabled" />
+              )}
+              <Typography variant="subtitle1" fontWeight="bold">
+                {fullHistory.lead?.depositConfirmed ? 'Deposit Confirmed' : 'Deposit Not Confirmed'}
+              </Typography>
+            </Box>
+            {fullHistory.lead?.depositConfirmed && (
+              <Box>
+                <Typography variant="body2" color="text.secondary">
+                  Confirmed by: {fullHistory.lead?.depositConfirmedBy?.fullName || 'Unknown'}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Confirmed at: {formatDateTime(fullHistory.lead?.depositConfirmedAt)}
+                </Typography>
+              </Box>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Deposit history */}
+        {fullHistory.depositHistory?.length > 0 && (
+          <>
+            <Typography variant="subtitle1" gutterBottom sx={{ mt: 2 }}>
+              History ({fullHistory.depositHistory.length})
+            </Typography>
+            <TableContainer component={Paper} variant="outlined" sx={{ mb: 3 }}>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Action</TableCell>
+                    <TableCell>Performed By</TableCell>
+                    <TableCell>Date</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {fullHistory.depositHistory.map((entry, index) => (
+                    <TableRow key={index}>
+                      <TableCell>
+                        <Chip
+                          icon={entry.action === 'confirmed' ? <CheckCircle /> : <Cancel />}
+                          label={entry.action === 'confirmed' ? 'Deposit Confirmed' : 'Deposit Unconfirmed'}
+                          size="small"
+                          color={entry.action === 'confirmed' ? 'success' : 'warning'}
+                        />
+                      </TableCell>
+                      <TableCell>{entry.performedBy?.fullName || 'N/A'}</TableCell>
+                      <TableCell>{formatDateTime(entry.performedAt)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </>
         )}
 
         <Divider sx={{ my: 3 }} />

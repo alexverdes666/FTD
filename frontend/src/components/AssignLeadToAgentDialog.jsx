@@ -169,7 +169,8 @@ const AssignLeadToAgentDialog = ({
           onSuccess({
             leadId: validLeads[0]._id,
             agentId: isUnassigning ? null : data.agentId,
-            agentName: isUnassigning ? null : (selectedAgent?.fullName || 'Unknown Agent')
+            agentName: isUnassigning ? null : (selectedAgent?.fullName || 'Unknown Agent'),
+            agentEmail: isUnassigning ? null : (selectedAgent?.email || null),
           });
         }
       }

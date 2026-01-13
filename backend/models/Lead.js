@@ -63,6 +63,37 @@ const leadSchema = new mongoose.Schema(
     assignedAgentAt: {
       type: Date,
     },
+    depositConfirmed: {
+      type: Boolean,
+      default: false,
+    },
+    depositConfirmedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    depositConfirmedAt: {
+      type: Date,
+      default: null,
+    },
+    depositHistory: [
+      {
+        action: {
+          type: String,
+          enum: ["confirmed", "unconfirmed"],
+          required: true,
+        },
+        performedBy: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+          required: true,
+        },
+        performedAt: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
     lastUsedInOrder: {
       type: Date,
       default: null,

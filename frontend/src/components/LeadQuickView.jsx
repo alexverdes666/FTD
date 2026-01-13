@@ -50,7 +50,9 @@ const LeadQuickView = ({
   onConvertLeadType,
   onChangeFTDLead,
   onAssignLeadToAgent,
-  onAssignDepositCall,
+  onConfirmDeposit,
+  onUnconfirmDeposit,
+  userRole,
   readOnly = false,
 }) => {
   const [editingClientBroker, setEditingClientBroker] = useState(false);
@@ -282,16 +284,57 @@ const LeadQuickView = ({
             </Button>
           )}
 
-          {onAssignDepositCall && isFtdOrFiller && (
-            <Button
-              size="small"
-              startIcon={<CallIcon />}
-              onClick={() => onAssignDepositCall(lead)}
-              variant="outlined"
-              color="success"
+          {isFtdOrFiller && (
+            <Tooltip
+              title={
+                lead.depositConfirmed
+                  ? userRole === "admin"
+                    ? "Click to unconfirm deposit"
+                    : "Deposit already confirmed"
+                  : !lead.assignedAgent
+                  ? "First assign an agent to this lead"
+                  : "Confirm deposit for this lead"
+              }
             >
-              Assign Deposit Call
-            </Button>
+              <span>
+                {lead.depositConfirmed ? (
+                  userRole === "admin" && onUnconfirmDeposit ? (
+                    <Button
+                      size="small"
+                      startIcon={<CallIcon />}
+                      onClick={() => onUnconfirmDeposit(lead)}
+                      variant="contained"
+                      color="warning"
+                    >
+                      Unconfirm Deposit
+                    </Button>
+                  ) : (
+                    <Button
+                      size="small"
+                      startIcon={<CallIcon />}
+                      variant="contained"
+                      color="success"
+                      disabled
+                    >
+                      Deposit Confirmed
+                    </Button>
+                  )
+                ) : (
+                  onConfirmDeposit && (
+                    <Button
+                      size="small"
+                      startIcon={<CallIcon />}
+                      onClick={() => onConfirmDeposit(lead)}
+                      variant="outlined"
+                      color="success"
+                      disabled={!lead.assignedAgent}
+                    >
+                      Confirm Deposit
+                    </Button>
+                  )
+                )}
+              </span>
+            </Tooltip>
           )}
         </Box>
       </Box>
@@ -568,6 +611,45 @@ const LeadQuickView = ({
                       {lead.assignedAgent.email}
                     </Typography>
                   )}
+              </Box>
+            </Box>
+          </Box>
+        )}
+
+        {/* Deposit Confirmation Status */}
+        {lead.depositConfirmed && (
+          <Box sx={{ flex: "1 1 200px", minWidth: 200 }}>
+            <Typography
+              variant="subtitle2"
+              sx={{ fontWeight: 600, mb: 1, color: "success.main" }}
+            >
+              Deposit Status
+            </Typography>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+              <CallIcon fontSize="small" color="success" />
+              <Box>
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  display="block"
+                >
+                  Confirmed
+                </Typography>
+                <Typography variant="body2" sx={{ fontWeight: 500, color: "success.main" }}>
+                  Deposit Confirmed
+                </Typography>
+                {lead.depositConfirmedBy && (
+                  <Typography variant="caption" color="text.secondary">
+                    By: {typeof lead.depositConfirmedBy === "object"
+                      ? lead.depositConfirmedBy.fullName
+                      : "Unknown"}
+                  </Typography>
+                )}
+                {lead.depositConfirmedAt && (
+                  <Typography variant="caption" color="text.secondary" display="block">
+                    {formatDate(lead.depositConfirmedAt)}
+                  </Typography>
+                )}
               </Box>
             </Box>
           </Box>

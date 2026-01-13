@@ -45,6 +45,8 @@ const {
   getArchivedLeads,
   getLeadAuditHistory,
   getLeadFullHistory,
+  confirmDeposit,
+  unconfirmDeposit,
 } = require("../controllers/leads");
 const router = express.Router();
 router.get(
@@ -579,6 +581,20 @@ router.get(
       .withMessage("Lead type must be ftd or filler"),
   ],
   getLeadsByAgent
+);
+
+// Confirm deposit for a lead
+router.put(
+  "/:id/confirm-deposit",
+  [protect, authorize("admin", "affiliate_manager")],
+  confirmDeposit
+);
+
+// Unconfirm deposit for a lead (admin only)
+router.put(
+  "/:id/unconfirm-deposit",
+  [protect, authorize("admin")],
+  unconfirmDeposit
 );
 
 module.exports = router;

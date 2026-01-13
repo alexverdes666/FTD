@@ -3026,7 +3026,7 @@ exports.getOrders = async (req, res, next) => {
         .populate({
           path: "leads",
           select:
-            "leadType firstName lastName country email phone orderId assignedClientBrokers clientBrokerHistory assignedAgent assignedAgentAt",
+            "leadType firstName lastName country email phone orderId assignedClientBrokers clientBrokerHistory assignedAgent assignedAgentAt depositConfirmed depositConfirmedBy depositConfirmedAt",
           populate: [
             {
               path: "assignedAgent",
@@ -3043,6 +3043,10 @@ exports.getOrders = async (req, res, next) => {
             {
               path: "clientBrokerHistory.clientBroker",
               select: "name domain description",
+            },
+            {
+              path: "depositConfirmedBy",
+              select: "fullName email",
             },
           ],
         })
@@ -3162,7 +3166,7 @@ exports.getOrders = async (req, res, next) => {
       .populate({
         path: "leads",
         select:
-          "leadType firstName lastName country email phone orderId assignedClientBrokers clientBrokerHistory assignedAgent assignedAgentAt",
+          "leadType firstName lastName country email phone orderId assignedClientBrokers clientBrokerHistory assignedAgent assignedAgentAt depositConfirmed depositConfirmedBy depositConfirmedAt",
         populate: [
           {
             path: "assignedAgent",
@@ -3179,6 +3183,10 @@ exports.getOrders = async (req, res, next) => {
           {
             path: "clientBrokerHistory.clientBroker",
             select: "name domain description",
+          },
+          {
+            path: "depositConfirmedBy",
+            select: "fullName email",
           },
         ],
       })
@@ -3242,6 +3250,10 @@ exports.getOrderById = async (req, res, next) => {
           {
             path: "clientNetworkHistory.clientNetwork",
             select: "name description",
+          },
+          {
+            path: "depositConfirmedBy",
+            select: "fullName email",
           },
         ],
       });

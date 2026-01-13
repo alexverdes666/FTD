@@ -91,8 +91,6 @@ import { refundsService } from "../services/refunds";
 import CommentButton from "../components/CommentButton";
 import ClientBrokerManagementDialog from "../components/ClientBrokerManagementDialog";
 import GenderFallbackModal from "../components/GenderFallbackModal";
-import AssignDepositCallDialog from "../components/AssignDepositCallDialog";
-import depositCallsService from "../services/depositCallsService";
 import CopyPreferencesDialog, {
   copyLeadsWithPreferences,
 } from "../components/CopyPreferencesDialog";
@@ -495,13 +493,6 @@ const OrdersPage = () => {
     orderStatus: null,
     permanentDelete: false,
     loading: false,
-  });
-
-  // Deposit Call Assignment State
-  const [assignDepositCallDialog, setAssignDepositCallDialog] = useState({
-    open: false,
-    order: null,
-    lead: null,
   });
 
   // Autocomplete states for Create Order Dialog
@@ -2043,6 +2034,24 @@ const OrdersPage = () => {
 
   const handleAssignLeadSuccess = useCallback(
     async (assignmentData) => {
+      // Update local state instantly
+      setAssignedLeadsModal((prev) => ({
+        ...prev,
+        leads: prev.leads.map((l) =>
+          l._id === assignmentData.leadId
+            ? {
+                ...l,
+                assignedAgent: {
+                  _id: assignmentData.agentId,
+                  fullName: assignmentData.agentName,
+                  email: assignmentData.agentEmail,
+                },
+                assignedAgentAt: new Date().toISOString(),
+              }
+            : l
+        ),
+      }));
+
       setNotification({
         message: `Lead ${assignmentData.leadId.slice(
           -8
@@ -2050,22 +2059,10 @@ const OrdersPage = () => {
         severity: "success",
       });
 
-      // Refresh the orders and expanded order data
-      await fetchOrders();
-
-      // Refresh expanded order data if it exists
-      if (assignLeadDialog.lead && expandedRowData) {
-        const orderId = Object.keys(expandedRowData).find((id) =>
-          expandedRowData[id].leads?.some(
-            (lead) => lead._id === assignmentData.leadId
-          )
-        );
-        if (orderId) {
-          toggleRowExpansion(orderId);
-        }
-      }
+      // Refresh the orders in background
+      fetchOrders();
     },
-    [assignLeadDialog.lead, expandedRowData, fetchOrders, toggleRowExpansion]
+    [fetchOrders]
   );
 
   const handleCopyToClipboard = useCallback(async (text, fieldName) => {
@@ -2084,59 +2081,92 @@ const OrdersPage = () => {
     }
   }, []);
 
-  // Deposit Call Dialog Handlers
-  const handleOpenAssignDepositCallDialog = useCallback((order, lead) => {
-    setAssignDepositCallDialog({
-      open: true,
-      order: order,
-      lead: lead,
-    });
-  }, []);
+  // Confirm Deposit Handler
+  const handleConfirmDeposit = useCallback(
+    async (lead) => {
+      // Ask for confirmation
+      if (!window.confirm(`Are you sure you want to confirm deposit for ${lead.firstName} ${lead.lastName}?`)) {
+        return;
+      }
 
-  const handleCloseAssignDepositCallDialog = useCallback(() => {
-    setAssignDepositCallDialog({
-      open: false,
-      order: null,
-      lead: null,
-    });
-  }, []);
-
-  const handleAssignDepositCall = useCallback(
-    async (orderId, leadId, agentId) => {
       try {
-        const response = await depositCallsService.assignToAgent(
-          orderId,
-          leadId,
-          agentId
-        );
+        const response = await api.put(`/leads/${lead._id}/confirm-deposit`);
+
+        // Update local state instantly
+        setAssignedLeadsModal((prev) => ({
+          ...prev,
+          leads: prev.leads.map((l) =>
+            l._id === lead._id
+              ? {
+                  ...l,
+                  depositConfirmed: true,
+                  depositConfirmedBy: response.data.data?.depositConfirmedBy || user,
+                  depositConfirmedAt: new Date().toISOString(),
+                }
+              : l
+          ),
+        }));
 
         setNotification({
-          message: response.isNew
-            ? "Deposit call created and assigned to agent successfully"
-            : "Deposit call reassigned to agent successfully",
+          message: "Deposit confirmed successfully",
           severity: "success",
         });
 
-        // Refresh the orders and expanded order data
-        await fetchOrders();
-
-        // Refresh expanded order data if it exists
-        if (orderId && expandedRowData[orderId]) {
-          toggleRowExpansion(orderId);
-        }
-
-        handleCloseAssignDepositCallDialog();
+        // Refresh the orders in background
+        fetchOrders();
       } catch (err) {
-        console.error("Error assigning deposit call:", err);
-        throw err; // Re-throw to be handled by the dialog
+        console.error("Error confirming deposit:", err);
+        setNotification({
+          message: err.response?.data?.message || "Failed to confirm deposit",
+          severity: "error",
+        });
       }
     },
-    [
-      expandedRowData,
-      fetchOrders,
-      toggleRowExpansion,
-      handleCloseAssignDepositCallDialog,
-    ]
+    [fetchOrders, user]
+  );
+
+  // Unconfirm Deposit Handler (admin only)
+  const handleUnconfirmDeposit = useCallback(
+    async (lead) => {
+      // Ask for confirmation
+      if (!window.confirm(`Are you sure you want to unconfirm deposit for ${lead.firstName} ${lead.lastName}?`)) {
+        return;
+      }
+
+      try {
+        await api.put(`/leads/${lead._id}/unconfirm-deposit`);
+
+        // Update local state instantly
+        setAssignedLeadsModal((prev) => ({
+          ...prev,
+          leads: prev.leads.map((l) =>
+            l._id === lead._id
+              ? {
+                  ...l,
+                  depositConfirmed: false,
+                  depositConfirmedBy: null,
+                  depositConfirmedAt: null,
+                }
+              : l
+          ),
+        }));
+
+        setNotification({
+          message: "Deposit unconfirmed successfully",
+          severity: "success",
+        });
+
+        // Refresh the orders in background
+        fetchOrders();
+      } catch (err) {
+        console.error("Error unconfirming deposit:", err);
+        setNotification({
+          message: err.response?.data?.message || "Failed to unconfirm deposit",
+          severity: "error",
+        });
+      }
+    },
+    [fetchOrders]
   );
 
   const handleCloseCopyNotification = useCallback(() => {
@@ -5069,15 +5099,6 @@ const OrdersPage = () => {
         onSuccess={handleAssignLeadSuccess}
       />
 
-      {/* Assign Deposit Call Dialog */}
-      <AssignDepositCallDialog
-        open={assignDepositCallDialog.open}
-        onClose={handleCloseAssignDepositCallDialog}
-        order={assignDepositCallDialog.order}
-        lead={assignDepositCallDialog.lead}
-        onAssign={handleAssignDepositCall}
-      />
-
       {/* Gender Fallback Modal */}
       <GenderFallbackModal
         open={genderFallbackModalOpen}
@@ -5310,15 +5331,6 @@ const OrdersPage = () => {
         onClose={handleCloseAssignLeadDialog}
         lead={assignLeadDialog.lead}
         onSuccess={handleAssignLeadSuccess}
-      />
-
-      {/* Assign Deposit Call Dialog */}
-      <AssignDepositCallDialog
-        open={assignDepositCallDialog.open}
-        onClose={handleCloseAssignDepositCallDialog}
-        order={assignDepositCallDialog.order}
-        lead={assignDepositCallDialog.lead}
-        onAssign={handleAssignDepositCall}
       />
 
       {/* Delete Order Confirmation Dialog */}
@@ -5612,17 +5624,17 @@ const OrdersPage = () => {
                       ? handleOpenAssignLeadDialog
                       : undefined
                   }
-                  onAssignDepositCall={
+                  onConfirmDeposit={
                     user?.role !== "lead_manager"
-                      ? (lead) =>
-                          handleOpenAssignDepositCallDialog(
-                            orders.find(
-                              (o) => o._id === assignedLeadsModal.orderId
-                            ),
-                            lead
-                          )
+                      ? handleConfirmDeposit
                       : undefined
                   }
+                  onUnconfirmDeposit={
+                    user?.role === "admin"
+                      ? handleUnconfirmDeposit
+                      : undefined
+                  }
+                  userRole={user?.role}
                   titleExtra={
                     <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                       {!showLeadsSearch ? (

@@ -287,6 +287,9 @@ exports.getLeads = async (req, res, next) => {
           orderedAs: 1,
           assignedAgent: 1,
           assignedAgentAt: 1,
+          depositConfirmed: 1,
+          depositConfirmedBy: 1,
+          depositConfirmedAt: 1,
           lastUsedInOrder: 1,
           status: 1,
           createdAt: 1,
@@ -325,7 +328,7 @@ exports.getLeads = async (req, res, next) => {
     ];
     const leads = await Lead.aggregate(aggregationPipeline);
 
-    // Populate comments.author and assignedAgent for the leads
+    // Populate comments.author, assignedAgent, and depositConfirmedBy for the leads
     await Lead.populate(leads, [
       {
         path: "comments.author",
@@ -334,6 +337,10 @@ exports.getLeads = async (req, res, next) => {
       {
         path: "assignedAgent",
         select: "fullName email fourDigitCode",
+      },
+      {
+        path: "depositConfirmedBy",
+        select: "fullName email",
       },
     ]);
 
@@ -4120,6 +4127,8 @@ exports.getLeadFullHistory = async (req, res, next) => {
       .populate("campaignHistory.assignedBy", "fullName email")
       .populate("ourNetworkHistory.ourNetwork")
       .populate("ourNetworkHistory.assignedBy", "fullName email")
+      .populate("depositHistory.performedBy", "fullName email")
+      .populate("depositConfirmedBy", "fullName email")
       .populate("createdBy", "fullName email")
       .populate("assignedAgent", "fullName email")
       .populate("archivedBy", "fullName email");
@@ -4157,6 +4166,7 @@ exports.getLeadFullHistory = async (req, res, next) => {
       callTracking: lead.orderCallTracking || [],
       comments: lead.orderComments || [],
       sessionHistory: lead.sessionHistory || [],
+      depositHistory: lead.depositHistory || [],
     };
 
     res.status(200).json({
@@ -4165,6 +4175,130 @@ exports.getLeadFullHistory = async (req, res, next) => {
     });
   } catch (error) {
     console.error("Error fetching lead full history:", error);
+    next(error);
+  }
+};
+
+// Confirm deposit for a lead
+exports.confirmDeposit = async (req, res, next) => {
+  try {
+    const leadId = req.params.id;
+    const userId = req.user._id;
+    const userRole = req.user.role;
+
+    // Only admin and affiliate_manager can confirm deposits
+    if (userRole !== "admin" && userRole !== "affiliate_manager") {
+      return res.status(403).json({
+        success: false,
+        message: "Only admins and affiliate managers can confirm deposits",
+      });
+    }
+
+    const lead = await Lead.findById(leadId);
+
+    if (!lead) {
+      return res.status(404).json({
+        success: false,
+        message: "Lead not found",
+      });
+    }
+
+    // Check if lead has an assigned agent
+    if (!lead.assignedAgent) {
+      return res.status(400).json({
+        success: false,
+        message: "Please assign an agent to this lead first before confirming deposit",
+      });
+    }
+
+    // Affiliate managers can only confirm once (cannot change after confirming)
+    if (userRole === "affiliate_manager" && lead.depositConfirmed) {
+      return res.status(403).json({
+        success: false,
+        message: "Deposit has already been confirmed. Only admins can modify this.",
+      });
+    }
+
+    lead.depositConfirmed = true;
+    lead.depositConfirmedBy = userId;
+    lead.depositConfirmedAt = new Date();
+
+    // Add to deposit history
+    lead.depositHistory.push({
+      action: "confirmed",
+      performedBy: userId,
+      performedAt: new Date(),
+    });
+
+    await lead.save();
+
+    // Populate the confirmedBy field for response
+    await lead.populate("depositConfirmedBy", "fullName email");
+    await lead.populate("assignedAgent", "fullName email fourDigitCode");
+
+    res.status(200).json({
+      success: true,
+      message: "Deposit confirmed successfully",
+      data: lead,
+    });
+  } catch (error) {
+    console.error("Error confirming deposit:", error);
+    next(error);
+  }
+};
+
+// Unconfirm deposit for a lead (admin only)
+exports.unconfirmDeposit = async (req, res, next) => {
+  try {
+    const leadId = req.params.id;
+    const userRole = req.user.role;
+
+    // Only admin can unconfirm deposits
+    if (userRole !== "admin") {
+      return res.status(403).json({
+        success: false,
+        message: "Only admins can unconfirm deposits",
+      });
+    }
+
+    const lead = await Lead.findById(leadId);
+
+    if (!lead) {
+      return res.status(404).json({
+        success: false,
+        message: "Lead not found",
+      });
+    }
+
+    if (!lead.depositConfirmed) {
+      return res.status(400).json({
+        success: false,
+        message: "Deposit is not confirmed",
+      });
+    }
+
+    lead.depositConfirmed = false;
+    lead.depositConfirmedBy = null;
+    lead.depositConfirmedAt = null;
+
+    // Add to deposit history
+    lead.depositHistory.push({
+      action: "unconfirmed",
+      performedBy: req.user._id,
+      performedAt: new Date(),
+    });
+
+    await lead.save();
+
+    await lead.populate("assignedAgent", "fullName email fourDigitCode");
+
+    res.status(200).json({
+      success: true,
+      message: "Deposit unconfirmed successfully",
+      data: lead,
+    });
+  } catch (error) {
+    console.error("Error unconfirming deposit:", error);
     next(error);
   }
 };
