@@ -718,14 +718,7 @@ exports.addComment = async (req, res, next) => {
         errors: errors.array(),
       });
     }
-    const { text, orderId } = req.body;
-
-    if (!orderId) {
-      return res.status(400).json({
-        success: false,
-        message: "Order ID is required for comments",
-      });
-    }
+    const { text } = req.body;
 
     const lead = await Lead.findById(req.params.id);
     if (!lead) {
@@ -735,43 +728,13 @@ exports.addComment = async (req, res, next) => {
       });
     }
 
-    // Verify the order exists and contains this lead
-    const Order = require("../models/Order");
-    const order = await Order.findById(orderId);
-    if (!order) {
-      return res.status(404).json({
-        success: false,
-        message: "Order not found",
-      });
-    }
-
-    const leadExistsInOrder = order.leads.some(
-      (leadId) => leadId.toString() === lead._id.toString()
-    );
-    if (!leadExistsInOrder) {
-      return res.status(400).json({
-        success: false,
-        message: "This lead is not part of the specified order",
-      });
-    }
-
     // Check permissions based on user role
     if (req.user.role === "admin") {
       // Admins can comment on any lead
     } else if (req.user.role === "affiliate_manager") {
-      // Affiliate managers can only comment on leads from orders they created OR leads assigned to them
-      const hasAccess =
-        (order.requester && order.requester.toString() === req.user.id) ||
-        (lead.assignedAgent && lead.assignedAgent.toString() === req.user.id);
-      if (!hasAccess) {
-        return res.status(403).json({
-          success: false,
-          message:
-            "Affiliate managers can only comment on leads from their orders or leads assigned to them",
-        });
-      }
+      // Affiliate managers can comment on all leads
     } else if (req.user.role === "lead_manager") {
-      // Lead managers can comment on all leads (no filtering)
+      // Lead managers can comment on all leads
     } else if (req.user.role === "agent") {
       // Agents can only comment on leads assigned to them
       if (
@@ -790,21 +753,23 @@ exports.addComment = async (req, res, next) => {
       });
     }
 
-    // Add order-specific comment
-    lead.addOrderComment(orderId, text, req.user.id);
+    // Add comment to the lead's comments array
+    lead.comments.push({
+      text,
+      author: req.user.id,
+      createdAt: new Date(),
+    });
     await lead.save();
 
-    // Populate and return the order-specific comments
-    await lead.populate("orderComments.author", "fullName fourDigitCode");
-    const orderComments = lead.getOrderComments(orderId);
+    // Populate and return all comments
+    await lead.populate("comments.author", "fullName fourDigitCode");
 
     res.status(200).json({
       success: true,
       message: "Comment added successfully",
       data: {
         leadId: lead._id,
-        orderId: orderId,
-        comments: orderComments,
+        comments: lead.comments,
       },
     });
   } catch (error) {

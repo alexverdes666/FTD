@@ -7,9 +7,6 @@ import React, {
 } from "react";
 import { useSelector } from "react-redux";
 import { useSearchParams } from "react-router-dom";
-import { useForm, Controller } from "react-hook-form";
-import { yupResolver } from "@hookform/resolvers/yup";
-import * as yup from "yup";
 import {
   Box,
   Typography,
@@ -94,6 +91,7 @@ import AddLeadForm from "../components/AddLeadForm";
 import DocumentPreview from "../components/DocumentPreview";
 import AssignLeadToAgentDialog from "../components/AssignLeadToAgentDialog";
 import LeadAuditHistoryModal from "../components/LeadAuditHistoryModal";
+import LeadCommentsDialog from "../components/LeadCommentsDialog";
 
 import api from "../services/api";
 import { selectUser } from "../store/slices/authSlice";
@@ -196,12 +194,6 @@ const LEAD_TYPES = {
   FILLER: "filler",
   COLD: "cold",
 };
-const commentSchema = yup.object({
-  text: yup
-    .string()
-    .required("Comment is required")
-    .min(3, "Comment must be at least 3 characters"),
-});
 const getStatusColor = (status) => {
   switch (status) {
     case LEAD_STATUSES.ACTIVE:
@@ -299,95 +291,76 @@ const getDocumentStatusColor = (status) => {
   }
 };
 const LeadDetails = React.memo(({ lead }) => (
-  <Box
-    sx={{
-      animation: "fadeIn 0.3s ease-in-out",
-      "@keyframes fadeIn": {
-        "0%": {
-          opacity: 0,
-          transform: "translateY(-10px)",
-        },
-        "100%": {
-          opacity: 1,
-          transform: "translateY(0)",
-        },
-      },
-    }}
-  >
-    <Grid container spacing={3}>
+  <Box>
+    <Grid container spacing={1.5}>
       {}
       <Grid item xs={12} md={4}>
         <Paper
           elevation={0}
           sx={{
-            p: 2,
+            p: 1.5,
             bgcolor: "background.paper",
             borderRadius: 1,
             border: "1px solid",
             borderColor: "divider",
             height: "100%",
-            transition: "all 0.2s ease-in-out",
-            "&:hover": {
-              boxShadow: (theme) => theme.shadows[4],
-              transform: "translateY(-4px)",
-            },
           }}
         >
           <Typography
             variant="subtitle2"
-            gutterBottom
             sx={{
               color: "primary.main",
               fontWeight: "bold",
               display: "flex",
               alignItems: "center",
-              gap: 1,
-              mb: 2,
+              gap: 0.5,
+              mb: 1,
+              fontSize: "0.8rem",
             }}
           >
-            <PersonAddIcon fontSize="small" />
+            <PersonAddIcon sx={{ fontSize: "1rem" }} />
             Basic Information
           </Typography>
-          <Stack spacing={2}>
-            <Box>
-              <Typography variant="caption" color="text.secondary">
-                Full Name
+          <Stack spacing={0.5}>
+            <Box sx={{ display: "flex", gap: 1, alignItems: "baseline" }}>
+              <Typography variant="caption" color="text.secondary" sx={{ minWidth: 70 }}>
+                Name:
               </Typography>
-              <Typography variant="body1" fontWeight="medium">
+              <Typography variant="body2" fontWeight="medium">
                 {lead.fullName ||
                   `${lead.firstName} ${lead.lastName || ""}`.trim()}
               </Typography>
             </Box>
-            <Box>
-              <Typography variant="caption" color="text.secondary">
-                Lead ID
+            <Box sx={{ display: "flex", gap: 1, alignItems: "baseline" }}>
+              <Typography variant="caption" color="text.secondary" sx={{ minWidth: 70 }}>
+                Lead ID:
               </Typography>
-              <Typography variant="body2" fontFamily="monospace">
+              <Typography variant="caption" fontFamily="monospace" sx={{ fontSize: "0.7rem" }}>
                 {lead._id}
               </Typography>
             </Box>
-            <Box>
-              <Typography variant="caption" color="text.secondary">
-                Created
+            <Box sx={{ display: "flex", gap: 1, alignItems: "baseline" }}>
+              <Typography variant="caption" color="text.secondary" sx={{ minWidth: 70 }}>
+                Created:
               </Typography>
-              <Typography variant="body2">
+              <Typography variant="caption">
                 {new Date(lead.createdAt).toLocaleString()}
               </Typography>
             </Box>
-            <Box>
-              <Typography variant="caption" color="text.secondary">
-                Last Updated
+            <Box sx={{ display: "flex", gap: 1, alignItems: "baseline" }}>
+              <Typography variant="caption" color="text.secondary" sx={{ minWidth: 70 }}>
+                Updated:
               </Typography>
-              <Typography variant="body2">
+              <Typography variant="caption">
                 {new Date(lead.updatedAt).toLocaleString()}
               </Typography>
             </Box>
-            <Stack direction="row" spacing={1}>
+            <Stack direction="row" spacing={0.5} sx={{ mt: 0.5 }}>
               <Chip
                 label={getDisplayLeadType(lead)?.toUpperCase() || "UNKNOWN"}
                 color={getLeadTypeColor(getDisplayLeadType(lead))}
                 size="small"
-                sx={{ fontWeight: "medium" }}
+                sx={{ fontWeight: "medium", height: 20, fontSize: "0.7rem" }}
               />
               <Chip
                 label={
@@ -395,7 +368,7 @@ const LeadDetails = React.memo(({ lead }) => (
                 }
                 color={getStatusColor(lead.status)}
                 size="small"
-                sx={{ fontWeight: "medium" }}
+                sx={{ fontWeight: "medium", height: 20, fontSize: "0.7rem" }}
               />
             </Stack>
           </Stack>
@@ -406,70 +379,57 @@ const LeadDetails = React.memo(({ lead }) => (
         <Paper
           elevation={0}
           sx={{
-            p: 2,
+            p: 1.5,
             bgcolor: "background.paper",
             borderRadius: 1,
             border: "1px solid",
             borderColor: "divider",
             height: "100%",
-            transition: "all 0.2s ease-in-out",
-            "&:hover": {
-              boxShadow: (theme) => theme.shadows[4],
-              transform: "translateY(-4px)",
-            },
           }}
         >
           <Typography
             variant="subtitle2"
-            gutterBottom
             sx={{
               color: "primary.main",
               fontWeight: "bold",
               display: "flex",
               alignItems: "center",
-              gap: 1,
-              mb: 2,
+              gap: 0.5,
+              mb: 1,
+              fontSize: "0.8rem",
             }}
           >
-            <ContactsIcon fontSize="small" />
+            <ContactsIcon sx={{ fontSize: "1rem" }} />
             Contact Information
           </Typography>
-          <Stack spacing={2}>
-            <Box>
-              <Typography variant="caption" color="text.secondary">
-                Current Email
+          <Stack spacing={0.5}>
+            <Box sx={{ display: "flex", gap: 1, alignItems: "baseline", flexWrap: "wrap" }}>
+              <Typography variant="caption" color="text.secondary" sx={{ minWidth: 55 }}>
+                Email:
               </Typography>
-              <Typography variant="body2">{lead.newEmail}</Typography>
+              <Typography variant="caption">{lead.newEmail}</Typography>
               {lead.oldEmail && (
-                <Typography
-                  variant="caption"
-                  color="text.secondary"
-                  display="block"
-                >
-                  Previous: {lead.oldEmail}
+                <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.65rem" }}>
+                  (Prev: {lead.oldEmail})
                 </Typography>
               )}
             </Box>
-            <Box>
-              <Typography variant="caption" color="text.secondary">
-                Current Phone
+            <Box sx={{ display: "flex", gap: 1, alignItems: "baseline", flexWrap: "wrap" }}>
+              <Typography variant="caption" color="text.secondary" sx={{ minWidth: 55 }}>
+                Phone:
               </Typography>
-              <Typography variant="body2">{lead.newPhone}</Typography>
+              <Typography variant="caption">{lead.newPhone}</Typography>
               {lead.oldPhone && (
-                <Typography
-                  variant="caption"
-                  color="text.secondary"
-                  display="block"
-                >
-                  Previous: {lead.oldPhone}
+                <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.65rem" }}>
+                  (Prev: {lead.oldPhone})
                 </Typography>
               )}
             </Box>
-            <Box>
-              <Typography variant="caption" color="text.secondary">
-                Address
+            <Box sx={{ display: "flex", gap: 1, alignItems: "baseline" }}>
+              <Typography variant="caption" color="text.secondary" sx={{ minWidth: 55 }}>
+                Address:
               </Typography>
-              <Typography variant="body2">
+              <Typography variant="caption">
                 {typeof lead.address === "string"
                   ? lead.address
                   : lead.address
@@ -479,11 +439,11 @@ const LeadDetails = React.memo(({ lead }) => (
                   : "N/A"}
               </Typography>
             </Box>
-            <Box>
-              <Typography variant="caption" color="text.secondary">
-                Country
+            <Box sx={{ display: "flex", gap: 1, alignItems: "baseline" }}>
+              <Typography variant="caption" color="text.secondary" sx={{ minWidth: 55 }}>
+                Country:
               </Typography>
-              <Typography variant="body2">{lead.country || "N/A"}</Typography>
+              <Typography variant="caption">{lead.country || "N/A"}</Typography>
             </Box>
           </Stack>
         </Paper>
@@ -493,66 +453,61 @@ const LeadDetails = React.memo(({ lead }) => (
         <Paper
           elevation={0}
           sx={{
-            p: 2,
+            p: 1.5,
             bgcolor: "background.paper",
             borderRadius: 1,
             border: "1px solid",
             borderColor: "divider",
             height: "100%",
-            transition: "all 0.2s ease-in-out",
-            "&:hover": {
-              boxShadow: (theme) => theme.shadows[4],
-              transform: "translateY(-4px)",
-            },
           }}
         >
           <Typography
             variant="subtitle2"
-            gutterBottom
             sx={{
               color: "primary.main",
               fontWeight: "bold",
               display: "flex",
               alignItems: "center",
-              gap: 1,
-              mb: 2,
+              gap: 0.5,
+              mb: 1,
+              fontSize: "0.8rem",
             }}
           >
-            <InfoIcon fontSize="small" />
+            <InfoIcon sx={{ fontSize: "1rem" }} />
             Additional Details
           </Typography>
-          <Stack spacing={2}>
+          <Stack spacing={0.5}>
             {lead.sin && (
-              <Box>
-                <Typography variant="caption" color="text.secondary">
-                  SIN
+              <Box sx={{ display: "flex", gap: 1, alignItems: "baseline" }}>
+                <Typography variant="caption" color="text.secondary" sx={{ minWidth: 50 }}>
+                  SIN:
                 </Typography>
-                <Typography variant="body2" fontFamily="monospace">
+                <Typography variant="caption" fontFamily="monospace">
                   {lead.sin}
                 </Typography>
               </Box>
             )}
             {lead.dob && (
-              <Box>
-                <Typography variant="caption" color="text.secondary">
-                  Date of Birth
+              <Box sx={{ display: "flex", gap: 1, alignItems: "baseline" }}>
+                <Typography variant="caption" color="text.secondary" sx={{ minWidth: 50 }}>
+                  DOB:
                 </Typography>
-                <Typography variant="body2">
+                <Typography variant="caption">
                   {new Date(lead.dob).toLocaleDateString()}
                 </Typography>
               </Box>
             )}
-            <Box>
-              <Typography variant="caption" color="text.secondary">
-                Gender
+            <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+              <Typography variant="caption" color="text.secondary" sx={{ minWidth: 50 }}>
+                Gender:
               </Typography>
               {lead.gender && lead.gender !== "not_defined" ? (
                 <Chip
                   icon={
                     lead.gender === "male" ? (
-                      <MaleIcon sx={{ fontSize: "1rem !important" }} />
+                      <MaleIcon sx={{ fontSize: "0.8rem !important" }} />
                     ) : (
-                      <FemaleIcon sx={{ fontSize: "1rem !important" }} />
+                      <FemaleIcon sx={{ fontSize: "0.8rem !important" }} />
                     )
                   }
                   label={
@@ -560,7 +515,8 @@ const LeadDetails = React.memo(({ lead }) => (
                   }
                   size="small"
                   sx={{
-                    height: "24px",
+                    height: "18px",
+                    fontSize: "0.7rem",
                     "& .MuiChip-icon": { ml: 0.5 },
                     bgcolor: lead.gender === "male" ? "#e3f2fd" : "#fff3e0",
                     color: lead.gender === "male" ? "#1976d2" : "#e65100",
@@ -569,31 +525,31 @@ const LeadDetails = React.memo(({ lead }) => (
                   }}
                 />
               ) : (
-                <Typography variant="body2">Not Specified</Typography>
+                <Typography variant="caption">N/A</Typography>
               )}
             </Box>
             {lead.client && (
-              <Box>
-                <Typography variant="caption" color="text.secondary">
-                  Client
+              <Box sx={{ display: "flex", gap: 1, alignItems: "baseline" }}>
+                <Typography variant="caption" color="text.secondary" sx={{ minWidth: 50 }}>
+                  Client:
                 </Typography>
-                <Typography variant="body2">{lead.client}</Typography>
+                <Typography variant="caption">{lead.client}</Typography>
               </Box>
             )}
             {lead.clientBroker && (
-              <Box>
-                <Typography variant="caption" color="text.secondary">
-                  Client Broker
+              <Box sx={{ display: "flex", gap: 1, alignItems: "baseline" }}>
+                <Typography variant="caption" color="text.secondary" sx={{ minWidth: 50 }}>
+                  Broker:
                 </Typography>
-                <Typography variant="body2">{lead.clientBroker}</Typography>
+                <Typography variant="caption">{lead.clientBroker}</Typography>
               </Box>
             )}
             {lead.clientNetwork && (
-              <Box>
-                <Typography variant="caption" color="text.secondary">
-                  Client Network
+              <Box sx={{ display: "flex", gap: 1, alignItems: "baseline" }}>
+                <Typography variant="caption" color="text.secondary" sx={{ minWidth: 50 }}>
+                  Network:
                 </Typography>
-                <Typography variant="body2">{lead.clientNetwork}</Typography>
+                <Typography variant="caption">{lead.clientNetwork}</Typography>
               </Box>
             )}
           </Stack>
@@ -605,58 +561,55 @@ const LeadDetails = React.memo(({ lead }) => (
           <Paper
             elevation={0}
             sx={{
-              p: 2,
+              p: 1.5,
               bgcolor: "background.paper",
               borderRadius: 1,
               border: "1px solid",
               borderColor: "divider",
-              transition: "all 0.2s ease-in-out",
-              "&:hover": {
-                boxShadow: (theme) => theme.shadows[4],
-                transform: "translateY(-4px)",
-              },
             }}
           >
             <Typography
               variant="subtitle2"
-              gutterBottom
               sx={{
                 color: "primary.main",
                 fontWeight: "bold",
                 display: "flex",
                 alignItems: "center",
-                gap: 1,
-                mb: 2,
+                gap: 0.5,
+                mb: 1,
+                fontSize: "0.8rem",
               }}
             >
-              <AssignmentIndIcon fontSize="small" />
-              Assignment Information
+              <AssignmentIndIcon sx={{ fontSize: "1rem" }} />
+              Assignment
             </Typography>
-            <Stack spacing={2}>
-              <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-                <Avatar sx={{ bgcolor: "primary.main" }}>
+            <Stack spacing={0.5}>
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                <Avatar sx={{ bgcolor: "primary.main", width: 28, height: 28, fontSize: "0.8rem" }}>
                   {lead.assignedAgent.fullName?.charAt(0) || "A"}
                 </Avatar>
                 <Box>
-                  <Typography variant="body1" fontWeight="medium">
+                  <Typography variant="body2" fontWeight="medium">
                     {lead.assignedAgent.fullName}
                   </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    Agent Code: {lead.assignedAgent.fourDigitCode}
+                  <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.65rem" }}>
+                    #{lead.assignedAgent.fourDigitCode}
                   </Typography>
                 </Box>
               </Box>
-              <Typography variant="body2">
+              <Box sx={{ display: "flex", gap: 1, alignItems: "baseline" }}>
+                <Typography variant="caption" color="text.secondary">Email:</Typography>
                 <Link
                   href={`mailto:${lead.assignedAgent.email}`}
                   color="primary"
+                  sx={{ fontSize: "0.75rem" }}
                 >
                   {lead.assignedAgent.email}
                 </Link>
-              </Typography>
+              </Box>
               {lead.assignedAgentAt && (
-                <Typography variant="caption" color="text.secondary">
-                  Assigned on: {new Date(lead.assignedAgentAt).toLocaleString()}
+                <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.65rem" }}>
+                  Assigned: {new Date(lead.assignedAgentAt).toLocaleString()}
                 </Typography>
               )}
             </Stack>
@@ -669,167 +622,142 @@ const LeadDetails = React.memo(({ lead }) => (
           <Paper
             elevation={0}
             sx={{
-              p: 2,
+              p: 1.5,
               bgcolor: "background.paper",
               borderRadius: 1,
               border: "1px solid",
               borderColor: "divider",
-              transition: "all 0.2s ease-in-out",
-              "&:hover": {
-                boxShadow: (theme) => theme.shadows[4],
-                transform: "translateY(-4px)",
-              },
             }}
           >
             <Typography
               variant="subtitle2"
-              gutterBottom
               sx={{
                 color: "primary.main",
                 fontWeight: "bold",
                 display: "flex",
                 alignItems: "center",
-                gap: 1,
-                mb: 2,
+                gap: 0.5,
+                mb: 1,
+                fontSize: "0.8rem",
               }}
             >
-              <ShareIcon fontSize="small" />
-              Social Media Profiles
+              <ShareIcon sx={{ fontSize: "1rem" }} />
+              Social Media
             </Typography>
-            <Grid container spacing={2}>
+            <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
               {lead.socialMedia.facebook && (
-                <Grid item xs={12} sm={6} md={4}>
-                  <Link
-                    href={lead.socialMedia.facebook}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    sx={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 1,
-                      color: "text.primary",
-                      textDecoration: "none",
-                      p: 1,
-                      borderRadius: 1,
-                      "&:hover": {
-                        bgcolor: "action.hover",
-                      },
-                    }}
-                  >
-                    <FacebookIcon color="primary" />
-                    Facebook Profile
-                  </Link>
-                </Grid>
+                <Link
+                  href={lead.socialMedia.facebook}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 0.5,
+                    color: "text.primary",
+                    textDecoration: "none",
+                    p: 0.5,
+                    borderRadius: 1,
+                    fontSize: "0.75rem",
+                    "&:hover": { bgcolor: "action.hover" },
+                  }}
+                >
+                  <FacebookIcon sx={{ fontSize: "1rem" }} color="primary" />
+                  Facebook
+                </Link>
               )}
               {lead.socialMedia.twitter && (
-                <Grid item xs={12} sm={6} md={4}>
-                  <Link
-                    href={lead.socialMedia.twitter}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    sx={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 1,
-                      color: "text.primary",
-                      textDecoration: "none",
-                      p: 1,
-                      borderRadius: 1,
-                      "&:hover": {
-                        bgcolor: "action.hover",
-                      },
-                    }}
-                  >
-                    <TwitterIcon color="info" />
-                    Twitter Profile
-                  </Link>
-                </Grid>
+                <Link
+                  href={lead.socialMedia.twitter}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 0.5,
+                    color: "text.primary",
+                    textDecoration: "none",
+                    p: 0.5,
+                    borderRadius: 1,
+                    fontSize: "0.75rem",
+                    "&:hover": { bgcolor: "action.hover" },
+                  }}
+                >
+                  <TwitterIcon sx={{ fontSize: "1rem" }} color="info" />
+                  Twitter
+                </Link>
               )}
               {lead.socialMedia.linkedin && (
-                <Grid item xs={12} sm={6} md={4}>
-                  <Link
-                    href={lead.socialMedia.linkedin}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    sx={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 1,
-                      color: "text.primary",
-                      textDecoration: "none",
-                      p: 1,
-                      borderRadius: 1,
-                      "&:hover": {
-                        bgcolor: "action.hover",
-                      },
-                    }}
-                  >
-                    <LinkedInIcon color="primary" />
-                    LinkedIn Profile
-                  </Link>
-                </Grid>
+                <Link
+                  href={lead.socialMedia.linkedin}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 0.5,
+                    color: "text.primary",
+                    textDecoration: "none",
+                    p: 0.5,
+                    borderRadius: 1,
+                    fontSize: "0.75rem",
+                    "&:hover": { bgcolor: "action.hover" },
+                  }}
+                >
+                  <LinkedInIcon sx={{ fontSize: "1rem" }} color="primary" />
+                  LinkedIn
+                </Link>
               )}
               {lead.socialMedia.instagram && (
-                <Grid item xs={12} sm={6} md={4}>
-                  <Link
-                    href={lead.socialMedia.instagram}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    sx={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 1,
-                      color: "text.primary",
-                      textDecoration: "none",
-                      p: 1,
-                      borderRadius: 1,
-                      "&:hover": {
-                        bgcolor: "action.hover",
-                      },
-                    }}
-                  >
-                    <InstagramIcon color="secondary" />
-                    Instagram Profile
-                  </Link>
-                </Grid>
+                <Link
+                  href={lead.socialMedia.instagram}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 0.5,
+                    color: "text.primary",
+                    textDecoration: "none",
+                    p: 0.5,
+                    borderRadius: 1,
+                    fontSize: "0.75rem",
+                    "&:hover": { bgcolor: "action.hover" },
+                  }}
+                >
+                  <InstagramIcon sx={{ fontSize: "1rem" }} color="secondary" />
+                  Instagram
+                </Link>
               )}
               {lead.socialMedia.telegram && (
-                <Grid item xs={12} sm={6} md={4}>
-                  <Box
-                    sx={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 1,
-                      p: 1,
-                      borderRadius: 1,
-                    }}
-                  >
-                    <TelegramIcon color="info" />
-                    <Typography variant="body2">
-                      {lead.socialMedia.telegram}
-                    </Typography>
-                  </Box>
-                </Grid>
+                <Box
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 0.5,
+                    p: 0.5,
+                    fontSize: "0.75rem",
+                  }}
+                >
+                  <TelegramIcon sx={{ fontSize: "1rem" }} color="info" />
+                  <Typography variant="caption">{lead.socialMedia.telegram}</Typography>
+                </Box>
               )}
               {lead.socialMedia.whatsapp && (
-                <Grid item xs={12} sm={6} md={4}>
-                  <Box
-                    sx={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 1,
-                      p: 1,
-                      borderRadius: 1,
-                    }}
-                  >
-                    <WhatsAppIcon color="success" />
-                    <Typography variant="body2">
-                      {lead.socialMedia.whatsapp}
-                    </Typography>
-                  </Box>
-                </Grid>
+                <Box
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 0.5,
+                    p: 0.5,
+                    fontSize: "0.75rem",
+                  }}
+                >
+                  <WhatsAppIcon sx={{ fontSize: "1rem" }} color="success" />
+                  <Typography variant="caption">{lead.socialMedia.whatsapp}</Typography>
+                </Box>
               )}
-            </Grid>
+            </Stack>
           </Paper>
         </Grid>
       )}
@@ -839,34 +767,29 @@ const LeadDetails = React.memo(({ lead }) => (
           <Paper
             elevation={0}
             sx={{
-              p: 2,
+              p: 1.5,
               bgcolor: "background.paper",
               borderRadius: 1,
               border: "1px solid",
               borderColor: "divider",
-              transition: "all 0.2s ease-in-out",
-              "&:hover": {
-                boxShadow: (theme) => theme.shadows[4],
-                transform: "translateY(-4px)",
-              },
             }}
           >
             <Typography
               variant="subtitle2"
-              gutterBottom
               sx={{
                 color: "primary.main",
                 fontWeight: "bold",
                 display: "flex",
                 alignItems: "center",
-                gap: 1,
-                mb: 2,
+                gap: 0.5,
+                mb: 1,
+                fontSize: "0.8rem",
               }}
             >
-              <DescriptionIcon fontSize="small" />
+              <DescriptionIcon sx={{ fontSize: "1rem" }} />
               Documents
             </Typography>
-            <Grid container spacing={2}>
+            <Grid container spacing={1}>
               {lead.documents.map((doc, index) => (
                 <Grid item xs={12} sm={6} md={4} key={index}>
                   <Paper
@@ -940,139 +863,92 @@ const LeadDetails = React.memo(({ lead }) => (
           <Paper
             elevation={0}
             sx={{
-              p: 2,
+              p: 1.5,
               bgcolor: "background.paper",
               borderRadius: 1,
               border: "1px solid",
               borderColor: "divider",
-              transition: "all 0.2s ease-in-out",
-              "&:hover": {
-                boxShadow: (theme) => theme.shadows[4],
-                transform: "translateY(-4px)",
-              },
             }}
           >
             <Typography
               variant="subtitle2"
-              gutterBottom
               sx={{
                 color: "primary.main",
                 fontWeight: "bold",
                 display: "flex",
                 alignItems: "center",
-                gap: 1,
-                mb: 2,
+                gap: 0.5,
+                mb: 1,
+                fontSize: "0.8rem",
               }}
             >
-              <VideocamIcon fontSize="small" />
+              <VideocamIcon sx={{ fontSize: "1rem" }} />
               Session Recordings
             </Typography>
-            <Typography variant="body2" color="text.secondary" gutterBottom>
-              Complete verification session recordings from both cameras.
-            </Typography>
-            <Grid container spacing={2}>
+            <Grid container spacing={1}>
               {lead.sessionRecordings.map((recording, index) => (
                 <Grid item xs={12} sm={6} md={4} key={index}>
                   <Paper
                     elevation={0}
                     sx={{
-                      p: 2,
+                      p: 1,
                       border: "1px solid",
                       borderColor: "divider",
                       borderRadius: 1,
-                      "&:hover": {
-                        bgcolor: "action.hover",
-                      },
+                      "&:hover": { bgcolor: "action.hover" },
                     }}
                   >
-                    <Stack
-                      direction="row"
-                      alignItems="center"
-                      spacing={2}
-                      sx={{ mb: 2 }}
-                    >
+                    <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.5 }}>
                       <Box
                         sx={{
-                          width: 40,
-                          height: 40,
-                          borderRadius: 1,
-                          bgcolor:
-                            recording.cameraType === "front"
-                              ? "primary.main"
-                              : "secondary.main",
+                          width: 28,
+                          height: 28,
+                          borderRadius: 0.5,
+                          bgcolor: recording.cameraType === "front" ? "primary.main" : "secondary.main",
                           display: "flex",
                           alignItems: "center",
                           justifyContent: "center",
                           color: "white",
+                          fontSize: "0.8rem",
                         }}
                       >
                         📹
                       </Box>
                       <Box>
-                        <Typography variant="subtitle2">
-                          {recording.cameraType === "front"
-                            ? "Front Camera"
-                            : "Back Camera"}
+                        <Typography variant="caption" fontWeight="medium">
+                          {recording.cameraType === "front" ? "Front" : "Back"}
                         </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          {Math.round(recording.duration / 1000)}s •{" "}
-                          {(recording.fileSize / (1024 * 1024)).toFixed(1)}MB
+                        <Typography variant="caption" color="text.secondary" display="block" sx={{ fontSize: "0.65rem" }}>
+                          {Math.round(recording.duration / 1000)}s • {(recording.fileSize / (1024 * 1024)).toFixed(1)}MB
                         </Typography>
                       </Box>
                     </Stack>
-                    <Stack spacing={1}>
-                      <Button
-                        variant="contained"
-                        size="small"
-                        fullWidth
-                        onClick={async () => {
-                          try {
-                            // Extract sessionId and filename from s3Key
-                            const s3Key =
-                              recording.s3Key ||
-                              recording.s3Location
-                                ?.split("/")
-                                .slice(-2)
-                                .join("/");
-                            if (!s3Key) {
-                              console.error("No S3 key found for recording");
-                              return;
-                            }
-
-                            const [sessionId, filename] = s3Key.split("/");
-
-                            // Get signed URL from our backend API
-                            const response = await api.get(
-                              `/video/${sessionId}/${filename}`
-                            );
-
-                            if (response.data.success) {
-                              window.open(response.data.url, "_blank");
-                            } else {
-                              console.error(
-                                "Failed to get video URL:",
-                                response.data.error
-                              );
-                              alert("Error loading video. Please try again.");
-                            }
-                          } catch (error) {
-                            console.error("Error fetching video:", error);
+                    <Button
+                      variant="contained"
+                      size="small"
+                      fullWidth
+                      sx={{ py: 0.25, fontSize: "0.7rem" }}
+                      onClick={async () => {
+                        try {
+                          const s3Key = recording.s3Key || recording.s3Location?.split("/").slice(-2).join("/");
+                          if (!s3Key) { console.error("No S3 key found for recording"); return; }
+                          const [sessionId, filename] = s3Key.split("/");
+                          const response = await api.get(`/video/${sessionId}/${filename}`);
+                          if (response.data.success) {
+                            window.open(response.data.url, "_blank");
+                          } else {
+                            console.error("Failed to get video URL:", response.data.error);
                             alert("Error loading video. Please try again.");
                           }
-                        }}
-                        startIcon={<PlayArrowIcon />}
-                      >
-                        View Recording
-                      </Button>
-                      <Typography
-                        variant="caption"
-                        color="text.secondary"
-                        sx={{ textAlign: "center" }}
-                      >
-                        Uploaded:{" "}
-                        {new Date(recording.uploadedAt).toLocaleString()}
-                      </Typography>
-                    </Stack>
+                        } catch (error) {
+                          console.error("Error fetching video:", error);
+                          alert("Error loading video. Please try again.");
+                        }
+                      }}
+                      startIcon={<PlayArrowIcon sx={{ fontSize: "0.9rem !important" }} />}
+                    >
+                      View
+                    </Button>
                   </Paper>
                 </Grid>
               ))}
@@ -1085,76 +961,69 @@ const LeadDetails = React.memo(({ lead }) => (
         <Paper
           elevation={0}
           sx={{
-            p: 2,
+            p: 1.5,
             bgcolor: "background.paper",
             borderRadius: 1,
             border: "1px solid",
             borderColor: "divider",
-            transition: "all 0.2s ease-in-out",
-            "&:hover": {
-              boxShadow: (theme) => theme.shadows[4],
-              transform: "translateY(-4px)",
-            },
           }}
         >
           <Typography
             variant="subtitle2"
-            gutterBottom
             sx={{
               color: "primary.main",
               fontWeight: "bold",
               display: "flex",
               alignItems: "center",
-              gap: 1,
-              mb: 2,
+              gap: 0.5,
+              mb: 1,
+              fontSize: "0.8rem",
             }}
           >
-            <CommentIcon fontSize="small" />
-            Comments & Activity
+            <CommentIcon sx={{ fontSize: "1rem" }} />
+            Comments
           </Typography>
-          <Box sx={{ maxHeight: 300, overflowY: "auto", pr: 1 }}>
+          <Box sx={{ maxHeight: 150, overflowY: "auto", pr: 0.5 }}>
             {lead.comments && lead.comments.length > 0 ? (
-              <Stack spacing={2}>
+              <Stack spacing={0.5}>
                 {lead.comments.map((comment, index) => (
                   <Paper
                     key={index}
                     elevation={0}
                     sx={{
-                      p: 2,
+                      p: 1,
                       bgcolor: "action.hover",
                       borderRadius: 1,
-                      border: "1px solid",
-                      borderColor: "divider",
                     }}
                   >
                     <Box
                       sx={{
                         display: "flex",
                         alignItems: "center",
-                        gap: 1,
-                        mb: 1,
+                        gap: 0.5,
+                        mb: 0.5,
                       }}
                     >
                       <Avatar
-                        sx={{ width: 24, height: 24, fontSize: "0.875rem" }}
+                        sx={{ width: 18, height: 18, fontSize: "0.65rem" }}
                       >
                         {comment.author?.fullName?.charAt(0) || "U"}
                       </Avatar>
-                      <Typography variant="subtitle2">
-                        {comment.author?.fullName || "Unknown User"}
+                      <Typography variant="caption" fontWeight="medium">
+                        {comment.author?.fullName || "Unknown"}
                       </Typography>
-                      <Typography variant="caption" color="text.secondary">
+                      <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.65rem" }}>
                         • {new Date(comment.createdAt).toLocaleString()}
                       </Typography>
                     </Box>
-                    <Typography variant="body2">{comment.text}</Typography>
+                    <Typography variant="caption">{comment.text}</Typography>
                   </Paper>
                 ))}
               </Stack>
             ) : (
-              <Box sx={{ textAlign: "center", py: 3, color: "text.secondary" }}>
-                <CommentIcon sx={{ fontSize: 40, opacity: 0.5, mb: 1 }} />
-                <Typography variant="body2">No comments yet</Typography>
+              <Box sx={{ textAlign: "center", py: 1.5, color: "text.secondary" }}>
+                <CommentIcon sx={{ fontSize: 24, opacity: 0.5, mb: 0.5 }} />
+                <Typography variant="caption">No comments</Typography>
               </Box>
             )}
           </Box>
@@ -1295,15 +1164,6 @@ const LeadsPage = () => {
     return count;
   }, [selectedLeads, leads]);
 
-  const {
-    control: commentControl,
-    handleSubmit: handleCommentSubmit,
-    reset: resetComment,
-    formState: { errors: commentErrors, isSubmitting: isCommentSubmitting },
-  } = useForm({
-    resolver: yupResolver(commentSchema),
-    defaultValues: { text: "" },
-  });
   const fetchPendingRequests = useCallback(
     async (leadsData) => {
       // Only for agents - check for pending requests for each lead/order
@@ -1410,50 +1270,6 @@ const LeadsPage = () => {
       setError(err.response?.data?.message || "Failed to fetch orders");
     }
   }, []);
-  const onSubmitComment = useCallback(
-    async (data) => {
-      try {
-        setError(null);
-        if (isLeadManager) {
-          const lead = leads.find((l) => l._id === selectedLead._id);
-          if (lead?.createdBy !== user.id) {
-            setError("You can only comment on leads that you created.");
-            return;
-          }
-        }
-
-        // For agents, orderId is required (passed from the order row)
-        if (isAgent && !selectedLead?.orderId) {
-          setError("Order ID is required for comments.");
-          return;
-        }
-
-        // Include orderId in the request data
-        const requestData = isAgent
-          ? { ...data, orderId: selectedLead.orderId }
-          : data;
-
-        await api.put(`/leads/${selectedLead._id}/comment`, requestData);
-        setSuccess("Comment added successfully!");
-        setCommentDialogOpen(false);
-        resetComment();
-        fetchLeads();
-      } catch (err) {
-        setError(err.response?.data?.message || "Failed to add comment.");
-      }
-    },
-    [
-      selectedLead,
-      fetchLeads,
-      resetComment,
-      isLeadManager,
-      isAgent,
-      user?.id,
-      leads,
-      setSuccess,
-      setError,
-    ]
-  );
   const updateLeadStatus = useCallback(
     async (leadId, status) => {
       try {
@@ -2831,59 +2647,13 @@ const LeadsPage = () => {
           </Stack>
         )}
       </Box>
-      {}
-      <Dialog
+      {/* Comments Dialog */}
+      <LeadCommentsDialog
         open={commentDialogOpen}
         onClose={() => setCommentDialogOpen(false)}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle>Add Comment</DialogTitle>
-        <form onSubmit={handleCommentSubmit(onSubmitComment)}>
-          <DialogContent>
-            {selectedLead && (
-              <Box mb={2}>
-                <Typography variant="subtitle2">
-                  Lead: {selectedLead.firstName} {selectedLead.lastName}
-                </Typography>
-                <Typography variant="caption" color="textSecondary">
-                  {selectedLead.email} • {selectedLead.leadType.toUpperCase()}
-                </Typography>
-              </Box>
-            )}
-            <Controller
-              name="text"
-              control={commentControl}
-              render={({ field }) => (
-                <TextField
-                  {...field}
-                  fullWidth
-                  label="Comment"
-                  multiline
-                  rows={4}
-                  error={!!commentErrors.text}
-                  helperText={commentErrors.text?.message}
-                  placeholder="Add your comment about this lead..."
-                />
-              )}
-            />
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setCommentDialogOpen(false)}>Cancel</Button>
-            <Button
-              type="submit"
-              variant="contained"
-              disabled={isCommentSubmitting}
-            >
-              {isCommentSubmitting ? (
-                <CircularProgress size={24} />
-              ) : (
-                "Add Comment"
-              )}
-            </Button>
-          </DialogActions>
-        </form>
-      </Dialog>
+        lead={selectedLead}
+        onCommentAdded={fetchLeads}
+      />
       <ImportLeadsDialog
         open={importDialogOpen}
         onClose={() => setImportDialogOpen(false)}
@@ -3446,8 +3216,8 @@ const GroupedLeadRow = React.memo(
           sx={{ cursor: isExpanded ? "pointer" : "default" }}
         >
           <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={8}>
-            <Collapse in={isExpanded} timeout="auto" unmountOnExit>
-              <Box sx={{ margin: 2 }}>
+            <Collapse in={isExpanded} timeout={0}>
+              <Box sx={{ margin: 1 }}>
                 <Typography variant="h6" gutterBottom component="div">
                   Orders ({orders.length})
                 </Typography>
@@ -4308,7 +4078,7 @@ const LeadRow = React.memo(
                     <ListItemIcon>
                       <CommentIcon fontSize="small" />
                     </ListItemIcon>
-                    <ListItemText primary="Add Comment" />
+                    <ListItemText primary="Comments" />
                   </MenuItem>
                 </Box>
               )}
@@ -4668,7 +4438,7 @@ const LeadCard = React.memo(
                     <ListItemIcon>
                       <CommentIcon fontSize="small" />
                     </ListItemIcon>
-                    <ListItemText primary="Add Comment" />
+                    <ListItemText primary="Comments" />
                   </MenuItem>
                   {canDeleteLeads && (
                     <Box>
@@ -4700,6 +4470,7 @@ const LeadCard = React.memo(
           </Grid>
           <Collapse
             in={expandedRows.has(lead._id)}
+            timeout={0}
             sx={{ width: "100%", cursor: "pointer" }}
             onClick={(e) => {
               e.stopPropagation();
@@ -4707,7 +4478,7 @@ const LeadCard = React.memo(
             }}
           >
             <Grid item xs={12}>
-              <Box sx={{ mt: 2, pb: 2, overflowX: "hidden" }}>
+              <Box sx={{ mt: 1, pb: 1, overflowX: "hidden" }}>
                 <LeadDetails lead={lead} />
               </Box>
             </Grid>
