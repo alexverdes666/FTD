@@ -3914,9 +3914,10 @@ exports.searchLeadsByEmails = async (req, res, next) => {
     // Normalize emails to lowercase and trim
     const normalizedEmails = emails.map((e) => e.trim().toLowerCase());
 
-    // Search for leads with matching emails
+    // Search for leads with matching emails (exclude archived leads - they cannot be used in orders)
     const leads = await Lead.find({
       newEmail: { $in: normalizedEmails },
+      isArchived: { $ne: true },
     }).populate("assignedAgent", "fullName email");
 
     res.status(200).json({

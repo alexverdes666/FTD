@@ -939,11 +939,11 @@ const generateDetailedReasonForLeadType = async (
 
   const limitingFactors = [];
 
-  // Step 1: Check total availability in database
-  const totalInDB = await Lead.countDocuments({ leadType });
+  // Step 1: Check total availability in database (excluding archived)
+  const totalInDB = await Lead.countDocuments({ leadType, isArchived: { $ne: true } });
   if (totalInDB < requested) {
     limitingFactors.push(
-      `Only ${totalInDB} total ${leadType} leads in database`
+      `Only ${totalInDB} total ${leadType} leads in database (excluding archived)`
     );
     reason += ` - ${limitingFactors.join(", ")}`;
     return reason;
@@ -951,6 +951,7 @@ const generateDetailedReasonForLeadType = async (
 
   let baseQuery = {
     leadType,
+    isArchived: { $ne: true }, // Never count archived leads
   };
 
   // Step 2: Add country filter
@@ -1089,6 +1090,16 @@ const handleManualSelectionOrder = async (req, res, next) => {
       return res.status(400).json({
         success: false,
         message: `Some leads not found: ${missingIds.join(", ")}`,
+      });
+    }
+
+    // Check for archived leads - they cannot be used in orders
+    const archivedLeads = foundLeads.filter((lead) => lead.isArchived === true);
+    if (archivedLeads.length > 0) {
+      const archivedIds = archivedLeads.map((l) => l._id.toString());
+      return res.status(400).json({
+        success: false,
+        message: `Cannot include archived leads in order: ${archivedIds.join(", ")}`,
       });
     }
 
@@ -1398,6 +1409,7 @@ exports.createOrder = async (req, res, next) => {
 
       let query = {
         leadType,
+        isArchived: { $ne: true }, // Never return archived leads
         ...countryFilter,
         ...genderFilterToUse,
       };
@@ -1413,8 +1425,8 @@ exports.createOrder = async (req, res, next) => {
       let availableLeads;
 
       if (agentId) {
-        // When agent is specified, prioritize fetching their assigned leads first
-        // Fetch ALL agent-assigned leads + ALL unassigned leads (no limit)
+        // When agent is specified, prioritize UNASSIGNED leads first, then agent-assigned
+        // This ensures unassigned leads are used first before falling back to assigned leads
         const agentQuery = { ...query, assignedAgent: agentId };
         const unassignedQuery = { ...query, assignedAgent: null };
 
@@ -1441,15 +1453,15 @@ exports.createOrder = async (req, res, next) => {
             .join(", ")}`
         );
 
-        // Combine agent leads first, then unassigned
-        availableLeads = [...agentLeads, ...unassignedLeads];
+        // Combine UNASSIGNED leads first (priority 1), then agent-assigned leads (priority 2)
+        availableLeads = [...unassignedLeads, ...agentLeads];
 
         console.log(
           `[${leadType.toUpperCase()}] Fetched ${
-            agentLeads.length
-          } agent-assigned leads + ${
             unassignedLeads.length
-          } unassigned leads for agent ${agentId}`
+          } unassigned leads (priority 1) + ${
+            agentLeads.length
+          } agent-assigned leads (priority 2) for agent ${agentId}`
         );
       } else {
         // No agent specified, fetch all matching leads (no limit)
@@ -1532,9 +1544,14 @@ exports.createOrder = async (req, res, next) => {
         );
       }
 
-      // Filter by agent assignment
+      // Filter by agent assignment - Priority: UNASSIGNED first, then ASSIGNED
       if (agentId) {
-        // Get leads assigned to this agent
+        // Get unassigned leads (Priority 1)
+        const unassignedLeads = availableLeads.filter(
+          (lead) => !lead.assignedAgent
+        );
+
+        // Get leads assigned to this agent (Priority 2)
         const agentAssignedLeads = availableLeads.filter(
           (lead) =>
             lead.assignedAgent &&
@@ -1543,13 +1560,15 @@ exports.createOrder = async (req, res, next) => {
 
         console.log(
           `[${leadType.toUpperCase()}] Agent ${agentId}: ${
+            unassignedLeads.length
+          } unassigned leads (priority 1) + ${
             agentAssignedLeads.length
-          } assigned leads found (need ${count}) - ${
+          } assigned leads (priority 2) found (need ${count}) - ${
             availableLeads.length
           } leads passed previous filters`
         );
 
-        if (agentAssignedLeads.length === 0 && totalAvailableCount > 0) {
+        if (unassignedLeads.length === 0 && agentAssignedLeads.length === 0 && totalAvailableCount > 0) {
           console.log(
             `[${leadType.toUpperCase()}] WARNING: ${totalAvailableCount} leads in database but 0 after filtering. Possible reasons:`,
             {
@@ -1564,35 +1583,27 @@ exports.createOrder = async (req, res, next) => {
           );
         }
 
-        // If agent-assigned leads are insufficient and we're not allowed to use unassigned
-        if (agentAssignedLeads.length < count && !allowUnassignedFallback) {
-          console.log(
-            `[${leadType.toUpperCase()}] Agent ${agentId}: Insufficient assigned leads, will trigger modal`
-          );
-          return {
-            leads: agentAssignedLeads,
-            agentLeadsInsufficient: true,
-            agentAssignedCount: agentAssignedLeads.length,
-          };
-        }
+        // Combine: UNASSIGNED first (priority 1), then agent-assigned (priority 2)
+        availableLeads = [...unassignedLeads, ...agentAssignedLeads];
 
-        // If allowed to fallback or retrying with gender, include unassigned leads
-        if (allowUnassignedFallback && agentAssignedLeads.length < count) {
-          const unassignedLeads = availableLeads.filter(
-            (lead) => !lead.assignedAgent
-          );
-          availableLeads = [...agentAssignedLeads, ...unassignedLeads];
-          console.log(
-            `[${leadType.toUpperCase()}] Agent ${agentId}: Using ${
-              agentAssignedLeads.length
-            } assigned + ${unassignedLeads.length} unassigned leads`
-          );
-        } else {
-          availableLeads = agentAssignedLeads;
-        }
+        console.log(
+          `[${leadType.toUpperCase()}] Agent ${agentId}: Using ${
+            unassignedLeads.length
+          } unassigned + ${agentAssignedLeads.length} assigned leads`
+        );
       } else {
-        // No agent specified, only use unassigned leads
-        availableLeads = availableLeads.filter((lead) => !lead.assignedAgent);
+        // No agent specified - Priority: UNASSIGNED first, then ANY assigned leads
+        const unassignedLeads = availableLeads.filter((lead) => !lead.assignedAgent);
+        const assignedLeads = availableLeads.filter((lead) => lead.assignedAgent);
+
+        // Combine: UNASSIGNED first (priority 1), then assigned (priority 2)
+        availableLeads = [...unassignedLeads, ...assignedLeads];
+
+        console.log(
+          `[${leadType.toUpperCase()}] No agent filter: ${
+            unassignedLeads.length
+          } unassigned (priority 1) + ${assignedLeads.length} assigned (priority 2) leads`
+        );
       }
 
       return {
@@ -1609,6 +1620,7 @@ exports.createOrder = async (req, res, next) => {
     ) => {
       let query = {
         leadType,
+        isArchived: { $ne: true }, // Never return archived leads
         ...countryFilter,
         ...genderFilter,
       };
@@ -1640,7 +1652,8 @@ exports.createOrder = async (req, res, next) => {
 
       let availableLeads;
 
-      // If agentFilter is specified, prioritize fetching agent-assigned leads
+      // If agentFilter is specified, fetch both unassigned and agent-assigned leads
+      // Priority: UNASSIGNED first, then agent-assigned
       if (agentFilter && (leadType === "ftd" || leadType === "filler")) {
         const agentQuery = { ...query, assignedAgent: agentFilter };
         const unassignedQuery = { ...query, assignedAgent: null };
@@ -1650,12 +1663,13 @@ exports.createOrder = async (req, res, next) => {
           fetchLimit
         );
 
-        availableLeads = [...agentLeads, ...unassignedLeads];
+        // UNASSIGNED first (priority 1), then agent-assigned (priority 2)
+        availableLeads = [...unassignedLeads, ...agentLeads];
 
         console.log(
           `[${leadType.toUpperCase()}-DEBUG] Fetched ${
-            agentLeads.length
-          } agent-assigned + ${unassignedLeads.length} unassigned (total: ${
+            unassignedLeads.length
+          } unassigned (priority 1) + ${agentLeads.length} agent-assigned (priority 2) (total: ${
             availableLeads.length
           })`
         );
@@ -1735,19 +1749,30 @@ exports.createOrder = async (req, res, next) => {
           agentLeadsInsufficient[leadType] = true;
         }
 
-        // Prioritize agent-assigned leads, then fill with unassigned
-        availableLeads = [...agentAssignedLeads, ...unassignedLeads];
+        // Priority: UNASSIGNED first (priority 1), then agent-assigned (priority 2)
+        availableLeads = [...unassignedLeads, ...agentAssignedLeads];
+
+        console.log(
+          `[${leadType.toUpperCase()}-DEBUG] Agent filter - combined ${
+            unassignedLeads.length
+          } unassigned (priority 1) + ${
+            agentAssignedLeads.length
+          } assigned (priority 2)`
+        );
       } else if (
         (leadType === "ftd" || leadType === "filler") &&
         !agentFilter
       ) {
-        // If no agent filter, only use unassigned leads for FTD/Filler
-        const beforeCount = availableLeads.length;
-        availableLeads = availableLeads.filter((lead) => !lead.assignedAgent);
+        // No agent filter - Priority: UNASSIGNED first, then ANY assigned leads
+        const unassignedLeads = availableLeads.filter((lead) => !lead.assignedAgent);
+        const assignedLeads = availableLeads.filter((lead) => lead.assignedAgent);
+        availableLeads = [...unassignedLeads, ...assignedLeads];
         console.log(
-          `[${leadType.toUpperCase()}-DEBUG] No agent filter - only unassigned leads: ${
-            availableLeads.length
-          } leads remain (${beforeCount - availableLeads.length} filtered out)`
+          `[${leadType.toUpperCase()}-DEBUG] No agent filter - ${
+            unassignedLeads.length
+          } unassigned (priority 1) + ${
+            assignedLeads.length
+          } assigned (priority 2)`
         );
       }
 
@@ -2002,6 +2027,7 @@ exports.createOrder = async (req, res, next) => {
       // Build base query for FTD leads
       let ftdQuery = {
         leadType: "ftd",
+        isArchived: { $ne: true }, // Never return archived leads
         ...countryFilter,
         ...genderFilter,
       };
@@ -2418,6 +2444,7 @@ exports.createOrder = async (req, res, next) => {
       // Build base query for FTD leads (fillers now come from FTDs)
       let fillerQuery = {
         leadType: "ftd",
+        isArchived: { $ne: true }, // Never return archived leads
         ...countryFilter,
         ...genderFilter,
       };
@@ -2556,6 +2583,7 @@ exports.createOrder = async (req, res, next) => {
       // Build base query for cold leads
       let coldQuery = {
         leadType: "cold",
+        isArchived: { $ne: true }, // Never return archived leads
         ...countryFilter,
         ...genderFilter,
       };
@@ -4093,6 +4121,7 @@ exports.changeFTDInOrder = async (req, res, next) => {
     // Build base query for replacement leads (all FTD type)
     let ftdQuery = {
       leadType: "ftd",
+      isArchived: { $ne: true }, // Never return archived leads
       _id: { $nin: leadsToExclude }, // Exclude current lead and all previously used leads
       ...countryFilter,
     };
@@ -4864,6 +4893,7 @@ exports.checkOrderFulfillment = async (req, res, next) => {
 
       let baseQuery = {
         leadType,
+        isArchived: { $ne: true }, // Never return archived leads
         ...countryFilter,
         ...genderFilter,
       };
