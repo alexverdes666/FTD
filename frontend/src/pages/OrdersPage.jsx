@@ -28,6 +28,8 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  Menu,
+  ListItemIcon,
   Alert,
   CircularProgress,
   useMediaQuery,
@@ -72,6 +74,9 @@ import {
   Search as SearchIcon,
   Image as ImageIcon,
   Settings as SettingsIcon,
+  MoreVert as MoreVertIcon,
+  Cached as ChangeIcon,
+  Call as CallIcon,
 } from "@mui/icons-material";
 import { useForm, Controller } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
@@ -362,6 +367,13 @@ const OrdersPage = () => {
     open: false,
     leads: [],
     orderId: null,
+    order: null,
+  });
+
+  // Actions menu state for leads preview modal
+  const [previewActionsMenu, setPreviewActionsMenu] = useState({
+    anchorEl: null,
+    lead: null,
   });
 
   const {
@@ -1346,16 +1358,26 @@ const OrdersPage = () => {
     setShowLeadsSearch(false);
   }, []);
 
-  const handleOpenLeadsPreviewModal = useCallback((leads, orderId) => {
+  const handleOpenLeadsPreviewModal = useCallback((leads, orderId, order) => {
     setLeadsPreviewModal({
       open: true,
       leads: leads || [],
       orderId: orderId,
+      order: order || null,
     });
   }, []);
 
   const handleCloseLeadsPreviewModal = useCallback(() => {
-    setLeadsPreviewModal({ open: false, leads: [], orderId: null });
+    setLeadsPreviewModal({ open: false, leads: [], orderId: null, order: null });
+    setPreviewActionsMenu({ anchorEl: null, lead: null });
+  }, []);
+
+  const handleOpenPreviewActionsMenu = useCallback((event, lead) => {
+    setPreviewActionsMenu({ anchorEl: event.currentTarget, lead });
+  }, []);
+
+  const handleClosePreviewActionsMenu = useCallback(() => {
+    setPreviewActionsMenu({ anchorEl: null, lead: null });
   }, []);
 
   const handlePreviewOrderLeads = useCallback(
@@ -1363,7 +1385,7 @@ const OrdersPage = () => {
       try {
         const response = await api.get(`/orders/${orderId}`);
         const orderData = response.data.data;
-        handleOpenLeadsPreviewModal(orderData.leads || [], orderId);
+        handleOpenLeadsPreviewModal(orderData.leads || [], orderId, orderData);
       } catch (err) {
         setNotification({
           message: "Could not load order leads for preview.",
@@ -2035,20 +2057,27 @@ const OrdersPage = () => {
   const handleAssignLeadSuccess = useCallback(
     async (assignmentData) => {
       // Update local state instantly
+      const updatedLeadData = {
+        assignedAgent: {
+          _id: assignmentData.agentId,
+          fullName: assignmentData.agentName,
+          email: assignmentData.agentEmail,
+        },
+        assignedAgentAt: new Date().toISOString(),
+      };
+
       setAssignedLeadsModal((prev) => ({
         ...prev,
         leads: prev.leads.map((l) =>
-          l._id === assignmentData.leadId
-            ? {
-                ...l,
-                assignedAgent: {
-                  _id: assignmentData.agentId,
-                  fullName: assignmentData.agentName,
-                  email: assignmentData.agentEmail,
-                },
-                assignedAgentAt: new Date().toISOString(),
-              }
-            : l
+          l._id === assignmentData.leadId ? { ...l, ...updatedLeadData } : l
+        ),
+      }));
+
+      // Also update preview modal if open
+      setLeadsPreviewModal((prev) => ({
+        ...prev,
+        leads: prev.leads.map((l) =>
+          l._id === assignmentData.leadId ? { ...l, ...updatedLeadData } : l
         ),
       }));
 
@@ -2093,17 +2122,24 @@ const OrdersPage = () => {
         const response = await api.put(`/leads/${lead._id}/confirm-deposit`);
 
         // Update local state instantly
+        const updatedLeadData = {
+          depositConfirmed: true,
+          depositConfirmedBy: response.data.data?.depositConfirmedBy || user,
+          depositConfirmedAt: new Date().toISOString(),
+        };
+
         setAssignedLeadsModal((prev) => ({
           ...prev,
           leads: prev.leads.map((l) =>
-            l._id === lead._id
-              ? {
-                  ...l,
-                  depositConfirmed: true,
-                  depositConfirmedBy: response.data.data?.depositConfirmedBy || user,
-                  depositConfirmedAt: new Date().toISOString(),
-                }
-              : l
+            l._id === lead._id ? { ...l, ...updatedLeadData } : l
+          ),
+        }));
+
+        // Also update preview modal if open
+        setLeadsPreviewModal((prev) => ({
+          ...prev,
+          leads: prev.leads.map((l) =>
+            l._id === lead._id ? { ...l, ...updatedLeadData } : l
           ),
         }));
 
@@ -2137,17 +2173,24 @@ const OrdersPage = () => {
         await api.put(`/leads/${lead._id}/unconfirm-deposit`);
 
         // Update local state instantly
+        const updatedLeadData = {
+          depositConfirmed: false,
+          depositConfirmedBy: null,
+          depositConfirmedAt: null,
+        };
+
         setAssignedLeadsModal((prev) => ({
           ...prev,
           leads: prev.leads.map((l) =>
-            l._id === lead._id
-              ? {
-                  ...l,
-                  depositConfirmed: false,
-                  depositConfirmedBy: null,
-                  depositConfirmedAt: null,
-                }
-              : l
+            l._id === lead._id ? { ...l, ...updatedLeadData } : l
+          ),
+        }));
+
+        // Also update preview modal if open
+        setLeadsPreviewModal((prev) => ({
+          ...prev,
+          leads: prev.leads.map((l) =>
+            l._id === lead._id ? { ...l, ...updatedLeadData } : l
           ),
         }));
 
@@ -3306,7 +3349,8 @@ const OrdersPage = () => {
                                                   onClick={() =>
                                                     handleOpenLeadsPreviewModal(
                                                       expandedDetails.leads,
-                                                      order._id
+                                                      order._id,
+                                                      order
                                                     )
                                                   }
                                                 >
@@ -5975,25 +6019,26 @@ const OrdersPage = () => {
                   >
                     Broker
                   </TableCell>
-                  {user.role === "admin" && (
-                    <TableCell
-                      sx={{
-                        fontWeight: "bold",
-                        backgroundColor: "grey.100",
-                        whiteSpace: "nowrap",
-                        py: 0.5,
-                        px: 0.5,
-                        fontSize: "0.75rem",
-                      }}
-                    ></TableCell>
-                  )}
+                  <TableCell
+                    sx={{
+                      fontWeight: "bold",
+                      backgroundColor: "grey.100",
+                      whiteSpace: "nowrap",
+                      py: 0.5,
+                      px: 0.5,
+                      fontSize: "0.75rem",
+                      textAlign: "center",
+                    }}
+                  >
+                    Actions
+                  </TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {leadsPreviewModal.leads.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={user.role === "admin" ? 9 : 8}
+                      colSpan={9}
                       align="center"
                     >
                       <Typography color="text.secondary" variant="body2">
@@ -6185,19 +6230,15 @@ const OrdersPage = () => {
                           </Typography>
                         </TableCell>
                         {/* Actions */}
-                        {user.role === "admin" && (
-                          <TableCell sx={{ py: 0.5, px: 0.5 }}>
-                            <IconButton
-                              size="small"
-                              color="error"
-                              onClick={() => handleCancelLead(lead._id)}
-                              title="Remove from order"
-                              sx={{ p: 0.25 }}
-                            >
-                              <DeleteIcon sx={{ fontSize: 18 }} />
-                            </IconButton>
-                          </TableCell>
-                        )}
+                        <TableCell sx={{ py: 0.5, px: 0.5, textAlign: "center" }}>
+                          <IconButton
+                            size="small"
+                            onClick={(e) => handleOpenPreviewActionsMenu(e, lead)}
+                            sx={{ p: 0.25 }}
+                          >
+                            <MoreVertIcon sx={{ fontSize: 18 }} />
+                          </IconButton>
+                        </TableCell>
                       </TableRow>
                     );
                   })
@@ -6211,6 +6252,133 @@ const OrdersPage = () => {
             Close
           </Button>
         </DialogActions>
+
+        {/* Actions Menu for Preview Modal */}
+        <Menu
+          anchorEl={previewActionsMenu.anchorEl}
+          open={Boolean(previewActionsMenu.anchorEl)}
+          onClose={handleClosePreviewActionsMenu}
+          anchorOrigin={{
+            vertical: "bottom",
+            horizontal: "right",
+          }}
+          transformOrigin={{
+            vertical: "top",
+            horizontal: "right",
+          }}
+        >
+          {previewActionsMenu.lead && (() => {
+            const lead = previewActionsMenu.lead;
+            const leadType = getDisplayLeadType(lead);
+            const isFtdOrFiller = leadType === "ftd" || leadType === "filler";
+            const order = leadsPreviewModal.order;
+
+            return (
+              <>
+                {/* Convert to Filler/FTD */}
+                {isFtdOrFiller && order && (
+                  <MenuItem
+                    onClick={() => {
+                      handleConvertLeadType(order, lead);
+                      handleClosePreviewActionsMenu();
+                    }}
+                  >
+                    <ListItemIcon>
+                      <ConvertIcon fontSize="small" color="primary" />
+                    </ListItemIcon>
+                    Convert to {leadType === "ftd" ? "Filler" : "FTD"}
+                  </MenuItem>
+                )}
+
+                {/* Change FTD/Filler Lead */}
+                {isFtdOrFiller && order && (
+                  <MenuItem
+                    onClick={() => {
+                      handleOpenChangeFTDDialog(order, lead);
+                      handleClosePreviewActionsMenu();
+                    }}
+                  >
+                    <ListItemIcon>
+                      <ChangeIcon fontSize="small" color="warning" />
+                    </ListItemIcon>
+                    Change {leadType === "filler" ? "Filler" : "FTD"} Lead
+                  </MenuItem>
+                )}
+
+                {/* Assign to Agent */}
+                <MenuItem
+                  onClick={() => {
+                    handleOpenAssignLeadDialog(lead);
+                    handleClosePreviewActionsMenu();
+                  }}
+                >
+                  <ListItemIcon>
+                    <AssignIcon fontSize="small" color="info" />
+                  </ListItemIcon>
+                  Assign to Agent
+                </MenuItem>
+
+                {/* Confirm/Unconfirm Deposit */}
+                {isFtdOrFiller && (
+                  lead.depositConfirmed ? (
+                    user.role === "admin" ? (
+                      <MenuItem
+                        onClick={() => {
+                          handleUnconfirmDeposit(lead);
+                          handleClosePreviewActionsMenu();
+                        }}
+                      >
+                        <ListItemIcon>
+                          <CallIcon fontSize="small" color="warning" />
+                        </ListItemIcon>
+                        Unconfirm Deposit
+                      </MenuItem>
+                    ) : (
+                      <MenuItem disabled>
+                        <ListItemIcon>
+                          <CallIcon fontSize="small" color="success" />
+                        </ListItemIcon>
+                        Deposit Confirmed
+                      </MenuItem>
+                    )
+                  ) : (
+                    <MenuItem
+                      onClick={() => {
+                        handleConfirmDeposit(lead);
+                        handleClosePreviewActionsMenu();
+                      }}
+                      disabled={!lead.assignedAgent}
+                    >
+                      <ListItemIcon>
+                        <CallIcon fontSize="small" color="success" />
+                      </ListItemIcon>
+                      Confirm Deposit
+                    </MenuItem>
+                  )
+                )}
+
+                {/* Delete - Admin only */}
+                {user.role === "admin" && (
+                  <>
+                    <Divider />
+                    <MenuItem
+                      onClick={() => {
+                        handleCancelLead(lead._id);
+                        handleClosePreviewActionsMenu();
+                      }}
+                      sx={{ color: "error.main" }}
+                    >
+                      <ListItemIcon>
+                        <DeleteIcon fontSize="small" color="error" />
+                      </ListItemIcon>
+                      Remove from Order
+                    </MenuItem>
+                  </>
+                )}
+              </>
+            );
+          })()}
+        </Menu>
       </Dialog>
 
       {/* Copy Preferences Dialog */}
