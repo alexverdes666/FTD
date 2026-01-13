@@ -53,6 +53,7 @@ import {
   Note as NoteIcon,
   Speed as PerformanceIcon,
   GridOn as SheetsIcon,
+  Sms as SmsIcon,
 } from "@mui/icons-material";
 import {
   logout,
@@ -301,6 +302,11 @@ const MainLayout = () => {
               text: "SIM Cards",
               icon: <SimCardIcon />,
               path: "/simcards",
+            },
+            {
+              text: "SMS",
+              icon: <SmsIcon />,
+              path: "/sms",
             },
             {
               text: "AMs Targets",

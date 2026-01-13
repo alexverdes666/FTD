@@ -62,6 +62,7 @@ import VerificationsPage from "./pages/VerificationsPage.jsx";
 import TicketsPage from "./pages/TicketsPage.jsx";
 import NotificationsPage from "./pages/NotificationsPage.jsx";
 import SimCardsPage from "./pages/SimCardsPage.jsx";
+import SMSPage from "./pages/SMSPage.jsx";
 import AccountManagementPage from "./pages/AccountManagementPage.jsx";
 import GatewayManagementPage from "./pages/GatewayManagementPage.jsx";
 import AgentSchedulePage from "./pages/AgentSchedulePage.jsx";
@@ -432,6 +433,14 @@ function AppContent() {
               element={
                 <ProtectedRoute allowedRoles={["inventory_manager", "admin"]}>
                   <SimCardsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="sms"
+              element={
+                <ProtectedRoute allowedRoles={["admin"]}>
+                  <SMSPage />
                 </ProtectedRoute>
               }
             />

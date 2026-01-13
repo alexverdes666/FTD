@@ -1,5 +1,6 @@
 const SimCard = require("../models/SimCard");
 const GatewayDevice = require("../models/GatewayDevice");
+const IncomingSMS = require("../models/IncomingSMS");
 const { validationResult } = require("express-validator");
 const GoIPGatewayService = require("../services/goipGatewayService");
 
@@ -527,8 +528,17 @@ exports.receiveSMS = async (req, res, next) => {
           await simCard.save();
         }
 
-        // You can store SMS in a separate collection if needed
-        // For now, we're just updating the counter
+        // Store SMS in IncomingSMS collection
+        await IncomingSMS.create({
+          timestamp: new Date(timestamp * 1000), // Convert Unix timestamp to Date
+          sender,
+          recipient,
+          content,
+          port,
+          deliveryReport,
+          simCard: simCard?._id || null,
+          gatewayDevice: simCard?.gateway?.gatewayId || null,
+        });
       });
 
       await Promise.all(updatePromises);
