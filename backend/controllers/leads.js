@@ -2249,23 +2249,57 @@ exports.importLeads = async (req, res, next) => {
 };
 exports.deleteLead = async (req, res, next) => {
   try {
-    const lead = await Lead.findById(req.params.id);
-    if (!lead) {
-      return res.status(404).json({
-        success: false,
-        message: "Lead not found",
-      });
-    }
+    // Check admin authorization
     if (req.user.role !== "admin") {
       return res.status(403).json({
         success: false,
         message: "Not authorized to delete leads",
       });
     }
+
+    // Validate deletion reason
+    const { reason } = req.body;
+    if (!reason || reason.trim().length < 10) {
+      return res.status(400).json({
+        success: false,
+        message: "Deletion reason is required (minimum 10 characters)",
+      });
+    }
+
+    // Find and populate the lead
+    const lead = await Lead.findById(req.params.id)
+      .populate("clientBrokerHistory.clientBroker")
+      .populate("assignedAgent");
+
+    if (!lead) {
+      return res.status(404).json({
+        success: false,
+        message: "Lead not found",
+      });
+    }
+
+    // Import the backup utility
+    const createDeletedLeadBackup = require("../utils/deletedLeadBackup");
+
+    // Create backup before deletion
+    const deletedLead = await createDeletedLeadBackup(
+      lead,
+      req.user.id,
+      "single",
+      reason.trim()
+    );
+
+    // Delete the lead
     await lead.deleteOne();
+
     res.status(200).json({
       success: true,
-      message: "Lead deleted successfully",
+      message: "Lead deleted and backed up successfully",
+      data: {
+        deletedLeadId: deletedLead._id,
+        deletedAt: deletedLead.deletedAt,
+        orderReferencesCount: deletedLead.orderReferences.length,
+      },
     });
   } catch (error) {
     next(error);
@@ -2274,12 +2308,23 @@ exports.deleteLead = async (req, res, next) => {
 
 exports.bulkDeleteLeads = async (req, res, next) => {
   try {
+    // Check admin authorization
     if (req.user.role !== "admin") {
       return res.status(403).json({
         success: false,
         message: "Not authorized to delete leads",
       });
     }
+
+    // Validate deletion reason
+    const { reason } = req.body;
+    if (!reason || reason.trim().length < 10) {
+      return res.status(400).json({
+        success: false,
+        message: "Deletion reason is required (minimum 10 characters)",
+      });
+    }
+
     const {
       leadType,
       country,
@@ -2309,12 +2354,38 @@ exports.bulkDeleteLeads = async (req, res, next) => {
         { oldPhone: new RegExp(search, "i") },
       ];
     }
+
+    // BEFORE deletion, fetch all leads that will be deleted
+    const leadsToDelete = await Lead.find(filter)
+      .populate("clientBrokerHistory.clientBroker")
+      .populate("assignedAgent");
+
+    if (leadsToDelete.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "No leads found matching the criteria",
+      });
+    }
+
+    // Import the backup utility
+    const createDeletedLeadBackup = require("../utils/deletedLeadBackup");
+
+    // Create backups for each lead
+    const backupPromises = leadsToDelete.map((lead) =>
+      createDeletedLeadBackup(lead, req.user.id, "bulk", reason.trim())
+    );
+    const deletedLeads = await Promise.all(backupPromises);
+
+    // NOW perform the deletion
     const result = await Lead.deleteMany(filter);
+
     res.status(200).json({
       success: true,
-      message: `${result.deletedCount} leads deleted successfully`,
+      message: `${result.deletedCount} leads deleted and backed up successfully`,
       data: {
         deletedCount: result.deletedCount,
+        backedUpCount: deletedLeads.length,
+        deletedLeadIds: deletedLeads.map((dl) => dl._id),
       },
     });
   } catch (error) {
@@ -3976,6 +4047,123 @@ exports.getArchivedLeads = async (req, res, next) => {
     });
   } catch (error) {
     console.error("Error fetching archived leads:", error);
+    next(error);
+  }
+};
+
+/**
+ * @desc    Get audit history for a lead from ActivityLog
+ * @route   GET /api/leads/:id/audit-history
+ * @access  Admin, Lead Manager, Affiliate Manager
+ */
+exports.getLeadAuditHistory = async (req, res, next) => {
+  try {
+    const leadId = req.params.id;
+    const ActivityLog = require("../models/ActivityLog");
+
+    // Get activity logs for this lead
+    const activityLogs = await ActivityLog.find({
+      $or: [
+        { "requestBody.id": leadId },
+        { "requestBody.leadId": leadId },
+        { path: { $regex: `/leads/${leadId}` } },
+      ],
+    })
+      .populate("user", "fullName email role")
+      .sort({ timestamp: -1 })
+      .lean();
+
+    // Transform to show field-level changes
+    const history = activityLogs.map((log) => ({
+      _id: log._id,
+      timestamp: log.timestamp,
+      user: log.userSnapshot || log.user,
+      action: log.actionType,
+      method: log.method,
+      changes: log.changes, // Field-by-field diff
+      previousState: log.previousState,
+      ip: log.ip,
+      device: log.device,
+      browser: log.browser,
+      os: log.os,
+      geo: log.geo,
+    }));
+
+    res.status(200).json({
+      success: true,
+      count: history.length,
+      data: history,
+    });
+  } catch (error) {
+    console.error("Error fetching lead audit history:", error);
+    next(error);
+  }
+};
+
+/**
+ * @desc    Get full history for a lead including all assignments and orders
+ * @route   GET /api/leads/:id/full-history
+ * @access  Admin, Lead Manager, Affiliate Manager
+ */
+exports.getLeadFullHistory = async (req, res, next) => {
+  try {
+    const leadId = req.params.id;
+    const Order = require("../models/Order");
+
+    const lead = await Lead.findById(leadId)
+      .populate("clientBrokerHistory.clientBroker")
+      .populate("clientBrokerHistory.assignedBy", "fullName email")
+      .populate("clientNetworkHistory.clientNetwork")
+      .populate("clientNetworkHistory.assignedBy", "fullName email")
+      .populate("campaignHistory.campaign")
+      .populate("campaignHistory.assignedBy", "fullName email")
+      .populate("ourNetworkHistory.ourNetwork")
+      .populate("ourNetworkHistory.assignedBy", "fullName email")
+      .populate("createdBy", "fullName email")
+      .populate("assignedAgent", "fullName email")
+      .populate("archivedBy", "fullName email");
+
+    if (!lead) {
+      return res.status(404).json({
+        success: false,
+        message: "Lead not found",
+      });
+    }
+
+    // Get orders this lead was used in
+    const orders = await Order.find({ leads: leadId })
+      .populate("requester", "fullName email")
+      .select("_id createdAt status requests fulfilled leadsMetadata")
+      .lean();
+
+    // Combine all history
+    const fullHistory = {
+      lead: lead,
+      orders: orders.map((order) => {
+        const metadata = order.leadsMetadata.find(
+          (m) => m.leadId && m.leadId.toString() === leadId
+        );
+        return {
+          ...order,
+          orderedAs: metadata?.orderedAs || null,
+          replacementHistory: metadata?.replacementHistory || [],
+        };
+      }),
+      clientBrokerHistory: lead.clientBrokerHistory || [],
+      clientNetworkHistory: lead.clientNetworkHistory || [],
+      campaignHistory: lead.campaignHistory || [],
+      ourNetworkHistory: lead.ourNetworkHistory || [],
+      callTracking: lead.orderCallTracking || [],
+      comments: lead.orderComments || [],
+      sessionHistory: lead.sessionHistory || [],
+    };
+
+    res.status(200).json({
+      success: true,
+      data: fullHistory,
+    });
+  } catch (error) {
+    console.error("Error fetching lead full history:", error);
     next(error);
   }
 };

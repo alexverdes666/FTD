@@ -42,6 +42,7 @@ import LandingPage from "./pages/LandingPage.jsx";
 import DashboardPage from "./pages/DashboardPage.jsx";
 import OrdersPage from "./pages/OrdersPage.jsx";
 import LeadsPage from "./pages/LeadsPage.jsx";
+import DeletedLeadsPage from "./pages/DeletedLeadsPage.jsx";
 import UsersPage from "./pages/UsersPage.jsx";
 import ClientNetworksPage from "./pages/ClientNetworksPage.jsx";
 import OurNetworksPage from "./pages/OurNetworksPage.jsx";
@@ -385,6 +386,7 @@ function AppContent() {
             <Route path="dashboard" element={<DashboardPage />} />
             <Route path="orders" element={<OrdersPage />} />
             <Route path="leads" element={<LeadsPage />} />
+            <Route path="deleted-leads" element={<DeletedLeadsPage />} />
             <Route path="users" element={<UsersPage />} />
             <Route path="client-networks" element={<ClientNetworksPage />} />
             <Route path="our-networks" element={<OurNetworksPage />} />

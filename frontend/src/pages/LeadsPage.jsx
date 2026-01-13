@@ -88,10 +88,12 @@ import {
   Female as FemaleIcon,
   ContentCopy as CopyIcon,
   PersonRemove as PersonRemoveIcon,
+  History as HistoryIcon,
 } from "@mui/icons-material";
 import AddLeadForm from "../components/AddLeadForm";
 import DocumentPreview from "../components/DocumentPreview";
 import AssignLeadToAgentDialog from "../components/AssignLeadToAgentDialog";
+import LeadAuditHistoryModal from "../components/LeadAuditHistoryModal";
 
 import api from "../services/api";
 import { selectUser } from "../store/slices/authSlice";
@@ -1184,6 +1186,11 @@ const LeadsPage = () => {
   const [archivedLeadsDialogOpen, setArchivedLeadsDialogOpen] = useState(false);
   const [archivedLeads, setArchivedLeads] = useState([]);
   const [archivedLeadsLoading, setArchivedLeadsLoading] = useState(false);
+  const [auditHistoryDialog, setAuditHistoryDialog] = useState({
+    open: false,
+    leadId: null,
+    leadName: null,
+  });
   const [archivedLeadsPagination, setArchivedLeadsPagination] = useState({
     page: 1,
     limit: 10,
@@ -1807,6 +1814,24 @@ const LeadsPage = () => {
     setArchivedLeadsDialogOpen(true);
     fetchArchivedLeads(1, "");
   }, [fetchArchivedLeads]);
+
+  // Open audit history dialog
+  const handleOpenAuditHistory = useCallback((leadId, leadName) => {
+    setAuditHistoryDialog({
+      open: true,
+      leadId: leadId,
+      leadName: leadName,
+    });
+  }, []);
+
+  // Close audit history dialog
+  const handleCloseAuditHistory = useCallback(() => {
+    setAuditHistoryDialog({
+      open: false,
+      leadId: null,
+      leadName: null,
+    });
+  }, []);
 
   // Handle archived leads pagination
   const handleArchivedLeadsPageChange = useCallback(
@@ -2532,6 +2557,7 @@ const LeadsPage = () => {
                         onUnarchiveLead={handleUnarchiveLeadFromTable}
                         handleEditLead={handleEditLead}
                         updateCallNumber={updateCallNumber}
+                        onViewHistory={handleOpenAuditHistory}
                       />
                       {expandedRows.has(lead._id) && (
                         <TableRow
@@ -3274,6 +3300,14 @@ const LeadsPage = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Audit History Modal */}
+      <LeadAuditHistoryModal
+        open={auditHistoryDialog.open}
+        onClose={handleCloseAuditHistory}
+        leadId={auditHistoryDialog.leadId}
+        leadName={auditHistoryDialog.leadName}
+      />
     </Box>
   );
 };
@@ -3809,6 +3843,7 @@ const LeadRow = React.memo(
     user,
     handleEditLead,
     updateCallNumber,
+    onViewHistory,
   }) => {
     const [anchorEl, setAnchorEl] = useState(null);
     const menuOpen = Boolean(anchorEl);
@@ -4157,7 +4192,6 @@ const LeadRow = React.memo(
                   const copyText = [fullName, email, phone, country].join("\t");
                   navigator.clipboard.writeText(copyText);
                 }}
-                title="Copy details"
                 sx={{ padding: "4px" }}
               >
                 <CopyIcon sx={{ fontSize: "1rem" }} />
@@ -4281,6 +4315,22 @@ const LeadRow = React.memo(
               {user?.role === ROLES.ADMIN && (
                 <Box>
                   {isOwner && <Divider />}
+                  <MenuItem
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleMenuClose();
+                      onViewHistory(
+                        lead._id,
+                        `${lead.firstName} ${lead.lastName}`
+                      );
+                    }}
+                    sx={{ fontSize: "0.75rem", py: 0.75 }}
+                  >
+                    <ListItemIcon>
+                      <HistoryIcon fontSize="small" sx={{ color: "info.main" }} />
+                    </ListItemIcon>
+                    <ListItemText primary="View History" />
+                  </MenuItem>
                   {isArchived ? (
                     <MenuItem
                       onClick={(e) => {

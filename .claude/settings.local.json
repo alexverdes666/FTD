@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep:*)",
+      "Bash(node check_order.js:*)",
+      "Bash(node search_order.js:*)",
+      "Bash(node find_matching_order.js:*)",
+      "Bash(node analyze_order_discrepancy.js:*)",
+      "Bash(node check_lead_existence.js:*)",
+      "Bash(ls:*)",
+      "Bash(npm install:*)"
+    ]
+  }
+}

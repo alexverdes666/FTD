@@ -43,6 +43,8 @@ const {
   archiveLead,
   unarchiveLead,
   getArchivedLeads,
+  getLeadAuditHistory,
+  getLeadFullHistory,
 } = require("../controllers/leads");
 const router = express.Router();
 router.get(
@@ -367,6 +369,19 @@ router.delete(
   ],
   bulkDeleteLeads
 );
+
+// Audit history routes (must come before /:id to avoid route conflicts)
+router.get(
+  "/:id/audit-history",
+  [protect, authorize("admin", "affiliate_manager", "lead_manager")],
+  getLeadAuditHistory
+);
+router.get(
+  "/:id/full-history",
+  [protect, authorize("admin", "affiliate_manager", "lead_manager")],
+  getLeadFullHistory
+);
+
 router.delete("/:id", [protect, isAdmin], deleteLead);
 router.post(
   "/import",
