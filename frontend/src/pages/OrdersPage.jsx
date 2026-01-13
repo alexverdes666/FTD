@@ -77,6 +77,7 @@ import {
   MoreVert as MoreVertIcon,
   Cached as ChangeIcon,
   Call as CallIcon,
+  ContentCut as ShavedIcon,
 } from "@mui/icons-material";
 import { useForm, Controller } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
@@ -5807,43 +5808,6 @@ const OrdersPage = () => {
                     user?.role !== "lead_manager" ? handleLeadUpdate : undefined
                   }
                   readOnly={user?.role === "lead_manager"}
-                  onConvertLeadType={
-                    user?.role !== "lead_manager"
-                      ? (lead) =>
-                          handleConvertLeadType(
-                            orders.find(
-                              (o) => o._id === assignedLeadsModal.orderId
-                            ),
-                            lead
-                          )
-                      : undefined
-                  }
-                  onChangeFTDLead={
-                    user?.role !== "lead_manager"
-                      ? (lead) =>
-                          handleOpenChangeFTDDialog(
-                            orders.find(
-                              (o) => o._id === assignedLeadsModal.orderId
-                            ),
-                            lead
-                          )
-                      : undefined
-                  }
-                  onAssignLeadToAgent={
-                    user?.role !== "lead_manager"
-                      ? handleOpenAssignLeadDialog
-                      : undefined
-                  }
-                  onConfirmDeposit={
-                    user?.role !== "lead_manager"
-                      ? handleConfirmDeposit
-                      : undefined
-                  }
-                  onUnconfirmDeposit={
-                    user?.role === "admin"
-                      ? handleUnconfirmDeposit
-                      : undefined
-                  }
                   onMarkAsShaved={
                     user?.role !== "lead_manager"
                       ? handleMarkAsShaved
@@ -6530,6 +6494,39 @@ const OrdersPage = () => {
                       </ListItemIcon>
                       Confirm Deposit
                     </MenuItem>
+                  )
+                )}
+
+                {/* Mark/Unmark as Shaved - for FTD/Filler with confirmed deposit */}
+                {isFtdOrFiller && lead.depositConfirmed && (
+                  lead.shaved ? (
+                    user.role === "admin" && (
+                      <MenuItem
+                        onClick={() => {
+                          handleUnmarkAsShaved(lead);
+                          handleClosePreviewActionsMenu();
+                        }}
+                      >
+                        <ListItemIcon>
+                          <ShavedIcon fontSize="small" color="warning" />
+                        </ListItemIcon>
+                        Unmark as Shaved
+                      </MenuItem>
+                    )
+                  ) : (
+                    user.role !== "lead_manager" && (
+                      <MenuItem
+                        onClick={() => {
+                          handleMarkAsShaved(lead);
+                          handleClosePreviewActionsMenu();
+                        }}
+                      >
+                        <ListItemIcon>
+                          <ShavedIcon fontSize="small" color="error" />
+                        </ListItemIcon>
+                        Mark as Shaved
+                      </MenuItem>
+                    )
                   )
                 )}
 
