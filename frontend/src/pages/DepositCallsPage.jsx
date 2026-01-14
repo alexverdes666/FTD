@@ -63,8 +63,10 @@ import toast from 'react-hot-toast';
 const getStatusColor = (status) => {
   switch (status) {
     case 'completed': return 'success';
+    case 'answered': return 'success';
     case 'pending_approval': return 'warning';
     case 'scheduled': return 'info';
+    case 'rejected': return 'error';
     case 'skipped': return 'default';
     default: return 'default';
   }
@@ -82,7 +84,7 @@ const formatDateTime = (date) => {
 };
 
 // Call Cell Component
-const CallCell = ({ call, callNumber, depositCall, onSchedule, onMarkDone, onApprove, onReject, isAdmin, isAM, isAgent }) => {
+const CallCell = ({ call, callNumber, depositCall, onSchedule, onMarkDone, onApprove, onReject, onMarkAnswered, onMarkRejected, isAdmin, isAM, isAgent }) => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [expectedDate, setExpectedDate] = useState(call?.expectedDate ? new Date(call.expectedDate) : null);
   const [notes, setNotes] = useState('');
@@ -146,23 +148,56 @@ const CallCell = ({ call, callNumber, depositCall, onSchedule, onMarkDone, onApp
             </Typography>
             <Chip label="Pending Approval" size="small" color="warning" sx={{ fontSize: '0.65rem' }} />
             {canApprove && (
-              <Box sx={{ display: 'flex', gap: 0.5, mt: 0.5 }}>
-                <IconButton
-                  size="small"
-                  color="success"
-                  onClick={() => onApprove(depositCall._id, callNumber)}
-                >
-                  <ApproveIcon fontSize="small" />
-                </IconButton>
-                <IconButton
-                  size="small"
-                  color="error"
-                  onClick={() => onReject(depositCall._id, callNumber)}
-                >
-                  <RejectIcon fontSize="small" />
-                </IconButton>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, mt: 0.5 }}>
+                <Tooltip title="Mark as Answered">
+                  <Button
+                    size="small"
+                    variant="contained"
+                    color="success"
+                    onClick={() => onMarkAnswered(depositCall._id, callNumber)}
+                    sx={{ fontSize: '0.6rem', py: 0.25, minWidth: 'auto' }}
+                  >
+                    Answered
+                  </Button>
+                </Tooltip>
+                <Tooltip title="Mark as Rejected (FTD declined)">
+                  <Button
+                    size="small"
+                    variant="contained"
+                    color="error"
+                    onClick={() => onMarkRejected(depositCall._id, callNumber)}
+                    sx={{ fontSize: '0.6rem', py: 0.25, minWidth: 'auto' }}
+                  >
+                    Rejected
+                  </Button>
+                </Tooltip>
+                <Tooltip title="Return to scheduled (retry)">
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    color="warning"
+                    onClick={() => onReject(depositCall._id, callNumber)}
+                    sx={{ fontSize: '0.6rem', py: 0.25, minWidth: 'auto' }}
+                  >
+                    Retry
+                  </Button>
+                </Tooltip>
               </Box>
             )}
+          </>
+        ) : call?.status === 'answered' ? (
+          <>
+            <Typography variant="caption" color="success.main" fontWeight="bold">
+              ✓ {formatDateTime(call.doneDate)}
+            </Typography>
+            <Chip label="Answered" size="small" color="success" sx={{ fontSize: '0.65rem' }} />
+          </>
+        ) : call?.status === 'rejected' ? (
+          <>
+            <Typography variant="caption" color="error.main" fontWeight="bold">
+              ✗ {formatDateTime(call.doneDate)}
+            </Typography>
+            <Chip label="Rejected" size="small" color="error" sx={{ fontSize: '0.65rem' }} />
           </>
         ) : call?.status === 'completed' ? (
           <>
@@ -414,6 +449,28 @@ const DepositCallsPage = () => {
       fetchPendingCount();
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to reject call');
+    }
+  };
+
+  const handleMarkAnswered = async (depositCallId, callNumber) => {
+    try {
+      await depositCallsService.markCallAnswered(depositCallId, callNumber);
+      toast.success(`Call ${callNumber} marked as answered`);
+      fetchDepositCalls();
+      fetchPendingCount();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to mark call as answered');
+    }
+  };
+
+  const handleMarkRejected = async (depositCallId, callNumber) => {
+    try {
+      await depositCallsService.markCallRejected(depositCallId, callNumber);
+      toast.success(`Call ${callNumber} marked as rejected`);
+      fetchDepositCalls();
+      fetchPendingCount();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to mark call as rejected');
     }
   };
 
@@ -733,6 +790,8 @@ const DepositCallsPage = () => {
                             onMarkDone={handleMarkDone}
                             onApprove={handleApproveCall}
                             onReject={handleRejectCall}
+                            onMarkAnswered={handleMarkAnswered}
+                            onMarkRejected={handleMarkRejected}
                             isAdmin={isAdmin}
                             isAM={isAM}
                             isAgent={isAgent}
@@ -796,7 +855,8 @@ const DepositCallsPage = () => {
           <Box sx={{ mt: 3, display: 'flex', gap: 2, flexWrap: 'wrap', justifyContent: 'center' }}>
             <Chip label="Scheduled" size="small" color="info" />
             <Chip label="Pending Approval" size="small" color="warning" />
-            <Chip label="Completed" size="small" color="success" />
+            <Chip label="Answered" size="small" color="success" />
+            <Chip label="Rejected" size="small" color="error" />
           </Box>
 
           {/* Day Detail Dialog */}
@@ -913,11 +973,13 @@ const DepositCallsPage = () => {
                         {/* Status & Actions */}
                         <Grid item xs={12} sm={3}>
                           <Box sx={{ textAlign: { xs: 'left', sm: 'right' } }}>
-                            <Chip 
+                            <Chip
                               label={
                                 event.status === 'scheduled' ? 'Scheduled' :
                                 event.status === 'pending_approval' ? 'Pending Approval' :
-                                event.status === 'completed' ? 'Completed' : 
+                                event.status === 'completed' ? 'Completed' :
+                                event.status === 'answered' ? 'Answered' :
+                                event.status === 'rejected' ? 'Rejected' :
                                 event.status
                               }
                               color={getStatusColor(event.status)}

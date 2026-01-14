@@ -45,4 +45,10 @@ router.post("/:id/approve", depositCallsController.approveCall);
 // Reject a call
 router.post("/:id/reject", depositCallsController.rejectCall);
 
+// Mark call as answered (final status)
+router.post("/:id/mark-answered", depositCallsController.markCallAnswered);
+
+// Mark call as rejected (final status - FTD rejected)
+router.post("/:id/mark-rejected", depositCallsController.markCallRejected);
+
 module.exports = router;

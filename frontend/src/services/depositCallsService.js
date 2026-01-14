@@ -166,6 +166,34 @@ const depositCallsService = {
       throw error;
     }
   },
+
+  // Mark call as answered (final status)
+  markCallAnswered: async (id, callNumber, notes = "") => {
+    try {
+      const response = await api.post(`/deposit-calls/${id}/mark-answered`, {
+        callNumber,
+        notes,
+      });
+      return response.data;
+    } catch (error) {
+      console.error("Error marking call as answered:", error);
+      throw error;
+    }
+  },
+
+  // Mark call as rejected (final status - FTD rejected)
+  markCallRejected: async (id, callNumber, notes = "") => {
+    try {
+      const response = await api.post(`/deposit-calls/${id}/mark-rejected`, {
+        callNumber,
+        notes,
+      });
+      return response.data;
+    } catch (error) {
+      console.error("Error marking call as rejected:", error);
+      throw error;
+    }
+  },
 };
 
 export default depositCallsService;

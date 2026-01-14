@@ -13,7 +13,7 @@ const callSlotSchema = new Schema({
   },
   status: {
     type: String,
-    enum: ['pending', 'scheduled', 'pending_approval', 'completed', 'skipped'],
+    enum: ['pending', 'scheduled', 'pending_approval', 'completed', 'skipped', 'answered', 'rejected'],
     default: 'pending'
   },
   markedBy: {
@@ -227,16 +227,58 @@ depositCallSchema.methods.rejectCall = function(callNumber, userId) {
   if (callNumber < 1 || callNumber > 10) {
     throw new Error('Call number must be between 1 and 10');
   }
-  
+
   const callField = `call${callNumber}`;
   if (this[callField].status !== 'pending_approval') {
     throw new Error('Call is not pending approval');
   }
-  
+
   // Reset to scheduled state
   this[callField].status = 'scheduled';
   this[callField].doneDate = null;
-  
+
+  return this;
+};
+
+// Method to mark call as answered (final status)
+depositCallSchema.methods.markCallAnswered = function(callNumber, userId, notes = '') {
+  if (callNumber < 1 || callNumber > 10) {
+    throw new Error('Call number must be between 1 and 10');
+  }
+
+  const callField = `call${callNumber}`;
+  if (this[callField].status !== 'pending_approval') {
+    throw new Error('Call is not pending approval');
+  }
+
+  this[callField].status = 'answered';
+  this[callField].approvedBy = userId;
+  this[callField].approvedAt = new Date();
+  if (notes) {
+    this[callField].notes = notes;
+  }
+
+  return this;
+};
+
+// Method to mark call as rejected (final status - FTD rejected the call)
+depositCallSchema.methods.markCallRejected = function(callNumber, userId, notes = '') {
+  if (callNumber < 1 || callNumber > 10) {
+    throw new Error('Call number must be between 1 and 10');
+  }
+
+  const callField = `call${callNumber}`;
+  if (this[callField].status !== 'pending_approval') {
+    throw new Error('Call is not pending approval');
+  }
+
+  this[callField].status = 'rejected';
+  this[callField].approvedBy = userId;
+  this[callField].approvedAt = new Date();
+  if (notes) {
+    this[callField].notes = notes;
+  }
+
   return this;
 };
 

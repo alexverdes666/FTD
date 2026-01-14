@@ -506,6 +506,100 @@ exports.rejectCall = async (req, res, next) => {
   }
 };
 
+// Mark call as answered (final status)
+exports.markCallAnswered = async (req, res, next) => {
+  try {
+    const { callNumber, notes } = req.body;
+    const { id } = req.params;
+
+    // Only admin and AM can mark as answered
+    if (!["admin", "affiliate_manager"].includes(req.user.role)) {
+      return res.status(403).json({
+        success: false,
+        message: "Not authorized to mark calls as answered",
+      });
+    }
+
+    const depositCall = await DepositCall.findById(id);
+    if (!depositCall) {
+      return res.status(404).json({
+        success: false,
+        message: "Deposit call not found",
+      });
+    }
+
+    // AM can only mark their assigned deposit calls
+    if (
+      req.user.role === "affiliate_manager" &&
+      depositCall.accountManager?.toString() !== req.user.id
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "Not authorized to mark calls for this deposit",
+      });
+    }
+
+    // Mark the call as answered
+    depositCall.markCallAnswered(callNumber, req.user.id, notes || "");
+    await depositCall.save();
+
+    res.status(200).json({
+      success: true,
+      message: `Call ${callNumber} marked as answered`,
+      data: depositCall,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Mark call as rejected (final status - FTD rejected)
+exports.markCallRejected = async (req, res, next) => {
+  try {
+    const { callNumber, notes } = req.body;
+    const { id } = req.params;
+
+    // Only admin and AM can mark as rejected
+    if (!["admin", "affiliate_manager"].includes(req.user.role)) {
+      return res.status(403).json({
+        success: false,
+        message: "Not authorized to mark calls as rejected",
+      });
+    }
+
+    const depositCall = await DepositCall.findById(id);
+    if (!depositCall) {
+      return res.status(404).json({
+        success: false,
+        message: "Deposit call not found",
+      });
+    }
+
+    // AM can only mark their assigned deposit calls
+    if (
+      req.user.role === "affiliate_manager" &&
+      depositCall.accountManager?.toString() !== req.user.id
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "Not authorized to mark calls for this deposit",
+      });
+    }
+
+    // Mark the call as rejected
+    depositCall.markCallRejected(callNumber, req.user.id, notes || "");
+    await depositCall.save();
+
+    res.status(200).json({
+      success: true,
+      message: `Call ${callNumber} marked as rejected`,
+      data: depositCall,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // Get pending approvals
 exports.getPendingApprovals = async (req, res, next) => {
   try {
