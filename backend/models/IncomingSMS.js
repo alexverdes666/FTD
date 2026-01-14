@@ -26,6 +26,10 @@ const incomingSMSSchema = new mongoose.Schema(
       trim: true,
       index: true,
     },
+    slot: {
+      type: String,
+      trim: true,
+    },
     deliveryReport: {
       type: String,
       trim: true,

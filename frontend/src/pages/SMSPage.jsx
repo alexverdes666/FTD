@@ -57,6 +57,10 @@ const SMSPage = () => {
   const [selectedGateway, setSelectedGateway] = useState('');
   const [fetching, setFetching] = useState(false);
 
+  // SMS content dialog state
+  const [contentDialogOpen, setContentDialogOpen] = useState(false);
+  const [selectedSms, setSelectedSms] = useState(null);
+
   // Filter states
   const [filters, setFilters] = useState({
     phone: '',
@@ -321,15 +325,24 @@ const SMSPage = () => {
                         </Typography>
                       </TableCell>
                       <TableCell>
-                        <Tooltip title={sms.content || ''} placement="top">
-                          <Typography variant="body2" sx={{ maxWidth: 300 }}>
-                            {truncateContent(sms.content, 50)}
-                          </Typography>
-                        </Tooltip>
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            maxWidth: 300,
+                            cursor: 'pointer',
+                            '&:hover': { color: 'primary.main', textDecoration: 'underline' }
+                          }}
+                          onClick={() => {
+                            setSelectedSms(sms);
+                            setContentDialogOpen(true);
+                          }}
+                        >
+                          {truncateContent(sms.content, 50)}
+                        </Typography>
                       </TableCell>
                       <TableCell>
                         <Typography variant="body2">
-                          {sms.port || '-'}
+                          {sms.port ? `${sms.port}${sms.slot ? '.' + sms.slot : ''}` : '-'}
                         </Typography>
                       </TableCell>
                       <TableCell>
@@ -403,6 +416,65 @@ const SMSPage = () => {
             >
               {fetching ? 'Fetching...' : 'Fetch SMS'}
             </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* SMS Content Dialog */}
+        <Dialog
+          open={contentDialogOpen}
+          onClose={() => setContentDialogOpen(false)}
+          maxWidth="md"
+          fullWidth
+        >
+          <DialogTitle>
+            SMS Details
+          </DialogTitle>
+          <DialogContent dividers>
+            {selectedSms && (
+              <Box>
+                <Grid container spacing={2} sx={{ mb: 2 }}>
+                  <Grid item xs={6}>
+                    <Typography variant="caption" color="text.secondary">Sender</Typography>
+                    <Typography variant="body1" fontWeight="bold">{selectedSms.sender || '-'}</Typography>
+                  </Grid>
+                  <Grid item xs={6}>
+                    <Typography variant="caption" color="text.secondary">Recipient</Typography>
+                    <Typography variant="body1">{selectedSms.recipient || '-'}</Typography>
+                  </Grid>
+                  <Grid item xs={6}>
+                    <Typography variant="caption" color="text.secondary">Date/Time</Typography>
+                    <Typography variant="body1">{formatTimestamp(selectedSms.timestamp)}</Typography>
+                  </Grid>
+                  <Grid item xs={6}>
+                    <Typography variant="caption" color="text.secondary">Port.Slot</Typography>
+                    <Typography variant="body1">
+                      {selectedSms.port ? `${selectedSms.port}${selectedSms.slot ? '.' + selectedSms.slot : ''}` : '-'}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={6}>
+                    <Typography variant="caption" color="text.secondary">SIM Card</Typography>
+                    <Typography variant="body1">
+                      {selectedSms.simCard ? `${selectedSms.simCard.simNumber} (${selectedSms.simCard.geo})` : '-'}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={6}>
+                    <Typography variant="caption" color="text.secondary">Gateway</Typography>
+                    <Typography variant="body1">
+                      {selectedSms.gatewayDevice?.name || '-'}
+                    </Typography>
+                  </Grid>
+                </Grid>
+                <Typography variant="caption" color="text.secondary">Content</Typography>
+                <Paper variant="outlined" sx={{ p: 2, mt: 0.5, backgroundColor: 'grey.50' }}>
+                  <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                    {selectedSms.content || '-'}
+                  </Typography>
+                </Paper>
+              </Box>
+            )}
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setContentDialogOpen(false)}>Close</Button>
           </DialogActions>
         </Dialog>
       </Box>
