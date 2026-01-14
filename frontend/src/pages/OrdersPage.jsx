@@ -6781,6 +6781,78 @@ const OrdersPage = () => {
                   Assign to Agent
                 </MenuItem>
 
+                {/* Confirm/Unconfirm Deposit */}
+                {isFtdOrFiller && (
+                  lead.depositConfirmed ? (
+                    user.role === "admin" ? (
+                      <MenuItem
+                        onClick={() => {
+                          handleUnconfirmDeposit(lead);
+                          handleClosePreviewActionsMenu();
+                        }}
+                      >
+                        <ListItemIcon>
+                          <CallIcon fontSize="small" color="warning" />
+                        </ListItemIcon>
+                        Unconfirm Deposit
+                      </MenuItem>
+                    ) : (
+                      <MenuItem disabled>
+                        <ListItemIcon>
+                          <CallIcon fontSize="small" color="success" />
+                        </ListItemIcon>
+                        Deposit Confirmed
+                      </MenuItem>
+                    )
+                  ) : (
+                    <MenuItem
+                      onClick={() => {
+                        handleConfirmDeposit(lead);
+                        handleClosePreviewActionsMenu();
+                      }}
+                      disabled={!lead.assignedAgent}
+                    >
+                      <ListItemIcon>
+                        <CallIcon fontSize="small" color="success" />
+                      </ListItemIcon>
+                      Confirm Deposit
+                    </MenuItem>
+                  )
+                )}
+
+                {/* Mark/Unmark as Shaved - for FTD/Filler with confirmed deposit */}
+                {isFtdOrFiller && lead.depositConfirmed && (
+                  lead.shaved ? (
+                    user.role === "admin" && (
+                      <MenuItem
+                        onClick={() => {
+                          handleUnmarkAsShaved(lead);
+                          handleClosePreviewActionsMenu();
+                        }}
+                      >
+                        <ListItemIcon>
+                          <ShavedIcon fontSize="small" color="warning" />
+                        </ListItemIcon>
+                        Unmark as Shaved
+                      </MenuItem>
+                    )
+                  ) : (
+                    user.role !== "lead_manager" && (
+                      <MenuItem
+                        onClick={() => {
+                          handleMarkAsShaved(lead);
+                          handleClosePreviewActionsMenu();
+                        }}
+                      >
+                        <ListItemIcon>
+                          <ShavedIcon fontSize="small" color="error" />
+                        </ListItemIcon>
+                        Mark as Shaved
+                      </MenuItem>
+                    )
+                  )
+                )}
+
                 {/* Delete - Admin only */}
                 {user.role === "admin" && (
                   <>

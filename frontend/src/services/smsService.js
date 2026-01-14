@@ -14,7 +14,7 @@ export const smsService = {
   // Fetch SMS messages from a gateway device
   fetchFromGateway: async (gatewayId, params = {}) => {
     try {
-      const response = await api.post(`/sms/fetch-from-gateway/${gatewayId}`, null, { params });
+      const response = await api.post(`/sms/fetch-from-gateway/${gatewayId}`, {}, { params });
       return response.data;
     } catch (error) {
       throw error.response?.data || error;
