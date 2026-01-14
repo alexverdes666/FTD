@@ -3259,7 +3259,8 @@ exports.getOrderById = async (req, res, next) => {
       .populate("selectedCampaign", "name description")
       .populate("selectedOurNetwork", "name description")
       .populate("selectedClientNetwork", "name description")
-      .populate("selectedClientBrokers", "name domain description");
+      .populate("selectedClientBrokers", "name domain description")
+      .populate("auditLog.performedBy", "fullName email");
 
     // Only populate full lead details if not in lightweight mode
     if (!lightweight) {
@@ -3305,6 +3306,10 @@ exports.getOrderById = async (req, res, next) => {
           },
           {
             path: "shavedManagerAssignedBy",
+            select: "fullName email",
+          },
+          {
+            path: "adminActions.performedBy",
             select: "fullName email",
           },
         ],
@@ -3944,6 +3949,30 @@ exports.cancelLeadFromOrder = async (req, res, next) => {
       }
     }
 
+    // Add audit log entry to order (persists even when lead is removed)
+    const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+                     req.headers['x-real-ip'] ||
+                     req.connection?.remoteAddress ||
+                     req.socket?.remoteAddress ||
+                     'unknown';
+
+    if (!order.auditLog) {
+      order.auditLog = [];
+    }
+    order.auditLog.push({
+      action: "lead_removed",
+      leadId: lead._id,
+      leadEmail: lead.email,
+      performedBy: req.user._id,
+      performedAt: new Date(),
+      ipAddress: clientIp,
+      details: `Lead ${lead.firstName} ${lead.lastName} (${lead.email}) removed from order by ${req.user.fullName || req.user.email}`,
+      previousValue: {
+        leadType,
+        leadName: `${lead.firstName} ${lead.lastName}`,
+      },
+    });
+
     // Save both documents
     await Promise.all([lead.save(), order.save()]);
 
@@ -4526,9 +4555,6 @@ exports.changeFTDInOrder = async (req, res, next) => {
         // These histories are used for filtering and preventing duplicate assignments in future orders
         // assignedClientBrokers is also preserved as a permanent record
 
-        // Save old lead
-        await oldLead.save({ session });
-
         // Assign new lead to order
         newLead.orderId = orderId;
         newLead.createdBy = req.user._id;
@@ -4574,6 +4600,38 @@ exports.changeFTDInOrder = async (req, res, next) => {
           `[CHANGE-FTD-DEBUG] Updated lastUsedInOrder timestamp for replacement lead (10-day cooldown starts now)`
         );
 
+        // Add audit log entry to order for FTD swap
+        const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+                         req.headers['x-real-ip'] ||
+                         req.connection?.remoteAddress ||
+                         req.socket?.remoteAddress ||
+                         'unknown';
+
+        if (!order.auditLog) {
+          order.auditLog = [];
+        }
+        order.auditLog.push({
+          action: "ftd_swapped",
+          leadId: newLead._id,
+          leadEmail: newLead.email,
+          performedBy: req.user._id,
+          performedAt: new Date(),
+          ipAddress: clientIp,
+          details: `FTD swapped: ${oldLead.firstName} ${oldLead.lastName} (${oldLead.email}) replaced with ${newLead.firstName} ${newLead.lastName} (${newLead.email}) by ${req.user.fullName || req.user.email}`,
+          previousValue: {
+            leadId: oldLead._id,
+            leadEmail: oldLead.email,
+            leadName: `${oldLead.firstName} ${oldLead.lastName}`,
+          },
+          newValue: {
+            leadId: newLead._id,
+            leadEmail: newLead.email,
+            leadName: `${newLead.firstName} ${newLead.lastName}`,
+            leadType: isFillerOrder ? "filler" : "ftd",
+          },
+        });
+
+        await oldLead.save({ session });
         await newLead.save({ session });
 
         // Update order to replace the lead
@@ -4886,8 +4944,34 @@ exports.convertLeadTypeInOrder = async (req, res, next) => {
       `[CONVERT-LEAD-TYPE] Updated fulfilled counts - ftd: ${order.fulfilled.ftd}, filler: ${order.fulfilled.filler}`
     );
 
-    // Save the order
-    await order.save();
+    // Add audit log entry to order for lead type conversion
+    const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+                     req.headers['x-real-ip'] ||
+                     req.connection?.remoteAddress ||
+                     req.socket?.remoteAddress ||
+                     'unknown';
+
+    if (!order.auditLog) {
+      order.auditLog = [];
+    }
+    order.auditLog.push({
+      action: "lead_type_changed",
+      leadId: lead._id,
+      leadEmail: lead.email,
+      performedBy: req.user._id,
+      performedAt: new Date(),
+      ipAddress: clientIp,
+      details: `Lead ${lead.firstName} ${lead.lastName} (${lead.email}) type changed from ${currentOrderedAs} to ${newOrderedAs} by ${req.user.fullName || req.user.email}`,
+      previousValue: {
+        orderedAs: currentOrderedAs,
+      },
+      newValue: {
+        orderedAs: newOrderedAs,
+      },
+    });
+
+    // Save the order and lead
+    await Promise.all([order.save(), lead.save()]);
 
     console.log(`[CONVERT-LEAD-TYPE] ===== CONVERSION COMPLETE =====`);
 
@@ -5248,6 +5332,310 @@ exports.changeRequester = async (req, res, next) => {
     });
   } catch (error) {
     console.error("Error changing requester:", error);
+    next(error);
+  }
+};
+
+// Add leads to an existing order (Admin only)
+exports.addLeadsToOrder = async (req, res, next) => {
+  try {
+    const { orderId } = req.params;
+    const { leads: leadsToAdd } = req.body;
+    // leadsToAdd is an array of { leadId, agentId, leadType }
+
+    if (!leadsToAdd || !Array.isArray(leadsToAdd) || leadsToAdd.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "At least one lead is required",
+      });
+    }
+
+    // Find the order
+    const order = await Order.findById(orderId)
+      .populate("selectedClientNetwork")
+      .populate("selectedOurNetwork")
+      .populate("selectedCampaign");
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found",
+      });
+    }
+
+    // Get existing lead IDs to check for duplicates
+    const existingLeadIds = order.leads.map((id) => id.toString());
+
+    // Validate all leads exist and are not archived
+    const leadIds = leadsToAdd.map((l) => l.leadId);
+    const foundLeads = await Lead.find({ _id: { $in: leadIds } });
+
+    if (foundLeads.length !== leadIds.length) {
+      const foundIds = foundLeads.map((l) => l._id.toString());
+      const missingIds = leadIds.filter((id) => !foundIds.includes(id));
+      return res.status(400).json({
+        success: false,
+        message: `Some leads not found: ${missingIds.join(", ")}`,
+      });
+    }
+
+    // Check for archived leads
+    const archivedLeads = foundLeads.filter((lead) => lead.isArchived === true);
+    if (archivedLeads.length > 0) {
+      const archivedNames = archivedLeads.map(
+        (l) => `${l.firstName} ${l.lastName}`
+      );
+      return res.status(400).json({
+        success: false,
+        message: `Cannot add archived leads: ${archivedNames.join(", ")}`,
+      });
+    }
+
+    // Check for duplicates (leads already in the order)
+    const duplicateLeads = leadsToAdd.filter((l) =>
+      existingLeadIds.includes(l.leadId)
+    );
+    if (duplicateLeads.length > 0) {
+      const duplicateIds = duplicateLeads.map((l) => l.leadId);
+      return res.status(400).json({
+        success: false,
+        message: `Some leads are already in this order: ${duplicateIds.join(", ")}`,
+      });
+    }
+
+    // Check for cooldown on FTD/filler leads (10-day cooldown)
+    const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
+    const leadsOnCooldown = foundLeads.filter((lead) => {
+      // Only FTD/filler leads have cooldown
+      if (lead.leadType !== "ftd") return false;
+      // Check if lead was used in order within the last 10 days
+      return lead.lastUsedInOrder && lead.lastUsedInOrder > tenDaysAgo;
+    });
+
+    if (leadsOnCooldown.length > 0) {
+      const cooldownDetails = leadsOnCooldown.map((lead) => {
+        const daysRemaining = Math.ceil(
+          (lead.lastUsedInOrder.getTime() + 10 * 24 * 60 * 60 * 1000 - Date.now()) /
+            (24 * 60 * 60 * 1000)
+        );
+        return `${lead.firstName} ${lead.lastName} (${daysRemaining} days remaining)`;
+      });
+      return res.status(400).json({
+        success: false,
+        message: `Some FTD/filler leads are on cooldown: ${cooldownDetails.join(", ")}`,
+        cooldownLeads: leadsOnCooldown.map((l) => l._id),
+      });
+    }
+
+    // Validate agents if provided
+    const User = require("../models/User");
+    const agentIds = [...new Set(leadsToAdd.filter((l) => l.agentId).map((l) => l.agentId))];
+    if (agentIds.length > 0) {
+      const foundAgents = await User.find({
+        _id: { $in: agentIds },
+        role: "agent",
+      });
+
+      if (foundAgents.length !== agentIds.length) {
+        const foundAgentIds = foundAgents.map((a) => a._id.toString());
+        const missingAgentIds = agentIds.filter(
+          (id) => !foundAgentIds.includes(id)
+        );
+        return res.status(400).json({
+          success: false,
+          message: `Some agents not found: ${missingAgentIds.join(", ")}`,
+        });
+      }
+    }
+
+    // Create a map of leadId -> lead for easy lookup
+    const leadMap = new Map(foundLeads.map((l) => [l._id.toString(), l]));
+
+    // Track added counts by type
+    const addedCounts = { ftd: 0, filler: 0, cold: 0 };
+
+    // Get client IP address for audit logging
+    const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+                     req.headers['x-real-ip'] ||
+                     req.connection?.remoteAddress ||
+                     req.socket?.remoteAddress ||
+                     'unknown';
+
+    // Process each lead
+    const updatePromises = leadsToAdd.map(async (leadData) => {
+      const lead = leadMap.get(leadData.leadId);
+      const leadType = leadData.leadType || lead.leadType;
+
+      // Set the lead's orderId to link it to this order (for sorting/filtering on leads page)
+      lead.orderId = order._id;
+
+      // Update assigned agent if provided
+      if (leadData.agentId) {
+        lead.assignedAgent = leadData.agentId;
+        lead.assignedAgentAt = new Date();
+      }
+
+      // Update lastUsedInOrder for cooldown tracking (FTD/filler leads have 10-day cooldown)
+      if (leadType === "ftd" || leadType === "filler") {
+        lead.lastUsedInOrder = new Date();
+      }
+
+      // Add client network to history if the order has one
+      if (order.selectedClientNetwork) {
+        if (!lead.clientNetworkHistory) {
+          lead.clientNetworkHistory = [];
+        }
+        lead.clientNetworkHistory.push({
+          clientNetwork: order.selectedClientNetwork._id,
+          assignedAt: new Date(),
+          assignedBy: req.user._id,
+          orderId: order._id,
+        });
+      }
+
+      // Add our network to history if the order has one
+      if (order.selectedOurNetwork) {
+        if (!lead.ourNetworkHistory) {
+          lead.ourNetworkHistory = [];
+        }
+        lead.ourNetworkHistory.push({
+          ourNetwork: order.selectedOurNetwork._id,
+          assignedAt: new Date(),
+          assignedBy: req.user._id,
+          orderId: order._id,
+        });
+      }
+
+      // Add client brokers to history if the order has any
+      if (order.selectedClientBrokers && order.selectedClientBrokers.length > 0) {
+        order.selectedClientBrokers.forEach((brokerId) => {
+          if (!lead.assignedClientBrokers) {
+            lead.assignedClientBrokers = [];
+          }
+          if (!lead.assignedClientBrokers.includes(brokerId)) {
+            lead.assignedClientBrokers.push(brokerId);
+          }
+          if (!lead.clientBrokerHistory) {
+            lead.clientBrokerHistory = [];
+          }
+          lead.clientBrokerHistory.push({
+            clientBroker: brokerId,
+            assignedAt: new Date(),
+            assignedBy: req.user._id,
+            orderId: order._id,
+          });
+        });
+      }
+
+      // Add campaign to history if the order has one
+      if (order.selectedCampaign) {
+        if (!lead.campaignHistory) {
+          lead.campaignHistory = [];
+        }
+        lead.campaignHistory.push({
+          campaign: order.selectedCampaign._id,
+          assignedAt: new Date(),
+          assignedBy: req.user._id,
+          orderId: order._id,
+        });
+      }
+
+      // Track count by lead type
+      if (addedCounts[leadType] !== undefined) {
+        addedCounts[leadType]++;
+      }
+
+      return lead.save();
+    });
+
+    await Promise.all(updatePromises);
+
+    // Update the order
+    // Add leads to the order and create audit log entries
+    if (!order.auditLog) {
+      order.auditLog = [];
+    }
+    leadsToAdd.forEach((leadData) => {
+      const lead = leadMap.get(leadData.leadId);
+      const leadType = leadData.leadType || lead.leadType;
+      order.leads.push(leadData.leadId);
+      order.leadsMetadata.push({
+        leadId: leadData.leadId,
+        orderedAs: leadType,
+      });
+
+      // Add audit log entry for each lead added
+      order.auditLog.push({
+        action: "lead_added",
+        leadId: lead._id,
+        leadEmail: lead.email,
+        performedBy: req.user._id,
+        performedAt: new Date(),
+        ipAddress: clientIp,
+        details: `Lead ${lead.firstName} ${lead.lastName} (${lead.email}) added to order by ${req.user.fullName || req.user.email} as ${leadType}`,
+        newValue: {
+          leadType,
+          agentId: leadData.agentId || null,
+          leadName: `${lead.firstName} ${lead.lastName}`,
+        },
+      });
+    });
+
+    // Update requests and fulfilled counts
+    order.requests.ftd = (order.requests.ftd || 0) + addedCounts.ftd;
+    order.requests.filler = (order.requests.filler || 0) + addedCounts.filler;
+    order.requests.cold = (order.requests.cold || 0) + addedCounts.cold;
+
+    order.fulfilled.ftd = (order.fulfilled.ftd || 0) + addedCounts.ftd;
+    order.fulfilled.filler = (order.fulfilled.filler || 0) + addedCounts.filler;
+    order.fulfilled.cold = (order.fulfilled.cold || 0) + addedCounts.cold;
+
+    // Update order status if it was partial or cancelled
+    if (order.status === "partial" || order.status === "cancelled") {
+      // Check if order is now fulfilled
+      const totalRequested =
+        (order.requests.ftd || 0) +
+        (order.requests.filler || 0) +
+        (order.requests.cold || 0);
+      const totalFulfilled =
+        (order.fulfilled.ftd || 0) +
+        (order.fulfilled.filler || 0) +
+        (order.fulfilled.cold || 0);
+
+      if (totalFulfilled >= totalRequested) {
+        order.status = "fulfilled";
+        order.completedAt = new Date();
+        order.partialFulfillmentReason = null;
+      } else if (totalFulfilled > 0 && order.status === "cancelled") {
+        order.status = "partial";
+      }
+    }
+
+    await order.save();
+
+    // Populate the order for response
+    const populatedOrder = await Order.findById(order._id)
+      .populate("leads", "firstName lastName newEmail newPhone country leadType")
+      .populate("requester", "fullName email")
+      .populate("selectedClientNetwork", "name")
+      .populate("selectedOurNetwork", "name")
+      .populate("selectedCampaign", "name");
+
+    const resultOrder = mergeLeadsWithMetadata(populatedOrder);
+
+    console.log(
+      `[ORDER-ADD-LEADS] Added ${leadsToAdd.length} leads to order ${orderId}:`,
+      addedCounts
+    );
+
+    res.json({
+      success: true,
+      message: `Successfully added ${leadsToAdd.length} lead(s) to order`,
+      data: resultOrder,
+      addedCounts,
+    });
+  } catch (error) {
+    console.error("Error adding leads to order:", error);
     next(error);
   }
 };

@@ -258,6 +258,37 @@ exports.assignLeadToBroker = async (req, res, next) => {
     );
     clientBroker.assignLead(leadId);
     await Promise.all([lead.save(), clientBroker.save()]);
+
+    // Add audit log to associated order if exists
+    if (lead.orderId) {
+      const Order = require("../models/Order");
+      const order = await Order.findById(lead.orderId);
+      if (order) {
+        const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+                         req.headers['x-real-ip'] ||
+                         req.connection?.remoteAddress ||
+                         req.socket?.remoteAddress ||
+                         'unknown';
+        if (!order.auditLog) {
+          order.auditLog = [];
+        }
+        order.auditLog.push({
+          action: "client_broker_changed",
+          leadId: lead._id,
+          leadEmail: lead.email,
+          performedBy: req.user._id,
+          performedAt: new Date(),
+          ipAddress: clientIp,
+          details: `Client broker "${clientBroker.name}" assigned to lead ${lead.firstName} ${lead.lastName} (${lead.email}) by ${req.user.fullName || req.user.email}`,
+          newValue: {
+            clientBrokerId: clientBroker._id,
+            clientBrokerName: clientBroker.name,
+          },
+        });
+        await order.save();
+      }
+    }
+
     res.status(200).json({
       success: true,
       message: "Lead assigned to client broker successfully",
@@ -299,6 +330,37 @@ exports.unassignLeadFromBroker = async (req, res, next) => {
     lead.unassignClientBroker(brokerId);
     clientBroker.unassignLead(leadId);
     await Promise.all([lead.save(), clientBroker.save()]);
+
+    // Add audit log to associated order if exists
+    if (lead.orderId) {
+      const Order = require("../models/Order");
+      const order = await Order.findById(lead.orderId);
+      if (order) {
+        const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+                         req.headers['x-real-ip'] ||
+                         req.connection?.remoteAddress ||
+                         req.socket?.remoteAddress ||
+                         'unknown';
+        if (!order.auditLog) {
+          order.auditLog = [];
+        }
+        order.auditLog.push({
+          action: "client_broker_removed",
+          leadId: lead._id,
+          leadEmail: lead.email,
+          performedBy: req.user._id,
+          performedAt: new Date(),
+          ipAddress: clientIp,
+          details: `Client broker "${clientBroker.name}" removed from lead ${lead.firstName} ${lead.lastName} (${lead.email}) by ${req.user.fullName || req.user.email}`,
+          previousValue: {
+            clientBrokerId: clientBroker._id,
+            clientBrokerName: clientBroker.name,
+          },
+        });
+        await order.save();
+      }
+    }
+
     res.status(200).json({
       success: true,
       message: "Lead unassigned from client broker successfully",

@@ -25,6 +25,7 @@ const {
   convertLeadTypeInOrder,
   checkOrderFulfillment,
   changeRequester,
+  addLeadsToOrder,
 } = require("../controllers/orders");
 const router = express.Router();
 
@@ -278,6 +279,30 @@ router.post(
       .withMessage("Target type must be 'ftd' or 'filler'"),
   ],
   convertLeadTypeInOrder
+);
+
+// Add leads to an existing order (Admin only)
+router.post(
+  "/:orderId/add-leads",
+  [
+    protect,
+    authorize("admin"),
+    body("leads")
+      .isArray({ min: 1 })
+      .withMessage("At least one lead is required"),
+    body("leads.*.leadId")
+      .isMongoId()
+      .withMessage("Each lead must have a valid leadId"),
+    body("leads.*.agentId")
+      .optional()
+      .isMongoId()
+      .withMessage("agentId must be a valid MongoDB ObjectId"),
+    body("leads.*.leadType")
+      .optional()
+      .isIn(["ftd", "filler", "cold"])
+      .withMessage("leadType must be ftd, filler, or cold"),
+  ],
+  addLeadsToOrder
 );
 
 module.exports = router;

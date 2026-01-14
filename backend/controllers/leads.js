@@ -663,7 +663,8 @@ exports.getLeadById = async (req, res, next) => {
     const lead = await Lead.findById(req.params.id)
       .populate("assignedAgent", "fullName fourDigitCode email")
       .populate("comments.author", "fullName fourDigitCode")
-      .populate("orderId", "requester");
+      .populate("orderId", "requester")
+      .populate("adminActions.performedBy", "fullName email");
     if (!lead) {
       return res.status(404).json({
         success: false,
@@ -1260,6 +1261,37 @@ exports.assignClientBrokerToLead = async (req, res, next) => {
     }
     clientBroker.assignLead(leadId);
     await Promise.all([lead.save(), clientBroker.save()]);
+
+    // Add audit log to associated order if exists
+    if (lead.orderId) {
+      const Order = require("../models/Order");
+      const order = await Order.findById(lead.orderId);
+      if (order) {
+        const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+                         req.headers['x-real-ip'] ||
+                         req.connection?.remoteAddress ||
+                         req.socket?.remoteAddress ||
+                         'unknown';
+        if (!order.auditLog) {
+          order.auditLog = [];
+        }
+        order.auditLog.push({
+          action: "client_broker_changed",
+          leadId: lead._id,
+          leadEmail: lead.email,
+          performedBy: req.user._id,
+          performedAt: new Date(),
+          ipAddress: clientIp,
+          details: `Client broker "${clientBroker.name}" assigned to lead ${lead.firstName} ${lead.lastName} (${lead.email}) by ${req.user.fullName || req.user.email}`,
+          newValue: {
+            clientBrokerId: clientBroker._id,
+            clientBrokerName: clientBroker.name,
+          },
+        });
+        await order.save();
+      }
+    }
+
     const updatedLead = await Lead.findById(leadId)
       .populate("assignedAgent", "fullName fourDigitCode email")
       .populate("assignedClientBrokers", "name domain");
@@ -1602,6 +1634,7 @@ exports.updateLead = async (req, res, next) => {
     }
 
     // Handle client broker updates
+    const newlyAddedBrokers = []; // Track brokers added for audit logging
     if (clientBroker !== undefined) {
       if (Array.isArray(clientBroker) && clientBroker.length > 0) {
         const ClientBroker = require("../models/ClientBroker");
@@ -1625,6 +1658,11 @@ exports.updateLead = async (req, res, next) => {
         for (const brokerId of clientBroker) {
           if (!lead.isAssignedToClientBroker(brokerId)) {
             lead.assignClientBroker(brokerId, req.user._id, lead.orderId);
+            // Find the broker doc for audit logging
+            const brokerDoc = brokerDocs.find(b => b._id.toString() === brokerId.toString());
+            if (brokerDoc) {
+              newlyAddedBrokers.push({ id: brokerDoc._id, name: brokerDoc.name });
+            }
           }
         }
       } else if (Array.isArray(clientBroker) && clientBroker.length === 0) {
@@ -1648,6 +1686,7 @@ exports.updateLead = async (req, res, next) => {
         // Add broker to assignments (additive, not replacement)
         if (!lead.isAssignedToClientBroker(clientBroker)) {
           lead.assignClientBroker(clientBroker, req.user._id, lead.orderId);
+          newlyAddedBrokers.push({ id: brokerDoc._id, name: brokerDoc.name });
         }
       } else {
         // Note: We don't clear assignedClientBrokers because it's a permanent record
@@ -1656,6 +1695,38 @@ exports.updateLead = async (req, res, next) => {
     }
 
     await lead.save();
+
+    // Add audit log for newly added client brokers
+    if (newlyAddedBrokers.length > 0 && lead.orderId) {
+      const Order = require("../models/Order");
+      const order = await Order.findById(lead.orderId);
+      if (order) {
+        const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+                         req.headers['x-real-ip'] ||
+                         req.connection?.remoteAddress ||
+                         req.socket?.remoteAddress ||
+                         'unknown';
+        if (!order.auditLog) {
+          order.auditLog = [];
+        }
+        for (const broker of newlyAddedBrokers) {
+          order.auditLog.push({
+            action: "client_broker_changed",
+            leadId: lead._id,
+            leadEmail: lead.email,
+            performedBy: req.user._id,
+            performedAt: new Date(),
+            ipAddress: clientIp,
+            details: `Client broker "${broker.name}" assigned to lead ${lead.firstName} ${lead.lastName} (${lead.email}) by ${req.user.fullName || req.user.email}`,
+            newValue: {
+              clientBrokerId: broker.id,
+              clientBrokerName: broker.name,
+            },
+          });
+        }
+        await order.save();
+      }
+    }
     await lead.populate("assignedAgent", "fullName fourDigitCode");
     await lead.populate("comments.author", "fullName");
     await lead.populate("assignedClientBrokers", "name domain description");
@@ -3674,6 +3745,37 @@ exports.assignLeadsToAgent = async (req, res, next) => {
           lead.unassignFromAgent();
           await lead.save();
 
+          // Add audit log to associated order if exists
+          if (lead.orderId) {
+            const Order = require("../models/Order");
+            const order = await Order.findById(lead.orderId);
+            if (order) {
+              const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+                               req.headers['x-real-ip'] ||
+                               req.connection?.remoteAddress ||
+                               req.socket?.remoteAddress ||
+                               'unknown';
+              if (!order.auditLog) {
+                order.auditLog = [];
+              }
+              order.auditLog.push({
+                action: "agent_changed",
+                leadId: lead._id,
+                leadEmail: lead.email,
+                performedBy: req.user._id,
+                performedAt: new Date(),
+                ipAddress: clientIp,
+                details: `Agent unassigned from lead ${lead.firstName} ${lead.lastName} (${lead.email}) by ${req.user.fullName || req.user.email}. Previous agent: ${previousAgentInfo.name}`,
+                previousValue: {
+                  agentId: previousAgentInfo.id,
+                  agentName: previousAgentInfo.name,
+                },
+                newValue: null,
+              });
+              await order.save();
+            }
+          }
+
           results.success.push({
             leadId,
             leadType: lead.leadType,
@@ -3709,6 +3811,43 @@ exports.assignLeadsToAgent = async (req, res, next) => {
           // Assign to new agent (reassignment allowed)
           const assignmentResult = lead.assignToAgent(agentId, true);
           await assignmentResult.lead.save();
+
+          // Add audit log to associated order if exists
+          if (lead.orderId) {
+            const Order = require("../models/Order");
+            const order = await Order.findById(lead.orderId);
+            if (order) {
+              const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+                               req.headers['x-real-ip'] ||
+                               req.connection?.remoteAddress ||
+                               req.socket?.remoteAddress ||
+                               'unknown';
+              if (!order.auditLog) {
+                order.auditLog = [];
+              }
+              const isReassignment = assignmentResult.isReassignment && previousAgentInfo;
+              order.auditLog.push({
+                action: "agent_changed",
+                leadId: lead._id,
+                leadEmail: lead.email,
+                performedBy: req.user._id,
+                performedAt: new Date(),
+                ipAddress: clientIp,
+                details: isReassignment
+                  ? `Agent changed for lead ${lead.firstName} ${lead.lastName} (${lead.email}) by ${req.user.fullName || req.user.email}. Previous agent: ${previousAgentInfo.name}, New agent: ${agent.fullName}`
+                  : `Agent ${agent.fullName} assigned to lead ${lead.firstName} ${lead.lastName} (${lead.email}) by ${req.user.fullName || req.user.email}`,
+                previousValue: previousAgentInfo ? {
+                  agentId: previousAgentInfo.id,
+                  agentName: previousAgentInfo.name,
+                } : null,
+                newValue: {
+                  agentId: agent._id,
+                  agentName: agent.fullName,
+                },
+              });
+              await order.save();
+            }
+          }
 
           const successData = {
             leadId,
@@ -3874,7 +4013,7 @@ exports.getLeadsByAgent = async (req, res, next) => {
 // Search leads by email addresses (for manual order creation)
 exports.searchLeadsByEmails = async (req, res, next) => {
   try {
-    const { emails } = req.body;
+    const { emails, orderId } = req.body;
 
     if (!emails || !Array.isArray(emails) || emails.length === 0) {
       return res.status(400).json({
@@ -3892,9 +4031,45 @@ exports.searchLeadsByEmails = async (req, res, next) => {
       isArchived: { $ne: true },
     }).populate("assignedAgent", "fullName email");
 
+    // Get order's existing lead IDs if orderId is provided
+    let existingLeadIds = [];
+    if (orderId) {
+      const Order = require("../models/Order");
+      const order = await Order.findById(orderId).select("leads");
+      if (order) {
+        existingLeadIds = order.leads.map((id) => id.toString());
+      }
+    }
+
+    // Calculate cooldown status for each lead
+    const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
+    const leadsWithStatus = leads.map((lead) => {
+      const leadObj = lead.toObject();
+
+      // Check if lead is already in the order
+      leadObj.isInOrder = existingLeadIds.includes(lead._id.toString());
+
+      // Check if lead is on cooldown (only for FTD/filler leads)
+      const isOnCooldown =
+        lead.leadType === "ftd" &&
+        lead.lastUsedInOrder &&
+        lead.lastUsedInOrder > tenDaysAgo;
+
+      leadObj.isOnCooldown = isOnCooldown;
+
+      if (isOnCooldown) {
+        const cooldownEnds = new Date(lead.lastUsedInOrder.getTime() + 10 * 24 * 60 * 60 * 1000);
+        const daysRemaining = Math.ceil((cooldownEnds - Date.now()) / (24 * 60 * 60 * 1000));
+        leadObj.cooldownDaysRemaining = daysRemaining;
+        leadObj.cooldownEndsAt = cooldownEnds;
+      }
+
+      return leadObj;
+    });
+
     res.status(200).json({
       success: true,
-      data: leads,
+      data: leadsWithStatus,
       meta: {
         requested: normalizedEmails.length,
         found: leads.length,
@@ -4197,6 +4372,32 @@ exports.confirmDeposit = async (req, res, next) => {
 
     await lead.save();
 
+    // Add audit log to associated order if exists
+    if (lead.orderId) {
+      const Order = require("../models/Order");
+      const order = await Order.findById(lead.orderId);
+      if (order) {
+        const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+                         req.headers['x-real-ip'] ||
+                         req.connection?.remoteAddress ||
+                         req.socket?.remoteAddress ||
+                         'unknown';
+        if (!order.auditLog) {
+          order.auditLog = [];
+        }
+        order.auditLog.push({
+          action: "deposit_confirmed",
+          leadId: lead._id,
+          leadEmail: lead.email,
+          performedBy: userId,
+          performedAt: new Date(),
+          ipAddress: clientIp,
+          details: `Deposit confirmed for lead ${lead.firstName} ${lead.lastName} (${lead.email}) by ${req.user.fullName || req.user.email}`,
+        });
+        await order.save();
+      }
+    }
+
     // Populate the confirmedBy field for response
     await lead.populate("depositConfirmedBy", "fullName email");
     await lead.populate("assignedAgent", "fullName email fourDigitCode");
@@ -4254,6 +4455,32 @@ exports.unconfirmDeposit = async (req, res, next) => {
     });
 
     await lead.save();
+
+    // Add audit log to associated order if exists
+    if (lead.orderId) {
+      const Order = require("../models/Order");
+      const order = await Order.findById(lead.orderId);
+      if (order) {
+        const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+                         req.headers['x-real-ip'] ||
+                         req.connection?.remoteAddress ||
+                         req.socket?.remoteAddress ||
+                         'unknown';
+        if (!order.auditLog) {
+          order.auditLog = [];
+        }
+        order.auditLog.push({
+          action: "deposit_unconfirmed",
+          leadId: lead._id,
+          leadEmail: lead.email,
+          performedBy: req.user._id,
+          performedAt: new Date(),
+          ipAddress: clientIp,
+          details: `Deposit unconfirmed for lead ${lead.firstName} ${lead.lastName} (${lead.email}) by ${req.user.fullName || req.user.email}`,
+        });
+        await order.save();
+      }
+    }
 
     await lead.populate("assignedAgent", "fullName email fourDigitCode");
 
@@ -4373,6 +4600,36 @@ exports.markAsShaved = async (req, res, next) => {
 
     await lead.save();
 
+    // Add audit log to associated order if exists
+    if (lead.orderId) {
+      const Order = require("../models/Order");
+      const order = await Order.findById(lead.orderId);
+      if (order) {
+        const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+                         req.headers['x-real-ip'] ||
+                         req.connection?.remoteAddress ||
+                         req.socket?.remoteAddress ||
+                         'unknown';
+        if (!order.auditLog) {
+          order.auditLog = [];
+        }
+        order.auditLog.push({
+          action: "shaved",
+          leadId: lead._id,
+          leadEmail: lead.email,
+          performedBy: userId,
+          performedAt: new Date(),
+          ipAddress: clientIp,
+          details: `Lead ${lead.firstName} ${lead.lastName} (${lead.email}) marked as shaved by ${req.user.fullName || req.user.email}. Refunds manager: ${refundsManager.fullName}`,
+          newValue: {
+            refundsManagerId: refundsManagerId,
+            refundsManagerName: refundsManager.fullName,
+          },
+        });
+        await order.save();
+      }
+    }
+
     // Create or update RefundAssignment so the refunds manager can see this lead
     const RefundAssignment = require("../models/RefundAssignment");
 
@@ -4461,6 +4718,32 @@ exports.unmarkAsShaved = async (req, res, next) => {
     lead.shavedManagerAssignedAt = null;
 
     await lead.save();
+
+    // Add audit log to associated order if exists
+    if (lead.orderId) {
+      const Order = require("../models/Order");
+      const order = await Order.findById(lead.orderId);
+      if (order) {
+        const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+                         req.headers['x-real-ip'] ||
+                         req.connection?.remoteAddress ||
+                         req.socket?.remoteAddress ||
+                         'unknown';
+        if (!order.auditLog) {
+          order.auditLog = [];
+        }
+        order.auditLog.push({
+          action: "unshaved",
+          leadId: lead._id,
+          leadEmail: lead.email,
+          performedBy: req.user._id,
+          performedAt: new Date(),
+          ipAddress: clientIp,
+          details: `Lead ${lead.firstName} ${lead.lastName} (${lead.email}) unmarked as shaved by ${req.user.fullName || req.user.email}`,
+        });
+        await order.save();
+      }
+    }
 
     // Delete the RefundAssignment for this lead
     const RefundAssignment = require("../models/RefundAssignment");

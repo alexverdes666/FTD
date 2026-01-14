@@ -159,8 +159,8 @@ const orderSchema = new Schema(
     cancelledAt: Date,
     cancellationReason: String,
     partialFulfillmentReason: String,
-    plannedDate: { 
-      type: Date, 
+    plannedDate: {
+      type: Date,
       required: [true, "Planned date is required for order creation"],
       validate: {
         validator: function(value) {
@@ -169,22 +169,50 @@ const orderSchema = new Schema(
           if (!this.isNew) {
             return true;
           }
-          
+
           const now = new Date();
           // Normalize to UTC midnight for consistent comparison across timezones
           const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
           const plannedDay = new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()));
-          
+
           // Cannot create order for past dates (applies to everyone including admin)
           if (plannedDay < today) {
             throw new Error('Cannot create order for past dates');
           }
-          
+
           return true;
         },
         message: props => props.reason
       }
     },
+    // Audit log to track all changes made to the order (persists even when leads are removed)
+    auditLog: [{
+      action: {
+        type: String,
+        enum: [
+          "lead_added",
+          "lead_removed",
+          "lead_type_changed",
+          "agent_changed",
+          "ftd_swapped",
+          "client_broker_changed",
+          "client_broker_removed",
+          "deposit_confirmed",
+          "deposit_unconfirmed",
+          "shaved",
+          "unshaved"
+        ],
+        required: true,
+      },
+      leadId: { type: SchemaTypes.ObjectId, ref: "Lead" },
+      leadEmail: { type: String, trim: true }, // Store email for reference even if lead is deleted
+      performedBy: { type: SchemaTypes.ObjectId, ref: "User", required: true },
+      performedAt: { type: Date, default: Date.now },
+      ipAddress: { type: String, trim: true },
+      details: { type: String, trim: true },
+      previousValue: { type: SchemaTypes.Mixed },
+      newValue: { type: SchemaTypes.Mixed },
+    }],
   },
   {
     timestamps: true,

@@ -36,6 +36,11 @@ import {
   Cached as ChangeIcon,
   Call as CallIcon,
   ContentCut as ShavedIcon,
+  History as HistoryIcon,
+  Add as AddIcon,
+  Remove as RemoveIcon,
+  SwapHoriz as SwapIcon,
+  Transform as TransformIcon,
 } from "@mui/icons-material";
 import api from "../services/api";
 import DocumentPreview from "./DocumentPreview";

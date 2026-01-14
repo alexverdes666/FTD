@@ -59,6 +59,8 @@ import {
   Send as SendIcon,
   SwapHorizontalCircle as SwapIcon,
   SwapVert as ConvertIcon,
+  SwapHoriz as SwapHorizIcon,
+  SyncAlt as SyncAltIcon,
   AssignmentInd as AssignIcon,
   CheckCircle as CheckCircleIcon,
   Error as ErrorIcon,
@@ -79,6 +81,9 @@ import {
   Call as CallIcon,
   ContentCut as ShavedIcon,
   FormatListBulleted as ListIcon,
+  Cancel as CancelIcon,
+  Warning as WarningIcon,
+  Restore as RestoreIcon,
 } from "@mui/icons-material";
 import { useForm, Controller } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
@@ -452,6 +457,14 @@ const OrdersPage = () => {
   const [loadingRequesters, setLoadingRequesters] = useState(false);
   const [selectedNewRequester, setSelectedNewRequester] = useState(null);
 
+  // Order Audit Log State
+  const [orderAuditDialog, setOrderAuditDialog] = useState({
+    open: false,
+    order: null,
+    auditLogs: [],
+    loading: false,
+  });
+
   const fetchPotentialRequesters = useCallback(async () => {
     try {
       setLoadingRequesters(true);
@@ -473,6 +486,76 @@ const OrdersPage = () => {
       fetchPotentialRequesters();
     }
   }, [changeRequesterOpen, fetchPotentialRequesters]);
+
+  // Order Audit Log handlers
+  const handleOpenOrderAudit = useCallback(async (order) => {
+    setOrderAuditDialog({
+      open: true,
+      order,
+      auditLogs: [],
+      loading: true,
+    });
+
+    try {
+      // Fetch full order with auditLog
+      const response = await api.get(`/orders/${order._id}`);
+      const fullOrder = response.data.data;
+
+      // Collect all audit logs from the order
+      const allAuditLogs = [];
+
+      // Add order audit log entries (these are stored on the Order model and persist)
+      if (fullOrder.auditLog && fullOrder.auditLog.length > 0) {
+        fullOrder.auditLog.forEach((log) => {
+          allAuditLogs.push({
+            ...log,
+            leadName: log.newValue?.leadName || log.previousValue?.leadName || null,
+          });
+        });
+      }
+
+      // Add requester change history
+      if (fullOrder.requesterHistory && fullOrder.requesterHistory.length > 0) {
+        fullOrder.requesterHistory.forEach((history) => {
+          allAuditLogs.push({
+            action: "requester_changed",
+            performedBy: history.changedBy,
+            performedAt: history.changedAt,
+            details: `Requester changed from ${history.previousRequester?.fullName || "Unknown"} to ${history.newRequester?.fullName || "Unknown"}`,
+            previousValue: history.previousRequester?.fullName,
+            newValue: history.newRequester?.fullName,
+          });
+        });
+      }
+
+      // Sort by date (newest first)
+      allAuditLogs.sort(
+        (a, b) => new Date(b.performedAt) - new Date(a.performedAt)
+      );
+
+      setOrderAuditDialog((prev) => ({
+        ...prev,
+        auditLogs: allAuditLogs,
+        loading: false,
+      }));
+    } catch (err) {
+      console.error("Failed to fetch order audit logs:", err);
+      setNotification({
+        message: "Failed to fetch audit logs",
+        severity: "error",
+      });
+      setOrderAuditDialog((prev) => ({ ...prev, loading: false }));
+    }
+  }, []);
+
+  const handleCloseOrderAudit = useCallback(() => {
+    setOrderAuditDialog({
+      open: false,
+      order: null,
+      auditLogs: [],
+      loading: false,
+    });
+  }, []);
 
   const handleOpenChangeRequester = (order) => {
     setSelectedOrderForRequester(order);
@@ -535,6 +618,16 @@ const OrdersPage = () => {
     lead: null,
     loading: false,
   });
+
+  // Add Leads to Order Dialog State (Admin only)
+  const [addLeadsDialog, setAddLeadsDialog] = useState({
+    open: false,
+    order: null,
+    loading: false,
+  });
+  const [addLeadsEmails, setAddLeadsEmails] = useState("");
+  const [addLeadsSearching, setAddLeadsSearching] = useState(false);
+  const [addLeadsFound, setAddLeadsFound] = useState([]); // [{lead, agent, leadType}]
 
   // Delete Order Confirmation State
   const [deleteOrderDialog, setDeleteOrderDialog] = useState({
@@ -830,6 +923,202 @@ const OrdersPage = () => {
   const removeManualLead = useCallback((index) => {
     setManualLeads((prev) => prev.filter((_, i) => i !== index));
   }, []);
+
+  // Add Leads to Order handlers (Admin only)
+  const handleOpenAddLeadsDialog = useCallback((order) => {
+    setAddLeadsDialog({ open: true, order, loading: false });
+    setAddLeadsEmails("");
+    setAddLeadsFound([]);
+    fetchAllAgents(); // Fetch agents for the dialog
+  }, [fetchAllAgents]);
+
+  const handleCloseAddLeadsDialog = useCallback(() => {
+    setAddLeadsDialog({ open: false, order: null, loading: false });
+    setAddLeadsEmails("");
+    setAddLeadsFound([]);
+  }, []);
+
+  const searchLeadsForAddToOrder = useCallback(async () => {
+    if (!addLeadsEmails.trim()) {
+      setNotification({
+        message: "Please enter at least one email address",
+        severity: "warning",
+      });
+      return;
+    }
+
+    setAddLeadsSearching(true);
+    try {
+      const emails = addLeadsEmails
+        .split(/[\n\s,]+/)
+        .map((e) => e.trim().toLowerCase())
+        .filter((e) => e.length > 0);
+
+      if (emails.length === 0) {
+        setNotification({
+          message: "No valid emails found",
+          severity: "warning",
+        });
+        return;
+      }
+
+      // Pass orderId to get status info (isInOrder, isOnCooldown)
+      const response = await api.post("/leads/search-by-emails", {
+        emails,
+        orderId: addLeadsDialog.order?._id,
+      });
+      const foundLeads = response.data.data || [];
+
+      if (foundLeads.length === 0) {
+        setNotification({
+          message: "No leads found with the provided emails",
+          severity: "warning",
+        });
+        return;
+      }
+
+      // Map all found leads to add leads format (including those with issues)
+      const addLeadsEntries = foundLeads.map((lead) => ({
+        lead,
+        agent: lead.assignedAgent?._id || "",
+        leadType: lead.leadType || "ftd",
+        isInOrder: lead.isInOrder || false,
+        isOnCooldown: lead.isOnCooldown || false,
+        cooldownDaysRemaining: lead.cooldownDaysRemaining || 0,
+        canAdd: !lead.isInOrder && !lead.isOnCooldown,
+      }));
+
+      setAddLeadsFound(addLeadsEntries);
+
+      // Show notification about found/not found
+      const notFoundEmails = emails.filter(
+        (email) =>
+          !foundLeads.some(
+            (lead) => lead.newEmail?.toLowerCase() === email.toLowerCase()
+          )
+      );
+
+      const alreadyInOrder = addLeadsEntries.filter((e) => e.isInOrder).length;
+      const onCooldown = addLeadsEntries.filter((e) => e.isOnCooldown && !e.isInOrder).length;
+      const canAddCount = addLeadsEntries.filter((e) => e.canAdd).length;
+
+      let msg = `Found ${foundLeads.length} leads.`;
+      if (canAddCount > 0) msg = `${canAddCount} leads ready to add.`;
+      if (alreadyInOrder > 0) msg += ` ${alreadyInOrder} already in order.`;
+      if (onCooldown > 0) msg += ` ${onCooldown} on cooldown.`;
+      if (notFoundEmails.length > 0)
+        msg += ` Not found: ${notFoundEmails.join(", ")}`;
+
+      setNotification({
+        message: msg,
+        severity: canAddCount > 0 ? "success" : "warning",
+      });
+    } catch (err) {
+      console.error("Failed to search leads:", err);
+      setNotification({
+        message: err.response?.data?.message || "Failed to search leads",
+        severity: "error",
+      });
+    } finally {
+      setAddLeadsSearching(false);
+    }
+  }, [addLeadsEmails, addLeadsDialog.order]);
+
+  const updateAddLeadAgent = useCallback((index, agentId) => {
+    setAddLeadsFound((prev) =>
+      prev.map((entry, i) =>
+        i === index ? { ...entry, agent: agentId } : entry
+      )
+    );
+  }, []);
+
+  const updateAddLeadType = useCallback((index, leadType) => {
+    setAddLeadsFound((prev) =>
+      prev.map((entry, i) =>
+        i === index ? { ...entry, leadType } : entry
+      )
+    );
+  }, []);
+
+  const removeAddLead = useCallback((index) => {
+    setAddLeadsFound((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
+  const handleSubmitAddLeads = useCallback(async () => {
+    // Only submit leads that can be added (not on cooldown, not already in order)
+    const eligibleLeads = addLeadsFound.filter((entry) => entry.canAdd);
+
+    if (eligibleLeads.length === 0) {
+      setNotification({
+        message: "No eligible leads to add. All leads are either on cooldown or already in the order.",
+        severity: "warning",
+      });
+      return;
+    }
+
+    setAddLeadsDialog((prev) => ({ ...prev, loading: true }));
+    const orderId = addLeadsDialog.order._id;
+    const wasExpanded = !!expandedRowData[orderId];
+
+    try {
+      const leadsToAdd = eligibleLeads.map((entry) => ({
+        leadId: entry.lead._id,
+        agentId: entry.agent || null,
+        leadType: entry.leadType,
+      }));
+
+      await api.post(`/orders/${orderId}/add-leads`, {
+        leads: leadsToAdd,
+      });
+
+      setNotification({
+        message: `Successfully added ${leadsToAdd.length} lead(s) to the order`,
+        severity: "success",
+      });
+
+      handleCloseAddLeadsDialog();
+
+      // Clear expanded row data for this order so it will be re-fetched
+      if (wasExpanded) {
+        setExpandedRowData((prev) => {
+          const newData = { ...prev };
+          delete newData[orderId];
+          return newData;
+        });
+      }
+
+      // Refresh orders list
+      await fetchOrders();
+
+      // Re-expand the order if it was expanded before
+      if (wasExpanded) {
+        // Fetch fresh order data
+        const fullResponse = await api.get(`/orders/${orderId}`);
+        const fullOrderData = fullResponse.data.data;
+        setExpandedRowData((prev) => ({
+          ...prev,
+          [orderId]: {
+            ...fullOrderData,
+            leadsLoading: false,
+          },
+        }));
+      }
+    } catch (err) {
+      console.error("Failed to add leads to order:", err);
+      setNotification({
+        message: err.response?.data?.message || "Failed to add leads to order",
+        severity: "error",
+      });
+    } finally {
+      setAddLeadsDialog((prev) => ({ ...prev, loading: false }));
+    }
+  }, [
+    addLeadsFound,
+    addLeadsDialog.order,
+    handleCloseAddLeadsDialog,
+    fetchOrders,
+    expandedRowData,
+  ]);
 
   const checkFulfillment = useCallback(
     async (data) => {
@@ -2959,6 +3248,20 @@ const OrdersPage = () => {
                             >
                               <ContentCopyIcon fontSize="small" />
                             </IconButton>
+
+                            {user?.role === "admin" && (
+                              <IconButton
+                                size="small"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenOrderAudit(order);
+                                }}
+                                title="View Audit Log"
+                                color="info"
+                              >
+                                <HistoryIcon fontSize="small" />
+                              </IconButton>
+                            )}
 
                             {(user?.role === "admin" ||
                               user?.role === "affiliate_manager") && (
@@ -5624,6 +5927,218 @@ const OrdersPage = () => {
         onSuccess={handleAssignLeadSuccess}
       />
 
+      {/* Add Leads to Order Dialog (Admin only) */}
+      <Dialog
+        open={addLeadsDialog.open}
+        onClose={handleCloseAddLeadsDialog}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>
+          <Box
+            sx={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
+          >
+            <Typography variant="h6">
+              Add Leads to Order {addLeadsDialog.order?._id?.slice(-8)}
+            </Typography>
+            <IconButton
+              aria-label="close"
+              onClick={handleCloseAddLeadsDialog}
+              size="small"
+            >
+              <CloseIcon />
+            </IconButton>
+          </Box>
+        </DialogTitle>
+        <DialogContent dividers>
+          <Box sx={{ mb: 3 }}>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+              Enter email addresses of leads to add (one per line or separated by
+              commas/spaces)
+            </Typography>
+            <TextField
+              multiline
+              rows={4}
+              fullWidth
+              placeholder="lead1@example.com&#10;lead2@example.com"
+              value={addLeadsEmails}
+              onChange={(e) => setAddLeadsEmails(e.target.value)}
+              disabled={addLeadsDialog.loading}
+            />
+            <Button
+              variant="contained"
+              sx={{ mt: 1 }}
+              onClick={searchLeadsForAddToOrder}
+              disabled={addLeadsSearching || !addLeadsEmails.trim()}
+              startIcon={
+                addLeadsSearching ? (
+                  <CircularProgress size={16} />
+                ) : (
+                  <SearchIcon />
+                )
+              }
+            >
+              {addLeadsSearching ? "Searching..." : "Search Leads"}
+            </Button>
+          </Box>
+
+          {addLeadsFound.length > 0 && (
+            <Box>
+              <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                Found Leads ({addLeadsFound.length})
+                {addLeadsFound.filter((e) => e.canAdd).length <
+                  addLeadsFound.length && (
+                  <Typography
+                    component="span"
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ ml: 1 }}
+                  >
+                    ({addLeadsFound.filter((e) => e.canAdd).length} can be added)
+                  </Typography>
+                )}
+              </Typography>
+              <TableContainer component={Paper} variant="outlined">
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Status</TableCell>
+                      <TableCell>Name</TableCell>
+                      <TableCell>Email</TableCell>
+                      <TableCell>Country</TableCell>
+                      <TableCell>Lead Type</TableCell>
+                      <TableCell>Agent</TableCell>
+                      <TableCell width={50}>Remove</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {addLeadsFound.map((entry, index) => (
+                      <TableRow
+                        key={entry.lead._id}
+                        sx={{
+                          bgcolor: !entry.canAdd
+                            ? entry.isInOrder
+                              ? "error.lighter"
+                              : "warning.lighter"
+                            : "inherit",
+                          opacity: !entry.canAdd ? 0.7 : 1,
+                        }}
+                      >
+                        <TableCell>
+                          {entry.isInOrder ? (
+                            <Tooltip title="This lead is already in this order">
+                              <Chip
+                                label="In Order"
+                                size="small"
+                                color="error"
+                                sx={{ fontSize: "0.7rem" }}
+                              />
+                            </Tooltip>
+                          ) : entry.isOnCooldown ? (
+                            <Tooltip
+                              title={`This lead is on cooldown. ${entry.cooldownDaysRemaining} days remaining.`}
+                            >
+                              <Chip
+                                label={`Cooldown (${entry.cooldownDaysRemaining}d)`}
+                                size="small"
+                                color="warning"
+                                sx={{ fontSize: "0.7rem" }}
+                              />
+                            </Tooltip>
+                          ) : (
+                            <Chip
+                              label="Ready"
+                              size="small"
+                              color="success"
+                              sx={{ fontSize: "0.7rem" }}
+                            />
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {entry.lead.firstName} {entry.lead.lastName}
+                        </TableCell>
+                        <TableCell>{entry.lead.newEmail}</TableCell>
+                        <TableCell>{entry.lead.country}</TableCell>
+                        <TableCell>
+                          <FormControl size="small" sx={{ minWidth: 100 }}>
+                            <Select
+                              value={entry.leadType}
+                              onChange={(e) =>
+                                updateAddLeadType(index, e.target.value)
+                              }
+                              disabled={addLeadsDialog.loading || !entry.canAdd}
+                            >
+                              <MenuItem value="ftd">FTD</MenuItem>
+                              <MenuItem value="filler">Filler</MenuItem>
+                              <MenuItem value="cold">Cold</MenuItem>
+                            </Select>
+                          </FormControl>
+                        </TableCell>
+                        <TableCell>
+                          <FormControl size="small" sx={{ minWidth: 150 }}>
+                            <Select
+                              value={entry.agent || ""}
+                              onChange={(e) =>
+                                updateAddLeadAgent(index, e.target.value)
+                              }
+                              displayEmpty
+                              disabled={addLeadsDialog.loading || !entry.canAdd}
+                            >
+                              <MenuItem value="">
+                                <em>No Agent</em>
+                              </MenuItem>
+                              {allAgents.map((agent) => (
+                                <MenuItem key={agent._id} value={agent._id}>
+                                  {agent.fullName}
+                                </MenuItem>
+                              ))}
+                            </Select>
+                          </FormControl>
+                        </TableCell>
+                        <TableCell>
+                          <IconButton
+                            size="small"
+                            onClick={() => removeAddLead(index)}
+                            disabled={addLeadsDialog.loading}
+                            color="error"
+                          >
+                            <DeleteIcon fontSize="small" />
+                          </IconButton>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseAddLeadsDialog} disabled={addLeadsDialog.loading}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleSubmitAddLeads}
+            disabled={
+              addLeadsDialog.loading ||
+              addLeadsFound.filter((e) => e.canAdd).length === 0
+            }
+            startIcon={
+              addLeadsDialog.loading ? <CircularProgress size={16} /> : <AddIcon />
+            }
+          >
+            {addLeadsDialog.loading
+              ? "Adding..."
+              : `Add ${addLeadsFound.filter((e) => e.canAdd).length} Lead(s)`}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       {/* Delete Order Confirmation Dialog */}
       <Dialog
         open={deleteOrderDialog.open}
@@ -5749,6 +6264,236 @@ const OrdersPage = () => {
               ? "Permanently Delete"
               : "Cancel Order"}
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Order Audit Log Dialog */}
+      <Dialog
+        open={orderAuditDialog.open}
+        onClose={handleCloseOrderAudit}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>
+          <Box
+            sx={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
+          >
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+              <HistoryIcon color="primary" />
+              <Typography variant="h6">
+                Order Audit Log
+              </Typography>
+              {orderAuditDialog.order && (
+                <Chip
+                  label={`#${orderAuditDialog.order._id?.slice(-8)}`}
+                  size="small"
+                  variant="outlined"
+                />
+              )}
+            </Box>
+            <IconButton
+              aria-label="close"
+              onClick={handleCloseOrderAudit}
+              size="small"
+            >
+              <CloseIcon />
+            </IconButton>
+          </Box>
+        </DialogTitle>
+        <DialogContent dividers>
+          {orderAuditDialog.loading ? (
+            <Box
+              sx={{
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
+                py: 4,
+              }}
+            >
+              <CircularProgress />
+            </Box>
+          ) : orderAuditDialog.auditLogs.length === 0 ? (
+            <Box sx={{ textAlign: "center", py: 4 }}>
+              <Typography color="text.secondary">
+                No audit logs found for this order.
+              </Typography>
+            </Box>
+          ) : (
+            <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
+              {orderAuditDialog.auditLogs.map((log, index) => {
+                const getActionIcon = (actionType) => {
+                  switch (actionType) {
+                    case "lead_added":
+                    case "added_to_order":
+                      return <AddIcon fontSize="small" color="success" />;
+                    case "lead_removed":
+                    case "removed_from_order":
+                      return <DeleteIcon fontSize="small" color="error" />;
+                    case "ftd_swapped":
+                    case "order_ftd_swapped":
+                      return <SwapHorizIcon fontSize="small" color="warning" />;
+                    case "lead_type_changed":
+                      return <SyncAltIcon fontSize="small" color="info" />;
+                    case "agent_changed":
+                      return <PersonIcon fontSize="small" color="primary" />;
+                    case "requester_changed":
+                      return <PersonIcon fontSize="small" color="secondary" />;
+                    case "client_broker_changed":
+                      return <BusinessIcon fontSize="small" color="primary" />;
+                    case "client_broker_removed":
+                      return <BusinessIcon fontSize="small" color="error" />;
+                    case "deposit_confirmed":
+                      return <CheckCircleIcon fontSize="small" color="success" />;
+                    case "deposit_unconfirmed":
+                      return <CancelIcon fontSize="small" color="warning" />;
+                    case "shaved":
+                      return <WarningIcon fontSize="small" color="error" />;
+                    case "unshaved":
+                      return <RestoreIcon fontSize="small" color="info" />;
+                    default:
+                      return <HistoryIcon fontSize="small" />;
+                  }
+                };
+
+                const getActionLabel = (actionType) => {
+                  switch (actionType) {
+                    case "lead_added":
+                    case "added_to_order":
+                      return "Lead Added";
+                    case "lead_removed":
+                    case "removed_from_order":
+                      return "Lead Removed";
+                    case "ftd_swapped":
+                    case "order_ftd_swapped":
+                      return "FTD Swapped";
+                    case "lead_type_changed":
+                      return "Type Changed";
+                    case "agent_changed":
+                      return "Agent Changed";
+                    case "requester_changed":
+                      return "Requester Changed";
+                    case "client_broker_changed":
+                      return "Broker Added";
+                    case "client_broker_removed":
+                      return "Broker Removed";
+                    case "deposit_confirmed":
+                      return "Deposit Confirmed";
+                    case "deposit_unconfirmed":
+                      return "Deposit Unconfirmed";
+                    case "shaved":
+                      return "Marked Shaved";
+                    case "unshaved":
+                      return "Unmarked Shaved";
+                    default:
+                      return actionType;
+                  }
+                };
+
+                const getActionColor = (actionType) => {
+                  switch (actionType) {
+                    case "lead_added":
+                    case "added_to_order":
+                    case "deposit_confirmed":
+                      return "success";
+                    case "lead_removed":
+                    case "removed_from_order":
+                    case "shaved":
+                    case "client_broker_removed":
+                      return "error";
+                    case "ftd_swapped":
+                    case "order_ftd_swapped":
+                    case "deposit_unconfirmed":
+                      return "warning";
+                    case "lead_type_changed":
+                    case "unshaved":
+                      return "info";
+                    case "agent_changed":
+                    case "client_broker_changed":
+                      return "primary";
+                    case "requester_changed":
+                      return "secondary";
+                    default:
+                      return "default";
+                  }
+                };
+
+                return (
+                  <Paper
+                    key={index}
+                    variant="outlined"
+                    sx={{
+                      p: 2,
+                      borderLeft: 4,
+                      borderLeftColor: `${getActionColor(log.action)}.main`,
+                    }}
+                  >
+                    <Box
+                      sx={{
+                        display: "flex",
+                        alignItems: "flex-start",
+                        justifyContent: "space-between",
+                        mb: 1,
+                      }}
+                    >
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                        {getActionIcon(log.action)}
+                        <Chip
+                          label={getActionLabel(log.action)}
+                          size="small"
+                          color={getActionColor(log.action)}
+                        />
+                        {log.leadName && (
+                          <Typography variant="body2" color="text.secondary">
+                            - {log.leadName}
+                          </Typography>
+                        )}
+                      </Box>
+                      <Typography variant="caption" color="text.secondary">
+                        {new Date(log.performedAt).toLocaleString()}
+                      </Typography>
+                    </Box>
+                    <Typography variant="body2" sx={{ mb: 1 }}>
+                      {log.details}
+                    </Typography>
+                    <Box
+                      sx={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 2,
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <Typography variant="caption" color="text.secondary">
+                        By:{" "}
+                        <strong>
+                          {log.performedBy?.fullName ||
+                            log.performedBy?.email ||
+                            "Unknown"}
+                        </strong>
+                      </Typography>
+                      {log.ipAddress && log.ipAddress !== "unknown" && (
+                        <Typography variant="caption" color="text.disabled">
+                          IP: {log.ipAddress}
+                        </Typography>
+                      )}
+                      {log.leadEmail && (
+                        <Typography variant="caption" color="text.secondary">
+                          Email: {log.leadEmail}
+                        </Typography>
+                      )}
+                    </Box>
+                  </Paper>
+                );
+              })}
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseOrderAudit}>Close</Button>
         </DialogActions>
       </Dialog>
 
@@ -6133,13 +6878,27 @@ const OrdersPage = () => {
             <Typography variant="h6">
               Leads Preview ({leadsPreviewModal.leads.length} leads)
             </Typography>
-            <IconButton
-              aria-label="close"
-              onClick={handleCloseLeadsPreviewModal}
-              size="small"
-            >
-              <CloseIcon />
-            </IconButton>
+            <Box sx={{ display: "flex", gap: 1 }}>
+              {user?.role === "admin" && leadsPreviewModal.order && (
+                <Tooltip title="Add leads to this order">
+                  <IconButton
+                    aria-label="add leads"
+                    onClick={() => handleOpenAddLeadsDialog(leadsPreviewModal.order)}
+                    size="small"
+                    color="primary"
+                  >
+                    <AddIcon />
+                  </IconButton>
+                </Tooltip>
+              )}
+              <IconButton
+                aria-label="close"
+                onClick={handleCloseLeadsPreviewModal}
+                size="small"
+              >
+                <CloseIcon />
+              </IconButton>
+            </Box>
           </Box>
         </DialogTitle>
         <DialogContent dividers sx={{ p: 1, overflow: "auto" }}>

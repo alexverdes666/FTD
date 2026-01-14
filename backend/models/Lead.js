@@ -653,6 +653,43 @@ const leadSchema = new mongoose.Schema(
       sparse: true,
       index: true,
     },
+    // Admin action audit log for tracking lead additions, removals, and edits to orders
+    adminActions: [
+      {
+        action: {
+          type: String,
+          enum: ["added_to_order", "removed_from_order", "lead_type_changed", "agent_changed", "order_ftd_swapped"],
+          required: true,
+        },
+        orderId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Order",
+        },
+        performedBy: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+          required: true,
+        },
+        performedAt: {
+          type: Date,
+          default: Date.now,
+        },
+        ipAddress: {
+          type: String,
+          trim: true,
+        },
+        details: {
+          type: String,
+          trim: true,
+        },
+        previousValue: {
+          type: mongoose.Schema.Types.Mixed,
+        },
+        newValue: {
+          type: mongoose.Schema.Types.Mixed,
+        },
+      },
+    ],
   },
   {
     timestamps: true,
