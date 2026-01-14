@@ -101,16 +101,32 @@ exports.fetchFromGateway = async (req, res, next) => {
           num: parseInt(count),
         },
         timeout: 30000,
+        responseType: 'text', // Get raw text first
       });
     } catch (error) {
       return res.status(503).json({
         success: false,
         message: "Failed to connect to gateway",
         error: error.message,
+        details: error.response?.data,
       });
     }
 
-    const data = response.data;
+    // Parse response - handle both JSON and non-JSON responses
+    let data;
+    try {
+      data = typeof response.data === 'string'
+        ? JSON.parse(response.data)
+        : response.data;
+    } catch (parseError) {
+      // Gateway returned non-JSON response
+      console.log('Gateway raw response:', response.data);
+      return res.status(502).json({
+        success: false,
+        message: "Gateway returned invalid response",
+        rawResponse: response.data?.substring?.(0, 500) || response.data,
+      });
+    }
     if (!data || !Array.isArray(data.smses)) {
       return res.status(200).json({
         success: true,
