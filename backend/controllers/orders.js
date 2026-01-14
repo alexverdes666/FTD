@@ -939,11 +939,11 @@ const generateDetailedReasonForLeadType = async (
 
   const limitingFactors = [];
 
-  // Step 1: Check total availability in database (excluding archived)
-  const totalInDB = await Lead.countDocuments({ leadType, isArchived: { $ne: true } });
+  // Step 1: Check total availability in database (excluding archived and inactive)
+  const totalInDB = await Lead.countDocuments({ leadType, isArchived: { $ne: true }, status: { $ne: "inactive" } });
   if (totalInDB < requested) {
     limitingFactors.push(
-      `Only ${totalInDB} total ${leadType} leads in database (excluding archived)`
+      `Only ${totalInDB} total ${leadType} leads in database (excluding archived and inactive)`
     );
     reason += ` - ${limitingFactors.join(", ")}`;
     return reason;
@@ -952,6 +952,7 @@ const generateDetailedReasonForLeadType = async (
   let baseQuery = {
     leadType,
     isArchived: { $ne: true }, // Never count archived leads
+    status: { $ne: "inactive" }, // Never count inactive leads
   };
 
   // Step 2: Add country filter
@@ -1410,6 +1411,7 @@ exports.createOrder = async (req, res, next) => {
       let query = {
         leadType,
         isArchived: { $ne: true }, // Never return archived leads
+        status: { $ne: "inactive" }, // Never return inactive leads
         ...countryFilter,
         ...genderFilterToUse,
       };
@@ -1621,6 +1623,7 @@ exports.createOrder = async (req, res, next) => {
       let query = {
         leadType,
         isArchived: { $ne: true }, // Never return archived leads
+        status: { $ne: "inactive" }, // Never return inactive leads
         ...countryFilter,
         ...genderFilter,
       };
@@ -2028,6 +2031,7 @@ exports.createOrder = async (req, res, next) => {
       let ftdQuery = {
         leadType: "ftd",
         isArchived: { $ne: true }, // Never return archived leads
+        status: { $ne: "inactive" }, // Never return inactive leads
         ...countryFilter,
         ...genderFilter,
       };
@@ -2445,6 +2449,7 @@ exports.createOrder = async (req, res, next) => {
       let fillerQuery = {
         leadType: "ftd",
         isArchived: { $ne: true }, // Never return archived leads
+        status: { $ne: "inactive" }, // Never return inactive leads
         ...countryFilter,
         ...genderFilter,
       };
@@ -2584,6 +2589,7 @@ exports.createOrder = async (req, res, next) => {
       let coldQuery = {
         leadType: "cold",
         isArchived: { $ne: true }, // Never return archived leads
+        status: { $ne: "inactive" }, // Never return inactive leads
         ...countryFilter,
         ...genderFilter,
       };
@@ -4174,6 +4180,7 @@ exports.changeFTDInOrder = async (req, res, next) => {
     let ftdQuery = {
       leadType: "ftd",
       isArchived: { $ne: true }, // Never return archived leads
+      status: { $ne: "inactive" }, // Never return inactive leads
       _id: { $nin: leadsToExclude }, // Exclude current lead and all previously used leads
       ...countryFilter,
     };
@@ -4946,6 +4953,7 @@ exports.checkOrderFulfillment = async (req, res, next) => {
       let baseQuery = {
         leadType,
         isArchived: { $ne: true }, // Never return archived leads
+        status: { $ne: "inactive" }, // Never return inactive leads
         ...countryFilter,
         ...genderFilter,
       };
