@@ -10,4 +10,14 @@ export const smsService = {
       throw error.response?.data || error;
     }
   },
+
+  // Fetch SMS messages from a gateway device
+  fetchFromGateway: async (gatewayId, params = {}) => {
+    try {
+      const response = await api.post(`/sms/fetch-from-gateway/${gatewayId}`, null, { params });
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error;
+    }
+  },
 };

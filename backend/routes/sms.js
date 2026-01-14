@@ -1,5 +1,5 @@
 const express = require("express");
-const { getSMSMessages } = require("../controllers/sms");
+const { getSMSMessages, fetchFromGateway } = require("../controllers/sms");
 const { protect, isAdmin } = require("../middleware/auth");
 
 const router = express.Router();
@@ -10,5 +10,8 @@ router.use(isAdmin);
 
 // Get all SMS messages with pagination and filtering
 router.get("/", getSMSMessages);
+
+// Fetch SMS messages from a gateway device
+router.post("/fetch-from-gateway/:gatewayId", fetchFromGateway);
 
 module.exports = router;

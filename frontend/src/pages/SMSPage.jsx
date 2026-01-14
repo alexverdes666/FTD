@@ -20,18 +20,24 @@ import {
   Grid,
   Button,
   Tooltip,
-  CircularProgress
+  CircularProgress,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions
 } from '@mui/material';
 import {
   Sms as SmsIcon,
   FilterList as FilterIcon,
-  Refresh as RefreshIcon
+  Refresh as RefreshIcon,
+  CloudDownload as FetchIcon
 } from '@mui/icons-material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { smsService } from '../services/smsService';
 import { simCardService } from '../services/simCardService';
+import gatewayDeviceService from '../services/gatewayDeviceService';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 
@@ -44,6 +50,12 @@ const SMSPage = () => {
 
   // SIM cards for filter dropdown
   const [simCards, setSimCards] = useState([]);
+
+  // Gateway fetch dialog state
+  const [gateways, setGateways] = useState([]);
+  const [fetchDialogOpen, setFetchDialogOpen] = useState(false);
+  const [selectedGateway, setSelectedGateway] = useState('');
+  const [fetching, setFetching] = useState(false);
 
   // Filter states
   const [filters, setFilters] = useState({
@@ -65,6 +77,19 @@ const SMSPage = () => {
       }
     };
     fetchSimCards();
+  }, []);
+
+  // Fetch gateways for fetch dialog
+  useEffect(() => {
+    const fetchGateways = async () => {
+      try {
+        const response = await gatewayDeviceService.getGatewayDevices();
+        setGateways(response.data || []);
+      } catch (error) {
+        console.error('Error fetching gateways:', error);
+      }
+    };
+    fetchGateways();
   }, []);
 
   const fetchSMSMessages = useCallback(async () => {
@@ -111,6 +136,30 @@ const SMSPage = () => {
     setPage(0);
   };
 
+  const handleFetchFromGateway = async () => {
+    if (!selectedGateway) {
+      toast.error('Please select a gateway');
+      return;
+    }
+
+    try {
+      setFetching(true);
+      const response = await smsService.fetchFromGateway(selectedGateway);
+      if (response.success) {
+        toast.success(response.message);
+        setFetchDialogOpen(false);
+        setSelectedGateway('');
+        fetchSMSMessages(); // Refresh the list
+      } else {
+        toast.error(response.message || 'Failed to fetch SMS from gateway');
+      }
+    } catch (error) {
+      toast.error(error.message || 'Failed to fetch SMS from gateway');
+    } finally {
+      setFetching(false);
+    }
+  };
+
   const formatTimestamp = (timestamp) => {
     if (!timestamp) return '-';
     try {
@@ -136,6 +185,14 @@ const SMSPage = () => {
             SMS Messages
           </Typography>
           <Box sx={{ display: 'flex', gap: 1 }}>
+            <Button
+              variant="contained"
+              startIcon={<FetchIcon />}
+              onClick={() => setFetchDialogOpen(true)}
+              disabled={gateways.length === 0}
+            >
+              Fetch from Gateway
+            </Button>
             <Button
               variant="outlined"
               startIcon={<RefreshIcon />}
@@ -305,6 +362,49 @@ const SMSPage = () => {
             rowsPerPageOptions={[10, 25, 50, 100]}
           />
         </Card>
+
+        {/* Fetch from Gateway Dialog */}
+        <Dialog
+          open={fetchDialogOpen}
+          onClose={() => !fetching && setFetchDialogOpen(false)}
+          maxWidth="sm"
+          fullWidth
+        >
+          <DialogTitle>Fetch SMS from Gateway</DialogTitle>
+          <DialogContent>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              Select a gateway device to fetch received SMS messages from.
+            </Typography>
+            <FormControl fullWidth sx={{ mt: 1 }}>
+              <InputLabel>Gateway Device</InputLabel>
+              <Select
+                value={selectedGateway}
+                label="Gateway Device"
+                onChange={(e) => setSelectedGateway(e.target.value)}
+                disabled={fetching}
+              >
+                {gateways.map((gateway) => (
+                  <MenuItem key={gateway._id} value={gateway._id}>
+                    {gateway.name} ({gateway.host}:{gateway.port})
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setFetchDialogOpen(false)} disabled={fetching}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleFetchFromGateway}
+              variant="contained"
+              disabled={fetching || !selectedGateway}
+              startIcon={fetching ? <CircularProgress size={20} /> : <FetchIcon />}
+            >
+              {fetching ? 'Fetching...' : 'Fetch SMS'}
+            </Button>
+          </DialogActions>
+        </Dialog>
       </Box>
     </LocalizationProvider>
   );

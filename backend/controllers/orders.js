@@ -3284,6 +3284,14 @@ exports.getOrderById = async (req, res, next) => {
             select: "name description",
           },
           {
+            path: "ourNetworkHistory.ourNetwork",
+            select: "name description",
+          },
+          {
+            path: "campaignHistory.campaign",
+            select: "name description",
+          },
+          {
             path: "depositConfirmedBy",
             select: "fullName email",
           },

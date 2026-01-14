@@ -6201,6 +6201,42 @@ const OrdersPage = () => {
                       backgroundColor: "grey.100",
                       whiteSpace: "nowrap",
                       py: 0.5,
+                      px: 1,
+                      fontSize: "0.75rem",
+                    }}
+                  >
+                    Client Network
+                  </TableCell>
+                  <TableCell
+                    sx={{
+                      fontWeight: "bold",
+                      backgroundColor: "grey.100",
+                      whiteSpace: "nowrap",
+                      py: 0.5,
+                      px: 1,
+                      fontSize: "0.75rem",
+                    }}
+                  >
+                    Our Network
+                  </TableCell>
+                  <TableCell
+                    sx={{
+                      fontWeight: "bold",
+                      backgroundColor: "grey.100",
+                      whiteSpace: "nowrap",
+                      py: 0.5,
+                      px: 1,
+                      fontSize: "0.75rem",
+                    }}
+                  >
+                    Campaign
+                  </TableCell>
+                  <TableCell
+                    sx={{
+                      fontWeight: "bold",
+                      backgroundColor: "grey.100",
+                      whiteSpace: "nowrap",
+                      py: 0.5,
                       px: 0.5,
                       fontSize: "0.75rem",
                       textAlign: "center",
@@ -6214,7 +6250,7 @@ const OrdersPage = () => {
                 {leadsPreviewModal.leads.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={10}
+                      colSpan={13}
                       align="center"
                     >
                       <Typography color="text.secondary" variant="body2">
@@ -6478,6 +6514,39 @@ const OrdersPage = () => {
                                 </Tooltip>
                               )}
                           </Box>
+                        </TableCell>
+                        {/* Client Network */}
+                        <TableCell sx={{ py: 0.5, px: 1 }}>
+                          <Typography
+                            variant="body2"
+                            sx={{ whiteSpace: "nowrap", fontSize: "0.75rem" }}
+                          >
+                            {lead.clientNetworkHistory?.length > 0
+                              ? lead.clientNetworkHistory[lead.clientNetworkHistory.length - 1]?.clientNetwork?.name || "-"
+                              : "-"}
+                          </Typography>
+                        </TableCell>
+                        {/* Our Network */}
+                        <TableCell sx={{ py: 0.5, px: 1 }}>
+                          <Typography
+                            variant="body2"
+                            sx={{ whiteSpace: "nowrap", fontSize: "0.75rem" }}
+                          >
+                            {lead.ourNetworkHistory?.length > 0
+                              ? lead.ourNetworkHistory[lead.ourNetworkHistory.length - 1]?.ourNetwork?.name || "-"
+                              : "-"}
+                          </Typography>
+                        </TableCell>
+                        {/* Campaign */}
+                        <TableCell sx={{ py: 0.5, px: 1 }}>
+                          <Typography
+                            variant="body2"
+                            sx={{ whiteSpace: "nowrap", fontSize: "0.75rem" }}
+                          >
+                            {lead.campaignHistory?.length > 0
+                              ? lead.campaignHistory[lead.campaignHistory.length - 1]?.campaign?.name || "-"
+                              : "-"}
+                          </Typography>
                         </TableCell>
                         {/* Actions */}
                         <TableCell sx={{ py: 0.5, px: 0.5, textAlign: "center" }}>
