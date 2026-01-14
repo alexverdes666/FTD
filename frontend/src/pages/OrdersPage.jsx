@@ -386,6 +386,27 @@ const OrdersPage = () => {
     leadName: "",
   });
 
+  // Client Networks Display Dialog State
+  const [clientNetworksDialog, setClientNetworksDialog] = useState({
+    open: false,
+    networks: [],
+    leadName: "",
+  });
+
+  // Our Networks Display Dialog State
+  const [ourNetworksDialog, setOurNetworksDialog] = useState({
+    open: false,
+    networks: [],
+    leadName: "",
+  });
+
+  // Campaigns Display Dialog State
+  const [campaignsDialog, setCampaignsDialog] = useState({
+    open: false,
+    campaigns: [],
+    leadName: "",
+  });
+
   const {
     control,
     handleSubmit,
@@ -1409,6 +1430,54 @@ const OrdersPage = () => {
     setClientBrokersDialog({
       open: false,
       brokers: [],
+      leadName: "",
+    });
+  }, []);
+
+  const handleOpenClientNetworksDialog = useCallback((networks, leadName) => {
+    setClientNetworksDialog({
+      open: true,
+      networks: networks || [],
+      leadName,
+    });
+  }, []);
+
+  const handleCloseClientNetworksDialog = useCallback(() => {
+    setClientNetworksDialog({
+      open: false,
+      networks: [],
+      leadName: "",
+    });
+  }, []);
+
+  const handleOpenOurNetworksDialog = useCallback((networks, leadName) => {
+    setOurNetworksDialog({
+      open: true,
+      networks: networks || [],
+      leadName,
+    });
+  }, []);
+
+  const handleCloseOurNetworksDialog = useCallback(() => {
+    setOurNetworksDialog({
+      open: false,
+      networks: [],
+      leadName: "",
+    });
+  }, []);
+
+  const handleOpenCampaignsDialog = useCallback((campaigns, leadName) => {
+    setCampaignsDialog({
+      open: true,
+      campaigns: campaigns || [],
+      leadName,
+    });
+  }, []);
+
+  const handleCloseCampaignsDialog = useCallback(() => {
+    setCampaignsDialog({
+      open: false,
+      campaigns: [],
       leadName: "",
     });
   }, []);
@@ -6517,36 +6586,111 @@ const OrdersPage = () => {
                         </TableCell>
                         {/* Client Network */}
                         <TableCell sx={{ py: 0.5, px: 1 }}>
-                          <Typography
-                            variant="body2"
-                            sx={{ whiteSpace: "nowrap", fontSize: "0.75rem" }}
+                          <Box
+                            sx={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 0.5,
+                            }}
                           >
-                            {lead.clientNetworkHistory?.length > 0
-                              ? lead.clientNetworkHistory[lead.clientNetworkHistory.length - 1]?.clientNetwork?.name || "-"
-                              : "-"}
-                          </Typography>
+                            <Typography
+                              variant="body2"
+                              sx={{ whiteSpace: "nowrap", fontSize: "0.75rem" }}
+                            >
+                              {lead.clientNetworkHistory?.length > 0
+                                ? lead.clientNetworkHistory[lead.clientNetworkHistory.length - 1]?.clientNetwork?.name || "-"
+                                : "-"}
+                            </Typography>
+                            {lead.clientNetworkHistory &&
+                              lead.clientNetworkHistory.length > 0 && (
+                                <Tooltip title="View all client networks">
+                                  <IconButton
+                                    size="small"
+                                    onClick={() =>
+                                      handleOpenClientNetworksDialog(
+                                        lead.clientNetworkHistory,
+                                        `${lead.firstName} ${lead.lastName}`
+                                      )
+                                    }
+                                    sx={{ p: 0.25 }}
+                                  >
+                                    <ListIcon sx={{ fontSize: 16 }} />
+                                  </IconButton>
+                                </Tooltip>
+                              )}
+                          </Box>
                         </TableCell>
                         {/* Our Network */}
                         <TableCell sx={{ py: 0.5, px: 1 }}>
-                          <Typography
-                            variant="body2"
-                            sx={{ whiteSpace: "nowrap", fontSize: "0.75rem" }}
+                          <Box
+                            sx={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 0.5,
+                            }}
                           >
-                            {lead.ourNetworkHistory?.length > 0
-                              ? lead.ourNetworkHistory[lead.ourNetworkHistory.length - 1]?.ourNetwork?.name || "-"
-                              : "-"}
-                          </Typography>
+                            <Typography
+                              variant="body2"
+                              sx={{ whiteSpace: "nowrap", fontSize: "0.75rem" }}
+                            >
+                              {lead.ourNetworkHistory?.length > 0
+                                ? lead.ourNetworkHistory[lead.ourNetworkHistory.length - 1]?.ourNetwork?.name || "-"
+                                : "-"}
+                            </Typography>
+                            {lead.ourNetworkHistory &&
+                              lead.ourNetworkHistory.length > 0 && (
+                                <Tooltip title="View all our networks">
+                                  <IconButton
+                                    size="small"
+                                    onClick={() =>
+                                      handleOpenOurNetworksDialog(
+                                        lead.ourNetworkHistory,
+                                        `${lead.firstName} ${lead.lastName}`
+                                      )
+                                    }
+                                    sx={{ p: 0.25 }}
+                                  >
+                                    <ListIcon sx={{ fontSize: 16 }} />
+                                  </IconButton>
+                                </Tooltip>
+                              )}
+                          </Box>
                         </TableCell>
                         {/* Campaign */}
                         <TableCell sx={{ py: 0.5, px: 1 }}>
-                          <Typography
-                            variant="body2"
-                            sx={{ whiteSpace: "nowrap", fontSize: "0.75rem" }}
+                          <Box
+                            sx={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 0.5,
+                            }}
                           >
-                            {lead.campaignHistory?.length > 0
-                              ? lead.campaignHistory[lead.campaignHistory.length - 1]?.campaign?.name || "-"
-                              : "-"}
-                          </Typography>
+                            <Typography
+                              variant="body2"
+                              sx={{ whiteSpace: "nowrap", fontSize: "0.75rem" }}
+                            >
+                              {lead.campaignHistory?.length > 0
+                                ? lead.campaignHistory[lead.campaignHistory.length - 1]?.campaign?.name || "-"
+                                : "-"}
+                            </Typography>
+                            {lead.campaignHistory &&
+                              lead.campaignHistory.length > 0 && (
+                                <Tooltip title="View all campaigns">
+                                  <IconButton
+                                    size="small"
+                                    onClick={() =>
+                                      handleOpenCampaignsDialog(
+                                        lead.campaignHistory,
+                                        `${lead.firstName} ${lead.lastName}`
+                                      )
+                                    }
+                                    sx={{ p: 0.25 }}
+                                  >
+                                    <ListIcon sx={{ fontSize: 16 }} />
+                                  </IconButton>
+                                </Tooltip>
+                              )}
+                          </Box>
                         </TableCell>
                         {/* Actions */}
                         <TableCell sx={{ py: 0.5, px: 0.5, textAlign: "center" }}>
@@ -6712,6 +6856,180 @@ const OrdersPage = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseClientBrokersDialog} variant="outlined">
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Client Networks Display Dialog */}
+      <Dialog
+        open={clientNetworksDialog.open}
+        onClose={handleCloseClientNetworksDialog}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          Client Networks
+          {clientNetworksDialog.leadName && (
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+              for {clientNetworksDialog.leadName}
+            </Typography>
+          )}
+        </DialogTitle>
+        <DialogContent>
+          {clientNetworksDialog.networks.length > 0 ? (
+            <TableContainer>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Network Name</TableCell>
+                    <TableCell>Assigned At</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {clientNetworksDialog.networks.map((entry, index) => (
+                    <TableRow key={index}>
+                      <TableCell>
+                        <Typography variant="body2">
+                          {entry.clientNetwork?.name || "-"}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2" color="text.secondary">
+                          {entry.assignedAt
+                            ? new Date(entry.assignedAt).toLocaleString()
+                            : "-"}
+                        </Typography>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          ) : (
+            <Typography variant="body2" color="text.secondary">
+              No client networks assigned
+            </Typography>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseClientNetworksDialog} variant="outlined">
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Our Networks Display Dialog */}
+      <Dialog
+        open={ourNetworksDialog.open}
+        onClose={handleCloseOurNetworksDialog}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          Our Networks
+          {ourNetworksDialog.leadName && (
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+              for {ourNetworksDialog.leadName}
+            </Typography>
+          )}
+        </DialogTitle>
+        <DialogContent>
+          {ourNetworksDialog.networks.length > 0 ? (
+            <TableContainer>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Network Name</TableCell>
+                    <TableCell>Assigned At</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {ourNetworksDialog.networks.map((entry, index) => (
+                    <TableRow key={index}>
+                      <TableCell>
+                        <Typography variant="body2">
+                          {entry.ourNetwork?.name || "-"}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2" color="text.secondary">
+                          {entry.assignedAt
+                            ? new Date(entry.assignedAt).toLocaleString()
+                            : "-"}
+                        </Typography>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          ) : (
+            <Typography variant="body2" color="text.secondary">
+              No our networks assigned
+            </Typography>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseOurNetworksDialog} variant="outlined">
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Campaigns Display Dialog */}
+      <Dialog
+        open={campaignsDialog.open}
+        onClose={handleCloseCampaignsDialog}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          Campaigns
+          {campaignsDialog.leadName && (
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+              for {campaignsDialog.leadName}
+            </Typography>
+          )}
+        </DialogTitle>
+        <DialogContent>
+          {campaignsDialog.campaigns.length > 0 ? (
+            <TableContainer>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Campaign Name</TableCell>
+                    <TableCell>Assigned At</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {campaignsDialog.campaigns.map((entry, index) => (
+                    <TableRow key={index}>
+                      <TableCell>
+                        <Typography variant="body2">
+                          {entry.campaign?.name || "-"}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2" color="text.secondary">
+                          {entry.assignedAt
+                            ? new Date(entry.assignedAt).toLocaleString()
+                            : "-"}
+                        </Typography>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          ) : (
+            <Typography variant="body2" color="text.secondary">
+              No campaigns assigned
+            </Typography>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseCampaignsDialog} variant="outlined">
             Close
           </Button>
         </DialogActions>
