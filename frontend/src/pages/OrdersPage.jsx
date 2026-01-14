@@ -78,6 +78,7 @@ import {
   Cached as ChangeIcon,
   Call as CallIcon,
   ContentCut as ShavedIcon,
+  FormatListBulleted as ListIcon,
 } from "@mui/icons-material";
 import { useForm, Controller } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
@@ -376,6 +377,13 @@ const OrdersPage = () => {
   const [previewActionsMenu, setPreviewActionsMenu] = useState({
     anchorEl: null,
     lead: null,
+  });
+
+  // Client Brokers Display Dialog State
+  const [clientBrokersDialog, setClientBrokersDialog] = useState({
+    open: false,
+    brokers: [],
+    leadName: "",
   });
 
   const {
@@ -1387,6 +1395,22 @@ const OrdersPage = () => {
 
   const handleClosePreviewActionsMenu = useCallback(() => {
     setPreviewActionsMenu({ anchorEl: null, lead: null });
+  }, []);
+
+  const handleOpenClientBrokersDialog = useCallback((brokers, leadName) => {
+    setClientBrokersDialog({
+      open: true,
+      brokers: brokers || [],
+      leadName,
+    });
+  }, []);
+
+  const handleCloseClientBrokersDialog = useCallback(() => {
+    setClientBrokersDialog({
+      open: false,
+      brokers: [],
+      leadName: "",
+    });
   }, []);
 
   const handlePreviewOrderLeads = useCallback(
@@ -6082,6 +6106,18 @@ const OrdersPage = () => {
                       fontSize: "0.75rem",
                     }}
                   >
+                    Status
+                  </TableCell>
+                  <TableCell
+                    sx={{
+                      fontWeight: "bold",
+                      backgroundColor: "grey.100",
+                      whiteSpace: "nowrap",
+                      py: 0.5,
+                      px: 1,
+                      fontSize: "0.75rem",
+                    }}
+                  >
                     Phone
                   </TableCell>
                   <TableCell
@@ -6178,7 +6214,7 @@ const OrdersPage = () => {
                 {leadsPreviewModal.leads.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={9}
+                      colSpan={10}
                       align="center"
                     >
                       <Typography color="text.secondary" variant="body2">
@@ -6246,6 +6282,55 @@ const OrdersPage = () => {
                             >
                               {lead.firstName} {lead.lastName}
                             </Typography>
+                          </Box>
+                        </TableCell>
+                        {/* Status */}
+                        <TableCell sx={{ py: 0.5, px: 1 }}>
+                          <Box
+                            sx={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 0.5,
+                              flexWrap: "wrap",
+                            }}
+                          >
+                            {lead.depositConfirmed && (
+                              <Chip
+                                label="Deposit Confirmed"
+                                size="small"
+                                color="success"
+                                sx={{
+                                  height: 18,
+                                  fontSize: "0.6rem",
+                                  "& .MuiChip-label": {
+                                    padding: "0 4px",
+                                  },
+                                }}
+                              />
+                            )}
+                            {lead.shaved && (
+                              <Chip
+                                label="Shaved"
+                                size="small"
+                                color="error"
+                                sx={{
+                                  height: 18,
+                                  fontSize: "0.6rem",
+                                  "& .MuiChip-label": {
+                                    padding: "0 4px",
+                                  },
+                                }}
+                              />
+                            )}
+                            {!lead.depositConfirmed && !lead.shaved && (
+                              <Typography
+                                variant="body2"
+                                color="text.secondary"
+                                sx={{ fontSize: "0.75rem" }}
+                              >
+                                -
+                              </Typography>
+                            )}
                           </Box>
                         </TableCell>
                         {/* Phone */}
@@ -6360,14 +6445,39 @@ const OrdersPage = () => {
                         </TableCell>
                         {/* Client Broker */}
                         <TableCell sx={{ py: 0.5, px: 1 }}>
-                          <Typography
-                            variant="body2"
-                            sx={{ whiteSpace: "nowrap", fontSize: "0.75rem" }}
+                          <Box
+                            sx={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 0.5,
+                            }}
                           >
-                            {lead.assignedClientBrokers?.[0]?.name ||
-                              lead.clientBroker ||
-                              "-"}
-                          </Typography>
+                            <Typography
+                              variant="body2"
+                              sx={{ whiteSpace: "nowrap", fontSize: "0.75rem" }}
+                            >
+                              {lead.assignedClientBrokers?.[0]?.name ||
+                                lead.clientBroker ||
+                                "-"}
+                            </Typography>
+                            {lead.assignedClientBrokers &&
+                              lead.assignedClientBrokers.length > 0 && (
+                                <Tooltip title="View all client brokers">
+                                  <IconButton
+                                    size="small"
+                                    onClick={() =>
+                                      handleOpenClientBrokersDialog(
+                                        lead.assignedClientBrokers,
+                                        `${lead.firstName} ${lead.lastName}`
+                                      )
+                                    }
+                                    sx={{ p: 0.25 }}
+                                  >
+                                    <ListIcon sx={{ fontSize: 16 }} />
+                                  </IconButton>
+                                </Tooltip>
+                              )}
+                          </Box>
                         </TableCell>
                         {/* Actions */}
                         <TableCell sx={{ py: 0.5, px: 0.5, textAlign: "center" }}>
@@ -6458,78 +6568,6 @@ const OrdersPage = () => {
                   Assign to Agent
                 </MenuItem>
 
-                {/* Confirm/Unconfirm Deposit */}
-                {isFtdOrFiller && (
-                  lead.depositConfirmed ? (
-                    user.role === "admin" ? (
-                      <MenuItem
-                        onClick={() => {
-                          handleUnconfirmDeposit(lead);
-                          handleClosePreviewActionsMenu();
-                        }}
-                      >
-                        <ListItemIcon>
-                          <CallIcon fontSize="small" color="warning" />
-                        </ListItemIcon>
-                        Unconfirm Deposit
-                      </MenuItem>
-                    ) : (
-                      <MenuItem disabled>
-                        <ListItemIcon>
-                          <CallIcon fontSize="small" color="success" />
-                        </ListItemIcon>
-                        Deposit Confirmed
-                      </MenuItem>
-                    )
-                  ) : (
-                    <MenuItem
-                      onClick={() => {
-                        handleConfirmDeposit(lead);
-                        handleClosePreviewActionsMenu();
-                      }}
-                      disabled={!lead.assignedAgent}
-                    >
-                      <ListItemIcon>
-                        <CallIcon fontSize="small" color="success" />
-                      </ListItemIcon>
-                      Confirm Deposit
-                    </MenuItem>
-                  )
-                )}
-
-                {/* Mark/Unmark as Shaved - for FTD/Filler with confirmed deposit */}
-                {isFtdOrFiller && lead.depositConfirmed && (
-                  lead.shaved ? (
-                    user.role === "admin" && (
-                      <MenuItem
-                        onClick={() => {
-                          handleUnmarkAsShaved(lead);
-                          handleClosePreviewActionsMenu();
-                        }}
-                      >
-                        <ListItemIcon>
-                          <ShavedIcon fontSize="small" color="warning" />
-                        </ListItemIcon>
-                        Unmark as Shaved
-                      </MenuItem>
-                    )
-                  ) : (
-                    user.role !== "lead_manager" && (
-                      <MenuItem
-                        onClick={() => {
-                          handleMarkAsShaved(lead);
-                          handleClosePreviewActionsMenu();
-                        }}
-                      >
-                        <ListItemIcon>
-                          <ShavedIcon fontSize="small" color="error" />
-                        </ListItemIcon>
-                        Mark as Shaved
-                      </MenuItem>
-                    )
-                  )
-                )}
-
                 {/* Delete - Admin only */}
                 {user.role === "admin" && (
                   <>
@@ -6552,6 +6590,62 @@ const OrdersPage = () => {
             );
           })()}
         </Menu>
+      </Dialog>
+
+      {/* Client Brokers Display Dialog */}
+      <Dialog
+        open={clientBrokersDialog.open}
+        onClose={handleCloseClientBrokersDialog}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          Client Brokers
+          {clientBrokersDialog.leadName && (
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+              for {clientBrokersDialog.leadName}
+            </Typography>
+          )}
+        </DialogTitle>
+        <DialogContent>
+          {clientBrokersDialog.brokers.length > 0 ? (
+            <TableContainer>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Broker Name</TableCell>
+                    <TableCell>Domain</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {clientBrokersDialog.brokers.map((broker, index) => (
+                    <TableRow key={index}>
+                      <TableCell>
+                        <Typography variant="body2">
+                          {broker.name || "-"}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2" color="text.secondary">
+                          {broker.domain || "-"}
+                        </Typography>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          ) : (
+            <Typography variant="body2" color="text.secondary">
+              No client brokers assigned
+            </Typography>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseClientBrokersDialog} variant="outlined">
+            Close
+          </Button>
+        </DialogActions>
       </Dialog>
 
       {/* Copy Preferences Dialog */}

@@ -3026,7 +3026,7 @@ exports.getOrders = async (req, res, next) => {
         .populate({
           path: "leads",
           select:
-            "leadType firstName lastName country email phone orderId assignedClientBrokers clientBrokerHistory assignedAgent assignedAgentAt depositConfirmed depositConfirmedBy depositConfirmedAt shaved shavedBy shavedAt shavedRefundsManager shavedManagerAssignedBy shavedManagerAssignedAt",
+            "leadType firstName lastName country newEmail oldEmail newPhone oldPhone orderId assignedClientBrokers clientBrokerHistory assignedAgent assignedAgentAt depositConfirmed depositConfirmedBy depositConfirmedAt shaved shavedBy shavedAt shavedRefundsManager shavedManagerAssignedBy shavedManagerAssignedAt",
           populate: [
             {
               path: "assignedAgent",
@@ -3126,8 +3126,10 @@ exports.getOrders = async (req, res, next) => {
               (lead) =>
                 lead?.firstName?.toLowerCase().includes(keyword) ||
                 lead?.lastName?.toLowerCase().includes(keyword) ||
-                lead?.email?.toLowerCase().includes(keyword) ||
-                lead?.phone?.toLowerCase().includes(keyword) ||
+                lead?.newEmail?.toLowerCase().includes(keyword) ||
+                lead?.oldEmail?.toLowerCase().includes(keyword) ||
+                lead?.newPhone?.toLowerCase().includes(keyword) ||
+                lead?.oldPhone?.toLowerCase().includes(keyword) ||
                 lead?.country?.toLowerCase().includes(keyword) ||
                 lead?.assignedAgent?.fullName
                   ?.toLowerCase()
@@ -3178,7 +3180,7 @@ exports.getOrders = async (req, res, next) => {
       .populate({
         path: "leads",
         select:
-          "leadType firstName lastName country email phone orderId assignedClientBrokers clientBrokerHistory assignedAgent assignedAgentAt depositConfirmed depositConfirmedBy depositConfirmedAt shaved shavedBy shavedAt shavedRefundsManager shavedManagerAssignedBy shavedManagerAssignedAt",
+          "leadType firstName lastName country newEmail oldEmail newPhone oldPhone orderId assignedClientBrokers clientBrokerHistory assignedAgent assignedAgentAt depositConfirmed depositConfirmedBy depositConfirmedAt shaved shavedBy shavedAt shavedRefundsManager shavedManagerAssignedBy shavedManagerAssignedAt",
         populate: [
           {
             path: "assignedAgent",
@@ -3648,7 +3650,9 @@ exports.exportOrderLeads = async (req, res, next) => {
       lead.oldEmail || "",
       lead.oldPhone || "",
       lead.campaign || "",
-      lead.clientBroker || "",
+      lead.assignedClientBrokers && lead.assignedClientBrokers.length > 0
+        ? lead.assignedClientBrokers.map((b) => `${b.name} (${b.domain || "N/A"})`).join(", ")
+        : lead.clientBroker || "",
       lead.clientNetwork || "",
       lead.ourNetwork || "",
       lead.socialMedia?.facebook || "",
