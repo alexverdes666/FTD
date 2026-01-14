@@ -49,6 +49,7 @@ const {
   unconfirmDeposit,
   markAsShaved,
   unmarkAsShaved,
+  assignSimCardToLeads,
 } = require("../controllers/leads");
 const router = express.Router();
 router.get(
@@ -611,6 +612,30 @@ router.put(
   "/:id/unmark-shaved",
   [protect, authorize("admin")],
   unmarkAsShaved
+);
+
+// Assign SIM card to FTD leads
+router.post(
+  "/assign-simcard",
+  [
+    protect,
+    authorize("admin", "lead_manager"),
+    body("leadIds")
+      .isArray({ min: 1 })
+      .withMessage("leadIds must be a non-empty array"),
+    body("simCardId")
+      .optional()
+      .custom((value) => {
+        if (value === null || value === undefined) {
+          return true;
+        }
+        if (!mongoose.Types.ObjectId.isValid(value)) {
+          throw new Error("Invalid SIM card ID");
+        }
+        return true;
+      }),
+  ],
+  assignSimCardToLeads
 );
 
 module.exports = router;

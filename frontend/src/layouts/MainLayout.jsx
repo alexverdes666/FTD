@@ -304,6 +304,11 @@ const MainLayout = () => {
               path: "/simcards",
             },
             {
+              text: "Numbers",
+              icon: <SimCardIcon />,
+              path: "/numbers",
+            },
+            {
               text: "SMS",
               icon: <SmsIcon />,
               path: "/sms",
@@ -497,6 +502,19 @@ const MainLayout = () => {
           text: "Verifications",
           icon: <VerificationIcon />,
           path: "/verifications",
+        },
+        {
+          text: "ERP",
+          icon: <BusinessIcon />,
+          isExpandable: true,
+          key: "erp",
+          children: [
+            {
+              text: "Numbers",
+              icon: <SimCardIcon />,
+              path: "/numbers",
+            },
+          ],
         },
         { text: "Support Tickets", icon: <TicketIcon />, path: "/tickets" },
       ];

@@ -4478,3 +4478,168 @@ exports.unmarkAsShaved = async (req, res, next) => {
     next(error);
   }
 };
+
+// Assign SIM cards to FTD leads
+exports.assignSimCardToLeads = async (req, res, next) => {
+  try {
+    const { leadIds, simCardId } = req.body;
+
+    if (!leadIds || !Array.isArray(leadIds) || leadIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Lead IDs array is required",
+      });
+    }
+
+    // Check if this is an unassignment request (simCardId is null)
+    const isUnassigning = simCardId === null || simCardId === undefined;
+
+    let simCard = null;
+    if (!isUnassigning) {
+      // Verify SIM card exists
+      const SimCard = require("../models/SimCard");
+      simCard = await SimCard.findById(simCardId);
+      if (!simCard) {
+        return res.status(404).json({
+          success: false,
+          message: "SIM card not found",
+        });
+      }
+    }
+
+    const results = {
+      success: [],
+      failed: [],
+      reassigned: [],
+    };
+
+    for (const leadId of leadIds) {
+      try {
+        const lead = await Lead.findById(leadId).populate(
+          "assignedSimCard",
+          "simNumber geo operator"
+        );
+
+        if (!lead) {
+          results.failed.push({
+            leadId,
+            reason: "Lead not found",
+          });
+          continue;
+        }
+
+        if (lead.leadType !== "ftd") {
+          results.failed.push({
+            leadId,
+            reason: "Only FTD leads can be assigned SIM cards",
+          });
+          continue;
+        }
+
+        if (isUnassigning) {
+          // Handle unassignment
+          if (!lead.assignedSimCard) {
+            // Already unassigned
+            results.success.push({
+              leadId,
+              name: `${lead.firstName} ${lead.lastName}`,
+              alreadyUnassigned: true,
+            });
+            continue;
+          }
+
+          // Store previous SIM card info
+          const previousSimCardInfo = {
+            id: lead.assignedSimCard._id,
+            simNumber: lead.assignedSimCard.simNumber,
+            geo: lead.assignedSimCard.geo,
+            operator: lead.assignedSimCard.operator,
+          };
+
+          // Unassign the SIM card
+          lead.assignedSimCard = null;
+          lead.assignedSimCardAt = null;
+          lead.assignedSimCardBy = null;
+          await lead.save();
+
+          results.success.push({
+            leadId,
+            name: `${lead.firstName} ${lead.lastName}`,
+            unassigned: true,
+            previousSimCard: previousSimCardInfo,
+          });
+        } else {
+          // Handle assignment
+          // Check if this is already assigned to the same SIM card
+          if (
+            lead.assignedSimCard &&
+            lead.assignedSimCard._id.toString() === simCardId
+          ) {
+            results.success.push({
+              leadId,
+              name: `${lead.firstName} ${lead.lastName}`,
+              alreadyAssigned: true,
+              simCard: {
+                id: simCard._id,
+                simNumber: simCard.simNumber,
+                geo: simCard.geo,
+                operator: simCard.operator,
+              },
+            });
+            continue;
+          }
+
+          // Check if reassigning from another SIM card
+          const wasReassigned = !!lead.assignedSimCard;
+          const previousSimCardInfo = wasReassigned
+            ? {
+                id: lead.assignedSimCard._id,
+                simNumber: lead.assignedSimCard.simNumber,
+                geo: lead.assignedSimCard.geo,
+                operator: lead.assignedSimCard.operator,
+              }
+            : null;
+
+          // Assign the SIM card
+          lead.assignedSimCard = simCardId;
+          lead.assignedSimCardAt = new Date();
+          lead.assignedSimCardBy = req.user._id;
+          await lead.save();
+
+          const resultEntry = {
+            leadId,
+            name: `${lead.firstName} ${lead.lastName}`,
+            simCard: {
+              id: simCard._id,
+              simNumber: simCard.simNumber,
+              geo: simCard.geo,
+              operator: simCard.operator,
+            },
+          };
+
+          if (wasReassigned) {
+            resultEntry.reassigned = true;
+            resultEntry.previousSimCard = previousSimCardInfo;
+            results.reassigned.push(resultEntry);
+          } else {
+            results.success.push(resultEntry);
+          }
+        }
+      } catch (error) {
+        results.failed.push({
+          leadId,
+          reason: error.message,
+        });
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "SIM card assignment completed",
+      data: results,
+    });
+  } catch (error) {
+    console.error("Error assigning SIM cards to leads:", error);
+    next(error);
+  }
+};

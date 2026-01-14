@@ -63,6 +63,20 @@ const leadSchema = new mongoose.Schema(
     assignedAgentAt: {
       type: Date,
     },
+    assignedSimCard: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "SimCard",
+      default: null,
+      index: true,
+    },
+    assignedSimCardAt: {
+      type: Date,
+    },
+    assignedSimCardBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
     depositConfirmed: {
       type: Boolean,
       default: false,
