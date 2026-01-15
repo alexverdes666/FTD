@@ -1718,6 +1718,45 @@ exports.createOrder = async (req, res, next) => {
         );
       }
 
+      // Apply cooldown filter for FTD and Filler leads (10-day cooldown)
+      // This prevents returning leads that were previously ordered as FTD or Filler
+      if (leadType === "ftd" || leadType === "filler") {
+        const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
+        const beforeCooldownFilter = availableLeads.length;
+
+        // Extract phones from available leads to check for duplicates
+        const leadPhones = availableLeads
+          .map((l) => l.newPhone)
+          .filter(Boolean);
+
+        // Find ALL leads (ftd or filler) with these phones that have been used recently
+        // This prevents using an FTD lead if a Filler lead with same phone was used recently (and vice versa)
+        const recentlyUsedLeads = await Lead.find({
+          newPhone: { $in: leadPhones },
+          leadType: { $in: ["ftd", "filler"] },
+          lastUsedInOrder: { $gte: tenDaysAgo },
+        }).select("newPhone");
+
+        const recentlyUsedPhones = new Set(
+          recentlyUsedLeads.map((l) => l.newPhone)
+        );
+
+        availableLeads = availableLeads.filter((lead) => {
+          const inCooldown =
+            lead.lastUsedInOrder && lead.lastUsedInOrder >= tenDaysAgo;
+          const isDuplicateUsed = recentlyUsedPhones.has(lead.newPhone);
+          return !inCooldown && !isDuplicateUsed;
+        });
+
+        console.log(
+          `[${leadType.toUpperCase()}-DEBUG] Cooldown filtering: ${
+            beforeCooldownFilter - availableLeads.length
+          } leads filtered out (in 10-day cooldown or duplicate used), ${
+            availableLeads.length
+          } leads remain`
+        );
+      }
+
       // Agent filtering for FTD and Filler leads
       if ((leadType === "ftd" || leadType === "filler") && agentFilter) {
         console.log(

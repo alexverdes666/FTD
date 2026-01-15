@@ -3281,8 +3281,7 @@ const OrdersPage = () => {
                               <HistoryIcon fontSize="small" />
                             </IconButton>
 
-                            {(user?.role === "admin" ||
-                              user?.role === "affiliate_manager") && (
+                            {user?.role === "admin" && (
                               <IconButton
                                 size="small"
                                 onClick={(e) => {
