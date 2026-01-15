@@ -22,6 +22,11 @@ import {
   Stack,
   TablePagination,
   InputAdornment,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  FormHelperText,
 } from '@mui/material';
 import {
   SwapHoriz as SwapIcon,
@@ -33,6 +38,17 @@ import {
   CheckCircle as CheckCircleIcon,
 } from '@mui/icons-material';
 import api from '../services/api';
+
+const LEAD_CHANGE_REASONS = [
+  "Lead is not sent",
+  "Email not working",
+  "Phone not working",
+  "One or more leads from this order were already shaved",
+  "Lead failed",
+  "Agent is missing",
+  "Vankata e gei",
+  "Other",
+];
 
 const ReplaceLeadDialog = ({
   open,
@@ -56,6 +72,13 @@ const ReplaceLeadDialog = ({
   const [context, setContext] = useState(null);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
+
+  // Reason selection state (shown in confirmation step)
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [reason, setReason] = useState('');
+  const [customReason, setCustomReason] = useState('');
+  const [missingAgentId, setMissingAgentId] = useState('');
+  const [agents, setAgents] = useState([]);
 
   // Debounce search query
   useEffect(() => {
@@ -104,6 +127,21 @@ const ReplaceLeadDialog = ({
     fetchAvailableLeads();
   }, [fetchAvailableLeads]);
 
+  // Fetch agents when dialog opens
+  useEffect(() => {
+    const fetchAgents = async () => {
+      try {
+        const response = await api.get('/users?role=agent&limit=1000');
+        setAgents(response.data.data || []);
+      } catch (err) {
+        console.error('Failed to fetch agents:', err);
+      }
+    };
+    if (open) {
+      fetchAgents();
+    }
+  }, [open]);
+
   // Reset state when dialog opens/closes
   useEffect(() => {
     if (open) {
@@ -113,6 +151,11 @@ const ReplaceLeadDialog = ({
       setPagination((prev) => ({ ...prev, page: 0 }));
       setError(null);
       setSuccess(null);
+      // Reset confirmation dialog and reason fields
+      setShowConfirmDialog(false);
+      setReason('');
+      setCustomReason('');
+      setMissingAgentId('');
     }
   }, [open]);
 
@@ -122,11 +165,52 @@ const ReplaceLeadDialog = ({
     setError(null);
   }, []);
 
-  // Handle replacement
-  const handleReplaceLead = useCallback(async () => {
+  // Open confirmation dialog when Replace Lead is clicked
+  const handleReplaceLeadClick = useCallback(() => {
     if (!selectedLead) {
       setError('Please select a lead to replace with');
       return;
+    }
+    // Reset reason fields and show confirmation dialog
+    setReason('');
+    setCustomReason('');
+    setMissingAgentId('');
+    setShowConfirmDialog(true);
+    setError(null);
+  }, [selectedLead]);
+
+  // Close confirmation dialog
+  const handleCloseConfirmDialog = useCallback(() => {
+    setShowConfirmDialog(false);
+    setReason('');
+    setCustomReason('');
+    setMissingAgentId('');
+  }, []);
+
+  // Handle actual replacement after reason is confirmed
+  const handleConfirmReplaceLead = useCallback(async () => {
+    if (!reason) {
+      setError('Please select a reason for replacement');
+      return;
+    }
+
+    if (reason === 'Other' && !customReason.trim()) {
+      setError('Please enter a custom reason');
+      return;
+    }
+
+    if (reason === 'Agent is missing' && !missingAgentId) {
+      setError('Please select which agent is missing');
+      return;
+    }
+
+    // Build final reason
+    let finalReason = reason;
+    if (reason === 'Other') {
+      finalReason = customReason;
+    } else if (reason === 'Agent is missing') {
+      const missingAgent = agents.find(a => a._id === missingAgentId);
+      finalReason = `Agent is missing: ${missingAgent?.fullName || missingAgentId}`;
     }
 
     try {
@@ -135,10 +219,11 @@ const ReplaceLeadDialog = ({
 
       const response = await api.post(
         `/orders/${order._id}/leads/${lead._id}/replace`,
-        { newLeadId: selectedLead._id }
+        { newLeadId: selectedLead._id, reason: finalReason }
       );
 
       setSuccess('Lead successfully replaced!');
+      setShowConfirmDialog(false);
 
       // Call onSuccess callback after a short delay
       setTimeout(() => {
@@ -153,7 +238,7 @@ const ReplaceLeadDialog = ({
     } finally {
       setReplacing(false);
     }
-  }, [selectedLead, order?._id, lead?._id, onSuccess, onClose]);
+  }, [selectedLead, order?._id, lead?._id, onSuccess, onClose, reason, customReason, missingAgentId, agents]);
 
   // Handle pagination change
   const handleChangePage = useCallback((event, newPage) => {
@@ -461,13 +546,114 @@ const ReplaceLeadDialog = ({
         </Button>
         <Button
           variant="contained"
-          onClick={handleReplaceLead}
+          onClick={handleReplaceLeadClick}
           disabled={!selectedLead || replacing || loading}
-          startIcon={replacing ? <CircularProgress size={20} /> : <SwapIcon />}
+          startIcon={<SwapIcon />}
         >
-          {replacing ? 'Replacing...' : 'Replace Lead'}
+          Replace Lead
         </Button>
       </DialogActions>
+
+      {/* Confirmation Dialog for Reason Selection */}
+      <Dialog
+        open={showConfirmDialog}
+        onClose={handleCloseConfirmDialog}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Confirm Lead Replacement</DialogTitle>
+        <DialogContent>
+          {error && (
+            <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
+              {error}
+            </Alert>
+          )}
+          <Typography sx={{ mb: 2 }}>
+            You are about to replace{' '}
+            <strong>{lead?.firstName} {lead?.lastName}</strong> with{' '}
+            <strong>{selectedLead?.firstName} {selectedLead?.lastName}</strong>.
+            Please select a reason for this action.
+          </Typography>
+          <FormControl fullWidth required error={!reason}>
+            <InputLabel id="replace-lead-confirm-reason-label">
+              Reason for replacement *
+            </InputLabel>
+            <Select
+              labelId="replace-lead-confirm-reason-label"
+              value={reason}
+              label="Reason for replacement *"
+              onChange={(e) => {
+                setReason(e.target.value);
+                if (e.target.value !== 'Other') setCustomReason('');
+                if (e.target.value !== 'Agent is missing') setMissingAgentId('');
+              }}
+            >
+              {LEAD_CHANGE_REASONS.map((r) => (
+                <MenuItem key={r} value={r}>
+                  {r}
+                </MenuItem>
+              ))}
+            </Select>
+            {!reason && (
+              <FormHelperText>Please select a reason</FormHelperText>
+            )}
+          </FormControl>
+          {reason === 'Agent is missing' && (
+            <FormControl fullWidth required error={!missingAgentId} sx={{ mt: 2 }}>
+              <InputLabel id="replace-lead-confirm-missing-agent-label">
+                Which agent is missing? *
+              </InputLabel>
+              <Select
+                labelId="replace-lead-confirm-missing-agent-label"
+                value={missingAgentId}
+                label="Which agent is missing? *"
+                onChange={(e) => setMissingAgentId(e.target.value)}
+              >
+                {agents.map((agent) => (
+                  <MenuItem key={agent._id} value={agent._id}>
+                    {agent.fullName}
+                  </MenuItem>
+                ))}
+              </Select>
+              {!missingAgentId && (
+                <FormHelperText>Please select an agent</FormHelperText>
+              )}
+            </FormControl>
+          )}
+          {reason === 'Other' && (
+            <TextField
+              fullWidth
+              required
+              label="Please specify the reason *"
+              value={customReason}
+              onChange={(e) => setCustomReason(e.target.value)}
+              error={!customReason.trim()}
+              helperText={!customReason.trim() ? 'Please enter a custom reason' : ''}
+              sx={{ mt: 2 }}
+              multiline
+              rows={2}
+            />
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseConfirmDialog} disabled={replacing}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleConfirmReplaceLead}
+            disabled={
+              replacing ||
+              !reason ||
+              (reason === 'Other' && !customReason.trim()) ||
+              (reason === 'Agent is missing' && !missingAgentId)
+            }
+            startIcon={replacing ? <CircularProgress size={20} /> : <SwapIcon />}
+          >
+            {replacing ? 'Replacing...' : 'Confirm & Replace'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Dialog>
   );
 };

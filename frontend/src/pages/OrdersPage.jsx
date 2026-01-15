@@ -819,6 +819,15 @@ const OrdersPage = () => {
   const [addLeadsSearching, setAddLeadsSearching] = useState(false);
   const [addLeadsFound, setAddLeadsFound] = useState([]); // [{lead, agent, leadType}]
 
+  // Add Leads Confirmation Dialog State (for reason selection)
+  const [addLeadsConfirmDialog, setAddLeadsConfirmDialog] = useState({
+    open: false,
+    reason: "",
+    customReason: "",
+    missingAgentId: "",
+    loading: false,
+  });
+
   // Delete Order Confirmation State
   const [deleteOrderDialog, setDeleteOrderDialog] = useState({
     open: false,
@@ -835,17 +844,23 @@ const OrdersPage = () => {
     leadName: "",
     reason: "",
     customReason: "",
+    missingAgentId: "",
     loading: false,
   });
 
-  const REMOVE_LEAD_REASONS = [
+  const LEAD_CHANGE_REASONS = [
     "Lead is not sent",
     "Email not working",
     "Phone not working",
     "One or more leads from this order were already shaved",
+    "Lead failed",
+    "Agent is missing",
     "Vankata e gei",
     "Other",
   ];
+
+  // Keep alias for backward compatibility
+  const REMOVE_LEAD_REASONS = LEAD_CHANGE_REASONS;
 
   // Autocomplete states for Create Order Dialog
   const [clientNetworkInput, setClientNetworkInput] = useState("");
@@ -1201,16 +1216,23 @@ const OrdersPage = () => {
         return;
       }
 
+      // Get order's country filter
+      const orderCountry = addLeadsDialog.order?.countryFilter;
+
       // Map all found leads to add leads format (including those with issues)
-      const addLeadsEntries = foundLeads.map((lead) => ({
-        lead,
-        agent: lead.assignedAgent?._id || "",
-        leadType: lead.leadType || "ftd",
-        isInOrder: lead.isInOrder || false,
-        isOnCooldown: lead.isOnCooldown || false,
-        cooldownDaysRemaining: lead.cooldownDaysRemaining || 0,
-        canAdd: !lead.isInOrder && !lead.isOnCooldown,
-      }));
+      const addLeadsEntries = foundLeads.map((lead) => {
+        const isWrongCountry = orderCountry && lead.country !== orderCountry;
+        return {
+          lead,
+          agent: lead.assignedAgent?._id || "",
+          leadType: lead.leadType || "ftd",
+          isInOrder: lead.isInOrder || false,
+          isOnCooldown: lead.isOnCooldown || false,
+          cooldownDaysRemaining: lead.cooldownDaysRemaining || 0,
+          isWrongCountry: isWrongCountry,
+          canAdd: !lead.isInOrder && !lead.isOnCooldown && !isWrongCountry,
+        };
+      });
 
       setAddLeadsFound(addLeadsEntries);
 
@@ -1224,12 +1246,14 @@ const OrdersPage = () => {
 
       const alreadyInOrder = addLeadsEntries.filter((e) => e.isInOrder).length;
       const onCooldown = addLeadsEntries.filter((e) => e.isOnCooldown && !e.isInOrder).length;
+      const wrongCountry = addLeadsEntries.filter((e) => e.isWrongCountry && !e.isInOrder && !e.isOnCooldown).length;
       const canAddCount = addLeadsEntries.filter((e) => e.canAdd).length;
 
       let msg = `Found ${foundLeads.length} leads.`;
       if (canAddCount > 0) msg = `${canAddCount} leads ready to add.`;
       if (alreadyInOrder > 0) msg += ` ${alreadyInOrder} already in order.`;
       if (onCooldown > 0) msg += ` ${onCooldown} on cooldown.`;
+      if (wrongCountry > 0) msg += ` ${wrongCountry} wrong country (order requires ${orderCountry}).`;
       if (notFoundEmails.length > 0)
         msg += ` Not found: ${notFoundEmails.join(", ")}`;
 
@@ -1268,23 +1292,86 @@ const OrdersPage = () => {
     setAddLeadsFound((prev) => prev.filter((_, i) => i !== index));
   }, []);
 
-  const handleSubmitAddLeads = useCallback(async () => {
-    // Only submit leads that can be added (not on cooldown, not already in order)
+  // Open confirmation dialog when user clicks "Add Leads"
+  const handleSubmitAddLeads = useCallback(() => {
+    // Only submit leads that can be added (not on cooldown, not already in order, correct country)
     const eligibleLeads = addLeadsFound.filter((entry) => entry.canAdd);
 
     if (eligibleLeads.length === 0) {
       setNotification({
-        message: "No eligible leads to add. All leads are either on cooldown or already in the order.",
+        message: "No eligible leads to add. All leads are either on cooldown, already in the order, or from a different country.",
         severity: "warning",
       });
       return;
     }
 
-    setAddLeadsDialog((prev) => ({ ...prev, loading: true }));
+    // Open confirmation dialog for reason selection
+    setAddLeadsConfirmDialog({
+      open: true,
+      reason: "",
+      customReason: "",
+      missingAgentId: "",
+      loading: false,
+    });
+  }, [addLeadsFound]);
+
+  // Close add leads confirmation dialog
+  const handleCloseAddLeadsConfirmDialog = useCallback(() => {
+    setAddLeadsConfirmDialog({
+      open: false,
+      reason: "",
+      customReason: "",
+      missingAgentId: "",
+      loading: false,
+    });
+  }, []);
+
+  // Actually submit the leads after reason is selected
+  const handleConfirmAddLeads = useCallback(async () => {
+    const { reason, customReason, missingAgentId } = addLeadsConfirmDialog;
+
+    // Validate reason is provided
+    if (!reason) {
+      setNotification({
+        message: "Please select a reason for adding leads",
+        severity: "warning",
+      });
+      return;
+    }
+
+    // Validate custom reason if "Other" is selected
+    if (reason === "Other" && !customReason.trim()) {
+      setNotification({
+        message: "Please enter a custom reason",
+        severity: "warning",
+      });
+      return;
+    }
+
+    // Validate missing agent if "Agent is missing" is selected
+    if (reason === "Agent is missing" && !missingAgentId) {
+      setNotification({
+        message: "Please select which agent is missing",
+        severity: "warning",
+      });
+      return;
+    }
+
+    // Build the final reason
+    let finalReason = reason;
+    if (reason === "Other") {
+      finalReason = customReason;
+    } else if (reason === "Agent is missing") {
+      const missingAgent = allAgents.find(a => a._id === missingAgentId);
+      finalReason = `Agent is missing: ${missingAgent?.fullName || missingAgentId}`;
+    }
+
+    setAddLeadsConfirmDialog((prev) => ({ ...prev, loading: true }));
     const orderId = addLeadsDialog.order._id;
     const wasExpanded = !!expandedRowData[orderId];
 
     try {
+      const eligibleLeads = addLeadsFound.filter((entry) => entry.canAdd);
       const leadsToAdd = eligibleLeads.map((entry) => ({
         leadId: entry.lead._id,
         agentId: entry.agent || null,
@@ -1293,6 +1380,7 @@ const OrdersPage = () => {
 
       await api.post(`/orders/${orderId}/add-leads`, {
         leads: leadsToAdd,
+        reason: finalReason,
       });
 
       setNotification({
@@ -1300,6 +1388,8 @@ const OrdersPage = () => {
         severity: "success",
       });
 
+      // Close both dialogs
+      handleCloseAddLeadsConfirmDialog();
       handleCloseAddLeadsDialog();
 
       // Clear expanded row data for this order so it will be re-fetched
@@ -1334,11 +1424,14 @@ const OrdersPage = () => {
         severity: "error",
       });
     } finally {
-      setAddLeadsDialog((prev) => ({ ...prev, loading: false }));
+      setAddLeadsConfirmDialog((prev) => ({ ...prev, loading: false }));
     }
   }, [
-    addLeadsFound,
+    addLeadsConfirmDialog,
     addLeadsDialog.order,
+    addLeadsFound,
+    allAgents,
+    handleCloseAddLeadsConfirmDialog,
     handleCloseAddLeadsDialog,
     fetchOrders,
     expandedRowData,
@@ -2073,8 +2166,10 @@ const OrdersPage = () => {
       leadName: `${lead.firstName} ${lead.lastName}`,
       reason: "",
       customReason: "",
+      missingAgentId: "",
       loading: false,
     });
+    fetchAllAgents(); // Fetch agents for "Agent is missing" reason
   };
 
   // Close remove lead dialog
@@ -2085,6 +2180,7 @@ const OrdersPage = () => {
       leadName: "",
       reason: "",
       customReason: "",
+      missingAgentId: "",
       loading: false,
     });
   };
@@ -2092,10 +2188,16 @@ const OrdersPage = () => {
   // Confirm remove lead
   const handleConfirmRemoveLead = async () => {
     const orderId = leadsPreviewModal.orderId;
-    const { leadId, reason, customReason } = removeLeadDialog;
+    const { leadId, reason, customReason, missingAgentId } = removeLeadDialog;
 
     // Determine the final reason
-    const finalReason = reason === "Other" ? customReason : reason;
+    let finalReason = reason;
+    if (reason === "Other") {
+      finalReason = customReason;
+    } else if (reason === "Agent is missing") {
+      const missingAgent = allAgents.find(a => a._id === missingAgentId);
+      finalReason = `Agent is missing: ${missingAgent?.fullName || missingAgentId}`;
+    }
 
     if (!orderId || !leadId || !finalReason || !finalReason.trim()) return;
 
@@ -3620,33 +3722,6 @@ const OrdersPage = () => {
                             >
                               <HistoryIcon fontSize="small" />
                             </IconButton>
-
-                            {user?.role === "admin" && (
-                              <IconButton
-                                size="small"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleDeleteOrderClick(
-                                    order._id,
-                                    order.status
-                                  );
-                                }}
-                                title={
-                                  order.status === "cancelled"
-                                    ? "Permanently Delete Order"
-                                    : "Cancel Order"
-                                }
-                                color="error"
-                                sx={{
-                                  "&:hover": {
-                                    backgroundColor: "error.light",
-                                    color: "error.contrastText",
-                                  },
-                                }}
-                              >
-                                <DeleteIcon fontSize="small" />
-                              </IconButton>
-                            )}
                           </Box>
                         </TableCell>
                       </TableRow>
@@ -6748,7 +6823,7 @@ const OrdersPage = () => {
                         key={entry.lead._id}
                         sx={{
                           bgcolor: !entry.canAdd
-                            ? entry.isInOrder
+                            ? entry.isInOrder || entry.isWrongCountry
                               ? "error.lighter"
                               : "warning.lighter"
                             : "inherit",
@@ -6760,6 +6835,17 @@ const OrdersPage = () => {
                             <Tooltip title="This lead is already in this order">
                               <Chip
                                 label="In Order"
+                                size="small"
+                                color="error"
+                                sx={{ fontSize: "0.7rem" }}
+                              />
+                            </Tooltip>
+                          ) : entry.isWrongCountry ? (
+                            <Tooltip
+                              title={`This lead is from ${entry.lead.country}, but order requires ${addLeadsDialog.order?.countryFilter}`}
+                            >
+                              <Chip
+                                label="Wrong Country"
                                 size="small"
                                 color="error"
                                 sx={{ fontSize: "0.7rem" }}
@@ -6855,13 +6941,135 @@ const OrdersPage = () => {
               addLeadsDialog.loading ||
               addLeadsFound.filter((e) => e.canAdd).length === 0
             }
+            startIcon={<AddIcon />}
+          >
+            {`Add ${addLeadsFound.filter((e) => e.canAdd).length} Lead(s)`}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Add Leads Confirmation Dialog (Reason Selection) */}
+      <Dialog
+        open={addLeadsConfirmDialog.open}
+        onClose={handleCloseAddLeadsConfirmDialog}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Confirm Adding Leads</DialogTitle>
+        <DialogContent>
+          <Typography sx={{ mb: 2 }}>
+            You are about to add{" "}
+            <strong>{addLeadsFound.filter((e) => e.canAdd).length} lead(s)</strong>{" "}
+            to the order. Please select a reason for this action.
+          </Typography>
+          <FormControl fullWidth required error={!addLeadsConfirmDialog.reason}>
+            <InputLabel id="add-leads-confirm-reason-label">
+              Reason for adding leads *
+            </InputLabel>
+            <Select
+              labelId="add-leads-confirm-reason-label"
+              value={addLeadsConfirmDialog.reason}
+              label="Reason for adding leads *"
+              onChange={(e) =>
+                setAddLeadsConfirmDialog((prev) => ({
+                  ...prev,
+                  reason: e.target.value,
+                  customReason:
+                    e.target.value !== "Other" ? "" : prev.customReason,
+                  missingAgentId:
+                    e.target.value !== "Agent is missing" ? "" : prev.missingAgentId,
+                }))
+              }
+            >
+              {LEAD_CHANGE_REASONS.map((reason) => (
+                <MenuItem key={reason} value={reason}>
+                  {reason}
+                </MenuItem>
+              ))}
+            </Select>
+            {!addLeadsConfirmDialog.reason && (
+              <FormHelperText>Please select a reason</FormHelperText>
+            )}
+          </FormControl>
+          {addLeadsConfirmDialog.reason === "Agent is missing" && (
+            <FormControl fullWidth required error={!addLeadsConfirmDialog.missingAgentId} sx={{ mt: 2 }}>
+              <InputLabel id="add-leads-confirm-missing-agent-label">
+                Which agent is missing? *
+              </InputLabel>
+              <Select
+                labelId="add-leads-confirm-missing-agent-label"
+                value={addLeadsConfirmDialog.missingAgentId}
+                label="Which agent is missing? *"
+                onChange={(e) =>
+                  setAddLeadsConfirmDialog((prev) => ({
+                    ...prev,
+                    missingAgentId: e.target.value,
+                  }))
+                }
+              >
+                {allAgents.map((agent) => (
+                  <MenuItem key={agent._id} value={agent._id}>
+                    {agent.fullName}
+                  </MenuItem>
+                ))}
+              </Select>
+              {!addLeadsConfirmDialog.missingAgentId && (
+                <FormHelperText>Please select an agent</FormHelperText>
+              )}
+            </FormControl>
+          )}
+          {addLeadsConfirmDialog.reason === "Other" && (
+            <TextField
+              fullWidth
+              required
+              label="Please specify the reason *"
+              value={addLeadsConfirmDialog.customReason}
+              onChange={(e) =>
+                setAddLeadsConfirmDialog((prev) => ({
+                  ...prev,
+                  customReason: e.target.value,
+                }))
+              }
+              error={!addLeadsConfirmDialog.customReason.trim()}
+              helperText={
+                !addLeadsConfirmDialog.customReason.trim()
+                  ? "Please enter a custom reason"
+                  : ""
+              }
+              sx={{ mt: 2 }}
+              multiline
+              rows={2}
+            />
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={handleCloseAddLeadsConfirmDialog}
+            disabled={addLeadsConfirmDialog.loading}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleConfirmAddLeads}
+            color="primary"
+            variant="contained"
+            disabled={
+              addLeadsConfirmDialog.loading ||
+              !addLeadsConfirmDialog.reason ||
+              (addLeadsConfirmDialog.reason === "Other" &&
+                !addLeadsConfirmDialog.customReason.trim()) ||
+              (addLeadsConfirmDialog.reason === "Agent is missing" &&
+                !addLeadsConfirmDialog.missingAgentId)
+            }
             startIcon={
-              addLeadsDialog.loading ? <CircularProgress size={16} /> : <AddIcon />
+              addLeadsConfirmDialog.loading ? (
+                <CircularProgress size={20} />
+              ) : (
+                <AddIcon />
+              )
             }
           >
-            {addLeadsDialog.loading
-              ? "Adding..."
-              : `Add ${addLeadsFound.filter((e) => e.canAdd).length} Lead(s)`}
+            {addLeadsConfirmDialog.loading ? "Adding..." : "Confirm & Add"}
           </Button>
         </DialogActions>
       </Dialog>
@@ -7022,6 +7230,8 @@ const OrdersPage = () => {
                   reason: e.target.value,
                   customReason:
                     e.target.value !== "Other" ? "" : prev.customReason,
+                  missingAgentId:
+                    e.target.value !== "Agent is missing" ? "" : prev.missingAgentId,
                 }))
               }
             >
@@ -7035,6 +7245,33 @@ const OrdersPage = () => {
               <FormHelperText>Please select a reason</FormHelperText>
             )}
           </FormControl>
+          {removeLeadDialog.reason === "Agent is missing" && (
+            <FormControl fullWidth required error={!removeLeadDialog.missingAgentId} sx={{ mt: 2 }}>
+              <InputLabel id="remove-lead-missing-agent-label">
+                Which agent is missing? *
+              </InputLabel>
+              <Select
+                labelId="remove-lead-missing-agent-label"
+                value={removeLeadDialog.missingAgentId}
+                label="Which agent is missing? *"
+                onChange={(e) =>
+                  setRemoveLeadDialog((prev) => ({
+                    ...prev,
+                    missingAgentId: e.target.value,
+                  }))
+                }
+              >
+                {allAgents.map((agent) => (
+                  <MenuItem key={agent._id} value={agent._id}>
+                    {agent.fullName}
+                  </MenuItem>
+                ))}
+              </Select>
+              {!removeLeadDialog.missingAgentId && (
+                <FormHelperText>Please select an agent</FormHelperText>
+              )}
+            </FormControl>
+          )}
           {removeLeadDialog.reason === "Other" && (
             <TextField
               fullWidth
@@ -7074,7 +7311,9 @@ const OrdersPage = () => {
               removeLeadDialog.loading ||
               !removeLeadDialog.reason ||
               (removeLeadDialog.reason === "Other" &&
-                !removeLeadDialog.customReason.trim())
+                !removeLeadDialog.customReason.trim()) ||
+              (removeLeadDialog.reason === "Agent is missing" &&
+                !removeLeadDialog.missingAgentId)
             }
             startIcon={
               removeLeadDialog.loading ? (

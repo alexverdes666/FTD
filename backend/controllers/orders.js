@@ -5637,13 +5637,22 @@ exports.changeRequester = async (req, res, next) => {
 exports.addLeadsToOrder = async (req, res, next) => {
   try {
     const { orderId } = req.params;
-    const { leads: leadsToAdd } = req.body;
+    const { leads: leadsToAdd, reason } = req.body;
     // leadsToAdd is an array of { leadId, agentId, leadType }
+    // reason is required - explains why leads are being added
 
     if (!leadsToAdd || !Array.isArray(leadsToAdd) || leadsToAdd.length === 0) {
       return res.status(400).json({
         success: false,
         message: "At least one lead is required",
+      });
+    }
+
+    // Reason is required
+    if (!reason || !reason.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Reason for adding leads is required",
       });
     }
 
@@ -5869,11 +5878,12 @@ exports.addLeadsToOrder = async (req, res, next) => {
         performedBy: req.user._id,
         performedAt: new Date(),
         ipAddress: clientIp,
-        details: `Lead ${lead.firstName} ${lead.lastName} (${lead.email}) added to order by ${req.user.fullName || req.user.email} as ${leadType}`,
+        details: `Lead ${lead.firstName} ${lead.lastName} (${lead.email}) added to order by ${req.user.fullName || req.user.email} as ${leadType}. Reason: ${reason}`,
         newValue: {
           leadType,
           agentId: leadData.agentId || null,
           leadName: `${lead.firstName} ${lead.lastName}`,
+          reason: reason,
         },
       });
     });
@@ -6113,9 +6123,17 @@ exports.getAvailableLeadsForReplacement = async (req, res, next) => {
 exports.replaceLeadInOrder = async (req, res, next) => {
   try {
     const { orderId, leadId } = req.params;
-    const { newLeadId } = req.body;
+    const { newLeadId, reason } = req.body;
 
     console.log(`[REPLACE-LEAD] Starting lead replacement: order=${orderId}, oldLead=${leadId}, newLead=${newLeadId}`);
+
+    // Reason is required
+    if (!reason || !reason.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Reason for replacing lead is required",
+      });
+    }
 
     // Check user permissions - only admin and affiliate_manager
     if (!["admin", "affiliate_manager"].includes(req.user.role)) {
@@ -6289,7 +6307,7 @@ exports.replaceLeadInOrder = async (req, res, next) => {
         performedBy: req.user._id,
         performedAt: new Date(),
         ipAddress: clientIp,
-        details: `Lead manually replaced: ${oldLead.firstName} ${oldLead.lastName} (${oldLead.newEmail}) replaced with ${newLead.firstName} ${newLead.lastName} (${newLead.newEmail}) by ${req.user.fullName || req.user.email}`,
+        details: `Lead manually replaced: ${oldLead.firstName} ${oldLead.lastName} (${oldLead.newEmail}) replaced with ${newLead.firstName} ${newLead.lastName} (${newLead.newEmail}) by ${req.user.fullName || req.user.email}. Reason: ${reason}`,
         previousValue: {
           leadId: oldLead._id,
           leadEmail: oldLead.newEmail,
@@ -6301,6 +6319,7 @@ exports.replaceLeadInOrder = async (req, res, next) => {
           leadEmail: newLead.newEmail,
           leadName: `${newLead.firstName} ${newLead.lastName}`,
           leadType: orderedAs,
+          reason: reason,
         },
       });
 
