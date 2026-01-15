@@ -214,6 +214,18 @@ router.put("/:id", [
     .optional()
     .isISO8601()
     .withMessage("plannedDate must be a valid date"),
+  body("selectedCampaign")
+    .optional()
+    .custom((value) => !value || mongoose.Types.ObjectId.isValid(value))
+    .withMessage("selectedCampaign must be a valid MongoDB ObjectId"),
+  body("selectedOurNetwork")
+    .optional()
+    .custom((value) => !value || mongoose.Types.ObjectId.isValid(value))
+    .withMessage("selectedOurNetwork must be a valid MongoDB ObjectId"),
+  body("selectedClientNetwork")
+    .optional()
+    .custom((value) => !value || mongoose.Types.ObjectId.isValid(value))
+    .withMessage("selectedClientNetwork must be a valid MongoDB ObjectId"),
 ], updateOrder);
 router.delete("/:id", [protect, isManager], cancelOrder);
 // Permanent deletion - managers and admins, only for cancelled orders (unless force=true for admins)

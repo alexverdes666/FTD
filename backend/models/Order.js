@@ -210,7 +210,10 @@ const orderSchema = new Schema(
           "deposit_confirmed",
           "deposit_unconfirmed",
           "shaved",
-          "unshaved"
+          "unshaved",
+          "campaign_changed",
+          "our_network_changed",
+          "client_network_changed"
         ],
         required: true,
       },

@@ -2916,8 +2916,8 @@ exports.createOrder = async (req, res, next) => {
             order._id
           );
           // Add the assignment to update object
-          if (lead.clientNetworkAssignments) {
-            updateObj.clientNetworkAssignments = lead.clientNetworkAssignments;
+          if (lead.clientNetworkHistory) {
+            updateObj.clientNetworkHistory = lead.clientNetworkHistory;
           }
         } catch (error) {
           console.warn(
@@ -2933,8 +2933,8 @@ exports.createOrder = async (req, res, next) => {
             order._id
           );
           // Add the assignment to update object
-          if (lead.ourNetworkAssignments) {
-            updateObj.ourNetworkAssignments = lead.ourNetworkAssignments;
+          if (lead.ourNetworkHistory) {
+            updateObj.ourNetworkHistory = lead.ourNetworkHistory;
           }
         } catch (error) {
           console.warn(
@@ -2946,8 +2946,8 @@ exports.createOrder = async (req, res, next) => {
         try {
           lead.addCampaignAssignment(selectedCampaign, req.user._id, order._id);
           // Add the assignment to update object
-          if (lead.campaignAssignments) {
-            updateObj.campaignAssignments = lead.campaignAssignments;
+          if (lead.campaignHistory) {
+            updateObj.campaignHistory = lead.campaignHistory;
           }
         } catch (error) {
           console.warn(
@@ -3407,6 +3407,7 @@ exports.getOrderById = async (req, res, next) => {
   }
 };
 exports.updateOrder = async (req, res, next) => {
+  const session = await mongoose.startSession();
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -3416,71 +3417,301 @@ exports.updateOrder = async (req, res, next) => {
         errors: errors.array(),
       });
     }
-    const order = await Order.findById(req.params.id);
-    if (!order) {
-      return res.status(404).json({
-        success: false,
-        message: "Order not found",
-      });
-    }
-    if (
-      req.user.role !== "admin" &&
-      order.requester.toString() !== req.user._id.toString()
-    ) {
-      return res.status(403).json({
-        success: false,
-        message: "Not authorized to update this order",
-      });
-    }
-    const { priority, notes, selectedClientBrokers, plannedDate } = req.body;
-    if (priority) order.priority = priority;
-    if (notes !== undefined) order.notes = notes;
-    if (plannedDate !== undefined) {
-      const newPlannedDate = new Date(plannedDate);
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      newPlannedDate.setHours(0, 0, 0, 0);
-      if (newPlannedDate < today) {
-        return res.status(400).json({
+
+    await session.withTransaction(async () => {
+      const order = await Order.findById(req.params.id)
+        .populate("selectedCampaign", "name")
+        .populate("selectedOurNetwork", "name")
+        .populate("selectedClientNetwork", "name")
+        .session(session);
+      if (!order) {
+        return res.status(404).json({
           success: false,
-          message: "Planned date cannot be in the past",
+          message: "Order not found",
         });
       }
-      order.plannedDate = plannedDate;
-    }
-
-    // Handle client brokers update
-    if (selectedClientBrokers !== undefined) {
-      if (selectedClientBrokers && selectedClientBrokers.length > 0) {
-        // Validate each client broker exists and is active
-        const ClientBroker = require("../models/ClientBroker");
-        for (const brokerId of selectedClientBrokers) {
-          const clientBroker = await ClientBroker.findOne({
-            _id: brokerId,
-            isActive: true,
+      if (
+        req.user.role !== "admin" &&
+        order.requester.toString() !== req.user._id.toString()
+      ) {
+        return res.status(403).json({
+          success: false,
+          message: "Not authorized to update this order",
+        });
+      }
+      const {
+        priority,
+        notes,
+        selectedClientBrokers,
+        plannedDate,
+        selectedCampaign,
+        selectedOurNetwork,
+        selectedClientNetwork,
+      } = req.body;
+      if (priority) order.priority = priority;
+      if (notes !== undefined) order.notes = notes;
+      if (plannedDate !== undefined) {
+        const newPlannedDate = new Date(plannedDate);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        newPlannedDate.setHours(0, 0, 0, 0);
+        if (newPlannedDate < today) {
+          return res.status(400).json({
+            success: false,
+            message: "Planned date cannot be in the past",
           });
-          if (!clientBroker) {
+        }
+        order.plannedDate = plannedDate;
+      }
+
+      // Handle client brokers update
+      if (selectedClientBrokers !== undefined) {
+        if (selectedClientBrokers && selectedClientBrokers.length > 0) {
+          // Validate each client broker exists and is active
+          for (const brokerId of selectedClientBrokers) {
+            const clientBroker = await ClientBroker.findOne({
+              _id: brokerId,
+              isActive: true,
+            }).session(session);
+            if (!clientBroker) {
+              return res.status(400).json({
+                success: false,
+                message: `Client broker ${brokerId} not found or inactive`,
+              });
+            }
+          }
+          order.selectedClientBrokers = selectedClientBrokers;
+        } else {
+          // Allow clearing the client brokers (set to empty array)
+          order.selectedClientBrokers = [];
+        }
+      }
+
+      // Handle campaign update (admin only)
+      if (selectedCampaign !== undefined && req.user.role === "admin") {
+        const oldCampaignId = order.selectedCampaign?._id?.toString();
+        const newCampaignId = selectedCampaign;
+
+        if (oldCampaignId !== newCampaignId) {
+          // Validate the new campaign exists and is active
+          const newCampaign = await Campaign.findOne({
+            _id: newCampaignId,
+            isActive: true,
+          }).session(session);
+          if (!newCampaign) {
             return res.status(400).json({
               success: false,
-              message: `Client broker ${brokerId} not found or inactive`,
+              message: "Campaign not found or inactive",
             });
           }
-        }
-        order.selectedClientBrokers = selectedClientBrokers;
-      } else {
-        // Allow clearing the client brokers (set to empty array)
-        order.selectedClientBrokers = [];
-      }
-    }
 
-    await order.save();
-    res.status(200).json({
-      success: true,
-      message: "Order updated successfully",
-      data: order,
+          // First, remove existing campaignHistory entries for this order
+          await Lead.updateMany(
+            { _id: { $in: order.leads } },
+            {
+              $pull: {
+                campaignHistory: { orderId: order._id },
+              },
+            },
+            { session }
+          );
+
+          // Then, add new campaignHistory entry for all leads
+          await Lead.updateMany(
+            { _id: { $in: order.leads } },
+            {
+              $push: {
+                campaignHistory: {
+                  campaign: newCampaignId,
+                  assignedBy: req.user._id,
+                  orderId: order._id,
+                  assignedAt: new Date(),
+                },
+              },
+            },
+            { session }
+          );
+
+          // Add audit log entry
+          order.auditLog.push({
+            action: "campaign_changed",
+            performedBy: req.user._id,
+            performedAt: new Date(),
+            ipAddress:
+              req.ip || req.headers["x-forwarded-for"] || req.socket.remoteAddress,
+            details: `Campaign changed from "${order.selectedCampaign?.name || "N/A"}" to "${newCampaign.name}"`,
+            previousValue: oldCampaignId,
+            newValue: newCampaignId,
+          });
+
+          order.selectedCampaign = newCampaignId;
+
+          console.log(
+            `[UPDATE-ORDER] Campaign changed from ${oldCampaignId} to ${newCampaignId} for order ${order._id}. Updated ${order.leads.length} leads.`
+          );
+        }
+      }
+
+      // Handle our network update (admin only)
+      if (selectedOurNetwork !== undefined && req.user.role === "admin") {
+        const OurNetwork = require("../models/OurNetwork");
+        const oldOurNetworkId = order.selectedOurNetwork?._id?.toString();
+        const newOurNetworkId = selectedOurNetwork || null;
+
+        if (oldOurNetworkId !== newOurNetworkId) {
+          let newOurNetworkName = "N/A";
+
+          // First, remove existing ourNetworkHistory entries for this order
+          await Lead.updateMany(
+            { _id: { $in: order.leads } },
+            {
+              $pull: {
+                ourNetworkHistory: { orderId: order._id },
+              },
+            },
+            { session }
+          );
+
+          if (newOurNetworkId) {
+            // Validate the new our network exists and is active
+            const newOurNetwork = await OurNetwork.findOne({
+              _id: newOurNetworkId,
+              isActive: true,
+            }).session(session);
+            if (!newOurNetwork) {
+              return res.status(400).json({
+                success: false,
+                message: "Our Network not found or inactive",
+              });
+            }
+            newOurNetworkName = newOurNetwork.name;
+
+            // Add new ourNetworkHistory entry for all leads
+            await Lead.updateMany(
+              { _id: { $in: order.leads } },
+              {
+                $push: {
+                  ourNetworkHistory: {
+                    ourNetwork: newOurNetworkId,
+                    assignedBy: req.user._id,
+                    orderId: order._id,
+                    assignedAt: new Date(),
+                  },
+                },
+              },
+              { session }
+            );
+          }
+
+          // Add audit log entry
+          order.auditLog.push({
+            action: "our_network_changed",
+            performedBy: req.user._id,
+            performedAt: new Date(),
+            ipAddress:
+              req.ip || req.headers["x-forwarded-for"] || req.socket.remoteAddress,
+            details: `Our Network changed from "${order.selectedOurNetwork?.name || "N/A"}" to "${newOurNetworkName}"`,
+            previousValue: oldOurNetworkId,
+            newValue: newOurNetworkId,
+          });
+
+          order.selectedOurNetwork = newOurNetworkId;
+
+          console.log(
+            `[UPDATE-ORDER] Our Network changed from ${oldOurNetworkId} to ${newOurNetworkId} for order ${order._id}. Updated ${order.leads.length} leads.`
+          );
+        }
+      }
+
+      // Handle client network update (admin only)
+      if (selectedClientNetwork !== undefined && req.user.role === "admin") {
+        const oldClientNetworkId = order.selectedClientNetwork?._id?.toString();
+        const newClientNetworkId = selectedClientNetwork || null;
+
+        if (oldClientNetworkId !== newClientNetworkId) {
+          let newClientNetworkName = "N/A";
+
+          // First, remove existing clientNetworkHistory entries for this order
+          await Lead.updateMany(
+            { _id: { $in: order.leads } },
+            {
+              $pull: {
+                clientNetworkHistory: { orderId: order._id },
+              },
+            },
+            { session }
+          );
+
+          if (newClientNetworkId) {
+            // Validate the new client network exists and is active
+            const newClientNetwork = await ClientNetwork.findOne({
+              _id: newClientNetworkId,
+              isActive: true,
+            }).session(session);
+            if (!newClientNetwork) {
+              return res.status(400).json({
+                success: false,
+                message: "Client Network not found or inactive",
+              });
+            }
+            newClientNetworkName = newClientNetwork.name;
+
+            // Add new clientNetworkHistory entry for all leads
+            await Lead.updateMany(
+              { _id: { $in: order.leads } },
+              {
+                $push: {
+                  clientNetworkHistory: {
+                    clientNetwork: newClientNetworkId,
+                    assignedBy: req.user._id,
+                    orderId: order._id,
+                    assignedAt: new Date(),
+                  },
+                },
+              },
+              { session }
+            );
+          }
+
+          // Add audit log entry
+          order.auditLog.push({
+            action: "client_network_changed",
+            performedBy: req.user._id,
+            performedAt: new Date(),
+            ipAddress:
+              req.ip || req.headers["x-forwarded-for"] || req.socket.remoteAddress,
+            details: `Client Network changed from "${order.selectedClientNetwork?.name || "N/A"}" to "${newClientNetworkName}"`,
+            previousValue: oldClientNetworkId,
+            newValue: newClientNetworkId,
+          });
+
+          order.selectedClientNetwork = newClientNetworkId;
+
+          console.log(
+            `[UPDATE-ORDER] Client Network changed from ${oldClientNetworkId} to ${newClientNetworkId} for order ${order._id}. Updated ${order.leads.length} leads.`
+          );
+        }
+      }
+
+      await order.save({ session });
+
+      // Fetch updated order with populated fields
+      const updatedOrder = await Order.findById(order._id)
+        .populate("selectedCampaign", "name")
+        .populate("selectedOurNetwork", "name")
+        .populate("selectedClientNetwork", "name")
+        .session(session);
+
+      res.status(200).json({
+        success: true,
+        message: "Order updated successfully",
+        data: updatedOrder,
+      });
     });
   } catch (error) {
     next(error);
+  } finally {
+    session.endSession();
   }
 };
 exports.cancelOrder = async (req, res, next) => {

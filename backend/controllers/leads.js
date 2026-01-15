@@ -4051,7 +4051,7 @@ exports.searchLeadsByEmails = async (req, res, next) => {
 
       // Check if lead is on cooldown (only for FTD/filler leads)
       const isOnCooldown =
-        lead.leadType === "ftd" &&
+        (lead.leadType === "ftd" || lead.leadType === "filler") &&
         lead.lastUsedInOrder &&
         lead.lastUsedInOrder > tenDaysAgo;
 

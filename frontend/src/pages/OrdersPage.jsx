@@ -480,6 +480,15 @@ const OrdersPage = () => {
   });
   const [newPlannedDate, setNewPlannedDate] = useState("");
 
+  // Edit Network Configuration State (admin only)
+  const [editNetworkConfigDialog, setEditNetworkConfigDialog] = useState({
+    open: false,
+    order: null,
+    loading: false,
+    field: null, // 'campaign', 'ourNetwork', or 'clientNetwork'
+  });
+  const [newNetworkValue, setNewNetworkValue] = useState("");
+
   const fetchPotentialRequesters = useCallback(async () => {
     try {
       setLoadingRequesters(true);
@@ -681,6 +690,95 @@ const OrdersPage = () => {
         severity: "error",
       });
       setEditPlannedDateDialog((prev) => ({ ...prev, loading: false }));
+    }
+  };
+
+  // Network Configuration Edit Handlers (admin only)
+  const handleOpenEditNetworkConfig = (order, field) => {
+    let currentValue = "";
+    if (field === "campaign" && order.selectedCampaign) {
+      currentValue = order.selectedCampaign._id || order.selectedCampaign;
+    } else if (field === "ourNetwork" && order.selectedOurNetwork) {
+      currentValue = order.selectedOurNetwork._id || order.selectedOurNetwork;
+    } else if (field === "clientNetwork" && order.selectedClientNetwork) {
+      currentValue = order.selectedClientNetwork._id || order.selectedClientNetwork;
+    }
+    setNewNetworkValue(currentValue);
+    setEditNetworkConfigDialog({
+      open: true,
+      order,
+      loading: false,
+      field,
+    });
+  };
+
+  const handleCloseEditNetworkConfig = () => {
+    setEditNetworkConfigDialog({
+      open: false,
+      order: null,
+      loading: false,
+      field: null,
+    });
+    setNewNetworkValue("");
+  };
+
+  const handleSubmitEditNetworkConfig = async () => {
+    if (!editNetworkConfigDialog.order || !editNetworkConfigDialog.field) return;
+
+    setEditNetworkConfigDialog((prev) => ({ ...prev, loading: true }));
+
+    try {
+      const updateData = {};
+      const { field } = editNetworkConfigDialog;
+
+      if (field === "campaign") {
+        updateData.selectedCampaign = newNetworkValue;
+      } else if (field === "ourNetwork") {
+        updateData.selectedOurNetwork = newNetworkValue || null;
+      } else if (field === "clientNetwork") {
+        updateData.selectedClientNetwork = newNetworkValue || null;
+      }
+
+      const response = await api.put(
+        `/orders/${editNetworkConfigDialog.order._id}`,
+        updateData
+      );
+
+      const fieldLabels = {
+        campaign: "Campaign",
+        ourNetwork: "Our Network",
+        clientNetwork: "Client Network",
+      };
+
+      setNotification({
+        message: `${fieldLabels[field]} updated successfully. All leads in the order have been updated.`,
+        severity: "success",
+      });
+
+      // Update expandedRowData immediately if the order is expanded
+      const orderId = editNetworkConfigDialog.order._id;
+      if (expandedRowData[orderId]) {
+        const updatedOrder = response.data.data;
+        setExpandedRowData((prev) => ({
+          ...prev,
+          [orderId]: {
+            ...prev[orderId],
+            selectedCampaign: updatedOrder.selectedCampaign,
+            selectedOurNetwork: updatedOrder.selectedOurNetwork,
+            selectedClientNetwork: updatedOrder.selectedClientNetwork,
+          },
+        }));
+      }
+
+      handleCloseEditNetworkConfig();
+      fetchOrders();
+    } catch (err) {
+      setNotification({
+        message:
+          err.response?.data?.message || "Failed to update network configuration",
+        severity: "error",
+      });
+      setEditNetworkConfigDialog((prev) => ({ ...prev, loading: false }));
     }
   };
 
@@ -981,15 +1079,21 @@ const OrdersPage = () => {
         return;
       }
 
-      // Map found leads to manual selection format
+      // Map found leads to manual selection format (include cooldown status)
       const manualLeadEntries = foundLeads.map((lead) => ({
         lead,
         agent: lead.assignedAgent?._id || "",
+        isOnCooldown: lead.isOnCooldown || false,
+        cooldownDaysRemaining: lead.cooldownDaysRemaining || 0,
       }));
 
       setManualLeads(manualLeadEntries);
 
-      // Show notification about found/not found
+      // Count active vs cooldown leads
+      const activeLeads = manualLeadEntries.filter((e) => !e.isOnCooldown);
+      const cooldownLeads = manualLeadEntries.filter((e) => e.isOnCooldown);
+
+      // Show notification about found/not found/cooldown
       const notFoundEmails = emails.filter(
         (email) =>
           !foundLeads.some(
@@ -997,19 +1101,28 @@ const OrdersPage = () => {
           )
       );
 
-      if (notFoundEmails.length > 0) {
-        setNotification({
-          message: `Found ${
-            foundLeads.length
-          } leads. Not found: ${notFoundEmails.join(", ")}`,
-          severity: "warning",
-        });
-      } else {
-        setNotification({
-          message: `Found all ${foundLeads.length} leads`,
-          severity: "success",
-        });
+      let notificationMessage = `Found ${foundLeads.length} leads`;
+      let notificationSeverity = "success";
+
+      if (cooldownLeads.length > 0) {
+        notificationMessage += ` (${cooldownLeads.length} on cooldown - will be excluded)`;
+        notificationSeverity = "warning";
       }
+
+      if (notFoundEmails.length > 0) {
+        notificationMessage += `. Not found: ${notFoundEmails.join(", ")}`;
+        notificationSeverity = "warning";
+      }
+
+      if (activeLeads.length === 0 && foundLeads.length > 0) {
+        notificationMessage = `All ${foundLeads.length} found leads are on cooldown. Cannot create order.`;
+        notificationSeverity = "error";
+      }
+
+      setNotification({
+        message: notificationMessage,
+        severity: notificationSeverity,
+      });
     } catch (err) {
       console.error("Failed to search leads:", err);
       setNotification({
@@ -1358,20 +1471,32 @@ const OrdersPage = () => {
             return;
           }
 
-          // Validate that all leads have agent assignments
-          const leadsWithoutAgents = manualLeads.filter(
+          // Filter out leads that are on cooldown
+          const activeLeads = manualLeads.filter((entry) => !entry.isOnCooldown);
+
+          // Check if there are any active leads
+          if (activeLeads.length === 0) {
+            setNotification({
+              message: "All selected leads are on cooldown. Cannot create order.",
+              severity: "error",
+            });
+            return;
+          }
+
+          // Validate that all ACTIVE leads have agent assignments
+          const leadsWithoutAgents = activeLeads.filter(
             (entry) => !entry.agent
           );
           if (leadsWithoutAgents.length > 0) {
             setNotification({
-              message: `Please assign agents to all leads (${leadsWithoutAgents.length} unassigned)`,
+              message: `Please assign agents to all active leads (${leadsWithoutAgents.length} unassigned)`,
               severity: "warning",
             });
             return;
           }
 
-          // Build manual leads data - use the lead's original type
-          const manualLeadsData = manualLeads.map((entry) => ({
+          // Build manual leads data - only include active (non-cooldown) leads
+          const manualLeadsData = activeLeads.map((entry) => ({
             leadId: entry.lead._id,
             agentId: entry.agent,
             leadType: entry.lead.leadType, // Use original lead type from the record
@@ -3983,6 +4108,21 @@ const OrdersPage = () => {
                                                 fontSize: "0.75rem",
                                               }}
                                             />
+                                            {user?.role === "admin" && (
+                                              <IconButton
+                                                size="small"
+                                                onClick={() =>
+                                                  handleOpenEditNetworkConfig(
+                                                    expandedDetails,
+                                                    "campaign"
+                                                  )
+                                                }
+                                                title="Edit Campaign"
+                                                sx={{ p: 0.25 }}
+                                              >
+                                                <EditIcon sx={{ fontSize: 14 }} />
+                                              </IconButton>
+                                            )}
                                           </Box>
                                         </Grid>
                                         <Grid item xs={12} sm={6} md={3}>
@@ -4014,6 +4154,21 @@ const OrdersPage = () => {
                                                 fontSize: "0.75rem",
                                               }}
                                             />
+                                            {user?.role === "admin" && (
+                                              <IconButton
+                                                size="small"
+                                                onClick={() =>
+                                                  handleOpenEditNetworkConfig(
+                                                    expandedDetails,
+                                                    "ourNetwork"
+                                                  )
+                                                }
+                                                title="Edit Our Network"
+                                                sx={{ p: 0.25 }}
+                                              >
+                                                <EditIcon sx={{ fontSize: 14 }} />
+                                              </IconButton>
+                                            )}
                                           </Box>
                                         </Grid>
                                         <Grid item xs={12} sm={6} md={3}>
@@ -4045,6 +4200,21 @@ const OrdersPage = () => {
                                                 fontSize: "0.75rem",
                                               }}
                                             />
+                                            {user?.role === "admin" && (
+                                              <IconButton
+                                                size="small"
+                                                onClick={() =>
+                                                  handleOpenEditNetworkConfig(
+                                                    expandedDetails,
+                                                    "clientNetwork"
+                                                  )
+                                                }
+                                                title="Edit Client Network"
+                                                sx={{ p: 0.25 }}
+                                              >
+                                                <EditIcon sx={{ fontSize: 14 }} />
+                                              </IconButton>
+                                            )}
                                           </Box>
                                         </Grid>
                                         <Grid item xs={12} sm={6} md={3}>
@@ -4775,12 +4945,35 @@ const OrdersPage = () => {
                   {/* Display found leads with agent assignment */}
                   {manualLeads.length > 0 && (
                     <Grid item xs={12}>
-                      <Typography
-                        variant="subtitle2"
-                        sx={{ mb: 1, fontWeight: 600 }}
+                      <Box
+                        sx={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 1,
+                          mb: 1,
+                        }}
                       >
-                        Found Leads ({manualLeads.length})
-                      </Typography>
+                        <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                          Found Leads ({manualLeads.length})
+                        </Typography>
+                        {manualLeads.filter((e) => e.isOnCooldown).length > 0 && (
+                          <Chip
+                            label={`${
+                              manualLeads.filter((e) => !e.isOnCooldown).length
+                            } active, ${
+                              manualLeads.filter((e) => e.isOnCooldown).length
+                            } on cooldown`}
+                            size="small"
+                            color={
+                              manualLeads.filter((e) => !e.isOnCooldown).length ===
+                              0
+                                ? "error"
+                                : "warning"
+                            }
+                            variant="outlined"
+                          />
+                        )}
+                      </Box>
                       <TableContainer component={Paper} variant="outlined">
                         <Table size="small">
                           <TableHead>
@@ -4795,11 +4988,24 @@ const OrdersPage = () => {
                           </TableHead>
                           <TableBody>
                             {manualLeads.map((entry, index) => (
-                              <TableRow key={entry.lead._id}>
+                              <TableRow
+                                key={entry.lead._id}
+                                sx={{
+                                  opacity: entry.isOnCooldown ? 0.5 : 1,
+                                  bgcolor: entry.isOnCooldown
+                                    ? "action.disabledBackground"
+                                    : "inherit",
+                                }}
+                              >
                                 <TableCell>
                                   <Typography
                                     variant="body2"
-                                    sx={{ fontSize: "0.75rem" }}
+                                    sx={{
+                                      fontSize: "0.75rem",
+                                      textDecoration: entry.isOnCooldown
+                                        ? "line-through"
+                                        : "none",
+                                    }}
                                   >
                                     {entry.lead.newEmail}
                                   </Typography>
@@ -4809,17 +5015,36 @@ const OrdersPage = () => {
                                 </TableCell>
                                 <TableCell>{entry.lead.country}</TableCell>
                                 <TableCell>
-                                  <Chip
-                                    label={entry.lead.leadType?.toUpperCase()}
-                                    size="small"
-                                    color={
-                                      entry.lead.leadType === "ftd"
-                                        ? "success"
-                                        : entry.lead.leadType === "filler"
-                                        ? "warning"
-                                        : "default"
-                                    }
-                                  />
+                                  <Box
+                                    sx={{
+                                      display: "flex",
+                                      alignItems: "center",
+                                      gap: 0.5,
+                                    }}
+                                  >
+                                    <Chip
+                                      label={entry.lead.leadType?.toUpperCase()}
+                                      size="small"
+                                      color={
+                                        entry.isOnCooldown
+                                          ? "default"
+                                          : entry.lead.leadType === "ftd"
+                                          ? "success"
+                                          : entry.lead.leadType === "filler"
+                                          ? "warning"
+                                          : "default"
+                                      }
+                                    />
+                                    {entry.isOnCooldown && (
+                                      <Chip
+                                        label={`Cooldown ${entry.cooldownDaysRemaining}d`}
+                                        size="small"
+                                        color="error"
+                                        variant="outlined"
+                                        sx={{ fontSize: "0.65rem" }}
+                                      />
+                                    )}
+                                  </Box>
                                 </TableCell>
                                 <TableCell>
                                   <FormControl fullWidth size="small">
@@ -4832,10 +5057,15 @@ const OrdersPage = () => {
                                         )
                                       }
                                       displayEmpty
-                                      error={!entry.agent}
+                                      error={!entry.agent && !entry.isOnCooldown}
+                                      disabled={entry.isOnCooldown}
                                     >
                                       <MenuItem value="">
-                                        <em>Select Agent</em>
+                                        <em>
+                                          {entry.isOnCooldown
+                                            ? "On Cooldown"
+                                            : "Select Agent"}
+                                        </em>
                                       </MenuItem>
                                       {allAgents.map((agent) => (
                                         <MenuItem
@@ -4867,8 +5097,8 @@ const OrdersPage = () => {
                         color="text.secondary"
                         sx={{ mt: 1, display: "block" }}
                       >
-                        * All leads must have an agent assigned before creating
-                        the order
+                        * All active leads must have an agent assigned. Leads on
+                        cooldown will be automatically excluded from the order.
                       </Typography>
                     </Grid>
                   )}
@@ -6070,6 +6300,132 @@ const OrdersPage = () => {
             disabled={!newPlannedDate || editPlannedDateDialog.loading}
           >
             {editPlannedDateDialog.loading ? "Saving..." : "Save"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Edit Network Configuration Dialog (Admin Only) */}
+      <Dialog
+        open={editNetworkConfigDialog.open}
+        onClose={handleCloseEditNetworkConfig}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          <Box display="flex" alignItems="center" gap={1}>
+            <EditIcon color="primary" />
+            <Typography variant="h6">
+              Edit{" "}
+              {editNetworkConfigDialog.field === "campaign"
+                ? "Campaign"
+                : editNetworkConfigDialog.field === "ourNetwork"
+                ? "Our Network"
+                : "Client Network"}
+            </Typography>
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          <Alert severity="warning" sx={{ mb: 2, mt: 1 }}>
+            Changing this will update all leads in the order with the new{" "}
+            {editNetworkConfigDialog.field === "campaign"
+              ? "campaign"
+              : editNetworkConfigDialog.field === "ourNetwork"
+              ? "our network"
+              : "client network"}
+            .
+          </Alert>
+          {editNetworkConfigDialog.field === "campaign" && (
+            <Autocomplete
+              value={
+                campaigns.find((c) => c._id === newNetworkValue) || null
+              }
+              onChange={(_, newValue) =>
+                setNewNetworkValue(newValue?._id || "")
+              }
+              options={campaigns}
+              getOptionLabel={(option) => option.name || ""}
+              isOptionEqualToValue={(option, value) =>
+                option._id === value?._id
+              }
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Campaign"
+                  size="small"
+                  fullWidth
+                  helperText={`${campaigns.length} campaigns available`}
+                />
+              )}
+              sx={{ mt: 1 }}
+            />
+          )}
+          {editNetworkConfigDialog.field === "ourNetwork" && (
+            <Autocomplete
+              value={
+                ourNetworks.find((n) => n._id === newNetworkValue) || null
+              }
+              onChange={(_, newValue) =>
+                setNewNetworkValue(newValue?._id || "")
+              }
+              options={ourNetworks}
+              getOptionLabel={(option) => option.name || ""}
+              isOptionEqualToValue={(option, value) =>
+                option._id === value?._id
+              }
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Our Network"
+                  size="small"
+                  fullWidth
+                  helperText={`${ourNetworks.length} networks available`}
+                />
+              )}
+              sx={{ mt: 1 }}
+            />
+          )}
+          {editNetworkConfigDialog.field === "clientNetwork" && (
+            <Autocomplete
+              value={
+                clientNetworks.find((n) => n._id === newNetworkValue) || null
+              }
+              onChange={(_, newValue) =>
+                setNewNetworkValue(newValue?._id || "")
+              }
+              options={clientNetworks}
+              getOptionLabel={(option) => option.name || ""}
+              isOptionEqualToValue={(option, value) =>
+                option._id === value?._id
+              }
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Client Network"
+                  size="small"
+                  fullWidth
+                  helperText={`${clientNetworks.length} networks available`}
+                />
+              )}
+              sx={{ mt: 1 }}
+            />
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={handleCloseEditNetworkConfig}
+            disabled={editNetworkConfigDialog.loading}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSubmitEditNetworkConfig}
+            variant="contained"
+            disabled={
+              (editNetworkConfigDialog.field === "campaign" && !newNetworkValue) ||
+              editNetworkConfigDialog.loading
+            }
+          >
+            {editNetworkConfigDialog.loading ? "Saving..." : "Save"}
           </Button>
         </DialogActions>
       </Dialog>
