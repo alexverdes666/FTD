@@ -204,6 +204,7 @@ const orderSchema = new Schema(
           "lead_type_changed",
           "agent_changed",
           "ftd_swapped",
+          "lead_replaced",
           "client_broker_changed",
           "client_broker_removed",
           "deposit_confirmed",

@@ -108,6 +108,7 @@ import GenderFallbackModal from "../components/GenderFallbackModal";
 import CopyPreferencesDialog, {
   copyLeadsWithPreferences,
 } from "../components/CopyPreferencesDialog";
+import ReplaceLeadDialog from "../components/ReplaceLeadDialog";
 
 const createOrderSchema = (userRole) => {
   return yup.object({
@@ -430,6 +431,11 @@ const OrdersPage = () => {
   });
   const [assignLeadDialog, setAssignLeadDialog] = useState({
     open: false,
+    lead: null,
+  });
+  const [replaceLeadDialog, setReplaceLeadDialog] = useState({
+    open: false,
+    order: null,
     lead: null,
   });
   const [processingLeads, setProcessingLeads] = useState({});
@@ -2541,6 +2547,57 @@ const OrdersPage = () => {
       }
     },
     [changeFTDDialog.order, expandedRowData, fetchOrders, toggleRowExpansion]
+  );
+
+  // Replace Lead Dialog handlers
+  const handleOpenReplaceLeadDialog = useCallback(
+    (order, lead) => {
+      // Check user role
+      if (user?.role !== "admin" && user?.role !== "affiliate_manager") {
+        setNotification({
+          message: "Only admins and affiliate managers can replace leads",
+          severity: "warning",
+        });
+        return;
+      }
+
+      setReplaceLeadDialog({
+        open: true,
+        order: order,
+        lead: lead,
+      });
+    },
+    [user?.role]
+  );
+
+  const handleCloseReplaceLeadDialog = useCallback(() => {
+    setReplaceLeadDialog({
+      open: false,
+      order: null,
+      lead: null,
+    });
+  }, []);
+
+  const handleReplaceLeadSuccess = useCallback(
+    async (replaceData) => {
+      setNotification({
+        message: `Lead successfully replaced: ${replaceData.oldLead.firstName} ${replaceData.oldLead.lastName} replaced with ${replaceData.newLead.firstName} ${replaceData.newLead.lastName}`,
+        severity: "success",
+      });
+
+      // Refresh the orders
+      await fetchOrders();
+
+      // Update the leads preview modal if open
+      if (leadsPreviewModal.open && leadsPreviewModal.orderId === replaceData.order?._id) {
+        setLeadsPreviewModal((prev) => ({
+          ...prev,
+          leads: replaceData.order?.leads || prev.leads,
+          order: replaceData.order || prev.order,
+        }));
+      }
+    },
+    [fetchOrders, leadsPreviewModal.open, leadsPreviewModal.orderId]
   );
 
   // Convert lead type between FTD and Filler
@@ -5943,6 +6000,15 @@ const OrdersPage = () => {
         onSuccess={handleAssignLeadSuccess}
       />
 
+      {/* Replace Lead Dialog */}
+      <ReplaceLeadDialog
+        open={replaceLeadDialog.open}
+        onClose={handleCloseReplaceLeadDialog}
+        order={replaceLeadDialog.order}
+        lead={replaceLeadDialog.lead}
+        onSuccess={handleReplaceLeadSuccess}
+      />
+
       {/* Gender Fallback Modal */}
       <GenderFallbackModal
         open={genderFallbackModalOpen}
@@ -7990,6 +8056,21 @@ const OrdersPage = () => {
                       <ChangeIcon fontSize="small" color="warning" />
                     </ListItemIcon>
                     Change {leadType === "filler" ? "Filler" : "FTD"} Lead
+                  </MenuItem>
+                )}
+
+                {/* Replace Lead - Admin and Affiliate Manager only */}
+                {(user?.role === "admin" || user?.role === "affiliate_manager") && order && (
+                  <MenuItem
+                    onClick={() => {
+                      handleOpenReplaceLeadDialog(order, lead);
+                      handleClosePreviewActionsMenu();
+                    }}
+                  >
+                    <ListItemIcon>
+                      <SwapHorizIcon fontSize="small" color="secondary" />
+                    </ListItemIcon>
+                    Replace Lead
                   </MenuItem>
                 )}
 

@@ -26,6 +26,8 @@ const {
   checkOrderFulfillment,
   changeRequester,
   addLeadsToOrder,
+  getAvailableLeadsForReplacement,
+  replaceLeadInOrder,
 } = require("../controllers/orders");
 const router = express.Router();
 
@@ -283,6 +285,32 @@ router.post(
       .withMessage("Target type must be 'ftd' or 'filler'"),
   ],
   convertLeadTypeInOrder
+);
+
+// Get available leads for replacement (filtered by country and lead type)
+router.get(
+  "/:orderId/leads/:leadId/available-replacements",
+  [
+    protect,
+    authorize("admin", "affiliate_manager"),
+    query("search").optional().trim(),
+    query("page").optional().isInt({ min: 1 }).toInt(),
+    query("limit").optional().isInt({ min: 1, max: 50 }).toInt(),
+  ],
+  getAvailableLeadsForReplacement
+);
+
+// Replace a lead in an order with a specific selected lead
+router.post(
+  "/:orderId/leads/:leadId/replace",
+  [
+    protect,
+    authorize("admin", "affiliate_manager"),
+    body("newLeadId")
+      .isMongoId()
+      .withMessage("newLeadId must be a valid MongoDB ObjectId"),
+  ],
+  replaceLeadInOrder
 );
 
 // Add leads to an existing order (Admin only)

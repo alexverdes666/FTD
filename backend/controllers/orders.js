@@ -5705,3 +5705,441 @@ exports.addLeadsToOrder = async (req, res, next) => {
     next(error);
   }
 };
+
+/**
+ * Get available leads for replacement in an order
+ * Returns leads filtered by: same country as order, same lead type, not in cooldown (for FTD/Filler), not archived/inactive
+ * GET /:orderId/leads/:leadId/available-replacements
+ */
+exports.getAvailableLeadsForReplacement = async (req, res, next) => {
+  try {
+    const { orderId, leadId } = req.params;
+    const { search, page = 1, limit = 20 } = req.query;
+
+    // Check user permissions - only admin and affiliate_manager
+    if (!["admin", "affiliate_manager"].includes(req.user.role)) {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied. Only admins and affiliate managers can replace leads.",
+      });
+    }
+
+    // Find the order
+    const Order = require("../models/Order");
+    const order = await Order.findById(orderId);
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found",
+      });
+    }
+
+    // For affiliate managers, ensure they can only access their own orders
+    if (req.user.role === "affiliate_manager") {
+      if (order.requester.toString() !== req.user._id.toString()) {
+        return res.status(403).json({
+          success: false,
+          message: "Access denied. You can only replace leads in your own orders.",
+        });
+      }
+    }
+
+    // Find the lead being replaced
+    const Lead = require("../models/Lead");
+    const leadToReplace = await Lead.findById(leadId);
+    if (!leadToReplace) {
+      return res.status(404).json({
+        success: false,
+        message: "Lead not found",
+      });
+    }
+
+    // Check if lead is in the order
+    const leadInOrder = order.leads.some((id) => id.toString() === leadId);
+    if (!leadInOrder) {
+      return res.status(400).json({
+        success: false,
+        message: "Lead is not in this order",
+      });
+    }
+
+    // Get the orderedAs type from leadsMetadata
+    const leadMetadata = order.leadsMetadata?.find(
+      (meta) => meta.leadId.toString() === leadId
+    );
+    const orderedAs = leadMetadata?.orderedAs || leadToReplace.leadType;
+
+    // Get replacement history to exclude previously used leads
+    const replacementHistory = leadMetadata?.replacementHistory || [];
+
+    // Build list of leads to exclude: current order leads + replacement history
+    const orderLeadIds = order.leads.map((id) => id.toString());
+    const removedLeadIds = order.removedLeads?.map((rl) =>
+      (rl.leadId?._id || rl.leadId).toString()
+    ) || [];
+    const leadsToExclude = [
+      ...orderLeadIds,
+      ...removedLeadIds,
+      ...replacementHistory.map((id) => id.toString()),
+    ];
+
+    // Build base query
+    const baseQuery = {
+      country: order.countryFilter,
+      isArchived: { $ne: true },
+      status: { $ne: "inactive" },
+      _id: { $nin: leadsToExclude.map((id) => new mongoose.Types.ObjectId(id)) },
+    };
+
+    // Determine leadType to search for based on orderedAs
+    // Note: Filler leads are stored as leadType: "ftd" with orderedAs: "filler"
+    if (orderedAs === "ftd" || orderedAs === "filler") {
+      baseQuery.leadType = "ftd";
+      // Apply 10-day cooldown for FTD/Filler leads
+      const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
+      baseQuery.$or = [
+        { lastUsedInOrder: null },
+        { lastUsedInOrder: { $exists: false } },
+        { lastUsedInOrder: { $lt: tenDaysAgo } },
+      ];
+    } else if (orderedAs === "cold") {
+      baseQuery.leadType = "cold";
+      // Cold leads have NO cooldown
+    } else {
+      // Fallback to original lead type
+      baseQuery.leadType = leadToReplace.leadType;
+    }
+
+    // Add search filter if provided
+    if (search && search.trim()) {
+      const searchRegex = new RegExp(search.trim(), "i");
+      baseQuery.$and = baseQuery.$and || [];
+      baseQuery.$and.push({
+        $or: [
+          { firstName: searchRegex },
+          { lastName: searchRegex },
+          { newEmail: searchRegex },
+          { newPhone: searchRegex },
+        ],
+      });
+    }
+
+    // Count total matching leads
+    const total = await Lead.countDocuments(baseQuery);
+
+    // Fetch paginated leads
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const leads = await Lead.find(baseQuery)
+      .populate("assignedAgent", "fullName email fourDigitCode")
+      .select("firstName lastName newEmail newPhone country leadType assignedAgent lastUsedInOrder")
+      .sort({ firstName: 1, lastName: 1 })
+      .skip(skip)
+      .limit(parseInt(limit))
+      .lean();
+
+    // Add cooldown info to each lead
+    const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
+    const leadsWithCooldownInfo = leads.map((lead) => {
+      const isOnCooldown = lead.lastUsedInOrder && lead.lastUsedInOrder >= tenDaysAgo;
+      let cooldownDaysRemaining = 0;
+      if (isOnCooldown) {
+        const cooldownEnd = new Date(lead.lastUsedInOrder.getTime() + 10 * 24 * 60 * 60 * 1000);
+        cooldownDaysRemaining = Math.ceil((cooldownEnd - new Date()) / (24 * 60 * 60 * 1000));
+      }
+      return {
+        ...lead,
+        isOnCooldown,
+        cooldownDaysRemaining,
+      };
+    });
+
+    res.json({
+      success: true,
+      data: leadsWithCooldownInfo,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        totalPages: Math.ceil(total / parseInt(limit)),
+      },
+      context: {
+        orderId,
+        leadIdBeingReplaced: leadId,
+        orderedAs,
+        countryFilter: order.countryFilter,
+      },
+    });
+  } catch (error) {
+    console.error("Error getting available leads for replacement:", error);
+    next(error);
+  }
+};
+
+/**
+ * Replace a lead in an order with a specific selected lead
+ * POST /:orderId/leads/:leadId/replace
+ */
+exports.replaceLeadInOrder = async (req, res, next) => {
+  try {
+    const { orderId, leadId } = req.params;
+    const { newLeadId } = req.body;
+
+    console.log(`[REPLACE-LEAD] Starting lead replacement: order=${orderId}, oldLead=${leadId}, newLead=${newLeadId}`);
+
+    // Check user permissions - only admin and affiliate_manager
+    if (!["admin", "affiliate_manager"].includes(req.user.role)) {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied. Only admins and affiliate managers can replace leads.",
+      });
+    }
+
+    // Find the order
+    const Order = require("../models/Order");
+    const order = await Order.findById(orderId);
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found",
+      });
+    }
+
+    // For affiliate managers, ensure they can only modify their own orders
+    if (req.user.role === "affiliate_manager") {
+      if (order.requester.toString() !== req.user._id.toString()) {
+        return res.status(403).json({
+          success: false,
+          message: "Access denied. You can only replace leads in your own orders.",
+        });
+      }
+    }
+
+    // Find the old lead
+    const Lead = require("../models/Lead");
+    const oldLead = await Lead.findById(leadId);
+    if (!oldLead) {
+      return res.status(404).json({
+        success: false,
+        message: "Lead to replace not found",
+      });
+    }
+
+    // Check if old lead is in the order
+    const leadInOrder = order.leads.some((id) => id.toString() === leadId);
+    if (!leadInOrder) {
+      return res.status(400).json({
+        success: false,
+        message: "Lead is not in this order",
+      });
+    }
+
+    // Find the new lead
+    const newLead = await Lead.findById(newLeadId);
+    if (!newLead) {
+      return res.status(404).json({
+        success: false,
+        message: "Replacement lead not found",
+      });
+    }
+
+    // Validate new lead is not already in the order
+    if (order.leads.some((id) => id.toString() === newLeadId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Replacement lead is already in this order",
+      });
+    }
+
+    // Validate new lead is not archived or inactive
+    if (newLead.isArchived) {
+      return res.status(400).json({
+        success: false,
+        message: "Cannot use an archived lead as replacement",
+      });
+    }
+    if (newLead.status === "inactive") {
+      return res.status(400).json({
+        success: false,
+        message: "Cannot use an inactive lead as replacement",
+      });
+    }
+
+    // Get the orderedAs type from leadsMetadata
+    const leadMetadataIndex = order.leadsMetadata?.findIndex(
+      (meta) => meta.leadId.toString() === leadId
+    );
+    const leadMetadata = leadMetadataIndex !== -1 ? order.leadsMetadata[leadMetadataIndex] : null;
+    const orderedAs = leadMetadata?.orderedAs || oldLead.leadType;
+
+    // Validate new lead matches required criteria
+    // Same country as order
+    if (newLead.country !== order.countryFilter) {
+      return res.status(400).json({
+        success: false,
+        message: `Replacement lead must be from the same country (${order.countryFilter})`,
+      });
+    }
+
+    // Same lead type (ftd for ftd/filler, cold for cold)
+    const expectedLeadType = (orderedAs === "ftd" || orderedAs === "filler") ? "ftd" : orderedAs;
+    if (newLead.leadType !== expectedLeadType) {
+      return res.status(400).json({
+        success: false,
+        message: `Replacement lead must be of type ${expectedLeadType}`,
+      });
+    }
+
+    // Check cooldown for FTD/Filler leads
+    if (orderedAs === "ftd" || orderedAs === "filler") {
+      const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
+      if (newLead.lastUsedInOrder && newLead.lastUsedInOrder >= tenDaysAgo) {
+        const cooldownEnd = new Date(newLead.lastUsedInOrder.getTime() + 10 * 24 * 60 * 60 * 1000);
+        const daysRemaining = Math.ceil((cooldownEnd - new Date()) / (24 * 60 * 60 * 1000));
+        return res.status(400).json({
+          success: false,
+          message: `Replacement lead is on cooldown. ${daysRemaining} day(s) remaining.`,
+        });
+      }
+    }
+
+    // Check replacement history to prevent reusing previously swapped leads
+    const replacementHistory = leadMetadata?.replacementHistory || [];
+    if (replacementHistory.some((id) => id.toString() === newLeadId)) {
+      return res.status(400).json({
+        success: false,
+        message: "This lead was previously used in this position and cannot be used again",
+      });
+    }
+
+    // Get client IP for audit log
+    const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+                     req.headers['x-real-ip'] ||
+                     req.connection?.remoteAddress ||
+                     req.socket?.remoteAddress ||
+                     'unknown';
+
+    // Start transaction to replace the lead
+    const session = await Lead.startSession();
+    await session.withTransaction(async () => {
+      // Reset the old lead
+      oldLead.orderId = undefined;
+      oldLead.createdBy = undefined;
+      // Clear cooldown for replaced lead (allows immediate reuse)
+      oldLead.lastUsedInOrder = undefined;
+
+      // Assign new lead to order
+      newLead.orderId = orderId;
+      newLead.createdBy = req.user._id;
+
+      // Update lastUsedInOrder for FTD/Filler leads (starts 10-day cooldown)
+      if (orderedAs === "ftd" || orderedAs === "filler") {
+        newLead.lastUsedInOrder = new Date();
+      }
+
+      // Add network/campaign assignments from order to new lead
+      if (order.selectedCampaign) {
+        newLead.addCampaignAssignment(order.selectedCampaign, req.user._id, orderId);
+      }
+      if (order.selectedClientNetwork) {
+        newLead.addClientNetworkAssignment(order.selectedClientNetwork, req.user._id, orderId);
+      }
+      if (order.selectedOurNetwork) {
+        newLead.addOurNetworkAssignment(order.selectedOurNetwork, req.user._id, orderId);
+      }
+
+      // Add audit log entry
+      if (!order.auditLog) {
+        order.auditLog = [];
+      }
+      order.auditLog.push({
+        action: "lead_replaced",
+        leadId: newLead._id,
+        leadEmail: newLead.newEmail,
+        performedBy: req.user._id,
+        performedAt: new Date(),
+        ipAddress: clientIp,
+        details: `Lead manually replaced: ${oldLead.firstName} ${oldLead.lastName} (${oldLead.newEmail}) replaced with ${newLead.firstName} ${newLead.lastName} (${newLead.newEmail}) by ${req.user.fullName || req.user.email}`,
+        previousValue: {
+          leadId: oldLead._id,
+          leadEmail: oldLead.newEmail,
+          leadName: `${oldLead.firstName} ${oldLead.lastName}`,
+          leadType: orderedAs,
+        },
+        newValue: {
+          leadId: newLead._id,
+          leadEmail: newLead.newEmail,
+          leadName: `${newLead.firstName} ${newLead.lastName}`,
+          leadType: orderedAs,
+        },
+      });
+
+      // Save leads
+      await oldLead.save({ session });
+      await newLead.save({ session });
+
+      // Update order.leads array
+      const leadIndex = order.leads.findIndex((id) => id.toString() === leadId);
+      if (leadIndex !== -1) {
+        order.leads[leadIndex] = newLead._id;
+      }
+
+      // Update leadsMetadata
+      if (leadMetadataIndex !== -1 && order.leadsMetadata) {
+        // Add old lead to replacement history
+        if (!order.leadsMetadata[leadMetadataIndex].replacementHistory) {
+          order.leadsMetadata[leadMetadataIndex].replacementHistory = [];
+        }
+        order.leadsMetadata[leadMetadataIndex].replacementHistory.push(oldLead._id);
+
+        // Update leadId to new lead (preserve orderedAs)
+        order.leadsMetadata[leadMetadataIndex].leadId = newLead._id;
+      }
+
+      await order.save({ session });
+    });
+
+    await session.endSession();
+
+    console.log(`[REPLACE-LEAD] Successfully replaced lead ${leadId} with ${newLeadId} in order ${orderId}`);
+
+    // Populate the order for response
+    const populatedOrder = await Order.findById(orderId)
+      .populate("leads", "firstName lastName newEmail newPhone country leadType assignedAgent depositConfirmed shaved")
+      .populate({
+        path: "leads",
+        populate: { path: "assignedAgent", select: "fullName email fourDigitCode" }
+      })
+      .populate("requester", "fullName email")
+      .populate("selectedClientNetwork", "name")
+      .populate("selectedOurNetwork", "name")
+      .populate("selectedCampaign", "name")
+      .lean();
+
+    res.json({
+      success: true,
+      message: "Lead successfully replaced",
+      data: {
+        order: populatedOrder,
+        oldLead: {
+          _id: oldLead._id,
+          firstName: oldLead.firstName,
+          lastName: oldLead.lastName,
+          newEmail: oldLead.newEmail,
+          newPhone: oldLead.newPhone,
+        },
+        newLead: {
+          _id: newLead._id,
+          firstName: newLead.firstName,
+          lastName: newLead.lastName,
+          newEmail: newLead.newEmail,
+          newPhone: newLead.newPhone,
+          assignedAgent: newLead.assignedAgent,
+        },
+        orderedAs,
+      },
+    });
+  } catch (error) {
+    console.error("Error replacing lead in order:", error);
+    next(error);
+  }
+};
