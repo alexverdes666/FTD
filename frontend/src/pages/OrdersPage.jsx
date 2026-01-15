@@ -35,6 +35,7 @@ import {
   useMediaQuery,
   useTheme,
   FormControlLabel,
+  FormHelperText,
   Checkbox,
   Snackbar,
   Tooltip,
@@ -637,6 +638,25 @@ const OrdersPage = () => {
     permanentDelete: false,
     loading: false,
   });
+
+  // Remove Lead from Order Dialog State
+  const [removeLeadDialog, setRemoveLeadDialog] = useState({
+    open: false,
+    leadId: null,
+    leadName: "",
+    reason: "",
+    customReason: "",
+    loading: false,
+  });
+
+  const REMOVE_LEAD_REASONS = [
+    "Lead is not sent",
+    "Email not working",
+    "Phone not working",
+    "One or more leads from this order were already shaved",
+    "Vankata e gei",
+    "Other",
+  ];
 
   // Autocomplete states for Create Order Dialog
   const [clientNetworkInput, setClientNetworkInput] = useState("");
@@ -1829,35 +1849,88 @@ const OrdersPage = () => {
     }
   }, []);
 
-  const handleCancelLead = async (leadId) => {
-    const orderId = leadsPreviewModal.orderId;
-    if (!orderId) return;
+  // Open remove lead dialog
+  const handleOpenRemoveLeadDialog = (lead) => {
+    setRemoveLeadDialog({
+      open: true,
+      leadId: lead._id,
+      leadName: `${lead.firstName} ${lead.lastName}`,
+      reason: "",
+      customReason: "",
+      loading: false,
+    });
+  };
 
-    if (
-      !window.confirm(
-        "Are you sure you want to remove this lead from the order? It will be returned to the pool of available leads."
-      )
-    ) {
-      return;
-    }
+  // Close remove lead dialog
+  const handleCloseRemoveLeadDialog = () => {
+    setRemoveLeadDialog({
+      open: false,
+      leadId: null,
+      leadName: "",
+      reason: "",
+      customReason: "",
+      loading: false,
+    });
+  };
+
+  // Confirm remove lead
+  const handleConfirmRemoveLead = async () => {
+    const orderId = leadsPreviewModal.orderId;
+    const { leadId, reason, customReason } = removeLeadDialog;
+
+    // Determine the final reason
+    const finalReason = reason === "Other" ? customReason : reason;
+
+    if (!orderId || !leadId || !finalReason || !finalReason.trim()) return;
+
+    setRemoveLeadDialog((prev) => ({ ...prev, loading: true }));
 
     try {
-      await api.delete(`/orders/${orderId}/leads/${leadId}`);
-      notificationService.success("Lead removed from order successfully");
+      const response = await api.delete(`/orders/${orderId}/leads/${leadId}`, {
+        data: { reason: finalReason },
+      });
+      setNotification({
+        message: "Lead removed from order successfully",
+        severity: "success",
+      });
 
-      // Update the local state to remove the lead from the modal
-      setLeadsPreviewModal((prev) => ({
-        ...prev,
-        leads: prev.leads.filter((lead) => lead._id !== leadId),
-      }));
+      // Update the local state to mark the lead as removed (not filter it out)
+      const updatedOrder = response.data?.data?.order;
+      if (updatedOrder) {
+        setLeadsPreviewModal((prev) => ({
+          ...prev,
+          order: {
+            ...prev.order,
+            removedLeads: updatedOrder.removedLeads || [],
+            fulfilled: updatedOrder.fulfilled,
+          },
+        }));
 
-      // Refresh the orders list to reflect the changes (e.g. updated counts)
-      fetchOrders();
+        // Update the orders list with the new fulfilled counts (real-time update)
+        setOrders((prevOrders) =>
+          prevOrders.map((order) =>
+            order._id === orderId
+              ? {
+                  ...order,
+                  fulfilled: updatedOrder.fulfilled,
+                  removedLeads: updatedOrder.removedLeads || [],
+                  status: updatedOrder.status,
+                }
+              : order
+          )
+        );
+      }
+
+      // Close the dialog
+      handleCloseRemoveLeadDialog();
     } catch (error) {
       console.error("Error removing lead from order:", error);
-      notificationService.error(
-        error.response?.data?.message || "Failed to remove lead from order"
-      );
+      setNotification({
+        message:
+          error.response?.data?.message || "Failed to remove lead from order",
+        severity: "error",
+      });
+      setRemoveLeadDialog((prev) => ({ ...prev, loading: false }));
     }
   };
 
@@ -6284,6 +6357,101 @@ const OrdersPage = () => {
         </DialogActions>
       </Dialog>
 
+      {/* Remove Lead from Order Dialog */}
+      <Dialog
+        open={removeLeadDialog.open}
+        onClose={handleCloseRemoveLeadDialog}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Remove Lead from Order</DialogTitle>
+        <DialogContent>
+          <Typography sx={{ mb: 2 }}>
+            Are you sure you want to remove{" "}
+            <strong>{removeLeadDialog.leadName}</strong> from this order? The
+            lead will be returned to the pool of available leads.
+          </Typography>
+          <FormControl fullWidth required error={!removeLeadDialog.reason}>
+            <InputLabel id="remove-lead-reason-label">
+              Reason for removal *
+            </InputLabel>
+            <Select
+              labelId="remove-lead-reason-label"
+              value={removeLeadDialog.reason}
+              label="Reason for removal *"
+              onChange={(e) =>
+                setRemoveLeadDialog((prev) => ({
+                  ...prev,
+                  reason: e.target.value,
+                  customReason:
+                    e.target.value !== "Other" ? "" : prev.customReason,
+                }))
+              }
+            >
+              {REMOVE_LEAD_REASONS.map((reason) => (
+                <MenuItem key={reason} value={reason}>
+                  {reason}
+                </MenuItem>
+              ))}
+            </Select>
+            {!removeLeadDialog.reason && (
+              <FormHelperText>Please select a reason</FormHelperText>
+            )}
+          </FormControl>
+          {removeLeadDialog.reason === "Other" && (
+            <TextField
+              fullWidth
+              required
+              label="Please specify the reason *"
+              value={removeLeadDialog.customReason}
+              onChange={(e) =>
+                setRemoveLeadDialog((prev) => ({
+                  ...prev,
+                  customReason: e.target.value,
+                }))
+              }
+              error={!removeLeadDialog.customReason.trim()}
+              helperText={
+                !removeLeadDialog.customReason.trim()
+                  ? "Please enter a custom reason"
+                  : ""
+              }
+              sx={{ mt: 2 }}
+              multiline
+              rows={2}
+            />
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={handleCloseRemoveLeadDialog}
+            disabled={removeLeadDialog.loading}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleConfirmRemoveLead}
+            color="error"
+            variant="contained"
+            disabled={
+              removeLeadDialog.loading ||
+              !removeLeadDialog.reason ||
+              (removeLeadDialog.reason === "Other" &&
+                !removeLeadDialog.customReason.trim())
+            }
+            startIcon={
+              removeLeadDialog.loading ? (
+                <CircularProgress size={20} />
+              ) : (
+                <DeleteIcon />
+              )
+            }
+          >
+            {removeLeadDialog.loading ? "Removing..." : "Remove Lead"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       {/* Order Audit Log Dialog */}
       <Dialog
         open={orderAuditDialog.open}
@@ -6476,6 +6644,16 @@ const OrdersPage = () => {
                     <Typography variant="body2" sx={{ mb: 1 }}>
                       {log.details}
                     </Typography>
+                    {(log.action === "lead_removed" ||
+                      log.action === "removed_from_order") &&
+                      log.previousValue?.removalReason && (
+                        <Alert severity="info" sx={{ mb: 1, py: 0 }}>
+                          <Typography variant="body2">
+                            <strong>Reason:</strong>{" "}
+                            {log.previousValue.removalReason}
+                          </Typography>
+                        </Alert>
+                      )}
                     <Box
                       sx={{
                         display: "flex",
@@ -7122,12 +7300,49 @@ const OrdersPage = () => {
                       doc.description?.toLowerCase().includes("selfie")
                     );
 
+                    // Check if lead is removed
+                    const removedInfo = leadsPreviewModal.order?.removedLeads?.find(
+                      (rl) => rl.leadId === lead._id || rl.leadId?._id === lead._id
+                    );
+                    const isRemoved = !!removedInfo;
+
                     return (
-                      <TableRow
+                      <Tooltip
                         key={lead._id || index}
-                        hover
-                        sx={{ "& td": { py: 0.5 } }}
+                        title={
+                          isRemoved
+                            ? `Removed: ${removedInfo.reason}${
+                                removedInfo.removedBy?.fullName
+                                  ? ` (by ${removedInfo.removedBy.fullName})`
+                                  : ""
+                              }${
+                                removedInfo.removedAt
+                                  ? ` on ${new Date(removedInfo.removedAt).toLocaleString()}`
+                                  : ""
+                              }`
+                            : ""
+                        }
+                        arrow
+                        placement="top"
+                        disableHoverListener={!isRemoved}
                       >
+                        <TableRow
+                          hover={!isRemoved}
+                          sx={{
+                            "& td": { py: 0.5 },
+                            ...(isRemoved && {
+                              backgroundColor: "action.disabledBackground",
+                              opacity: 0.6,
+                              "& *": {
+                                textDecoration: "line-through",
+                                color: "text.disabled",
+                              },
+                              "& .MuiChip-root": {
+                                opacity: 0.5,
+                              },
+                            }),
+                          }}
+                        >
                         {/* Name */}
                         <TableCell sx={{ py: 0.5, px: 1 }}>
                           <Box
@@ -7175,7 +7390,24 @@ const OrdersPage = () => {
                               flexWrap: "wrap",
                             }}
                           >
-                            {lead.depositConfirmed && (
+                            {isRemoved && (
+                              <Chip
+                                label="Removed"
+                                size="small"
+                                sx={{
+                                  height: 18,
+                                  fontSize: "0.6rem",
+                                  backgroundColor: "grey.500",
+                                  color: "white",
+                                  textDecoration: "none !important",
+                                  "& .MuiChip-label": {
+                                    padding: "0 4px",
+                                    textDecoration: "none !important",
+                                  },
+                                }}
+                              />
+                            )}
+                            {lead.depositConfirmed && !isRemoved && (
                               <Chip
                                 label="Deposit Confirmed"
                                 size="small"
@@ -7189,7 +7421,7 @@ const OrdersPage = () => {
                                 }}
                               />
                             )}
-                            {lead.shaved && (
+                            {lead.shaved && !isRemoved && (
                               <Chip
                                 label="Shaved"
                                 size="small"
@@ -7203,7 +7435,7 @@ const OrdersPage = () => {
                                 }}
                               />
                             )}
-                            {!lead.depositConfirmed && !lead.shaved && (
+                            {!lead.depositConfirmed && !lead.shaved && !isRemoved && (
                               <Typography
                                 variant="body2"
                                 color="text.secondary"
@@ -7474,11 +7706,13 @@ const OrdersPage = () => {
                             size="small"
                             onClick={(e) => handleOpenPreviewActionsMenu(e, lead)}
                             sx={{ p: 0.25 }}
+                            disabled={isRemoved}
                           >
                             <MoreVertIcon sx={{ fontSize: 18 }} />
                           </IconButton>
                         </TableCell>
                       </TableRow>
+                      </Tooltip>
                     );
                   })
                 )}
@@ -7629,24 +7863,22 @@ const OrdersPage = () => {
                   )
                 )}
 
-                {/* Delete - Admin only */}
-                {user.role === "admin" && (
-                  <>
-                    <Divider />
-                    <MenuItem
-                      onClick={() => {
-                        handleCancelLead(lead._id);
-                        handleClosePreviewActionsMenu();
-                      }}
-                      sx={{ color: "error.main" }}
-                    >
-                      <ListItemIcon>
-                        <DeleteIcon fontSize="small" color="error" />
-                      </ListItemIcon>
-                      Remove from Order
-                    </MenuItem>
-                  </>
-                )}
+                {/* Delete - Available to all users */}
+                <>
+                  <Divider />
+                  <MenuItem
+                    onClick={() => {
+                      handleOpenRemoveLeadDialog(lead);
+                      handleClosePreviewActionsMenu();
+                    }}
+                    sx={{ color: "error.main" }}
+                  >
+                    <ListItemIcon>
+                      <DeleteIcon fontSize="small" color="error" />
+                    </ListItemIcon>
+                    Remove from Order
+                  </MenuItem>
+                </>
               </>
             );
           })()}

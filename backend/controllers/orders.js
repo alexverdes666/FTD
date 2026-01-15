@@ -3107,6 +3107,7 @@ exports.getOrders = async (req, res, next) => {
             },
           ],
         })
+        .populate("removedLeads.removedBy", "fullName email")
         .sort({ createdAt: -1 });
 
       // Filter orders based on search term
@@ -3261,6 +3262,7 @@ exports.getOrders = async (req, res, next) => {
           },
         ],
       })
+      .populate("removedLeads.removedBy", "fullName email")
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limitNum);
@@ -3299,7 +3301,8 @@ exports.getOrderById = async (req, res, next) => {
       .populate("selectedOurNetwork", "name description")
       .populate("selectedClientNetwork", "name description")
       .populate("selectedClientBrokers", "name domain description")
-      .populate("auditLog.performedBy", "fullName email");
+      .populate("auditLog.performedBy", "fullName email")
+      .populate("removedLeads.removedBy", "fullName email");
 
     // Only populate full lead details if not in lightweight mode
     if (!lightweight) {
@@ -3797,17 +3800,19 @@ exports.skipOrderFTDs = async (req, res, next) => {
 };
 
 /**
- * Cancel a lead from an order and return it to the database as unused
+ * Cancel a lead from an order - marks it as removed but keeps it visible in the order
+ * The lead is freed up to be used in other orders
  */
 exports.cancelLeadFromOrder = async (req, res, next) => {
   try {
     const { orderId, leadId } = req.params;
+    const { reason } = req.body;
 
-    // Check user permissions
-    if (req.user.role !== "admin") {
-      return res.status(403).json({
+    // Validate reason is provided
+    if (!reason || !reason.trim()) {
+      return res.status(400).json({
         success: false,
-        message: "Access denied. Only admins can cancel leads from orders.",
+        message: "Reason for removal is required",
       });
     }
 
@@ -3838,35 +3843,41 @@ exports.cancelLeadFromOrder = async (req, res, next) => {
       });
     }
 
-    // Check lead's orderId field and auto-repair if inconsistent
-    if (!lead.orderId || lead.orderId.toString() !== orderId) {
-      console.log(
-        `[CANCEL-LEAD-DEBUG] WARNING: Lead's orderId field is out of sync!`
-      );
-      console.log(
-        `[CANCEL-LEAD-DEBUG] - Lead.orderId: ${lead.orderId || "null"}`
-      );
-      console.log(`[CANCEL-LEAD-DEBUG] - Expected orderId: ${orderId}`);
-      console.log(
-        `[CANCEL-LEAD-DEBUG] - Lead IS in order.leads array, auto-repairing before cancel...`
-      );
-
-      // Auto-repair: Since the lead is confirmed to be in the order's leads array,
-      // sync the lead's orderId field to match before proceeding with cancel
-      lead.orderId = orderId;
-
-      console.log(`[CANCEL-LEAD-DEBUG] ✓ Auto-repaired lead's orderId field`);
+    // Check if the lead is already removed
+    const alreadyRemoved = order.removedLeads?.some(
+      (rl) => rl.leadId.toString() === leadId
+    );
+    if (alreadyRemoved) {
+      return res.status(400).json({
+        success: false,
+        message: "Lead has already been removed from this order",
+      });
     }
 
-    // Store the lead type for updating fulfilled counts
-    const leadType = lead.leadType;
+    // Get the lead type from metadata or lead itself
+    const leadMetadata = order.leadsMetadata?.find(
+      (m) => m.leadId.toString() === leadId
+    );
+    const leadType = leadMetadata?.orderedAs || lead.leadType;
 
-    // Reset the lead to unused state
+    // Add to removedLeads array (soft delete - keep lead visible but marked as removed)
+    if (!order.removedLeads) {
+      order.removedLeads = [];
+    }
+    order.removedLeads.push({
+      leadId: lead._id,
+      reason: reason.trim(),
+      removedBy: req.user._id,
+      removedAt: new Date(),
+      leadType: leadType,
+    });
+
+    // Reset the lead to unused state so it can be used in other orders
     // Note: assignedAgent is preserved - once assigned to an agent, it stays assigned
     lead.orderId = undefined;
     lead.createdBy = undefined;
 
-    // Reset cooldown timer since the lead is no longer in the order
+    // Reset cooldown timer since the lead is no longer active in the order
     // This allows the lead to be used again immediately after cancellation
     lead.lastUsedInOrder = undefined;
     console.log(
@@ -3878,7 +3889,6 @@ exports.cancelLeadFromOrder = async (req, res, next) => {
     // These histories are used for filtering and preventing duplicate assignments in future orders
     // assignedAgent and assignedClientBrokers are also preserved
 
-    // Note: We no longer clear assignedClientBrokers when canceling because it's a permanent record
     // Update client brokers to remove this lead from their active lists
     if (lead.assignedClientBrokers && lead.assignedClientBrokers.length > 0) {
       const ClientBroker = require("../models/ClientBroker");
@@ -3905,8 +3915,8 @@ exports.cancelLeadFromOrder = async (req, res, next) => {
       );
     }
 
-    // Remove the lead from the order's leads array
-    order.leads = order.leads.filter((id) => id.toString() !== leadId);
+    // NOTE: We do NOT remove the lead from order.leads array anymore
+    // The lead stays in the array but is marked as removed via removedLeads
 
     // Update the order's fulfilled counts
     if (order.fulfilled && order.fulfilled[leadType] > 0) {
@@ -3988,7 +3998,7 @@ exports.cancelLeadFromOrder = async (req, res, next) => {
       }
     }
 
-    // Add audit log entry to order (persists even when lead is removed)
+    // Add audit log entry to order
     const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
                      req.headers['x-real-ip'] ||
                      req.connection?.remoteAddress ||
@@ -4005,10 +4015,11 @@ exports.cancelLeadFromOrder = async (req, res, next) => {
       performedBy: req.user._id,
       performedAt: new Date(),
       ipAddress: clientIp,
-      details: `Lead ${lead.firstName} ${lead.lastName} (${lead.email}) removed from order by ${req.user.fullName || req.user.email}`,
+      details: `Lead ${lead.firstName} ${lead.lastName} (${lead.email}) removed from order by ${req.user.fullName || req.user.email}. Reason: ${reason}`,
       previousValue: {
         leadType,
         leadName: `${lead.firstName} ${lead.lastName}`,
+        removalReason: reason,
       },
     });
 
@@ -4021,26 +4032,29 @@ exports.cancelLeadFromOrder = async (req, res, next) => {
       {
         path: "leads",
         select:
-          "leadType orderedAs firstName lastName country email phone orderId assignedAgent assignedAgentAt",
+          "leadType orderedAs firstName lastName country email phone orderId assignedAgent assignedAgentAt newPhone newEmail depositConfirmed isShaved",
         populate: {
           path: "assignedAgent",
           select: "fullName email fourDigitCode",
         },
       },
+      { path: "removedLeads.removedBy", select: "fullName email" },
     ]);
 
     res.status(200).json({
       success: true,
-      message: `Lead ${lead.firstName} ${lead.lastName} has been cancelled from the order and returned to the database as unused`,
+      message: `Lead ${lead.firstName} ${lead.lastName} has been removed from the order`,
       data: {
         order,
-        cancelledLead: {
+        removedLead: {
           _id: lead._id,
           firstName: lead.firstName,
           lastName: lead.lastName,
-          leadType: lead.leadType,
-          assignedAgent: lead.assignedAgent,
+          leadType: leadType,
+          reason: reason,
         },
+        // Return updated fulfilled counts for real-time UI update
+        fulfilled: order.fulfilled,
       },
     });
   } catch (error) {

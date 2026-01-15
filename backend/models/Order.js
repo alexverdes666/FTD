@@ -94,17 +94,26 @@ const orderSchema = new Schema(
     // This tracks display information per order to maintain historical accuracy
     leadsMetadata: [{
       leadId: { type: SchemaTypes.ObjectId, ref: "Lead", required: true },
-      orderedAs: { 
-        type: String, 
+      orderedAs: {
+        type: String,
         enum: ["ftd", "filler", "cold", null],
         default: null
       },
       // Track all leads that have been in this position (for FTD swap prevention)
-      replacementHistory: [{ 
-        type: SchemaTypes.ObjectId, 
+      replacementHistory: [{
+        type: SchemaTypes.ObjectId,
         ref: "Lead",
         default: []
       }],
+      _id: false
+    }],
+    // Track leads that have been removed from the order (soft delete)
+    removedLeads: [{
+      leadId: { type: SchemaTypes.ObjectId, ref: "Lead", required: true },
+      reason: { type: String, required: true },
+      removedBy: { type: SchemaTypes.ObjectId, ref: "User", required: true },
+      removedAt: { type: Date, default: Date.now },
+      leadType: { type: String, enum: ["ftd", "filler", "cold", null] },
       _id: false
     }],
     notes: String,
