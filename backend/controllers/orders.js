@@ -3432,9 +3432,22 @@ exports.updateOrder = async (req, res, next) => {
         message: "Not authorized to update this order",
       });
     }
-    const { priority, notes, selectedClientBrokers } = req.body;
+    const { priority, notes, selectedClientBrokers, plannedDate } = req.body;
     if (priority) order.priority = priority;
     if (notes !== undefined) order.notes = notes;
+    if (plannedDate !== undefined) {
+      const newPlannedDate = new Date(plannedDate);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      newPlannedDate.setHours(0, 0, 0, 0);
+      if (newPlannedDate < today) {
+        return res.status(400).json({
+          success: false,
+          message: "Planned date cannot be in the past",
+        });
+      }
+      order.plannedDate = plannedDate;
+    }
 
     // Handle client brokers update
     if (selectedClientBrokers !== undefined) {

@@ -3728,9 +3728,7 @@ const LeadRow = React.memo(
               }}
             >
               📱{" "}
-              {lead.prefix && lead.newPhone
-                ? `${lead.prefix} ${lead.newPhone}`
-                : lead.newPhone || "N/A"}
+              {lead.newPhone || "N/A"}
             </Typography>
           </Box>
         </TableCell>

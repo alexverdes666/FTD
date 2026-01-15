@@ -195,7 +195,7 @@ router.get(
 router.get("/stats", [protect, canViewOrders], getOrderStats);
 router.get("/:id", [protect, canViewOrders], getOrderById);
 router.put("/:id", [
-  protect, 
+  protect,
   isManager,
   body("selectedClientBrokers")
     .optional()
@@ -208,6 +208,10 @@ router.put("/:id", [
       return true;
     })
     .withMessage("All selectedClientBrokers must be valid MongoDB ObjectIds"),
+  body("plannedDate")
+    .optional()
+    .isISO8601()
+    .withMessage("plannedDate must be a valid date"),
 ], updateOrder);
 router.delete("/:id", [protect, isManager], cancelOrder);
 // Permanent deletion - managers and admins, only for cancelled orders (unless force=true for admins)

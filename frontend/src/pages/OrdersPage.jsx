@@ -466,11 +466,23 @@ const OrdersPage = () => {
     loading: false,
   });
 
+  // Edit Planned Date State
+  const [editPlannedDateDialog, setEditPlannedDateDialog] = useState({
+    open: false,
+    order: null,
+    loading: false,
+  });
+  const [newPlannedDate, setNewPlannedDate] = useState("");
+
   const fetchPotentialRequesters = useCallback(async () => {
     try {
       setLoadingRequesters(true);
       const response = await api.get("/users?isActive=true&limit=1000");
-      setPotentialRequesters(response.data.data);
+      // Filter to only show affiliate managers and admins (exclude agents)
+      const filteredUsers = response.data.data.filter(
+        (u) => u.role === "affiliate_manager" || u.role === "admin"
+      );
+      setPotentialRequesters(filteredUsers);
     } catch (error) {
       console.error("Error fetching potential requesters:", error);
       setNotification({
@@ -584,12 +596,85 @@ const OrdersPage = () => {
         message: "Requester changed successfully",
         severity: "success",
       });
+
+      // Update expandedRowData immediately if the order is expanded
+      const orderId = selectedOrderForRequester._id;
+      if (expandedRowData[orderId]) {
+        setExpandedRowData((prev) => ({
+          ...prev,
+          [orderId]: {
+            ...prev[orderId],
+            requester: selectedNewRequester,
+          },
+        }));
+      }
+
       fetchOrders();
     } catch (err) {
       setNotification({
         message: err.response?.data?.message || "Failed to change requester",
         severity: "error",
       });
+    }
+  };
+
+  // Edit Planned Date handlers
+  const handleOpenEditPlannedDate = (order) => {
+    const currentDate = order.plannedDate
+      ? new Date(order.plannedDate).toISOString().split("T")[0]
+      : "";
+    setNewPlannedDate(currentDate);
+    setEditPlannedDateDialog({
+      open: true,
+      order,
+      loading: false,
+    });
+  };
+
+  const handleCloseEditPlannedDate = () => {
+    setEditPlannedDateDialog({
+      open: false,
+      order: null,
+      loading: false,
+    });
+    setNewPlannedDate("");
+  };
+
+  const handleSubmitEditPlannedDate = async () => {
+    if (!editPlannedDateDialog.order || !newPlannedDate) return;
+
+    setEditPlannedDateDialog((prev) => ({ ...prev, loading: true }));
+
+    try {
+      await api.put(`/orders/${editPlannedDateDialog.order._id}`, {
+        plannedDate: new Date(newPlannedDate).toISOString(),
+      });
+
+      setNotification({
+        message: "Planned date updated successfully",
+        severity: "success",
+      });
+
+      // Update expandedRowData immediately if the order is expanded
+      const orderId = editPlannedDateDialog.order._id;
+      if (expandedRowData[orderId]) {
+        setExpandedRowData((prev) => ({
+          ...prev,
+          [orderId]: {
+            ...prev[orderId],
+            plannedDate: new Date(newPlannedDate).toISOString(),
+          },
+        }));
+      }
+
+      handleCloseEditPlannedDate();
+      fetchOrders();
+    } catch (err) {
+      setNotification({
+        message: err.response?.data?.message || "Failed to update planned date",
+        severity: "error",
+      });
+      setEditPlannedDateDialog((prev) => ({ ...prev, loading: false }));
     }
   };
 
@@ -3467,19 +3552,58 @@ const OrdersPage = () => {
                                       <Grid container spacing={2}>
                                         {/* Account Manager Section */}
                                         <Grid item xs={12} md={4}>
-                                          <Typography
-                                            variant="subtitle2"
+                                          <Box
                                             sx={{
-                                              fontWeight: 600,
-                                              mb: 1.5,
-                                              color: "primary.main",
                                               display: "flex",
                                               alignItems: "center",
                                               gap: 0.5,
+                                              mb: 1.5,
                                             }}
                                           >
-                                            👤 Account Manager
-                                          </Typography>
+                                            <Typography
+                                              variant="subtitle2"
+                                              sx={{
+                                                fontWeight: 600,
+                                                color: "primary.main",
+                                                display: "flex",
+                                                alignItems: "center",
+                                                gap: 0.5,
+                                              }}
+                                            >
+                                              👤 Account Manager
+                                            </Typography>
+                                            {user?.role === "admin" && (
+                                              <IconButton
+                                                size="small"
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  handleOpenChangeRequester(order);
+                                                }}
+                                                title="Change Requester"
+                                                sx={{
+                                                  p: 0.25,
+                                                }}
+                                              >
+                                                <EditIcon sx={{ fontSize: 14 }} />
+                                              </IconButton>
+                                            )}
+                                            {user?.role === "admin" &&
+                                              order.requesterHistory?.length > 0 && (
+                                                <IconButton
+                                                  size="small"
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleOpenRequesterHistory(order);
+                                                  }}
+                                                  title="Requester History"
+                                                  sx={{
+                                                    p: 0.25,
+                                                  }}
+                                                >
+                                                  <HistoryIcon sx={{ fontSize: 14 }} />
+                                                </IconButton>
+                                              )}
+                                          </Box>
                                           <Box
                                             sx={{
                                               display: "flex",
@@ -3608,6 +3732,52 @@ const OrdersPage = () => {
                                                   expandedDetails.createdAt
                                                 ).toLocaleDateString()}
                                               </Typography>
+                                            </Box>
+                                            <Box
+                                              sx={{
+                                                display: "flex",
+                                                alignItems: "center",
+                                                gap: 1,
+                                              }}
+                                            >
+                                              <Typography
+                                                variant="caption"
+                                                color="text.secondary"
+                                                sx={{ minWidth: "60px" }}
+                                              >
+                                                Planned:
+                                              </Typography>
+                                              <Typography
+                                                variant="body2"
+                                                sx={{ fontWeight: 500 }}
+                                              >
+                                                {expandedDetails.plannedDate
+                                                  ? new Date(
+                                                      expandedDetails.plannedDate
+                                                    ).toLocaleDateString()
+                                                  : "N/A"}
+                                              </Typography>
+                                              {(user?.role === "admin" ||
+                                                user?.role ===
+                                                  "affiliate_manager") && (
+                                                <IconButton
+                                                  size="small"
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleOpenEditPlannedDate(
+                                                      order
+                                                    );
+                                                  }}
+                                                  title="Edit Planned Date"
+                                                  sx={{
+                                                    p: 0.25,
+                                                  }}
+                                                >
+                                                  <EditIcon
+                                                    sx={{ fontSize: 14 }}
+                                                  />
+                                                </IconButton>
+                                              )}
                                             </Box>
                                             <Box
                                               sx={{
@@ -5792,6 +5962,51 @@ const OrdersPage = () => {
         selectedRequester={selectedNewRequester}
         onSelectRequester={setSelectedNewRequester}
       />
+
+      {/* Edit Planned Date Dialog */}
+      <Dialog
+        open={editPlannedDateDialog.open}
+        onClose={handleCloseEditPlannedDate}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>
+          <Box display="flex" alignItems="center" gap={1}>
+            <EditIcon color="primary" />
+            <Typography variant="h6">Edit Planned Date</Typography>
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          <TextField
+            label="Planned Date"
+            type="date"
+            value={newPlannedDate}
+            onChange={(e) => setNewPlannedDate(e.target.value)}
+            fullWidth
+            size="small"
+            InputLabelProps={{ shrink: true }}
+            inputProps={{
+              min: new Date().toISOString().split("T")[0],
+            }}
+            sx={{ mt: 2 }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={handleCloseEditPlannedDate}
+            disabled={editPlannedDateDialog.loading}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSubmitEditPlannedDate}
+            variant="contained"
+            disabled={!newPlannedDate || editPlannedDateDialog.loading}
+          >
+            {editPlannedDateDialog.loading ? "Saving..." : "Save"}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Requester History Dialog */}
       <RequesterHistoryDialog
