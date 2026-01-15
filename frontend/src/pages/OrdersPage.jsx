@@ -325,8 +325,10 @@ const buildIPQSTooltip = (validation, type) => {
         <Typography variant="caption" component="div">Disposable: {data.disposable ? "Yes" : "No"}</Typography>
         <Typography variant="caption" component="div">Honeypot: {data.honeypot ? "Yes" : "No"}</Typography>
         <Typography variant="caption" component="div">Recent Abuse: {data.recent_abuse ? "Yes" : "No"}</Typography>
+        <Typography variant="caption" component="div">Catch All: {data.catch_all ? "Yes" : "No"}</Typography>
         <Typography variant="caption" component="div">DNS Valid: {data.dns_valid ? "Yes" : "No"}</Typography>
         <Typography variant="caption" component="div">Deliverability: {data.deliverability || "N/A"}</Typography>
+        <Typography variant="caption" component="div">Leaked: {data.leaked ? "Yes" : "No"}</Typography>
       </Box>
     );
   } else {
@@ -344,6 +346,9 @@ const buildIPQSTooltip = (validation, type) => {
         <Typography variant="caption" component="div">Risky: {data.risky ? "Yes" : "No"}</Typography>
         <Typography variant="caption" component="div">Line Type: {data.line_type || "N/A"}</Typography>
         <Typography variant="caption" component="div">Carrier: {data.carrier || "N/A"}</Typography>
+        <Typography variant="caption" component="div">Country: {data.country || "N/A"}</Typography>
+        <Typography variant="caption" component="div">Do Not Call: {data.do_not_call ? "Yes" : "No"}</Typography>
+        <Typography variant="caption" component="div">Spammer: {data.spammer ? "Yes" : "No"}</Typography>
       </Box>
     );
   }
@@ -1476,14 +1481,19 @@ const OrdersPage = () => {
         });
       }
 
-      // Refresh orders list
-      await fetchOrders();
+      // Fetch fresh order data for immediate update
+      const fullResponse = await api.get(`/orders/${orderId}`);
+      const fullOrderData = fullResponse.data.data;
+
+      // Update orders list
+      setOrders((prevOrders) =>
+        prevOrders.map((order) =>
+          order._id === orderId ? { ...order, ...fullOrderData } : order
+        )
+      );
 
       // Re-expand the order if it was expanded before
       if (wasExpanded) {
-        // Fetch fresh order data
-        const fullResponse = await api.get(`/orders/${orderId}`);
-        const fullOrderData = fullResponse.data.data;
         setExpandedRowData((prev) => ({
           ...prev,
           [orderId]: {
@@ -1493,18 +1503,86 @@ const OrdersPage = () => {
         }));
       }
 
+      // Update leadsPreviewModal if open for this order
+      if (leadsPreviewModal.open && leadsPreviewModal.orderId === orderId) {
+        setLeadsPreviewModal((prev) => ({
+          ...prev,
+          leads: fullOrderData.leads || prev.leads,
+          order: fullOrderData,
+        }));
+      }
+
       // Auto-validate newly added leads with IPQS
       const addedLeadIds = leadsToAdd.map((l) => l.leadId);
+      const validationResults = [];
       for (const leadId of addedLeadIds) {
         try {
-          await api.post(`/orders/${orderId}/leads/${leadId}/validate-ipqs`);
+          const validateRes = await api.post(`/orders/${orderId}/leads/${leadId}/validate-ipqs`);
+          if (validateRes.data.success && !validateRes.data.data.alreadyValidated) {
+            validationResults.push({ leadId, validation: validateRes.data.data });
+          }
         } catch (err) {
           console.error("Auto IPQS validation failed for added lead:", err);
-          // Don't show error notification - auto-validation is optional
         }
       }
-      if (addedLeadIds.length > 0) {
-        notificationService.info(`${addedLeadIds.length} new lead(s) IPQS validated`);
+
+      // Update UI with IPQS validation results
+      if (validationResults.length > 0) {
+        const validationMap = new Map(
+          validationResults.map((r) => [r.leadId, r.validation])
+        );
+
+        // Update leadsPreviewModal with validation results
+        if (leadsPreviewModal.open && leadsPreviewModal.orderId === orderId) {
+          setLeadsPreviewModal((prev) => ({
+            ...prev,
+            leads: prev.leads.map((lead) => {
+              const validation = validationMap.get(lead._id);
+              if (validation) {
+                return {
+                  ...lead,
+                  ipqsValidation: {
+                    email: validation.email,
+                    phone: validation.phone,
+                    summary: validation.summary,
+                    validatedAt: validation.validatedAt,
+                  },
+                };
+              }
+              return lead;
+            }),
+          }));
+        }
+
+        // Update expandedRowData with validation results
+        if (wasExpanded) {
+          setExpandedRowData((prev) => ({
+            ...prev,
+            [orderId]: {
+              ...prev[orderId],
+              leads: prev[orderId].leads?.map((lead) => {
+                const validation = validationMap.get(lead._id);
+                if (validation) {
+                  return {
+                    ...lead,
+                    ipqsValidation: {
+                      email: validation.email,
+                      phone: validation.phone,
+                      summary: validation.summary,
+                      validatedAt: validation.validatedAt,
+                    },
+                  };
+                }
+                return lead;
+              }),
+            },
+          }));
+        }
+
+        setNotification({
+          message: `${validationResults.length} new lead(s) IPQS validated`,
+          severity: "info",
+        });
       }
     } catch (err) {
       console.error("Failed to add leads to order:", err);
@@ -1522,8 +1600,9 @@ const OrdersPage = () => {
     allAgents,
     handleCloseAddLeadsConfirmDialog,
     handleCloseAddLeadsDialog,
-    fetchOrders,
     expandedRowData,
+    leadsPreviewModal.open,
+    leadsPreviewModal.orderId,
   ]);
 
   const checkFulfillment = useCallback(
@@ -2169,18 +2248,23 @@ const OrdersPage = () => {
 
         const { newlyValidated = 0, alreadyValidated = 0 } = response.data.data;
         if (newlyValidated > 0) {
-          notificationService.success(
-            `Validated ${newlyValidated} leads${alreadyValidated > 0 ? ` (${alreadyValidated} already validated)` : ""}`
-          );
+          setNotification({
+            message: `Validated ${newlyValidated} leads${alreadyValidated > 0 ? ` (${alreadyValidated} already validated)` : ""}`,
+            severity: "success",
+          });
         } else {
-          notificationService.info("All leads were already validated");
+          setNotification({
+            message: "All leads were already validated",
+            severity: "info",
+          });
         }
       }
     } catch (error) {
       console.error("Error validating leads:", error);
-      notificationService.error(
-        error.response?.data?.message || "Failed to validate leads"
-      );
+      setNotification({
+        message: error.response?.data?.message || "Failed to validate leads",
+        severity: "error",
+      });
     } finally {
       setIpqsPreviewLoading(false);
     }
@@ -2373,6 +2457,7 @@ const OrdersPage = () => {
       // Update the local state to mark the lead as removed (not filter it out)
       const updatedOrder = response.data?.data?.order;
       if (updatedOrder) {
+        // Update leads preview modal
         setLeadsPreviewModal((prev) => ({
           ...prev,
           order: {
@@ -2395,6 +2480,22 @@ const OrdersPage = () => {
               : order
           )
         );
+
+        // Update expandedRowData if the order is expanded
+        setExpandedRowData((prev) => {
+          if (prev[orderId]) {
+            return {
+              ...prev,
+              [orderId]: {
+                ...prev[orderId],
+                removedLeads: updatedOrder.removedLeads || [],
+                fulfilled: updatedOrder.fulfilled,
+                status: updatedOrder.status,
+              },
+            };
+          }
+          return prev;
+        });
       }
 
       // Close the dialog
@@ -2965,16 +3066,24 @@ const OrdersPage = () => {
 
   const handleReplaceLeadSuccess = useCallback(
     async (replaceData) => {
+      const orderId = replaceData.order?._id;
+
       setNotification({
         message: `Lead successfully replaced: ${replaceData.oldLead.firstName} ${replaceData.oldLead.lastName} replaced with ${replaceData.newLead.firstName} ${replaceData.newLead.lastName}`,
         severity: "success",
       });
 
-      // Refresh the orders
-      await fetchOrders();
+      // Update orders list immediately with new data
+      if (replaceData.order) {
+        setOrders((prevOrders) =>
+          prevOrders.map((order) =>
+            order._id === orderId ? { ...order, ...replaceData.order } : order
+          )
+        );
+      }
 
       // Update the leads preview modal if open
-      if (leadsPreviewModal.open && leadsPreviewModal.orderId === replaceData.order?._id) {
+      if (leadsPreviewModal.open && leadsPreviewModal.orderId === orderId) {
         setLeadsPreviewModal((prev) => ({
           ...prev,
           leads: replaceData.order?.leads || prev.leads,
@@ -2982,8 +3091,19 @@ const OrdersPage = () => {
         }));
       }
 
+      // Update expandedRowData if the order is expanded
+      if (orderId && expandedRowData[orderId]) {
+        setExpandedRowData((prev) => ({
+          ...prev,
+          [orderId]: {
+            ...prev[orderId],
+            leads: replaceData.order?.leads || prev[orderId].leads,
+            leadsMetadata: replaceData.order?.leadsMetadata || prev[orderId].leadsMetadata,
+          },
+        }));
+      }
+
       // Auto-validate the new lead with IPQS if the order has other validated leads
-      const orderId = replaceData.order?._id;
       const newLeadId = replaceData.newLead?._id;
       if (orderId && newLeadId) {
         try {
@@ -2993,24 +3113,42 @@ const OrdersPage = () => {
           if (validateResponse.data.success && !validateResponse.data.data.alreadyValidated) {
             // Update the lead in the preview modal with validation results
             const validation = validateResponse.data.data;
+            const ipqsData = {
+              email: validation.email,
+              phone: validation.phone,
+              summary: validation.summary,
+              validatedAt: validation.validatedAt,
+            };
             setLeadsPreviewModal((prev) => ({
               ...prev,
               leads: prev.leads.map((lead) => {
                 if (lead._id === newLeadId) {
                   return {
                     ...lead,
-                    ipqsValidation: {
-                      email: validation.email,
-                      phone: validation.phone,
-                      summary: validation.summary,
-                      validatedAt: validation.validatedAt,
-                    },
+                    ipqsValidation: ipqsData,
                   };
                 }
                 return lead;
               }),
             }));
-            notificationService.info("New lead IPQS validated");
+            // Also update expandedRowData if the order is expanded
+            if (expandedRowData[orderId]) {
+              setExpandedRowData((prev) => ({
+                ...prev,
+                [orderId]: {
+                  ...prev[orderId],
+                  leads: prev[orderId].leads?.map((lead) =>
+                    lead._id === newLeadId
+                      ? { ...lead, ipqsValidation: ipqsData }
+                      : lead
+                  ),
+                },
+              }));
+            }
+            setNotification({
+              message: "New lead IPQS validated",
+              severity: "info",
+            });
           }
         } catch (err) {
           console.error("Auto IPQS validation failed for replaced lead:", err);
@@ -3018,7 +3156,7 @@ const OrdersPage = () => {
         }
       }
     },
-    [fetchOrders, leadsPreviewModal.open, leadsPreviewModal.orderId]
+    [leadsPreviewModal.open, leadsPreviewModal.orderId, expandedRowData]
   );
 
   // Convert lead type between FTD and Filler
@@ -4725,48 +4863,50 @@ const OrdersPage = () => {
                                                             } FTD lead(s) to refunds manager`
                                                       }
                                                     >
-                                                      <Button
-                                                        size="small"
-                                                        variant={
-                                                          refundAssignmentStatus[
+                                                      <span>
+                                                        <Button
+                                                          size="small"
+                                                          variant={
+                                                            refundAssignmentStatus[
+                                                              expandedDetails._id
+                                                            ]?.isAssigned
+                                                              ? "outlined"
+                                                              : "contained"
+                                                          }
+                                                          color={
+                                                            refundAssignmentStatus[
+                                                              expandedDetails._id
+                                                            ]?.isAssigned
+                                                              ? "success"
+                                                              : "primary"
+                                                          }
+                                                          startIcon={
+                                                            refundAssignmentStatus[
+                                                              expandedDetails._id
+                                                            ]?.isAssigned ? (
+                                                              <CheckCircleIcon />
+                                                            ) : (
+                                                              <SendIcon />
+                                                            )
+                                                          }
+                                                          onClick={() =>
+                                                            handleOpenRefundsAssignment(
+                                                              expandedDetails._id
+                                                            )
+                                                          }
+                                                          disabled={
+                                                            refundAssignmentStatus[
+                                                              expandedDetails._id
+                                                            ]?.isAssigned
+                                                          }
+                                                        >
+                                                          {refundAssignmentStatus[
                                                             expandedDetails._id
                                                           ]?.isAssigned
-                                                            ? "outlined"
-                                                            : "contained"
-                                                        }
-                                                        color={
-                                                          refundAssignmentStatus[
-                                                            expandedDetails._id
-                                                          ]?.isAssigned
-                                                            ? "success"
-                                                            : "primary"
-                                                        }
-                                                        startIcon={
-                                                          refundAssignmentStatus[
-                                                            expandedDetails._id
-                                                          ]?.isAssigned ? (
-                                                            <CheckCircleIcon />
-                                                          ) : (
-                                                            <SendIcon />
-                                                          )
-                                                        }
-                                                        onClick={() =>
-                                                          handleOpenRefundsAssignment(
-                                                            expandedDetails._id
-                                                          )
-                                                        }
-                                                        disabled={
-                                                          refundAssignmentStatus[
-                                                            expandedDetails._id
-                                                          ]?.isAssigned
-                                                        }
-                                                      >
-                                                        {refundAssignmentStatus[
-                                                          expandedDetails._id
-                                                        ]?.isAssigned
-                                                          ? "Assigned to Refunds"
-                                                          : "Assign to Refunds"}
-                                                      </Button>
+                                                            ? "Assigned to Refunds"
+                                                            : "Assign to Refunds"}
+                                                        </Button>
+                                                      </span>
                                                     </Tooltip>
                                                   )}
                                               </Box>
