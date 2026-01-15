@@ -6396,7 +6396,7 @@ exports.replaceLeadInOrder = async (req, res, next) => {
 
 /**
  * Validate leads in an order using IPQS (IP Quality Score)
- * Validates email and phone for each lead and returns quality scores
+ * Only validates leads that haven't been validated yet (one-time validation)
  * @route POST /api/orders/:orderId/validate-leads
  * @access Protected (Manager)
  */
@@ -6432,13 +6432,50 @@ exports.validateOrderLeadsIPQS = async (req, res, next) => {
       });
     }
 
-    console.log(`[IPQS] Starting validation for order ${orderId} with ${order.leads.length} leads`);
+    // Filter leads that need validation (only unvalidated leads)
+    const leadsToValidate = ipqsService.getUnvalidatedLeads(order.leads);
+    const alreadyValidatedLeads = order.leads.filter(lead => ipqsService.isLeadValidated(lead));
 
-    // Validate all leads
-    const validationResults = await ipqsService.validateOrderLeads(order.leads);
+    if (leadsToValidate.length === 0) {
+      // All leads already validated - return existing results
+      const results = order.leads.map((lead) => ({
+        leadId: lead._id,
+        firstName: lead.firstName,
+        lastName: lead.lastName,
+        newEmail: lead.newEmail,
+        newPhone: lead.newPhone,
+        country: lead.country,
+        leadType: lead.leadType,
+        email: lead.ipqsValidation?.email,
+        phone: lead.ipqsValidation?.phone,
+        summary: lead.ipqsValidation?.summary,
+        validatedAt: lead.ipqsValidation?.validatedAt,
+        alreadyValidated: true,
+      }));
+
+      // Calculate statistics from existing data
+      const stats = calculateIPQSStats(results);
+
+      return res.json({
+        success: true,
+        message: "All leads already validated",
+        data: {
+          orderId: orderId,
+          results: results,
+          stats: stats,
+          validatedAt: order.leads[0]?.ipqsValidation?.validatedAt,
+          allAlreadyValidated: true,
+        },
+      });
+    }
+
+    console.log(`[IPQS] Starting validation for order ${orderId}: ${leadsToValidate.length} new leads (${alreadyValidatedLeads.length} already validated)`);
+
+    // Validate only the unvalidated leads
+    const validationResults = await ipqsService.validateOrderLeads(leadsToValidate);
 
     // Process results and add summaries
-    const resultsWithSummary = validationResults.map((result) => {
+    const newResultsWithSummary = validationResults.map((result) => {
       const summary = ipqsService.getValidationSummary(result.email, result.phone);
       return {
         ...result,
@@ -6446,8 +6483,8 @@ exports.validateOrderLeadsIPQS = async (req, res, next) => {
       };
     });
 
-    // Update leads with validation results in database
-    const bulkOps = resultsWithSummary.map((result) => ({
+    // Update newly validated leads in database
+    const bulkOps = newResultsWithSummary.map((result) => ({
       updateOne: {
         filter: { _id: result.leadId },
         update: {
@@ -6467,53 +6504,43 @@ exports.validateOrderLeadsIPQS = async (req, res, next) => {
       await Lead.bulkWrite(bulkOps);
     }
 
-    // Calculate overall statistics
-    const stats = {
-      total: resultsWithSummary.length,
-      emailStats: {
-        clean: 0,
-        low_risk: 0,
-        medium_risk: 0,
-        high_risk: 0,
-        invalid: 0,
-        unknown: 0,
-      },
-      phoneStats: {
-        clean: 0,
-        low_risk: 0,
-        medium_risk: 0,
-        high_risk: 0,
-        invalid: 0,
-        unknown: 0,
-      },
-      overallStats: {
-        clean: 0,
-        low_risk: 0,
-        medium_risk: 0,
-        high_risk: 0,
-        invalid: 0,
-        unknown: 0,
-      },
-    };
+    // Combine new results with already validated leads for complete response
+    const allResults = [
+      ...alreadyValidatedLeads.map((lead) => ({
+        leadId: lead._id,
+        firstName: lead.firstName,
+        lastName: lead.lastName,
+        newEmail: lead.newEmail,
+        newPhone: lead.newPhone,
+        country: lead.country,
+        leadType: lead.leadType,
+        email: lead.ipqsValidation?.email,
+        phone: lead.ipqsValidation?.phone,
+        summary: lead.ipqsValidation?.summary,
+        validatedAt: lead.ipqsValidation?.validatedAt,
+        alreadyValidated: true,
+      })),
+      ...newResultsWithSummary.map((result) => ({
+        ...result,
+        alreadyValidated: false,
+      })),
+    ];
 
-    resultsWithSummary.forEach((result) => {
-      if (result.summary) {
-        stats.emailStats[result.summary.emailStatus]++;
-        stats.phoneStats[result.summary.phoneStatus]++;
-        stats.overallStats[result.summary.overallRisk]++;
-      }
-    });
+    // Calculate statistics
+    const stats = calculateIPQSStats(allResults);
 
-    console.log(`[IPQS] Validation completed for order ${orderId}`);
+    console.log(`[IPQS] Validation completed for order ${orderId}: ${newResultsWithSummary.length} newly validated`);
 
     res.json({
       success: true,
-      message: `Validated ${resultsWithSummary.length} leads`,
+      message: `Validated ${newResultsWithSummary.length} new leads (${alreadyValidatedLeads.length} already validated)`,
       data: {
         orderId: orderId,
-        results: resultsWithSummary,
+        results: allResults,
         stats: stats,
         validatedAt: new Date(),
+        newlyValidated: newResultsWithSummary.length,
+        alreadyValidated: alreadyValidatedLeads.length,
       },
     });
   } catch (error) {
@@ -6521,6 +6548,149 @@ exports.validateOrderLeadsIPQS = async (req, res, next) => {
     next(error);
   }
 };
+
+/**
+ * Validate a single lead using IPQS
+ * Used when a lead is added or replaced in an order
+ * @route POST /api/orders/:orderId/leads/:leadId/validate-ipqs
+ * @access Protected (Manager)
+ */
+exports.validateSingleLeadIPQS = async (req, res, next) => {
+  try {
+    const { orderId, leadId } = req.params;
+    const ipqsService = require("../services/ipqsService");
+
+    // Validate IDs
+    if (!mongoose.Types.ObjectId.isValid(orderId) || !mongoose.Types.ObjectId.isValid(leadId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid order ID or lead ID format",
+      });
+    }
+
+    // Find the order
+    const order = await Order.findById(orderId).lean();
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found",
+      });
+    }
+
+    // Verify lead is in the order
+    const isLeadInOrder = order.leads.some(lid => lid.toString() === leadId);
+    if (!isLeadInOrder) {
+      return res.status(400).json({
+        success: false,
+        message: "Lead is not in this order",
+      });
+    }
+
+    // Find the lead
+    const lead = await Lead.findById(leadId).lean();
+    if (!lead) {
+      return res.status(404).json({
+        success: false,
+        message: "Lead not found",
+      });
+    }
+
+    // Check if already validated
+    if (ipqsService.isLeadValidated(lead)) {
+      return res.json({
+        success: true,
+        message: "Lead already validated",
+        data: {
+          leadId: lead._id,
+          ipqsValidation: lead.ipqsValidation,
+          alreadyValidated: true,
+        },
+      });
+    }
+
+    console.log(`[IPQS] Validating single lead ${leadId} in order ${orderId}`);
+
+    // Validate the lead
+    const result = await ipqsService.validateLead(lead);
+    const summary = ipqsService.getValidationSummary(result.email, result.phone);
+
+    // Update lead in database
+    await Lead.findByIdAndUpdate(leadId, {
+      $set: {
+        ipqsValidation: {
+          email: result.email,
+          phone: result.phone,
+          summary: summary,
+          validatedAt: result.validatedAt,
+        },
+      },
+    });
+
+    console.log(`[IPQS] Single lead validation completed for ${leadId}`);
+
+    res.json({
+      success: true,
+      message: "Lead validated successfully",
+      data: {
+        leadId: leadId,
+        email: result.email,
+        phone: result.phone,
+        summary: summary,
+        validatedAt: result.validatedAt,
+      },
+    });
+  } catch (error) {
+    console.error("Error validating single lead with IPQS:", error);
+    next(error);
+  }
+};
+
+// Helper function to calculate IPQS statistics
+function calculateIPQSStats(results) {
+  const stats = {
+    total: results.length,
+    validated: 0,
+    notValidated: 0,
+    emailStats: {
+      clean: 0,
+      low_risk: 0,
+      medium_risk: 0,
+      high_risk: 0,
+      invalid: 0,
+      unknown: 0,
+    },
+    phoneStats: {
+      clean: 0,
+      low_risk: 0,
+      medium_risk: 0,
+      high_risk: 0,
+      invalid: 0,
+      unknown: 0,
+    },
+    overallStats: {
+      clean: 0,
+      low_risk: 0,
+      medium_risk: 0,
+      high_risk: 0,
+      invalid: 0,
+      unknown: 0,
+    },
+  };
+
+  results.forEach((result) => {
+    const summary = result.summary || result.ipqsValidation?.summary;
+    if (summary) {
+      stats.validated++;
+      if (summary.emailStatus) stats.emailStats[summary.emailStatus]++;
+      if (summary.phoneStatus) stats.phoneStats[summary.phoneStatus]++;
+      if (summary.overallRisk) stats.overallStats[summary.overallRisk]++;
+    } else {
+      stats.notValidated++;
+    }
+  });
+
+  return stats;
+}
 
 /**
  * Get cached IPQS validation results for an order

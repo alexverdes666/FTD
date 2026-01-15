@@ -30,6 +30,7 @@ const {
   replaceLeadInOrder,
   validateOrderLeadsIPQS,
   getOrderValidationResults,
+  validateSingleLeadIPQS,
 } = require("../controllers/orders");
 const router = express.Router();
 
@@ -364,6 +365,13 @@ router.get(
   "/:orderId/validation-results",
   [protect, isManager],
   getOrderValidationResults
+);
+
+// Validate a single lead with IPQS (used after adding/replacing a lead)
+router.post(
+  "/:orderId/leads/:leadId/validate-ipqs",
+  [protect, isManager],
+  validateSingleLeadIPQS
 );
 
 module.exports = router;

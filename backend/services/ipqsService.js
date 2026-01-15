@@ -192,13 +192,19 @@ class IPQSService {
     /**
      * Validate multiple leads in an order
      * @param {Array} leads - Array of lead objects
+     * @param {boolean} onlyUnvalidated - Only validate leads without existing IPQS validation
      * @returns {Promise<Array>} Array of validation results
      */
-    async validateOrderLeads(leads) {
+    async validateOrderLeads(leads, onlyUnvalidated = false) {
         const results = [];
 
+        // Filter leads if only validating unvalidated ones
+        const leadsToValidate = onlyUnvalidated
+            ? leads.filter(lead => !lead.ipqsValidation?.validatedAt)
+            : leads;
+
         // Process leads sequentially to avoid rate limiting
-        for (const lead of leads) {
+        for (const lead of leadsToValidate) {
             try {
                 const result = await this.validateLead(lead);
                 results.push(result);
@@ -217,6 +223,24 @@ class IPQSService {
         }
 
         return results;
+    }
+
+    /**
+     * Check if a lead has been validated
+     * @param {Object} lead - Lead object
+     * @returns {boolean} True if lead has IPQS validation
+     */
+    isLeadValidated(lead) {
+        return !!(lead.ipqsValidation && lead.ipqsValidation.validatedAt);
+    }
+
+    /**
+     * Get leads that need validation from an array
+     * @param {Array} leads - Array of lead objects
+     * @returns {Array} Leads without IPQS validation
+     */
+    getUnvalidatedLeads(leads) {
+        return leads.filter(lead => !this.isLeadValidated(lead));
     }
 
     /**

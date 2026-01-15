@@ -285,6 +285,70 @@ const useDebounce = (value, delay) => {
   }, [value, delay]);
   return debouncedValue;
 };
+
+// IPQS Status color helper
+const getIPQSStatusConfig = (status) => {
+  switch (status) {
+    case "clean":
+      return { color: "#4caf50", bgcolor: "#e8f5e9", label: "Clean", textColor: "#1b5e20" };
+    case "low_risk":
+      return { color: "#2196f3", bgcolor: "#e3f2fd", label: "Low Risk", textColor: "#0d47a1" };
+    case "medium_risk":
+      return { color: "#ff9800", bgcolor: "#fff3e0", label: "Medium Risk", textColor: "#e65100" };
+    case "high_risk":
+      return { color: "#f44336", bgcolor: "#ffebee", label: "High Risk", textColor: "#b71c1c" };
+    case "invalid":
+      return { color: "#9c27b0", bgcolor: "#f3e5f5", label: "Invalid", textColor: "#4a148c" };
+    default:
+      return { color: "inherit", bgcolor: "transparent", label: "Unknown", textColor: "inherit" };
+  }
+};
+
+// Build IPQS tooltip content
+const buildIPQSTooltip = (validation, type) => {
+  if (!validation) return "Not validated";
+
+  const data = type === "email" ? validation.email : validation.phone;
+  const summary = validation.summary;
+
+  if (!data?.success) return data?.error || "Validation failed";
+
+  if (type === "email") {
+    const status = summary?.emailStatus || "unknown";
+    const config = getIPQSStatusConfig(status);
+    return (
+      <Box sx={{ p: 0.5 }}>
+        <Typography variant="subtitle2" sx={{ color: config.color, fontWeight: "bold", mb: 0.5 }}>
+          {config.label} (Score: {data.fraud_score ?? "N/A"})
+        </Typography>
+        <Typography variant="caption" component="div">Valid: {data.valid ? "Yes" : "No"}</Typography>
+        <Typography variant="caption" component="div">Disposable: {data.disposable ? "Yes" : "No"}</Typography>
+        <Typography variant="caption" component="div">Honeypot: {data.honeypot ? "Yes" : "No"}</Typography>
+        <Typography variant="caption" component="div">Recent Abuse: {data.recent_abuse ? "Yes" : "No"}</Typography>
+        <Typography variant="caption" component="div">DNS Valid: {data.dns_valid ? "Yes" : "No"}</Typography>
+        <Typography variant="caption" component="div">Deliverability: {data.deliverability || "N/A"}</Typography>
+      </Box>
+    );
+  } else {
+    const status = summary?.phoneStatus || "unknown";
+    const config = getIPQSStatusConfig(status);
+    return (
+      <Box sx={{ p: 0.5 }}>
+        <Typography variant="subtitle2" sx={{ color: config.color, fontWeight: "bold", mb: 0.5 }}>
+          {config.label} (Score: {data.fraud_score ?? "N/A"})
+        </Typography>
+        <Typography variant="caption" component="div">Valid: {data.valid ? "Yes" : "No"}</Typography>
+        <Typography variant="caption" component="div">Active: {data.active ? "Yes" : "No"}</Typography>
+        <Typography variant="caption" component="div">VOIP: {data.VOIP ? "Yes" : "No"}</Typography>
+        <Typography variant="caption" component="div">Prepaid: {data.prepaid ? "Yes" : "No"}</Typography>
+        <Typography variant="caption" component="div">Risky: {data.risky ? "Yes" : "No"}</Typography>
+        <Typography variant="caption" component="div">Line Type: {data.line_type || "N/A"}</Typography>
+        <Typography variant="caption" component="div">Carrier: {data.carrier || "N/A"}</Typography>
+      </Box>
+    );
+  }
+};
+
 const OrdersPage = () => {
   const user = useSelector(selectUser);
   const theme = useTheme();
@@ -387,6 +451,9 @@ const OrdersPage = () => {
     orderId: null,
     order: null,
   });
+
+  // IPQS validation loading state for preview modal
+  const [ipqsPreviewLoading, setIpqsPreviewLoading] = useState(false);
 
   // Actions menu state for leads preview modal
   const [previewActionsMenu, setPreviewActionsMenu] = useState({
@@ -1425,6 +1492,20 @@ const OrdersPage = () => {
           },
         }));
       }
+
+      // Auto-validate newly added leads with IPQS
+      const addedLeadIds = leadsToAdd.map((l) => l.leadId);
+      for (const leadId of addedLeadIds) {
+        try {
+          await api.post(`/orders/${orderId}/leads/${leadId}/validate-ipqs`);
+        } catch (err) {
+          console.error("Auto IPQS validation failed for added lead:", err);
+          // Don't show error notification - auto-validation is optional
+        }
+      }
+      if (addedLeadIds.length > 0) {
+        notificationService.info(`${addedLeadIds.length} new lead(s) IPQS validated`);
+      }
     } catch (err) {
       console.error("Failed to add leads to order:", err);
       setNotification({
@@ -2035,6 +2116,75 @@ const OrdersPage = () => {
     setLeadsPreviewModal({ open: false, leads: [], orderId: null, order: null });
     setPreviewActionsMenu({ anchorEl: null, lead: null });
   }, []);
+
+  // Handler for IPQS validation in preview modal
+  const handleIPQSValidatePreview = useCallback(async () => {
+    if (!leadsPreviewModal.orderId) return;
+
+    setIpqsPreviewLoading(true);
+    try {
+      const response = await api.post(`/orders/${leadsPreviewModal.orderId}/validate-leads`);
+      if (response.data.success) {
+        // Update leads in the preview modal with validation results
+        const validationMap = new Map();
+        response.data.data.results.forEach((result) => {
+          validationMap.set(result.leadId, {
+            email: result.email,
+            phone: result.phone,
+            summary: result.summary,
+            validatedAt: result.validatedAt,
+          });
+        });
+
+        setLeadsPreviewModal((prev) => ({
+          ...prev,
+          leads: prev.leads.map((lead) => {
+            const validation = validationMap.get(lead._id);
+            if (validation) {
+              return { ...lead, ipqsValidation: validation };
+            }
+            return lead;
+          }),
+        }));
+
+        // Also update expandedRowData if the order is expanded
+        setExpandedRowData((prev) => {
+          if (prev[leadsPreviewModal.orderId]) {
+            return {
+              ...prev,
+              [leadsPreviewModal.orderId]: {
+                ...prev[leadsPreviewModal.orderId],
+                leads: prev[leadsPreviewModal.orderId].leads?.map((lead) => {
+                  const validation = validationMap.get(lead._id);
+                  if (validation) {
+                    return { ...lead, ipqsValidation: validation };
+                  }
+                  return lead;
+                }),
+              },
+            };
+          }
+          return prev;
+        });
+
+        const { newlyValidated = 0, alreadyValidated = 0 } = response.data.data;
+        if (newlyValidated > 0) {
+          notificationService.success(
+            `Validated ${newlyValidated} leads${alreadyValidated > 0 ? ` (${alreadyValidated} already validated)` : ""}`
+          );
+        } else {
+          notificationService.info("All leads were already validated");
+        }
+      }
+    } catch (error) {
+      console.error("Error validating leads:", error);
+      notificationService.error(
+        error.response?.data?.message || "Failed to validate leads"
+      );
+    } finally {
+      setIpqsPreviewLoading(false);
+    }
+  }, [leadsPreviewModal.orderId]);
 
   const handleOpenPreviewActionsMenu = useCallback((event, lead) => {
     setPreviewActionsMenu({ anchorEl: event.currentTarget, lead });
@@ -2830,6 +2980,42 @@ const OrdersPage = () => {
           leads: replaceData.order?.leads || prev.leads,
           order: replaceData.order || prev.order,
         }));
+      }
+
+      // Auto-validate the new lead with IPQS if the order has other validated leads
+      const orderId = replaceData.order?._id;
+      const newLeadId = replaceData.newLead?._id;
+      if (orderId && newLeadId) {
+        try {
+          const validateResponse = await api.post(
+            `/orders/${orderId}/leads/${newLeadId}/validate-ipqs`
+          );
+          if (validateResponse.data.success && !validateResponse.data.data.alreadyValidated) {
+            // Update the lead in the preview modal with validation results
+            const validation = validateResponse.data.data;
+            setLeadsPreviewModal((prev) => ({
+              ...prev,
+              leads: prev.leads.map((lead) => {
+                if (lead._id === newLeadId) {
+                  return {
+                    ...lead,
+                    ipqsValidation: {
+                      email: validation.email,
+                      phone: validation.phone,
+                      summary: validation.summary,
+                      validatedAt: validation.validatedAt,
+                    },
+                  };
+                }
+                return lead;
+              }),
+            }));
+            notificationService.info("New lead IPQS validated");
+          }
+        } catch (err) {
+          console.error("Auto IPQS validation failed for replaced lead:", err);
+          // Don't show error notification - auto-validation is optional
+        }
       }
     },
     [fetchOrders, leadsPreviewModal.open, leadsPreviewModal.orderId]
@@ -7992,7 +8178,39 @@ const OrdersPage = () => {
             <Typography variant="h6">
               Leads Preview ({leadsPreviewModal.leads.length} leads)
             </Typography>
-            <Box sx={{ display: "flex", gap: 1 }}>
+            <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+              {/* IPQS Validation Button */}
+              {(user?.role === "admin" ||
+                user?.role === "affiliate_manager" ||
+                user?.role === "lead_manager") &&
+                leadsPreviewModal.leads.length > 0 && (
+                  <Tooltip
+                    title={
+                      leadsPreviewModal.leads.every((l) => l.ipqsValidation?.validatedAt)
+                        ? "All leads already validated"
+                        : "Validate email & phone quality (IPQS)"
+                    }
+                  >
+                    <span>
+                      <IconButton
+                        aria-label="ipqs validate"
+                        onClick={handleIPQSValidatePreview}
+                        size="small"
+                        color="info"
+                        disabled={
+                          ipqsPreviewLoading ||
+                          leadsPreviewModal.leads.every((l) => l.ipqsValidation?.validatedAt)
+                        }
+                      >
+                        {ipqsPreviewLoading ? (
+                          <CircularProgress size={20} />
+                        ) : (
+                          <VerifiedUserIcon />
+                        )}
+                      </IconButton>
+                    </span>
+                  </Tooltip>
+                )}
               {user?.role === "admin" && leadsPreviewModal.order && (
                 <Tooltip title="Add leads to this order">
                   <IconButton
@@ -8367,26 +8585,73 @@ const OrdersPage = () => {
                         </TableCell>
                         {/* Phone */}
                         <TableCell sx={{ py: 0.5, px: 1 }}>
-                          <Typography
-                            variant="body2"
-                            sx={{ whiteSpace: "nowrap", fontSize: "0.75rem" }}
-                          >
-                            {formatPhoneWithCountryCode(lead.newPhone || lead.phone, lead.country) || "-"}
-                          </Typography>
+                          {(() => {
+                            const phoneStatus = lead.ipqsValidation?.summary?.phoneStatus;
+                            const statusConfig = phoneStatus ? getIPQSStatusConfig(phoneStatus) : null;
+                            return (
+                              <Tooltip
+                                title={lead.ipqsValidation ? buildIPQSTooltip(lead.ipqsValidation, "phone") : "Not validated"}
+                                arrow
+                                placement="top"
+                              >
+                                <Typography
+                                  variant="body2"
+                                  sx={{
+                                    whiteSpace: "nowrap",
+                                    fontSize: "0.75rem",
+                                    ...(statusConfig && {
+                                      backgroundColor: `${statusConfig.bgcolor} !important`,
+                                      color: `${statusConfig.textColor} !important`,
+                                      px: 0.5,
+                                      py: 0.25,
+                                      borderRadius: 0.5,
+                                      borderLeft: `3px solid ${statusConfig.color}`,
+                                      opacity: isRemoved ? 0.7 : 1,
+                                    }),
+                                    textDecoration: isRemoved ? "line-through !important" : "none",
+                                  }}
+                                >
+                                  {formatPhoneWithCountryCode(lead.newPhone || lead.phone, lead.country) || "-"}
+                                </Typography>
+                              </Tooltip>
+                            );
+                          })()}
                         </TableCell>
                         {/* Email */}
                         <TableCell sx={{ py: 0.5, px: 1 }}>
-                          <Typography
-                            variant="body2"
-                            sx={{
-                              fontSize: "0.7rem",
-                              maxWidth: 180,
-                              overflow: "hidden",
-                              textOverflow: "ellipsis",
-                            }}
-                          >
-                            {lead.newEmail || lead.email || "-"}
-                          </Typography>
+                          {(() => {
+                            const emailStatus = lead.ipqsValidation?.summary?.emailStatus;
+                            const statusConfig = emailStatus ? getIPQSStatusConfig(emailStatus) : null;
+                            return (
+                              <Tooltip
+                                title={lead.ipqsValidation ? buildIPQSTooltip(lead.ipqsValidation, "email") : "Not validated"}
+                                arrow
+                                placement="top"
+                              >
+                                <Typography
+                                  variant="body2"
+                                  sx={{
+                                    fontSize: "0.7rem",
+                                    maxWidth: 180,
+                                    overflow: "hidden",
+                                    textOverflow: "ellipsis",
+                                    ...(statusConfig && {
+                                      backgroundColor: `${statusConfig.bgcolor} !important`,
+                                      color: `${statusConfig.textColor} !important`,
+                                      px: 0.5,
+                                      py: 0.25,
+                                      borderRadius: 0.5,
+                                      borderLeft: `3px solid ${statusConfig.color}`,
+                                      opacity: isRemoved ? 0.7 : 1,
+                                    }),
+                                    textDecoration: isRemoved ? "line-through !important" : "none",
+                                  }}
+                                >
+                                  {lead.newEmail || lead.email || "-"}
+                                </Typography>
+                              </Tooltip>
+                            );
+                          })()}
                         </TableCell>
                         {/* Assigned Agent */}
                         <TableCell sx={{ py: 0.5, px: 1 }}>

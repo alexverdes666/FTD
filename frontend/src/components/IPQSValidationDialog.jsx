@@ -492,6 +492,8 @@ const IPQSValidationDialog = ({ open, onClose, orderId, orderDetails }) => {
   };
 
   const hasValidatedLeads = results?.stats?.validated > 0 || results?.results?.some(r => r.ipqsValidation || r.summary);
+  const allLeadsValidated = results?.stats?.total > 0 && results?.stats?.validated === results?.stats?.total;
+  const hasUnvalidatedLeads = results?.stats?.notValidated > 0;
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth>
@@ -536,10 +538,16 @@ const IPQSValidationDialog = ({ open, onClose, orderId, orderDetails }) => {
                 variant="contained"
                 color="primary"
                 onClick={handleValidate}
-                disabled={validating}
+                disabled={validating || allLeadsValidated}
                 startIcon={validating ? <CircularProgress size={16} /> : <RefreshIcon />}
               >
-                {validating ? "Validating..." : hasValidatedLeads ? "Re-validate" : "Validate Leads"}
+                {validating
+                  ? "Validating..."
+                  : allLeadsValidated
+                    ? "All Leads Validated"
+                    : hasUnvalidatedLeads
+                      ? `Validate ${results?.stats?.notValidated || 0} Unvalidated Lead(s)`
+                      : "Validate Leads"}
               </Button>
             </Box>
 
