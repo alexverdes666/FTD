@@ -6393,3 +6393,234 @@ exports.replaceLeadInOrder = async (req, res, next) => {
     next(error);
   }
 };
+
+/**
+ * Validate leads in an order using IPQS (IP Quality Score)
+ * Validates email and phone for each lead and returns quality scores
+ * @route POST /api/orders/:orderId/validate-leads
+ * @access Protected (Manager)
+ */
+exports.validateOrderLeadsIPQS = async (req, res, next) => {
+  try {
+    const { orderId } = req.params;
+    const ipqsService = require("../services/ipqsService");
+
+    // Validate orderId
+    if (!mongoose.Types.ObjectId.isValid(orderId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid order ID format",
+      });
+    }
+
+    // Find the order with populated leads
+    const order = await Order.findById(orderId)
+      .populate("leads", "firstName lastName newEmail newPhone country leadType ipqsValidation")
+      .lean();
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found",
+      });
+    }
+
+    if (!order.leads || order.leads.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Order has no leads to validate",
+      });
+    }
+
+    console.log(`[IPQS] Starting validation for order ${orderId} with ${order.leads.length} leads`);
+
+    // Validate all leads
+    const validationResults = await ipqsService.validateOrderLeads(order.leads);
+
+    // Process results and add summaries
+    const resultsWithSummary = validationResults.map((result) => {
+      const summary = ipqsService.getValidationSummary(result.email, result.phone);
+      return {
+        ...result,
+        summary,
+      };
+    });
+
+    // Update leads with validation results in database
+    const bulkOps = resultsWithSummary.map((result) => ({
+      updateOne: {
+        filter: { _id: result.leadId },
+        update: {
+          $set: {
+            ipqsValidation: {
+              email: result.email,
+              phone: result.phone,
+              summary: result.summary,
+              validatedAt: result.validatedAt,
+            },
+          },
+        },
+      },
+    }));
+
+    if (bulkOps.length > 0) {
+      await Lead.bulkWrite(bulkOps);
+    }
+
+    // Calculate overall statistics
+    const stats = {
+      total: resultsWithSummary.length,
+      emailStats: {
+        clean: 0,
+        low_risk: 0,
+        medium_risk: 0,
+        high_risk: 0,
+        invalid: 0,
+        unknown: 0,
+      },
+      phoneStats: {
+        clean: 0,
+        low_risk: 0,
+        medium_risk: 0,
+        high_risk: 0,
+        invalid: 0,
+        unknown: 0,
+      },
+      overallStats: {
+        clean: 0,
+        low_risk: 0,
+        medium_risk: 0,
+        high_risk: 0,
+        invalid: 0,
+        unknown: 0,
+      },
+    };
+
+    resultsWithSummary.forEach((result) => {
+      if (result.summary) {
+        stats.emailStats[result.summary.emailStatus]++;
+        stats.phoneStats[result.summary.phoneStatus]++;
+        stats.overallStats[result.summary.overallRisk]++;
+      }
+    });
+
+    console.log(`[IPQS] Validation completed for order ${orderId}`);
+
+    res.json({
+      success: true,
+      message: `Validated ${resultsWithSummary.length} leads`,
+      data: {
+        orderId: orderId,
+        results: resultsWithSummary,
+        stats: stats,
+        validatedAt: new Date(),
+      },
+    });
+  } catch (error) {
+    console.error("Error validating order leads with IPQS:", error);
+    next(error);
+  }
+};
+
+/**
+ * Get cached IPQS validation results for an order
+ * Returns previously validated results without calling the API again
+ * @route GET /api/orders/:orderId/validation-results
+ * @access Protected (Manager)
+ */
+exports.getOrderValidationResults = async (req, res, next) => {
+  try {
+    const { orderId } = req.params;
+
+    // Validate orderId
+    if (!mongoose.Types.ObjectId.isValid(orderId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid order ID format",
+      });
+    }
+
+    // Find the order with populated leads including IPQS data
+    const order = await Order.findById(orderId)
+      .populate("leads", "firstName lastName newEmail newPhone country leadType ipqsValidation")
+      .lean();
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found",
+      });
+    }
+
+    if (!order.leads || order.leads.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Order has no leads",
+      });
+    }
+
+    // Extract validation results from leads
+    const results = order.leads.map((lead) => ({
+      leadId: lead._id,
+      firstName: lead.firstName,
+      lastName: lead.lastName,
+      newEmail: lead.newEmail,
+      newPhone: lead.newPhone,
+      country: lead.country,
+      leadType: lead.leadType,
+      ipqsValidation: lead.ipqsValidation || null,
+    }));
+
+    // Calculate statistics
+    const stats = {
+      total: results.length,
+      validated: results.filter((r) => r.ipqsValidation).length,
+      notValidated: results.filter((r) => !r.ipqsValidation).length,
+      emailStats: {
+        clean: 0,
+        low_risk: 0,
+        medium_risk: 0,
+        high_risk: 0,
+        invalid: 0,
+        unknown: 0,
+      },
+      phoneStats: {
+        clean: 0,
+        low_risk: 0,
+        medium_risk: 0,
+        high_risk: 0,
+        invalid: 0,
+        unknown: 0,
+      },
+      overallStats: {
+        clean: 0,
+        low_risk: 0,
+        medium_risk: 0,
+        high_risk: 0,
+        invalid: 0,
+        unknown: 0,
+      },
+    };
+
+    results.forEach((result) => {
+      if (result.ipqsValidation && result.ipqsValidation.summary) {
+        const summary = result.ipqsValidation.summary;
+        stats.emailStats[summary.emailStatus]++;
+        stats.phoneStats[summary.phoneStatus]++;
+        stats.overallStats[summary.overallRisk]++;
+      }
+    });
+
+    res.json({
+      success: true,
+      data: {
+        orderId: orderId,
+        results: results,
+        stats: stats,
+      },
+    });
+  } catch (error) {
+    console.error("Error getting order validation results:", error);
+    next(error);
+  }
+};

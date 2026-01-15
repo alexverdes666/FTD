@@ -85,6 +85,7 @@ import {
   Cancel as CancelIcon,
   Warning as WarningIcon,
   Restore as RestoreIcon,
+  VerifiedUser as VerifiedUserIcon,
 } from "@mui/icons-material";
 import { useForm, Controller } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
@@ -109,6 +110,7 @@ import CopyPreferencesDialog, {
   copyLeadsWithPreferences,
 } from "../components/CopyPreferencesDialog";
 import ReplaceLeadDialog from "../components/ReplaceLeadDialog";
+import IPQSValidationDialog from "../components/IPQSValidationDialog";
 import { formatPhoneWithCountryCode } from "../utils/phoneUtils";
 
 const createOrderSchema = (userRole) => {
@@ -369,6 +371,11 @@ const OrdersPage = () => {
     currentIndex: 0,
     orderId: null,
   });
+
+  // IPQS Validation Dialog State
+  const [ipqsDialogOpen, setIpqsDialogOpen] = useState(false);
+  const [ipqsOrderId, setIpqsOrderId] = useState(null);
+  const [ipqsOrderDetails, setIpqsOrderDetails] = useState(null);
 
   // Search state for leads modal
   const [leadsSearchQuery, setLeadsSearchQuery] = useState("");
@@ -4486,6 +4493,29 @@ const OrdersPage = () => {
                                                   user?.role ===
                                                     "affiliate_manager" ||
                                                   user?.role ===
+                                                    "lead_manager") && (
+                                                  <Tooltip title="Validate lead emails and phones with IPQS">
+                                                    <Button
+                                                      size="small"
+                                                      startIcon={
+                                                        <VerifiedUserIcon />
+                                                      }
+                                                      onClick={() => {
+                                                        setIpqsOrderId(order._id);
+                                                        setIpqsOrderDetails(expandedDetails);
+                                                        setIpqsDialogOpen(true);
+                                                      }}
+                                                      variant="outlined"
+                                                      color="info"
+                                                    >
+                                                      IPQS Validate
+                                                    </Button>
+                                                  </Tooltip>
+                                                )}
+                                                {(user?.role === "admin" ||
+                                                  user?.role ===
+                                                    "affiliate_manager" ||
+                                                  user?.role ===
                                                     "lead_manager") &&
                                                   expandedDetails?.fulfilled
                                                     ?.ftd > 0 && (
@@ -6313,6 +6343,18 @@ const OrdersPage = () => {
         order={replaceLeadDialog.order}
         lead={replaceLeadDialog.lead}
         onSuccess={handleReplaceLeadSuccess}
+      />
+
+      {/* IPQS Validation Dialog */}
+      <IPQSValidationDialog
+        open={ipqsDialogOpen}
+        onClose={() => {
+          setIpqsDialogOpen(false);
+          setIpqsOrderId(null);
+          setIpqsOrderDetails(null);
+        }}
+        orderId={ipqsOrderId}
+        orderDetails={ipqsOrderDetails}
       />
 
       {/* Gender Fallback Modal */}

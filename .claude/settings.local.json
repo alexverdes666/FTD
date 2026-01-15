@@ -12,7 +12,12 @@
       "Bash(node --check:*)",
       "Bash(npx eslint:*)",
       "WebFetch(domain:ejoin-api.github.io)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "WebFetch(domain:www.ipqualityscore.com)",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:www.postman.com)",
+      "Bash(node -c:*)"
     ]
   }
 }

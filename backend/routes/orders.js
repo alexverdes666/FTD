@@ -28,6 +28,8 @@ const {
   addLeadsToOrder,
   getAvailableLeadsForReplacement,
   replaceLeadInOrder,
+  validateOrderLeadsIPQS,
+  getOrderValidationResults,
 } = require("../controllers/orders");
 const router = express.Router();
 
@@ -347,6 +349,21 @@ router.post(
       .withMessage("leadType must be ftd, filler, or cold"),
   ],
   addLeadsToOrder
+);
+
+// IPQS (IP Quality Score) Lead Validation
+// Validate all leads in an order using IPQS email and phone validation
+router.post(
+  "/:orderId/validate-leads",
+  [protect, isManager],
+  validateOrderLeadsIPQS
+);
+
+// Get cached IPQS validation results for an order
+router.get(
+  "/:orderId/validation-results",
+  [protect, isManager],
+  getOrderValidationResults
 );
 
 module.exports = router;

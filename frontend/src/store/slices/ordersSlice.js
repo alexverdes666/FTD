@@ -17,6 +17,12 @@ const initialState = {
     startDate: '',
     endDate: '',
   },
+  // IPQS Validation state
+  ipqsValidation: {
+    isValidating: false,
+    validationResults: {}, // keyed by orderId
+    error: null,
+  },
 };
 export const createOrder = createAsyncThunk(
   'orders/createOrder',
@@ -67,6 +73,35 @@ export const changeOrderRequester = createAsyncThunk(
     } catch (error) {
       return rejectWithValue(
         error.response?.data?.message || 'Failed to change requester'
+      );
+    }
+  }
+);
+
+// IPQS Lead Validation
+export const validateOrderLeads = createAsyncThunk(
+  'orders/validateOrderLeads',
+  async (orderId, { rejectWithValue }) => {
+    try {
+      const response = await api.post(`/orders/${orderId}/validate-leads`);
+      return { orderId, ...response.data };
+    } catch (error) {
+      return rejectWithValue(
+        error.response?.data?.message || 'Failed to validate leads'
+      );
+    }
+  }
+);
+
+export const getOrderValidationResults = createAsyncThunk(
+  'orders/getOrderValidationResults',
+  async (orderId, { rejectWithValue }) => {
+    try {
+      const response = await api.get(`/orders/${orderId}/validation-results`);
+      return { orderId, ...response.data };
+    } catch (error) {
+      return rejectWithValue(
+        error.response?.data?.message || 'Failed to get validation results'
       );
     }
   }
@@ -151,6 +186,33 @@ const ordersSlice = createSlice({
       .addCase(changeOrderRequester.rejected, (state, action) => {
         state.isLoading = false;
         state.error = action.payload;
+      })
+      // IPQS Validation
+      .addCase(validateOrderLeads.pending, (state) => {
+        state.ipqsValidation.isValidating = true;
+        state.ipqsValidation.error = null;
+      })
+      .addCase(validateOrderLeads.fulfilled, (state, action) => {
+        state.ipqsValidation.isValidating = false;
+        state.ipqsValidation.validationResults[action.payload.orderId] = action.payload.data;
+        state.ipqsValidation.error = null;
+      })
+      .addCase(validateOrderLeads.rejected, (state, action) => {
+        state.ipqsValidation.isValidating = false;
+        state.ipqsValidation.error = action.payload;
+      })
+      .addCase(getOrderValidationResults.pending, (state) => {
+        state.ipqsValidation.isValidating = true;
+        state.ipqsValidation.error = null;
+      })
+      .addCase(getOrderValidationResults.fulfilled, (state, action) => {
+        state.ipqsValidation.isValidating = false;
+        state.ipqsValidation.validationResults[action.payload.orderId] = action.payload.data;
+        state.ipqsValidation.error = null;
+      })
+      .addCase(getOrderValidationResults.rejected, (state, action) => {
+        state.ipqsValidation.isValidating = false;
+        state.ipqsValidation.error = action.payload;
       });
   },
 });
@@ -161,4 +223,10 @@ export const selectOrdersLoading = (state) => state.orders.isLoading;
 export const selectOrdersError = (state) => state.orders.error;
 export const selectOrdersPagination = (state) => state.orders.pagination;
 export const selectOrdersFilters = (state) => state.orders.filters;
+// IPQS Validation selectors
+export const selectIPQSValidation = (state) => state.orders.ipqsValidation;
+export const selectIPQSValidationResults = (orderId) => (state) =>
+  state.orders.ipqsValidation.validationResults[orderId] || null;
+export const selectIPQSIsValidating = (state) => state.orders.ipqsValidation.isValidating;
+export const selectIPQSError = (state) => state.orders.ipqsValidation.error;
 export default ordersSlice.reducer;
