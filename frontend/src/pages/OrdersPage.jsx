@@ -2914,6 +2914,18 @@ const OrdersPage = () => {
                     py: 1,
                   }}
                 >
+                  CN
+                </TableCell>
+                <TableCell
+                  sx={{
+                    display: { xs: "none", md: "table-cell" },
+                    fontWeight: "bold",
+                    backgroundColor: "grey.200",
+                    textAlign: "center",
+                    width: "10%",
+                    py: 1,
+                  }}
+                >
                   ON
                 </TableCell>
                 <TableCell
@@ -2990,13 +3002,13 @@ const OrdersPage = () => {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={9} align="center">
+                  <TableCell colSpan={10} align="center">
                     <CircularProgress />
                   </TableCell>
                 </TableRow>
               ) : orders.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} align="center">
+                  <TableCell colSpan={10} align="center">
                     No orders found
                   </TableCell>
                 </TableRow>
@@ -3069,6 +3081,14 @@ const OrdersPage = () => {
                                 </IconButton>
                               )}
                           </Box>
+                        </TableCell>
+                        <TableCell
+                          align="center"
+                          sx={{ display: { xs: "none", md: "table-cell" } }}
+                        >
+                          <Typography variant="body2" noWrap>
+                            {order.selectedClientNetwork?.name || "-"}
+                          </Typography>
                         </TableCell>
                         <TableCell
                           align="center"
