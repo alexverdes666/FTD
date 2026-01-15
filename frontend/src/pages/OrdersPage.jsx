@@ -3315,7 +3315,7 @@ const OrdersPage = () => {
                       <TableRow>
                         <TableCell
                           sx={{ p: 0, borderBottom: "none" }}
-                          colSpan={9}
+                          colSpan={10}
                         >
                           <Collapse
                             in={isExpanded}
