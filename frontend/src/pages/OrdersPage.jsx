@@ -3249,19 +3249,17 @@ const OrdersPage = () => {
                               <ContentCopyIcon fontSize="small" />
                             </IconButton>
 
-                            {user?.role === "admin" && (
-                              <IconButton
-                                size="small"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleOpenOrderAudit(order);
-                                }}
-                                title="View Audit Log"
-                                color="info"
-                              >
-                                <HistoryIcon fontSize="small" />
-                              </IconButton>
-                            )}
+                            <IconButton
+                              size="small"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenOrderAudit(order);
+                              }}
+                              title="View Audit Log"
+                              color="info"
+                            >
+                              <HistoryIcon fontSize="small" />
+                            </IconButton>
 
                             {(user?.role === "admin" ||
                               user?.role === "affiliate_manager") && (
