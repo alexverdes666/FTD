@@ -223,7 +223,7 @@ const MainLayout = () => {
         ...commonItems,
         { text: "Orders", icon: <OrdersIcon />, path: "/orders" },
         { text: "Leads", icon: <LeadsIcon />, path: "/leads" },
-        { text: "Workspace", icon: <WorkspaceIcon />, path: "/workspace" },
+        // { text: "Workspace", icon: <WorkspaceIcon />, path: "/workspace" }, // Temporarily hidden
         {
           text: "Users",
           icon: <UsersIcon />,
@@ -500,7 +500,7 @@ const MainLayout = () => {
         ...commonItems,
         { text: "Orders", icon: <OrdersIcon />, path: "/orders" },
         { text: "Lead Management", icon: <LeadsIcon />, path: "/leads" },
-        { text: "Workspace", icon: <WorkspaceIcon />, path: "/workspace" },
+        // { text: "Workspace", icon: <WorkspaceIcon />, path: "/workspace" }, // Temporarily hidden
         {
           text: "Verifications",
           icon: <VerificationIcon />,
