@@ -11,7 +11,8 @@
       "Bash(npm install:*)",
       "Bash(node --check:*)",
       "Bash(npx eslint:*)",
-      "WebFetch(domain:ejoin-api.github.io)"
+      "WebFetch(domain:ejoin-api.github.io)",
+      "Bash(git add:*)"
     ]
   }
 }
