@@ -54,6 +54,7 @@ import {
   Speed as PerformanceIcon,
   GridOn as SheetsIcon,
   Sms as SmsIcon,
+  Workspaces as WorkspaceIcon,
 } from "@mui/icons-material";
 import {
   logout,
@@ -222,6 +223,7 @@ const MainLayout = () => {
         ...commonItems,
         { text: "Orders", icon: <OrdersIcon />, path: "/orders" },
         { text: "Leads", icon: <LeadsIcon />, path: "/leads" },
+        { text: "Workspace", icon: <WorkspaceIcon />, path: "/workspace" },
         {
           text: "Users",
           icon: <UsersIcon />,
@@ -498,6 +500,7 @@ const MainLayout = () => {
         ...commonItems,
         { text: "Orders", icon: <OrdersIcon />, path: "/orders" },
         { text: "Lead Management", icon: <LeadsIcon />, path: "/leads" },
+        { text: "Workspace", icon: <WorkspaceIcon />, path: "/workspace" },
         {
           text: "Verifications",
           icon: <VerificationIcon />,

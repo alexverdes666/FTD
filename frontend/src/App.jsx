@@ -79,6 +79,7 @@ import MobileActionApprovalPage from "./pages/MobileActionApprovalPage.jsx";
 import QRSetupPage from "./pages/QRSetupPage.jsx";
 import SearchResultsPage from "./pages/SearchResultsPage.jsx";
 import SheetsPage from "./pages/SheetsPage.jsx";
+import WorkspacePage from "./pages/WorkspacePage.jsx";
 
 import GlobalPen from "./components/GlobalPen.jsx";
 
@@ -424,6 +425,14 @@ function AppContent() {
               element={
                 <ProtectedRoute allowedRoles={["admin", "lead_manager"]}>
                   <VerificationsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="workspace"
+              element={
+                <ProtectedRoute allowedRoles={["admin", "lead_manager"]}>
+                  <WorkspacePage />
                 </ProtectedRoute>
               }
             />
