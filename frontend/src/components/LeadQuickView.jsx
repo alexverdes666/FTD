@@ -44,6 +44,7 @@ import {
 } from "@mui/icons-material";
 import api from "../services/api";
 import DocumentPreview from "./DocumentPreview";
+import { formatPhoneWithCountryCode } from "../utils/phoneUtils";
 
 /**
  * LeadQuickView - A compact popover component that displays key lead information on hover
@@ -437,9 +438,7 @@ const LeadQuickView = ({
                   Phone
                 </Typography>
                 <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                  {lead.prefix && lead.newPhone
-                    ? `${lead.prefix} ${lead.newPhone}`
-                    : lead.newPhone || "N/A"}
+                  {formatPhoneWithCountryCode(lead.newPhone, lead.country)}
                 </Typography>
               </Box>
             </Box>

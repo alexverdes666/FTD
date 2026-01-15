@@ -41,6 +41,7 @@ import { useSelector } from "react-redux";
 import { selectUser } from "../store/slices/authSlice";
 import DocumentPreview from "./DocumentPreview";
 import api from "../services/api";
+import { formatPhoneWithCountryCode } from "../utils/phoneUtils";
 const LeadDetailCard = ({ lead, onLeadUpdate }) => {
   const user = useSelector(selectUser);
   const [editingClientBroker, setEditingClientBroker] = useState(false);
@@ -210,7 +211,7 @@ const LeadDetailCard = ({ lead, onLeadUpdate }) => {
                     Current Phone
                   </Typography>
                   <Typography variant="body2" sx={{ fontSize: "0.85rem", fontWeight: 500 }}>
-                    {lead.prefix && lead.newPhone ? `${lead.prefix} ${lead.newPhone}` : lead.newPhone || "N/A"}
+                    {formatPhoneWithCountryCode(lead.newPhone, lead.country)}
                   </Typography>
                 </Box>
               </Box>
@@ -222,7 +223,7 @@ const LeadDetailCard = ({ lead, onLeadUpdate }) => {
                       Previous Phone
                     </Typography>
                     <Typography variant="body2" sx={{ fontSize: "0.8rem", color: "text.secondary" }}>
-                      {lead.prefix && lead.oldPhone ? `${lead.prefix} ${lead.oldPhone}` : lead.oldPhone}
+                      {formatPhoneWithCountryCode(lead.oldPhone, lead.country)}
                     </Typography>
                   </Box>
                 </Box>

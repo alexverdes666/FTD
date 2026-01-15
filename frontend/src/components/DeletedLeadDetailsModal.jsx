@@ -38,6 +38,7 @@ import {
   ExpandMore
 } from '@mui/icons-material';
 import dayjs from 'dayjs';
+import { formatPhoneWithCountryCode } from '../utils/phoneUtils';
 
 const DeletedLeadDetailsModal = ({ open, onClose, deletedLead, onRestore }) => {
   if (!deletedLead) return null;
@@ -94,7 +95,7 @@ const DeletedLeadDetailsModal = ({ open, onClose, deletedLead, onRestore }) => {
                   value={`${leadData?.firstName || ''} ${leadData?.lastName || ''}`}
                 />
                 <InfoRow icon={Email} label="Email" value={leadData?.email || leadData?.newEmail} />
-                <InfoRow icon={Phone} label="Phone" value={leadData?.phone || leadData?.newPhone} />
+                <InfoRow icon={Phone} label="Phone" value={formatPhoneWithCountryCode(leadData?.phone || leadData?.newPhone, leadData?.country)} />
               </Grid>
               <Grid item xs={12} md={6}>
                 <InfoRow icon={Public} label="Country" value={leadData?.country} />

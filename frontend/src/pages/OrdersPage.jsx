@@ -109,6 +109,7 @@ import CopyPreferencesDialog, {
   copyLeadsWithPreferences,
 } from "../components/CopyPreferencesDialog";
 import ReplaceLeadDialog from "../components/ReplaceLeadDialog";
+import { formatPhoneWithCountryCode } from "../utils/phoneUtils";
 
 const createOrderSchema = (userRole) => {
   return yup.object({
@@ -8328,7 +8329,7 @@ const OrdersPage = () => {
                             variant="body2"
                             sx={{ whiteSpace: "nowrap", fontSize: "0.75rem" }}
                           >
-                            {lead.newPhone || lead.phone || "-"}
+                            {formatPhoneWithCountryCode(lead.newPhone || lead.phone, lead.country) || "-"}
                           </Typography>
                         </TableCell>
                         {/* Email */}

@@ -23,6 +23,7 @@ import {
   MenuItem
 } from '@mui/material';
 import { refundsService } from '../services/refunds';
+import { formatPhoneWithCountryCode } from '../utils/phoneUtils';
 
 const AssignToRefundsManagerModal = ({ open, onClose, orderId, onSuccess }) => {
   const [ftdLeads, setFtdLeads] = useState([]);
@@ -236,7 +237,7 @@ const AssignToRefundsManagerModal = ({ open, onClose, orderId, onSuccess }) => {
                             Email: {lead.email}
                           </Typography>
                           <Typography variant="body2" color="text.secondary">
-                            Phone: {lead.phone} • Country: {lead.country}
+                            Phone: {formatPhoneWithCountryCode(lead.phone, lead.country)} • Country: {lead.country}
                           </Typography>
                         </Box>
                       }

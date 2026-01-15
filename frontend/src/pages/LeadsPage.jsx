@@ -98,6 +98,7 @@ import { selectUser } from "../store/slices/authSlice";
 import { getSortedCountries } from "../constants/countries";
 import ImportLeadsDialog from "../components/ImportLeadsDialog";
 import EditLeadForm from "../components/EditLeadForm";
+import { formatPhoneWithCountryCode } from "../utils/phoneUtils";
 const glassMorphismStyles = {
   bgcolor: "rgba(255, 255, 255, 0.1)",
   backdropFilter: "blur(10px)",
@@ -418,10 +419,10 @@ const LeadDetails = React.memo(({ lead }) => (
               <Typography variant="caption" color="text.secondary" sx={{ minWidth: 55 }}>
                 Phone:
               </Typography>
-              <Typography variant="caption">{lead.newPhone}</Typography>
+              <Typography variant="caption">{formatPhoneWithCountryCode(lead.newPhone, lead.country)}</Typography>
               {lead.oldPhone && (
                 <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.65rem" }}>
-                  (Prev: {lead.oldPhone})
+                  (Prev: {formatPhoneWithCountryCode(lead.oldPhone, lead.country)})
                 </Typography>
               )}
             </Box>
@@ -2933,7 +2934,7 @@ const LeadsPage = () => {
                           {lead.firstName} {lead.lastName}
                         </TableCell>
                         <TableCell>{lead.newEmail}</TableCell>
-                        <TableCell>{lead.newPhone}</TableCell>
+                        <TableCell>{formatPhoneWithCountryCode(lead.newPhone, lead.country)}</TableCell>
                         <TableCell>
                           <Chip
                             label={lead.leadType?.toUpperCase()}
@@ -3728,7 +3729,7 @@ const LeadRow = React.memo(
               }}
             >
               📱{" "}
-              {lead.newPhone || "N/A"}
+              {formatPhoneWithCountryCode(lead.newPhone, lead.country)}
             </Typography>
           </Box>
         </TableCell>

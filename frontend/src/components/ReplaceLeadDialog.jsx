@@ -38,6 +38,7 @@ import {
   CheckCircle as CheckCircleIcon,
 } from '@mui/icons-material';
 import api from '../services/api';
+import { formatPhoneWithCountryCode } from '../utils/phoneUtils';
 
 const LEAD_CHANGE_REASONS = [
   "Lead is not sent",
@@ -349,7 +350,7 @@ const ReplaceLeadDialog = ({
             />
             <Chip
               icon={<PhoneIcon />}
-              label={lead.newPhone}
+              label={formatPhoneWithCountryCode(lead.newPhone, lead.country)}
               variant="outlined"
               size="small"
             />
@@ -449,7 +450,7 @@ const ReplaceLeadDialog = ({
                       </TableCell>
                       <TableCell>
                         <Typography variant="body2" color="text.secondary">
-                          {availableLead.newPhone}
+                          {formatPhoneWithCountryCode(availableLead.newPhone, availableLead.country)}
                         </Typography>
                       </TableCell>
                       <TableCell>
@@ -530,7 +531,7 @@ const ReplaceLeadDialog = ({
               />
               <Chip
                 icon={<PhoneIcon />}
-                label={selectedLead.newPhone}
+                label={formatPhoneWithCountryCode(selectedLead.newPhone, selectedLead.country)}
                 color="success"
                 variant="outlined"
                 size="small"
