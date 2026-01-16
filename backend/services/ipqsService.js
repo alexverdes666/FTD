@@ -1,6 +1,19 @@
 // IPQS (IPQualityScore) Email and Phone Validation Service
 const axios = require('axios');
 
+// Country code mapping for phone number formatting
+const COUNTRY_CODES = {
+    'Australia': '+61',
+    'Canada': '+1',
+    'Germany': '+49',
+    'Italy': '+39',
+    'Poland': '+48',
+    'South Africa': '+27',
+    'Spain': '+34',
+    'Sweden': '+46',
+    'United Kingdom': '+44',
+};
+
 class IPQSService {
     constructor() {
         this.apiKey = process.env.IPQS_API;
@@ -163,6 +176,25 @@ class IPQSService {
     }
 
     /**
+     * Format a phone number with country code prefix
+     * @param {string} phone - Phone number without country prefix
+     * @param {string} country - Country name (e.g., 'Australia', 'United Kingdom')
+     * @returns {string} Phone number with country prefix
+     */
+    formatPhoneWithCountryCode(phone, country) {
+        if (!phone) return phone;
+
+        const countryCode = country ? COUNTRY_CODES[country] : null;
+        if (!countryCode) return phone;
+
+        // Clean the phone number first
+        const cleanPhone = phone.replace(/[^\d]/g, '');
+
+        // Return with country code prefix
+        return `${countryCode}${cleanPhone}`;
+    }
+
+    /**
      * Validate a lead's email and phone
      * @param {Object} lead - Lead object with newEmail, newPhone, and country
      * @returns {Promise<Object>} Combined validation results
@@ -182,8 +214,9 @@ class IPQSService {
 
         // Validate phone
         if (lead.newPhone) {
-            // Use lead's country for better phone validation
-            results.phone = await this.validatePhone(lead.newPhone, lead.country);
+            // Format phone with country code prefix for accurate validation
+            const formattedPhone = this.formatPhoneWithCountryCode(lead.newPhone, lead.country);
+            results.phone = await this.validatePhone(formattedPhone, lead.country);
         }
 
         return results;
