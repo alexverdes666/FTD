@@ -25,6 +25,7 @@ const campaignRoutes = require("./routes/campaigns");
 const testRoutes = require("./routes/test");
 
 const guiBrowserRoutes = require("./routes/gui-browser");
+const fingerprintBrowserRoutes = require("./routes/fingerprint-browser");
 const agentBonusRoutes = require("./routes/agentBonuses");
 const agentCallCountsRoutes = require("./routes/agentCallCounts");
 const agentFineRoutes = require("./routes/agentFines");
@@ -66,6 +67,8 @@ const { deviceDetectionMiddleware } = require("./middleware/deviceDetection");
 const SessionCleanupService = require("./services/sessionCleanupService");
 const AgentScraperService = require("./services/agentScraperService");
 const schedulerService = require("./services/scheduler");
+const fingerprintBrowserService = require("./services/fingerprintBrowserService");
+const browserStreamService = require("./services/browserStreamService");
 const { createProxyMiddleware } = require("http-proxy-middleware");
 
 // Connect to MongoDB
@@ -560,6 +563,7 @@ app.use("/api/campaigns", campaignRoutes);
 app.use("/api/test", testRoutes);
 
 app.use("/api/gui-browser", guiBrowserRoutes);
+app.use("/api/fingerprint-browser", fingerprintBrowserRoutes);
 app.use("/api/agent-bonuses", agentBonusRoutes);
 app.use("/api/agent-call-counts", agentCallCountsRoutes);
 app.use("/api/agent-fines", agentFineRoutes);
@@ -628,10 +632,26 @@ server.listen(PORT, () => {
     } catch (error) {
       console.error("❌ Failed to initialize scheduler service:", error);
     }
+
+    // Initialize fingerprint browser service
+    try {
+      fingerprintBrowserService.initialize();
+      console.log("✅ Fingerprint browser service initialized");
+    } catch (error) {
+      console.error("❌ Failed to initialize fingerprint browser service:", error);
+    }
+
+    // Initialize browser stream service with Socket.IO
+    try {
+      browserStreamService.initialize(io);
+      console.log("✅ Browser stream service initialized");
+    } catch (error) {
+      console.error("❌ Failed to initialize browser stream service:", error);
+    }
   }
 });
 
-process.on("SIGTERM", () => {
+process.on("SIGTERM", async () => {
   console.log("SIGTERM received. Shutting down gracefully...");
 
   // Stop scheduler jobs
@@ -640,6 +660,22 @@ process.on("SIGTERM", () => {
     console.log("✅ Scheduler service stopped");
   } catch (error) {
     console.error("❌ Error stopping scheduler service:", error);
+  }
+
+  // Shutdown fingerprint browser service
+  try {
+    await fingerprintBrowserService.shutdown();
+    console.log("✅ Fingerprint browser service stopped");
+  } catch (error) {
+    console.error("❌ Error stopping fingerprint browser service:", error);
+  }
+
+  // Shutdown browser stream service
+  try {
+    browserStreamService.shutdown();
+    console.log("✅ Browser stream service stopped");
+  } catch (error) {
+    console.error("❌ Error stopping browser stream service:", error);
   }
 
   server.close(() => {

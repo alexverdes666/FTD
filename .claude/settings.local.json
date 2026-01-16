@@ -18,7 +18,9 @@
       "WebFetch(domain:github.com)",
       "WebFetch(domain:www.postman.com)",
       "Bash(node -c:*)",
-      "Bash(node -e:*)"
+      "Bash(node -e:*)",
+      "Bash(git -C /c/Users/dani0/GitProjects/FTD log --oneline -20)",
+      "WebFetch(domain:api.github.com)"
     ]
   }
 }

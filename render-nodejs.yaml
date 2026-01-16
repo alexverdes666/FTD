@@ -28,7 +28,9 @@ services:
         xdg-utils \
         libxss1 \
         libgconf-2-4 \
-        fluxbox &&
+        fluxbox \
+        curl \
+        xz-utils &&
       # Verify Python installation
       python3 --version &&
       pip3 --version &&
@@ -48,7 +50,20 @@ services:
       # Install root requirements if exists
       if [ -f "requirements.txt" ]; then /usr/bin/python3 -m pip install -r requirements.txt; fi &&
       /usr/bin/python3 -m playwright install chromium &&
-      /usr/bin/python3 -m playwright install-deps
+      /usr/bin/python3 -m playwright install-deps &&
+      # Install Fingerprint Chromium
+      echo "Installing Fingerprint Chromium..." &&
+      CHROMIUM_VERSION="142.0.7444.175" &&
+      DOWNLOAD_URL="https://github.com/adryfish/fingerprint-chromium/releases/download/${CHROMIUM_VERSION}/ungoogled-chromium-${CHROMIUM_VERSION}-1-x86_64_linux.tar.xz" &&
+      sudo mkdir -p /opt/fingerprint-chromium &&
+      curl -L -o /tmp/chromium.tar.xz "$DOWNLOAD_URL" &&
+      cd /tmp &&
+      tar -xf chromium.tar.xz &&
+      sudo cp -r ungoogled-chromium*/* /opt/fingerprint-chromium/ 2>/dev/null || sudo cp -r */* /opt/fingerprint-chromium/ 2>/dev/null || true &&
+      sudo chmod +x /opt/fingerprint-chromium/chrome 2>/dev/null || sudo chmod +x /opt/fingerprint-chromium/chromium 2>/dev/null || true &&
+      test -f /opt/fingerprint-chromium/chromium && sudo ln -sf /opt/fingerprint-chromium/chromium /opt/fingerprint-chromium/chrome || true &&
+      rm -rf /tmp/chromium.tar.xz /tmp/ungoogled-chromium* &&
+      echo "Fingerprint Chromium installed successfully!"
     startCommand: |
       # Export PATH to include Python directories
       export PATH="/usr/local/bin:/usr/bin:$PATH"
@@ -97,6 +112,14 @@ services:
         value: :99
       - key: XVFB_WHD
         value: 1920x1080x24
+      - key: FINGERPRINT_CHROMIUM_PATH
+        value: /opt/fingerprint-chromium/chrome
+      - key: MAX_BROWSER_SESSIONS
+        value: 5
+      - key: BROWSER_SESSION_TIMEOUT
+        value: 1800000
+      - key: BROWSER_DATA_DIR
+        value: /tmp/fp-browser-profiles
     plan: starter
     
 databases:
