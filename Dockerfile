@@ -87,6 +87,10 @@ COPY backend/package*.json ./
 # Install Node.js dependencies
 RUN npm ci --omit=dev
 
+# Reinstall sharp for glibc (Debian) platform
+RUN npm uninstall sharp && \
+    npm install --os=linux --cpu=x64 sharp
+
 # Copy backend source code
 COPY backend/ ./
 
@@ -135,6 +139,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:5000/api/health || exit 1
 
 # Start Xvfb and the Node.js server
-CMD Xvfb :99 -screen 0 1920x1080x24 -ac +extension GLX +render -noreset & \
+CMD rm -f /tmp/.X99-lock /tmp/.X11-unix/X99 && \
+    Xvfb :99 -screen 0 1920x1080x24 -ac +extension GLX +render -noreset & \
     sleep 2 && \
     npm start
