@@ -286,19 +286,19 @@ const useDebounce = (value, delay) => {
   return debouncedValue;
 };
 
-// IPQS Status color helper
+// IPQS Status color helper - bold colors matching IPQS validation dialog
 const getIPQSStatusConfig = (status) => {
   switch (status) {
     case "clean":
-      return { color: "#4caf50", bgcolor: "#e8f5e9", label: "Clean", textColor: "#1b5e20" };
+      return { color: "#2e7d32", bgcolor: "#c8e6c9", label: "Clean", textColor: "#1b5e20" };
     case "low_risk":
-      return { color: "#2196f3", bgcolor: "#e3f2fd", label: "Low Risk", textColor: "#0d47a1" };
+      return { color: "#1565c0", bgcolor: "#bbdefb", label: "Low Risk", textColor: "#0d47a1" };
     case "medium_risk":
-      return { color: "#ff9800", bgcolor: "#fff3e0", label: "Medium Risk", textColor: "#e65100" };
+      return { color: "#ef6c00", bgcolor: "#ffe0b2", label: "Medium Risk", textColor: "#e65100" };
     case "high_risk":
-      return { color: "#f44336", bgcolor: "#ffebee", label: "High Risk", textColor: "#b71c1c" };
+      return { color: "#c62828", bgcolor: "#ffcdd2", label: "High Risk", textColor: "#b71c1c" };
     case "invalid":
-      return { color: "#9c27b0", bgcolor: "#f3e5f5", label: "Invalid", textColor: "#4a148c" };
+      return { color: "#c62828", bgcolor: "#ffcdd2", label: "Invalid", textColor: "#b71c1c" };
     default:
       return { color: "inherit", bgcolor: "transparent", label: "Unknown", textColor: "inherit" };
   }
@@ -317,38 +317,38 @@ const buildIPQSTooltip = (validation, type) => {
     const status = summary?.emailStatus || "unknown";
     const config = getIPQSStatusConfig(status);
     return (
-      <Box sx={{ p: 0.5 }}>
-        <Typography variant="subtitle2" sx={{ color: config.color, fontWeight: "bold", mb: 0.5 }}>
+      <Box sx={{ p: 1, bgcolor: config.bgcolor, borderRadius: 1, borderLeft: `4px solid ${config.color}` }}>
+        <Typography variant="subtitle2" sx={{ color: config.textColor, fontWeight: "bold", mb: 0.5 }}>
           {config.label} (Score: {data.fraud_score ?? "N/A"})
         </Typography>
-        <Typography variant="caption" component="div">Valid: {data.valid ? "Yes" : "No"}</Typography>
-        <Typography variant="caption" component="div">Disposable: {data.disposable ? "Yes" : "No"}</Typography>
-        <Typography variant="caption" component="div">Honeypot: {data.honeypot ? "Yes" : "No"}</Typography>
-        <Typography variant="caption" component="div">Recent Abuse: {data.recent_abuse ? "Yes" : "No"}</Typography>
-        <Typography variant="caption" component="div">Catch All: {data.catch_all ? "Yes" : "No"}</Typography>
-        <Typography variant="caption" component="div">DNS Valid: {data.dns_valid ? "Yes" : "No"}</Typography>
-        <Typography variant="caption" component="div">Deliverability: {data.deliverability || "N/A"}</Typography>
-        <Typography variant="caption" component="div">Leaked: {data.leaked ? "Yes" : "No"}</Typography>
+        <Typography variant="caption" component="div" sx={{ color: "#212121" }}>Valid: {data.valid ? "Yes" : "No"}</Typography>
+        <Typography variant="caption" component="div" sx={{ color: "#212121" }}>Disposable: {data.disposable ? "Yes" : "No"}</Typography>
+        <Typography variant="caption" component="div" sx={{ color: "#212121" }}>Honeypot: {data.honeypot ? "Yes" : "No"}</Typography>
+        <Typography variant="caption" component="div" sx={{ color: "#212121" }}>Recent Abuse: {data.recent_abuse ? "Yes" : "No"}</Typography>
+        <Typography variant="caption" component="div" sx={{ color: "#212121" }}>Catch All: {data.catch_all ? "Yes" : "No"}</Typography>
+        <Typography variant="caption" component="div" sx={{ color: "#212121" }}>DNS Valid: {data.dns_valid ? "Yes" : "No"}</Typography>
+        <Typography variant="caption" component="div" sx={{ color: "#212121" }}>Deliverability: {data.deliverability || "N/A"}</Typography>
+        <Typography variant="caption" component="div" sx={{ color: "#212121" }}>Leaked: {data.leaked ? "Yes" : "No"}</Typography>
       </Box>
     );
   } else {
     const status = summary?.phoneStatus || "unknown";
     const config = getIPQSStatusConfig(status);
     return (
-      <Box sx={{ p: 0.5 }}>
-        <Typography variant="subtitle2" sx={{ color: config.color, fontWeight: "bold", mb: 0.5 }}>
+      <Box sx={{ p: 1, bgcolor: config.bgcolor, borderRadius: 1, borderLeft: `4px solid ${config.color}` }}>
+        <Typography variant="subtitle2" sx={{ color: config.textColor, fontWeight: "bold", mb: 0.5 }}>
           {config.label} (Score: {data.fraud_score ?? "N/A"})
         </Typography>
-        <Typography variant="caption" component="div">Valid: {data.valid ? "Yes" : "No"}</Typography>
-        <Typography variant="caption" component="div">Active: {data.active ? "Yes" : "No"}</Typography>
-        <Typography variant="caption" component="div">VOIP: {data.VOIP ? "Yes" : "No"}</Typography>
-        <Typography variant="caption" component="div">Prepaid: {data.prepaid ? "Yes" : "No"}</Typography>
-        <Typography variant="caption" component="div">Risky: {data.risky ? "Yes" : "No"}</Typography>
-        <Typography variant="caption" component="div">Line Type: {data.line_type || "N/A"}</Typography>
-        <Typography variant="caption" component="div">Carrier: {data.carrier || "N/A"}</Typography>
-        <Typography variant="caption" component="div">Country: {data.country || "N/A"}</Typography>
-        <Typography variant="caption" component="div">Do Not Call: {data.do_not_call ? "Yes" : "No"}</Typography>
-        <Typography variant="caption" component="div">Spammer: {data.spammer ? "Yes" : "No"}</Typography>
+        <Typography variant="caption" component="div" sx={{ color: "#212121" }}>Valid: {data.valid ? "Yes" : "No"}</Typography>
+        <Typography variant="caption" component="div" sx={{ color: "#212121" }}>Active: {data.active ? "Yes" : "No"}</Typography>
+        <Typography variant="caption" component="div" sx={{ color: "#212121" }}>VOIP: {data.VOIP ? "Yes" : "No"}</Typography>
+        <Typography variant="caption" component="div" sx={{ color: "#212121" }}>Prepaid: {data.prepaid ? "Yes" : "No"}</Typography>
+        <Typography variant="caption" component="div" sx={{ color: "#212121" }}>Risky: {data.risky ? "Yes" : "No"}</Typography>
+        <Typography variant="caption" component="div" sx={{ color: "#212121" }}>Line Type: {data.line_type || "N/A"}</Typography>
+        <Typography variant="caption" component="div" sx={{ color: "#212121" }}>Carrier: {data.carrier || "N/A"}</Typography>
+        <Typography variant="caption" component="div" sx={{ color: "#212121" }}>Country: {data.country || "N/A"}</Typography>
+        <Typography variant="caption" component="div" sx={{ color: "#212121" }}>Do Not Call: {data.do_not_call ? "Yes" : "No"}</Typography>
+        <Typography variant="caption" component="div" sx={{ color: "#212121" }}>Spammer: {data.spammer ? "Yes" : "No"}</Typography>
       </Box>
     );
   }
@@ -8749,12 +8749,12 @@ const OrdersPage = () => {
                                     fontSize: "0.75rem",
                                     ...(statusConfig && {
                                       backgroundColor: `${statusConfig.bgcolor} !important`,
-                                      color: `${statusConfig.textColor} !important`,
+                                      color: "#212121 !important",
+                                      fontWeight: 500,
                                       px: 0.5,
                                       py: 0.25,
                                       borderRadius: 0.5,
                                       borderLeft: `3px solid ${statusConfig.color}`,
-                                      opacity: isRemoved ? 0.7 : 1,
                                     }),
                                     textDecoration: isRemoved ? "line-through !important" : "none",
                                   }}
@@ -8785,12 +8785,12 @@ const OrdersPage = () => {
                                     textOverflow: "ellipsis",
                                     ...(statusConfig && {
                                       backgroundColor: `${statusConfig.bgcolor} !important`,
-                                      color: `${statusConfig.textColor} !important`,
+                                      color: "#212121 !important",
+                                      fontWeight: 500,
                                       px: 0.5,
                                       py: 0.25,
                                       borderRadius: 0.5,
                                       borderLeft: `3px solid ${statusConfig.color}`,
-                                      opacity: isRemoved ? 0.7 : 1,
                                     }),
                                     textDecoration: isRemoved ? "line-through !important" : "none",
                                   }}
