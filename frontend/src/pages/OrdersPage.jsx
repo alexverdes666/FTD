@@ -790,6 +790,14 @@ const OrdersPage = () => {
       loading: false,
       field,
     });
+    // Fetch the relevant data for the dropdown
+    if (field === "campaign") {
+      fetchCampaigns();
+    } else if (field === "ourNetwork") {
+      fetchOurNetworks();
+    } else if (field === "clientNetwork") {
+      fetchClientNetworks();
+    }
   };
 
   const handleCloseEditNetworkConfig = () => {
