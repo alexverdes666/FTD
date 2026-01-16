@@ -235,7 +235,7 @@ class FingerprintBrowserService extends EventEmitter {
     const page = pages[0] || await browser.newPage();
 
     // Restore session data if exists
-    const existingSession = lead.getActiveBrowserSession();
+    const existingSession = lead.getCurrentBrowserSession ? lead.getCurrentBrowserSession() : null;
     if (existingSession) {
       try {
         const decryptedSession = sessionSecurity.decryptSessionData(existingSession);
