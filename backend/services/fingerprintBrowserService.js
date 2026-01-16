@@ -167,6 +167,14 @@ class FingerprintBrowserService extends EventEmitter {
     const browserArgs = [
       `--remote-debugging-port=${port}`,
       `--user-data-dir=${userDataPath}`,
+      // Container-specific flags (required for Docker/Render)
+      `--no-sandbox`,
+      `--disable-setuid-sandbox`,
+      `--disable-dev-shm-usage`,
+      `--disable-gpu`,
+      `--disable-software-rasterizer`,
+      `--single-process`,
+      // General browser flags
       `--no-first-run`,
       `--no-default-browser-check`,
       `--disable-background-timer-throttling`,
