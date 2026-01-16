@@ -86,6 +86,7 @@ import {
   Warning as WarningIcon,
   Restore as RestoreIcon,
   VerifiedUser as VerifiedUserIcon,
+  Launch as LaunchIcon,
 } from "@mui/icons-material";
 import { useForm, Controller } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
@@ -111,6 +112,7 @@ import CopyPreferencesDialog, {
 } from "../components/CopyPreferencesDialog";
 import ReplaceLeadDialog from "../components/ReplaceLeadDialog";
 import IPQSValidationDialog from "../components/IPQSValidationDialog";
+import RemoteBrowserDialog from "../components/RemoteBrowserDialog";
 import { formatPhoneWithCountryCode } from "../utils/phoneUtils";
 
 const createOrderSchema = (userRole) => {
@@ -463,6 +465,12 @@ const OrdersPage = () => {
   // Actions menu state for leads preview modal
   const [previewActionsMenu, setPreviewActionsMenu] = useState({
     anchorEl: null,
+    lead: null,
+  });
+
+  // Remote Browser Dialog State
+  const [browserDialog, setBrowserDialog] = useState({
+    open: false,
     lead: null,
   });
 
@@ -6691,6 +6699,13 @@ const OrdersPage = () => {
         orderDetails={ipqsOrderDetails}
       />
 
+      {/* Remote Browser Dialog */}
+      <RemoteBrowserDialog
+        open={browserDialog.open}
+        onClose={() => setBrowserDialog({ open: false, lead: null })}
+        lead={browserDialog.lead}
+      />
+
       {/* Gender Fallback Modal */}
       <GenderFallbackModal
         open={genderFallbackModalOpen}
@@ -9208,6 +9223,21 @@ const OrdersPage = () => {
                       </MenuItem>
                     )
                   )
+                )}
+
+                {/* Open Browser Session */}
+                {(leadType === "ftd" || leadType === "filler") && (
+                  <MenuItem
+                    onClick={() => {
+                      setBrowserDialog({ open: true, lead });
+                      handleClosePreviewActionsMenu();
+                    }}
+                  >
+                    <ListItemIcon>
+                      <LaunchIcon fontSize="small" color="success" />
+                    </ListItemIcon>
+                    Open Browser
+                  </MenuItem>
                 )}
 
                 {/* Delete - Available to all users */}
