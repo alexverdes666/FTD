@@ -461,6 +461,8 @@ const OrdersPage = () => {
 
   // IPQS validation loading state for preview modal
   const [ipqsPreviewLoading, setIpqsPreviewLoading] = useState(false);
+  // IPQS validation success state (tracks leadIds that were just successfully validated)
+  const [ipqsValidationSuccess, setIpqsValidationSuccess] = useState([]);
 
   // Actions menu state for leads preview modal
   const [previewActionsMenu, setPreviewActionsMenu] = useState({
@@ -1595,10 +1597,12 @@ const OrdersPage = () => {
           }));
         }
 
-        setNotification({
-          message: `${validationResults.length} new lead(s) IPQS validated`,
-          severity: "info",
-        });
+        // Show success indicators on validated leads
+        const validatedLeadIds = validationResults.map((r) => r.leadId);
+        setIpqsValidationSuccess(validatedLeadIds);
+        setTimeout(() => {
+          setIpqsValidationSuccess([]);
+        }, 2000);
       }
     } catch (err) {
       console.error("Failed to add leads to order:", err);
@@ -2262,17 +2266,16 @@ const OrdersPage = () => {
           return prev;
         });
 
-        const { newlyValidated = 0, alreadyValidated = 0 } = response.data.data;
+        const { newlyValidated = 0 } = response.data.data;
         if (newlyValidated > 0) {
-          setNotification({
-            message: `Validated ${newlyValidated} leads${alreadyValidated > 0 ? ` (${alreadyValidated} already validated)` : ""}`,
-            severity: "success",
-          });
-        } else {
-          setNotification({
-            message: "All leads were already validated",
-            severity: "info",
-          });
+          // Show success indicators on validated leads
+          const validatedLeadIds = response.data.data.results
+            .filter((r) => r.validatedAt)
+            .map((r) => r.leadId);
+          setIpqsValidationSuccess(validatedLeadIds);
+          setTimeout(() => {
+            setIpqsValidationSuccess([]);
+          }, 2000);
         }
       }
     } catch (error) {
@@ -2283,6 +2286,60 @@ const OrdersPage = () => {
       });
     } finally {
       setIpqsPreviewLoading(false);
+    }
+  }, [leadsPreviewModal.orderId]);
+
+  // Handler for manual IPQS recheck of a single lead
+  const handleIPQSRecheckLead = useCallback(async (lead) => {
+    if (!leadsPreviewModal.orderId || !lead?._id) return;
+
+    handleClosePreviewActionsMenu();
+
+    try {
+      const response = await api.post(
+        `/orders/${leadsPreviewModal.orderId}/leads/${lead._id}/validate-ipqs?force=true`
+      );
+
+      if (response.data.success) {
+        const validation = {
+          email: response.data.data.email,
+          phone: response.data.data.phone,
+          summary: response.data.data.summary,
+          validatedAt: response.data.data.validatedAt,
+        };
+
+        // Update leads in the preview modal
+        setLeadsPreviewModal((prev) => ({
+          ...prev,
+          leads: prev.leads.map((l) =>
+            l._id === lead._id ? { ...l, ipqsValidation: validation } : l
+          ),
+        }));
+
+        // Also update expandedRowData if the order is expanded
+        setExpandedRowData((prev) => {
+          if (prev[leadsPreviewModal.orderId]) {
+            return {
+              ...prev,
+              [leadsPreviewModal.orderId]: {
+                ...prev[leadsPreviewModal.orderId],
+                leads: prev[leadsPreviewModal.orderId].leads?.map((l) =>
+                  l._id === lead._id ? { ...l, ipqsValidation: validation } : l
+                ),
+              },
+            };
+          }
+          return prev;
+        });
+
+        // Show success indicator on the lead
+        setIpqsValidationSuccess([lead._id]);
+        setTimeout(() => {
+          setIpqsValidationSuccess([]);
+        }, 2000);
+      }
+    } catch (error) {
+      console.error("Error rechecking lead IPQS:", error);
     }
   }, [leadsPreviewModal.orderId]);
 
@@ -3161,10 +3218,11 @@ const OrdersPage = () => {
                 },
               }));
             }
-            setNotification({
-              message: "New lead IPQS validated",
-              severity: "info",
-            });
+            // Show success indicator on the new lead
+            setIpqsValidationSuccess([newLeadId]);
+            setTimeout(() => {
+              setIpqsValidationSuccess([]);
+            }, 2000);
           }
         } catch (err) {
           console.error("Auto IPQS validation failed for replaced lead:", err);
@@ -8644,7 +8702,29 @@ const OrdersPage = () => {
                           }}
                         >
                         {/* Name */}
-                        <TableCell sx={{ py: 0.5, px: 1 }}>
+                        <TableCell sx={{ py: 0.5, px: 1, position: "relative" }}>
+                          {/* IPQS Validation Success Indicator - overlays on top */}
+                          {ipqsValidationSuccess.includes(lead._id) && (
+                            <Box
+                              sx={{
+                                position: "absolute",
+                                top: "50%",
+                                left: "50%",
+                                transform: "translate(-50%, -50%)",
+                                zIndex: 10,
+                                animation: "ipqsCheckFadeInOut 2s ease-in-out",
+                                "@keyframes ipqsCheckFadeInOut": {
+                                  "0%": { opacity: 0, transform: "translate(-50%, -50%) scale(0.5)" },
+                                  "15%": { opacity: 1, transform: "translate(-50%, -50%) scale(1.3)" },
+                                  "30%": { opacity: 1, transform: "translate(-50%, -50%) scale(1)" },
+                                  "85%": { opacity: 1 },
+                                  "100%": { opacity: 0 },
+                                },
+                              }}
+                            >
+                              <CheckCircleIcon sx={{ color: "success.main", fontSize: 32 }} />
+                            </Box>
+                          )}
                           <Box
                             sx={{
                               display: "flex",
@@ -9151,6 +9231,14 @@ const OrdersPage = () => {
                     <AssignIcon fontSize="small" color="info" />
                   </ListItemIcon>
                   Assign to Agent
+                </MenuItem>
+
+                {/* IPQS Recheck */}
+                <MenuItem onClick={() => handleIPQSRecheckLead(lead)}>
+                  <ListItemIcon>
+                    <VerifiedUserIcon fontSize="small" color="secondary" />
+                  </ListItemIcon>
+                  IPQS Recheck
                 </MenuItem>
 
                 {/* Confirm/Unconfirm Deposit */}

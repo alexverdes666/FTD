@@ -6553,11 +6553,13 @@ exports.validateOrderLeadsIPQS = async (req, res, next) => {
  * Validate a single lead using IPQS
  * Used when a lead is added or replaced in an order
  * @route POST /api/orders/:orderId/leads/:leadId/validate-ipqs
+ * @query force - If true, revalidate even if already validated (for manual recheck)
  * @access Protected (Manager)
  */
 exports.validateSingleLeadIPQS = async (req, res, next) => {
   try {
     const { orderId, leadId } = req.params;
+    const { force } = req.query;
     const ipqsService = require("../services/ipqsService");
 
     // Validate IDs
@@ -6595,8 +6597,8 @@ exports.validateSingleLeadIPQS = async (req, res, next) => {
       });
     }
 
-    // Check if already validated
-    if (ipqsService.isLeadValidated(lead)) {
+    // Check if already validated (skip if force=true for manual recheck)
+    if (!force && ipqsService.isLeadValidated(lead)) {
       return res.json({
         success: true,
         message: "Lead already validated",
