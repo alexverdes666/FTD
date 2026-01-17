@@ -11,6 +11,7 @@ const ClientBroker = require("../models/ClientBroker");
 const Campaign = require("../models/Campaign");
 const CallChangeRequest = require("../models/CallChangeRequest");
 const sessionSecurity = require("../utils/sessionSecurity");
+const LeadAuditLog = require("../models/LeadAuditLog");
 
 // Country code to name mapping for search
 const COUNTRY_CODE_MAP = {
@@ -1505,25 +1506,141 @@ exports.updateLead = async (req, res, next) => {
     // Access control - lead managers can edit all leads (no filtering)
     // Note: affiliate_manager validation removed - they can update any lead
 
-    if (firstName) lead.firstName = firstName;
-    if (lastName) lead.lastName = lastName;
-    if (newEmail) lead.newEmail = newEmail;
-    if (oldEmail !== undefined) lead.oldEmail = oldEmail;
-    if (newPhone) lead.newPhone = newPhone;
-    if (oldPhone !== undefined) lead.oldPhone = oldPhone;
-    if (country) lead.country = country;
-    if (status) lead.status = status;
-    if (leadType) lead.leadType = leadType;
-    if (sin !== undefined && leadType === "ftd") lead.sin = sin;
-    if (gender !== undefined) lead.gender = gender;
-    if (dob !== undefined) lead.dob = dob;
+    // Capture lead name and email for audit (before any changes)
+    const leadName = `${lead.firstName} ${lead.lastName}`;
+    const leadEmail = lead.newEmail;
+    const changedByName = req.user.fullName || req.user.email;
+    const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+                     req.headers['x-real-ip'] ||
+                     req.connection?.remoteAddress ||
+                     req.socket?.remoteAddress ||
+                     'unknown';
+
+    // Field mapping for audit labels
+    const fieldLabels = {
+      firstName: "First Name",
+      lastName: "Last Name",
+      newEmail: "Email",
+      oldEmail: "Old Email",
+      newPhone: "Phone",
+      oldPhone: "Old Phone",
+      country: "Country",
+      status: "Status",
+      leadType: "Lead Type",
+      sin: "SIN",
+      gender: "Gender",
+      dob: "Date of Birth",
+      address: "Address",
+    };
+
+    // Collect audit entries to create after save
+    const auditEntries = [];
+
+    // Helper function to track field changes
+    const trackChange = (fieldName, previousValue, newValue, previousDisplay = null, newDisplay = null) => {
+      // Skip if values are the same (handle null/undefined/empty string comparisons)
+      const prevStr = previousValue === null || previousValue === undefined ? "" : String(previousValue);
+      const newStr = newValue === null || newValue === undefined ? "" : String(newValue);
+      if (prevStr === newStr) return;
+
+      auditEntries.push({
+        leadId: lead._id,
+        leadName,
+        leadEmail,
+        fieldName,
+        fieldLabel: fieldLabels[fieldName] || fieldName,
+        previousValue,
+        newValue,
+        previousValueDisplay: previousDisplay || prevStr,
+        newValueDisplay: newDisplay || newStr,
+        changedBy: req.user._id,
+        changedByName,
+        ipAddress: clientIp,
+      });
+    };
+
+    // Track and apply changes
+    if (firstName && firstName !== lead.firstName) {
+      trackChange("firstName", lead.firstName, firstName);
+      lead.firstName = firstName;
+    }
+    if (lastName && lastName !== lead.lastName) {
+      trackChange("lastName", lead.lastName, lastName);
+      lead.lastName = lastName;
+    }
+    if (newEmail && newEmail !== lead.newEmail) {
+      trackChange("newEmail", lead.newEmail, newEmail);
+      lead.newEmail = newEmail;
+    }
+    if (oldEmail !== undefined && oldEmail !== lead.oldEmail) {
+      trackChange("oldEmail", lead.oldEmail, oldEmail);
+      lead.oldEmail = oldEmail;
+    }
+    if (newPhone && newPhone !== lead.newPhone) {
+      trackChange("newPhone", lead.newPhone, newPhone);
+      lead.newPhone = newPhone;
+    }
+    if (oldPhone !== undefined && oldPhone !== lead.oldPhone) {
+      trackChange("oldPhone", lead.oldPhone, oldPhone);
+      lead.oldPhone = oldPhone;
+    }
+    if (country && country !== lead.country) {
+      trackChange("country", lead.country, country);
+      lead.country = country;
+    }
+    if (status && status !== lead.status) {
+      trackChange("status", lead.status, status);
+      lead.status = status;
+    }
+    if (leadType && leadType !== lead.leadType) {
+      trackChange("leadType", lead.leadType, leadType);
+      lead.leadType = leadType;
+    }
+    if (sin !== undefined && leadType === "ftd" && sin !== lead.sin) {
+      trackChange("sin", lead.sin, sin);
+      lead.sin = sin;
+    }
+    if (gender !== undefined && gender !== lead.gender) {
+      trackChange("gender", lead.gender, gender);
+      lead.gender = gender;
+    }
+    if (dob !== undefined) {
+      const newDob = dob ? new Date(dob).toISOString().split('T')[0] : "";
+      const oldDob = lead.dob ? new Date(lead.dob).toISOString().split('T')[0] : "";
+      if (newDob !== oldDob) {
+        trackChange("dob", lead.dob, dob, oldDob, newDob);
+        lead.dob = dob;
+      }
+    }
     if (
       address !== undefined &&
       (lead.leadType === "ftd" || lead.leadType === "filler")
     ) {
-      lead.address = address;
+      const newAddress = typeof address === 'object' ? JSON.stringify(address) : address;
+      const oldAddress = typeof lead.address === 'object' ? JSON.stringify(lead.address) : lead.address;
+      if (newAddress !== oldAddress) {
+        trackChange("address", lead.address, address, oldAddress || "", newAddress || "");
+        lead.address = address;
+      }
     }
     if (socialMedia) {
+      // Track individual social media field changes
+      const socialMediaFields = ['facebook', 'twitter', 'linkedin', 'instagram', 'telegram', 'whatsapp'];
+      for (const field of socialMediaFields) {
+        if (socialMedia[field] !== undefined) {
+          const oldValue = lead.socialMedia?.[field] || "";
+          const newValue = socialMedia[field] || "";
+          if (oldValue !== newValue) {
+            trackChange(
+              `socialMedia.${field}`,
+              oldValue,
+              newValue
+            );
+            // Update fieldLabel for social media
+            auditEntries[auditEntries.length - 1].fieldLabel = `Social Media (${field.charAt(0).toUpperCase() + field.slice(1)})`;
+          }
+        }
+      }
       lead.socialMedia = {
         ...lead.socialMedia,
         ...socialMedia,
@@ -1696,16 +1813,27 @@ exports.updateLead = async (req, res, next) => {
 
     await lead.save();
 
+    // Create audit entries for all field changes (in separate collection for independence)
+    if (auditEntries.length > 0) {
+      try {
+        // Create audit entries with human-readable details
+        const auditDocsToCreate = auditEntries.map(entry => ({
+          ...entry,
+          details: `The ${entry.fieldLabel.toLowerCase()} of "${leadName}" was changed from "${entry.previousValueDisplay || "(empty)"}" to "${entry.newValueDisplay || "(empty)"}" by ${changedByName}`,
+          changedAt: new Date(),
+        }));
+        await LeadAuditLog.insertMany(auditDocsToCreate);
+      } catch (auditError) {
+        // Log error but don't fail the main operation
+        console.error("Error creating lead audit entries:", auditError);
+      }
+    }
+
     // Add audit log for newly added client brokers
     if (newlyAddedBrokers.length > 0 && lead.orderId) {
       const Order = require("../models/Order");
       const order = await Order.findById(lead.orderId);
       if (order) {
-        const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
-                         req.headers['x-real-ip'] ||
-                         req.connection?.remoteAddress ||
-                         req.socket?.remoteAddress ||
-                         'unknown';
         if (!order.auditLog) {
           order.auditLog = [];
         }
@@ -4923,6 +5051,80 @@ exports.assignSimCardToLeads = async (req, res, next) => {
     });
   } catch (error) {
     console.error("Error assigning SIM cards to leads:", error);
+    next(error);
+  }
+};
+
+// Get global lead audit logs (all changes across all leads)
+exports.getGlobalLeadAuditLogs = async (req, res, next) => {
+  try {
+    const {
+      page = 1,
+      limit = 50,
+      leadId,
+      changedBy,
+      fieldName,
+      startDate,
+      endDate,
+      search,
+    } = req.query;
+
+    const query = {};
+
+    if (leadId) {
+      query.leadId = leadId;
+    }
+    if (changedBy) {
+      query.changedBy = changedBy;
+    }
+    if (fieldName) {
+      query.fieldName = fieldName;
+    }
+    if (startDate || endDate) {
+      query.changedAt = {};
+      if (startDate) {
+        query.changedAt.$gte = new Date(startDate);
+      }
+      if (endDate) {
+        // Add a day to include the entire end date
+        const endDatePlusOne = new Date(endDate);
+        endDatePlusOne.setDate(endDatePlusOne.getDate() + 1);
+        query.changedAt.$lt = endDatePlusOne;
+      }
+    }
+    if (search) {
+      query.$or = [
+        { leadName: { $regex: search, $options: "i" } },
+        { leadEmail: { $regex: search, $options: "i" } },
+        { changedByName: { $regex: search, $options: "i" } },
+        { details: { $regex: search, $options: "i" } },
+      ];
+    }
+
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    const [logs, total] = await Promise.all([
+      LeadAuditLog.find(query)
+        .sort({ changedAt: -1 })
+        .skip(skip)
+        .limit(parseInt(limit))
+        .populate("changedBy", "fullName email")
+        .lean(),
+      LeadAuditLog.countDocuments(query),
+    ]);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        logs,
+        total,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        totalPages: Math.ceil(total / parseInt(limit)),
+      },
+    });
+  } catch (error) {
+    console.error("Error getting global lead audit logs:", error);
     next(error);
   }
 };

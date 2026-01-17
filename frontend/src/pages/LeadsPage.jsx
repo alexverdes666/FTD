@@ -91,6 +91,7 @@ import AddLeadForm from "../components/AddLeadForm";
 import DocumentPreview from "../components/DocumentPreview";
 import AssignLeadToAgentDialog from "../components/AssignLeadToAgentDialog";
 import LeadAuditHistoryModal from "../components/LeadAuditHistoryModal";
+import LeadGlobalAuditDialog from "../components/LeadGlobalAuditDialog";
 import LeadCommentsDialog from "../components/LeadCommentsDialog";
 
 import api from "../services/api";
@@ -1029,6 +1030,7 @@ const LeadsPage = () => {
     };
   });
   const [showFilters, setShowFilters] = useState(false);
+  const [globalAuditDialogOpen, setGlobalAuditDialogOpen] = useState(false);
   const [expandedRows, setExpandedRows] = useState(new Set());
   const [pendingRequests, setPendingRequests] = useState(new Map()); // Map<"leadId-orderId", pendingRequest>
 
@@ -1716,8 +1718,14 @@ const LeadsPage = () => {
     setEditDialogOpen(true);
   };
   const handleLeadUpdated = (updatedLead) => {
-    setSuccess("Lead updated successfully");
-    fetchLeads();
+    // Update the lead in-place without refetching the entire list
+    if (updatedLead && updatedLead._id) {
+      setLeads((prevLeads) =>
+        prevLeads.map((lead) =>
+          lead._id === updatedLead._id ? { ...lead, ...updatedLead } : lead
+        )
+      );
+    }
   };
   return (
     <Box sx={{ position: "relative" }}>
@@ -1903,6 +1911,22 @@ const LeadsPage = () => {
                   }}
                 >
                   <ArchiveIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            )}
+            {(isAdminOrManager || isLeadManager) && (
+              <Tooltip title="View Lead Changes Audit">
+                <IconButton
+                  size="small"
+                  onClick={() => setGlobalAuditDialogOpen(true)}
+                  sx={{
+                    color: "secondary.main",
+                    "&:hover": {
+                      bgcolor: "secondary.lighter",
+                    },
+                  }}
+                >
+                  <HistoryIcon fontSize="small" />
                 </IconButton>
               </Tooltip>
             )}
@@ -3005,6 +3029,12 @@ const LeadsPage = () => {
         onClose={handleCloseAuditHistory}
         leadId={auditHistoryDialog.leadId}
         leadName={auditHistoryDialog.leadName}
+      />
+
+      {/* Global Lead Audit Dialog */}
+      <LeadGlobalAuditDialog
+        open={globalAuditDialogOpen}
+        onClose={() => setGlobalAuditDialogOpen(false)}
       />
     </Box>
   );

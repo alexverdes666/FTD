@@ -50,6 +50,7 @@ const {
   markAsShaved,
   unmarkAsShaved,
   assignSimCardToLeads,
+  getGlobalLeadAuditLogs,
 } = require("../controllers/leads");
 const router = express.Router();
 router.get(
@@ -166,6 +167,46 @@ router.get(
       .withMessage("Lead type must be ftd, filler, or cold"),
   ],
   getArchivedLeads
+);
+
+// Global audit logs (all changes across all leads) - must be before /:id route
+router.get(
+  "/global-audit-logs",
+  [
+    protect,
+    authorize("admin", "affiliate_manager", "lead_manager"),
+    query("page")
+      .optional()
+      .isInt({ min: 1 })
+      .withMessage("Page must be a positive integer"),
+    query("limit")
+      .optional()
+      .isInt({ min: 1, max: 100 })
+      .withMessage("Limit must be between 1 and 100"),
+    query("leadId")
+      .optional()
+      .isMongoId()
+      .withMessage("Invalid lead ID format"),
+    query("changedBy")
+      .optional()
+      .isMongoId()
+      .withMessage("Invalid user ID format"),
+    query("fieldName")
+      .optional()
+      .trim(),
+    query("startDate")
+      .optional()
+      .isISO8601()
+      .withMessage("Start date must be a valid date"),
+    query("endDate")
+      .optional()
+      .isISO8601()
+      .withMessage("End date must be a valid date"),
+    query("search")
+      .optional()
+      .trim(),
+  ],
+  getGlobalLeadAuditLogs
 );
 
 router.get(
