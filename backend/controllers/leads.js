@@ -1863,6 +1863,15 @@ exports.updateLead = async (req, res, next) => {
       "name domain description"
     );
 
+    // Emit real-time update for lead changes so OrdersPage can update
+    if (req.io) {
+      req.io.emit("lead:updated", {
+        lead: lead.toObject(),
+        updatedBy: req.user._id,
+        updatedAt: new Date().toISOString(),
+      });
+    }
+
     res.status(200).json({
       success: true,
       message: "Lead updated successfully",

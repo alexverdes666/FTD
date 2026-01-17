@@ -239,6 +239,12 @@ class ChatService {
       console.log('📢 New announcement received:', data);
       this.emit('new_announcement', data);
     });
+
+    // Lead update events (for real-time sync across pages)
+    this.socket.on('lead:updated', (data) => {
+      console.log('📝 Lead updated received:', data.lead?._id);
+      this.emit('leads:updated', data);
+    });
   }
 
   // Handle reconnection logic

@@ -93,6 +93,7 @@ import { yupResolver } from "@hookform/resolvers/yup";
 import * as yup from "yup";
 import api from "../services/api";
 import notificationService from "../services/notificationService";
+import chatService from "../services/chatService";
 import { selectUser } from "../store/slices/authSlice";
 import { getSortedCountries } from "../constants/countries";
 import LeadQuickView from "../components/LeadQuickView";
@@ -998,6 +999,79 @@ const OrdersPage = () => {
   useEffect(() => {
     fetchOrders();
   }, [fetchOrders]);
+
+  // Listen for real-time lead updates to sync across pages
+  useEffect(() => {
+    const handleLeadUpdate = (data) => {
+      const updatedLead = data.lead;
+      if (!updatedLead?._id) return;
+
+      // Update leads in all orders that contain this lead
+      setOrders((prevOrders) =>
+        prevOrders.map((order) => {
+          // Check if this order contains the updated lead
+          const leadIndex = order.leads?.findIndex(
+            (lead) => lead._id === updatedLead._id
+          );
+
+          if (leadIndex === -1 || leadIndex === undefined) {
+            return order;
+          }
+
+          // Create a new leads array with the updated lead
+          const updatedLeads = [...order.leads];
+          // Preserve orderedAs from leadsMetadata if it exists
+          const metadata = order.leadsMetadata?.find(
+            (m) => m.leadId === updatedLead._id || m.leadId?._id === updatedLead._id
+          );
+          updatedLeads[leadIndex] = {
+            ...updatedLead,
+            orderedAs: metadata?.orderedAs || updatedLeads[leadIndex].orderedAs,
+          };
+
+          return {
+            ...order,
+            leads: updatedLeads,
+          };
+        })
+      );
+
+      // Also update expanded row data if the lead is there
+      setExpandedRowData((prev) => {
+        const newData = { ...prev };
+        Object.keys(newData).forEach((orderId) => {
+          const orderData = newData[orderId];
+          if (orderData?.leads) {
+            const leadIndex = orderData.leads.findIndex(
+              (lead) => lead._id === updatedLead._id
+            );
+            if (leadIndex !== -1) {
+              const updatedLeads = [...orderData.leads];
+              const metadata = orderData.leadsMetadata?.find(
+                (m) => m.leadId === updatedLead._id || m.leadId?._id === updatedLead._id
+              );
+              updatedLeads[leadIndex] = {
+                ...updatedLead,
+                orderedAs: metadata?.orderedAs || updatedLeads[leadIndex].orderedAs,
+              };
+              newData[orderId] = {
+                ...orderData,
+                leads: updatedLeads,
+              };
+            }
+          }
+        });
+        return newData;
+      });
+    };
+
+    chatService.on("leads:updated", handleLeadUpdate);
+
+    return () => {
+      chatService.off("leads:updated", handleLeadUpdate);
+    };
+  }, []);
+
   useEffect(() => {
     if (notification.message) {
       const timer = setTimeout(() => {
