@@ -460,8 +460,6 @@ const OrdersPage = () => {
     order: null,
   });
 
-  // IPQS validation loading state for preview modal
-  const [ipqsPreviewLoading, setIpqsPreviewLoading] = useState(false);
   // IPQS validation success state (tracks leadIds that were just successfully validated)
   const [ipqsValidationSuccess, setIpqsValidationSuccess] = useState([]);
 
@@ -1292,8 +1290,13 @@ const OrdersPage = () => {
       let notificationSeverity = "success";
 
       if (cooldownLeads.length > 0) {
-        notificationMessage += ` (${cooldownLeads.length} on cooldown - will be excluded)`;
-        notificationSeverity = "warning";
+        // Admin can add cooldown leads, non-admin cannot
+        if (user?.role === "admin") {
+          notificationMessage += ` (${cooldownLeads.length} on cooldown - admin override)`;
+        } else {
+          notificationMessage += ` (${cooldownLeads.length} on cooldown - will be excluded)`;
+          notificationSeverity = "warning";
+        }
       }
 
       if (notFoundEmails.length > 0) {
@@ -1301,7 +1304,8 @@ const OrdersPage = () => {
         notificationSeverity = "warning";
       }
 
-      if (activeLeads.length === 0 && foundLeads.length > 0) {
+      // Only block if all leads on cooldown AND user is not admin
+      if (activeLeads.length === 0 && foundLeads.length > 0 && user?.role !== "admin") {
         notificationMessage = `All ${foundLeads.length} found leads are on cooldown. Cannot create order.`;
         notificationSeverity = "error";
       }
@@ -1319,7 +1323,7 @@ const OrdersPage = () => {
     } finally {
       setSearchingLeads(false);
     }
-  }, [manualLeadEmails]);
+  }, [manualLeadEmails, user]);
 
   // Update manual lead agent assignment
   const updateManualLeadAgent = useCallback((index, agentId) => {
@@ -1392,8 +1396,12 @@ const OrdersPage = () => {
       const orderCountry = addLeadsDialog.order?.countryFilter;
 
       // Map all found leads to add leads format (including those with issues)
+      // Admin can add leads on cooldown, but not archived (already filtered by backend) or in order
+      const isAdmin = user?.role === "admin";
       const addLeadsEntries = foundLeads.map((lead) => {
         const isWrongCountry = orderCountry && lead.country !== orderCountry;
+        // Admin bypasses cooldown check
+        const cooldownBlocks = lead.isOnCooldown && !isAdmin;
         return {
           lead,
           agent: lead.assignedAgent?._id || "",
@@ -1402,7 +1410,7 @@ const OrdersPage = () => {
           isOnCooldown: lead.isOnCooldown || false,
           cooldownDaysRemaining: lead.cooldownDaysRemaining || 0,
           isWrongCountry: isWrongCountry,
-          canAdd: !lead.isInOrder && !lead.isOnCooldown && !isWrongCountry,
+          canAdd: !lead.isInOrder && !cooldownBlocks && !isWrongCountry,
         };
       });
 
@@ -1424,7 +1432,13 @@ const OrdersPage = () => {
       let msg = `Found ${foundLeads.length} leads.`;
       if (canAddCount > 0) msg = `${canAddCount} leads ready to add.`;
       if (alreadyInOrder > 0) msg += ` ${alreadyInOrder} already in order.`;
-      if (onCooldown > 0) msg += ` ${onCooldown} on cooldown.`;
+      if (onCooldown > 0) {
+        if (isAdmin) {
+          msg += ` ${onCooldown} on cooldown (admin override).`;
+        } else {
+          msg += ` ${onCooldown} on cooldown.`;
+        }
+      }
       if (wrongCountry > 0) msg += ` ${wrongCountry} wrong country (order requires ${orderCountry}).`;
       if (notFoundEmails.length > 0)
         msg += ` Not found: ${notFoundEmails.join(", ")}`;
@@ -1442,7 +1456,7 @@ const OrdersPage = () => {
     } finally {
       setAddLeadsSearching(false);
     }
-  }, [addLeadsEmails, addLeadsDialog.order]);
+  }, [addLeadsEmails, addLeadsDialog.order, user]);
 
   const updateAddLeadAgent = useCallback((index, agentId) => {
     setAddLeadsFound((prev) =>
@@ -1826,10 +1840,13 @@ const OrdersPage = () => {
             return;
           }
 
-          // Filter out leads that are on cooldown
-          const activeLeads = manualLeads.filter((entry) => !entry.isOnCooldown);
+          // Filter out leads that are on cooldown (admin can bypass cooldown)
+          const isAdmin = user?.role === "admin";
+          const activeLeads = isAdmin
+            ? manualLeads // Admin can use all leads including cooldown
+            : manualLeads.filter((entry) => !entry.isOnCooldown);
 
-          // Check if there are any active leads
+          // Check if there are any active leads (only block non-admin if all on cooldown)
           if (activeLeads.length === 0) {
             setNotification({
               message: "All selected leads are on cooldown. Cannot create order.",
@@ -1838,19 +1855,19 @@ const OrdersPage = () => {
             return;
           }
 
-          // Validate that all ACTIVE leads have agent assignments
+          // Validate that all leads have agent assignments
           const leadsWithoutAgents = activeLeads.filter(
             (entry) => !entry.agent
           );
           if (leadsWithoutAgents.length > 0) {
             setNotification({
-              message: `Please assign agents to all active leads (${leadsWithoutAgents.length} unassigned)`,
+              message: `Please assign agents to all leads (${leadsWithoutAgents.length} unassigned)`,
               severity: "warning",
             });
             return;
           }
 
-          // Build manual leads data - only include active (non-cooldown) leads
+          // Build manual leads data - admin includes all, non-admin excludes cooldown
           const manualLeadsData = activeLeads.map((entry) => ({
             leadId: entry.lead._id,
             agentId: entry.agent,
@@ -1991,7 +2008,7 @@ const OrdersPage = () => {
         }
       }
     },
-    [reset, fetchOrders, manualSelectionMode, manualLeads]
+    [reset, fetchOrders, manualSelectionMode, manualLeads, user]
   );
 
   const handleOpenClientBrokerManagement = useCallback((order) => {
@@ -2289,79 +2306,6 @@ const OrdersPage = () => {
     setLeadsPreviewModal({ open: false, leads: [], orderId: null, order: null });
     setPreviewActionsMenu({ anchorEl: null, lead: null });
   }, []);
-
-  // Handler for IPQS validation in preview modal
-  const handleIPQSValidatePreview = useCallback(async () => {
-    if (!leadsPreviewModal.orderId) return;
-
-    setIpqsPreviewLoading(true);
-    try {
-      const response = await api.post(`/orders/${leadsPreviewModal.orderId}/validate-leads`);
-      if (response.data.success) {
-        // Update leads in the preview modal with validation results
-        const validationMap = new Map();
-        response.data.data.results.forEach((result) => {
-          validationMap.set(result.leadId, {
-            email: result.email,
-            phone: result.phone,
-            summary: result.summary,
-            validatedAt: result.validatedAt,
-          });
-        });
-
-        setLeadsPreviewModal((prev) => ({
-          ...prev,
-          leads: prev.leads.map((lead) => {
-            const validation = validationMap.get(lead._id);
-            if (validation) {
-              return { ...lead, ipqsValidation: validation };
-            }
-            return lead;
-          }),
-        }));
-
-        // Also update expandedRowData if the order is expanded
-        setExpandedRowData((prev) => {
-          if (prev[leadsPreviewModal.orderId]) {
-            return {
-              ...prev,
-              [leadsPreviewModal.orderId]: {
-                ...prev[leadsPreviewModal.orderId],
-                leads: prev[leadsPreviewModal.orderId].leads?.map((lead) => {
-                  const validation = validationMap.get(lead._id);
-                  if (validation) {
-                    return { ...lead, ipqsValidation: validation };
-                  }
-                  return lead;
-                }),
-              },
-            };
-          }
-          return prev;
-        });
-
-        const { newlyValidated = 0 } = response.data.data;
-        if (newlyValidated > 0) {
-          // Show success indicators on validated leads
-          const validatedLeadIds = response.data.data.results
-            .filter((r) => r.validatedAt)
-            .map((r) => r.leadId);
-          setIpqsValidationSuccess(validatedLeadIds);
-          setTimeout(() => {
-            setIpqsValidationSuccess([]);
-          }, 2000);
-        }
-      }
-    } catch (error) {
-      console.error("Error validating leads:", error);
-      setNotification({
-        message: error.response?.data?.message || "Failed to validate leads",
-        severity: "error",
-      });
-    } finally {
-      setIpqsPreviewLoading(false);
-    }
-  }, [leadsPreviewModal.orderId]);
 
   // Handler for manual IPQS recheck of a single lead
   const handleIPQSRecheckLead = useCallback(async (lead) => {
@@ -8474,38 +8418,6 @@ const OrdersPage = () => {
               Leads Preview ({leadsPreviewModal.leads.length} leads)
             </Typography>
             <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
-              {/* IPQS Validation Button */}
-              {(user?.role === "admin" ||
-                user?.role === "affiliate_manager" ||
-                user?.role === "lead_manager") &&
-                leadsPreviewModal.leads.length > 0 && (
-                  <Tooltip
-                    title={
-                      leadsPreviewModal.leads.every((l) => l.ipqsValidation?.validatedAt)
-                        ? "All leads already validated"
-                        : "Validate email & phone quality (IPQS)"
-                    }
-                  >
-                    <span>
-                      <IconButton
-                        aria-label="ipqs validate"
-                        onClick={handleIPQSValidatePreview}
-                        size="small"
-                        color="info"
-                        disabled={
-                          ipqsPreviewLoading ||
-                          leadsPreviewModal.leads.every((l) => l.ipqsValidation?.validatedAt)
-                        }
-                      >
-                        {ipqsPreviewLoading ? (
-                          <CircularProgress size={20} />
-                        ) : (
-                          <VerifiedUserIcon />
-                        )}
-                      </IconButton>
-                    </span>
-                  </Tooltip>
-                )}
               {user?.role === "admin" && leadsPreviewModal.order && (
                 <Tooltip title="Add leads to this order">
                   <IconButton

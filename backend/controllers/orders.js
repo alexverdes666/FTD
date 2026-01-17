@@ -5710,27 +5710,31 @@ exports.addLeadsToOrder = async (req, res, next) => {
     }
 
     // Check for cooldown on FTD/filler leads (10-day cooldown)
-    const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
-    const leadsOnCooldown = foundLeads.filter((lead) => {
-      // Only FTD/filler leads have cooldown
-      if (lead.leadType !== "ftd") return false;
-      // Check if lead was used in order within the last 10 days
-      return lead.lastUsedInOrder && lead.lastUsedInOrder > tenDaysAgo;
-    });
+    // Admin users can bypass cooldown restriction
+    const isAdmin = req.user?.role === "admin";
+    if (!isAdmin) {
+      const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
+      const leadsOnCooldown = foundLeads.filter((lead) => {
+        // Only FTD/filler leads have cooldown
+        if (lead.leadType !== "ftd") return false;
+        // Check if lead was used in order within the last 10 days
+        return lead.lastUsedInOrder && lead.lastUsedInOrder > tenDaysAgo;
+      });
 
-    if (leadsOnCooldown.length > 0) {
-      const cooldownDetails = leadsOnCooldown.map((lead) => {
-        const daysRemaining = Math.ceil(
-          (lead.lastUsedInOrder.getTime() + 10 * 24 * 60 * 60 * 1000 - Date.now()) /
-            (24 * 60 * 60 * 1000)
-        );
-        return `${lead.firstName} ${lead.lastName} (${daysRemaining} days remaining)`;
-      });
-      return res.status(400).json({
-        success: false,
-        message: `Some FTD/filler leads are on cooldown: ${cooldownDetails.join(", ")}`,
-        cooldownLeads: leadsOnCooldown.map((l) => l._id),
-      });
+      if (leadsOnCooldown.length > 0) {
+        const cooldownDetails = leadsOnCooldown.map((lead) => {
+          const daysRemaining = Math.ceil(
+            (lead.lastUsedInOrder.getTime() + 10 * 24 * 60 * 60 * 1000 - Date.now()) /
+              (24 * 60 * 60 * 1000)
+          );
+          return `${lead.firstName} ${lead.lastName} (${daysRemaining} days remaining)`;
+        });
+        return res.status(400).json({
+          success: false,
+          message: `Some FTD/filler leads are on cooldown: ${cooldownDetails.join(", ")}`,
+          cooldownLeads: leadsOnCooldown.map((l) => l._id),
+        });
+      }
     }
 
     // Validate agents if provided
