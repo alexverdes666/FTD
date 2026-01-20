@@ -6747,11 +6747,11 @@ exports.getOrderValidationResults = async (req, res, next) => {
       ipqsValidation: lead.ipqsValidation || null,
     }));
 
-    // Calculate statistics
+    // Calculate statistics (check for validatedAt to match isLeadValidated logic)
     const stats = {
       total: results.length,
-      validated: results.filter((r) => r.ipqsValidation).length,
-      notValidated: results.filter((r) => !r.ipqsValidation).length,
+      validated: results.filter((r) => r.ipqsValidation?.validatedAt).length,
+      notValidated: results.filter((r) => !r.ipqsValidation?.validatedAt).length,
       emailStats: {
         clean: 0,
         low_risk: 0,

@@ -430,7 +430,7 @@ const StatsSummary = ({ stats }) => {
 };
 
 // Main dialog component
-const IPQSValidationDialog = ({ open, onClose, orderId, orderDetails }) => {
+const IPQSValidationDialog = ({ open, onClose, orderId, orderDetails, onValidationComplete }) => {
   const [loading, setLoading] = useState(false);
   const [validating, setValidating] = useState(false);
   const [results, setResults] = useState(null);
@@ -470,6 +470,10 @@ const IPQSValidationDialog = ({ open, onClose, orderId, orderDetails }) => {
       const response = await api.post(`/orders/${orderId}/validate-leads`);
       if (response.data.success) {
         setResults(response.data.data);
+        // Notify parent component about validation completion
+        if (onValidationComplete) {
+          onValidationComplete(response.data.data);
+        }
       }
     } catch (err) {
       console.error("Error validating leads:", err);

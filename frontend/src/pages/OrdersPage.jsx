@@ -112,7 +112,6 @@ import CopyPreferencesDialog, {
   copyLeadsWithPreferences,
 } from "../components/CopyPreferencesDialog";
 import ReplaceLeadDialog from "../components/ReplaceLeadDialog";
-import IPQSValidationDialog from "../components/IPQSValidationDialog";
 import RemoteBrowserDialog from "../components/RemoteBrowserDialog";
 import { formatPhoneWithCountryCode } from "../utils/phoneUtils";
 
@@ -444,11 +443,6 @@ const OrdersPage = () => {
     orderId: null,
   });
 
-  // IPQS Validation Dialog State
-  const [ipqsDialogOpen, setIpqsDialogOpen] = useState(false);
-  const [ipqsOrderId, setIpqsOrderId] = useState(null);
-  const [ipqsOrderDetails, setIpqsOrderDetails] = useState(null);
-
   // Search state for leads modal
   const [leadsSearchQuery, setLeadsSearchQuery] = useState("");
   const [showLeadsSearch, setShowLeadsSearch] = useState(false);
@@ -462,6 +456,13 @@ const OrdersPage = () => {
 
   // IPQS validation success state (tracks leadIds that were just successfully validated)
   const [ipqsValidationSuccess, setIpqsValidationSuccess] = useState([]);
+  // IPQS validation in progress state (tracks orderIds being validated)
+  const [ipqsValidatingOrders, setIpqsValidatingOrders] = useState([]);
+
+  // Lead removal selection state for leads preview modal
+  const [leadRemovalMode, setLeadRemovalMode] = useState(false);
+  const [selectedLeadsForRemoval, setSelectedLeadsForRemoval] = useState([]);
+  const [removingLeads, setRemovingLeads] = useState(false);
 
   // Actions menu state for leads preview modal
   const [previewActionsMenu, setPreviewActionsMenu] = useState({
@@ -2305,6 +2306,8 @@ const OrdersPage = () => {
   const handleCloseLeadsPreviewModal = useCallback(() => {
     setLeadsPreviewModal({ open: false, leads: [], orderId: null, order: null });
     setPreviewActionsMenu({ anchorEl: null, lead: null });
+    setLeadRemovalMode(false);
+    setSelectedLeadsForRemoval([]);
   }, []);
 
   // Handler for manual IPQS recheck of a single lead
@@ -2360,6 +2363,184 @@ const OrdersPage = () => {
       console.error("Error rechecking lead IPQS:", error);
     }
   }, [leadsPreviewModal.orderId]);
+
+  // Handler for direct IPQS validation of all unvalidated leads in an order
+  const handleDirectIPQSValidation = useCallback(async (orderId, fromLeadsPreview = false) => {
+    if (!orderId || ipqsValidatingOrders.includes(orderId)) return;
+
+    setIpqsValidatingOrders((prev) => [...prev, orderId]);
+
+    try {
+      const response = await api.post(`/orders/${orderId}/validate-leads`);
+
+      if (response.data.success) {
+        const validationData = response.data.data;
+
+        // Create validation map for quick lookup
+        const validationMap = new Map(
+          validationData.results?.map((r) => [r.leadId, r]) || []
+        );
+
+        // Update leadsPreviewModal if it's open for this order
+        if (fromLeadsPreview || (leadsPreviewModal.open && leadsPreviewModal.orderId === orderId)) {
+          setLeadsPreviewModal((prev) => ({
+            ...prev,
+            leads: prev.leads.map((lead) => {
+              const validation = validationMap.get(lead._id);
+              if (validation) {
+                return {
+                  ...lead,
+                  ipqsValidation: {
+                    email: validation.email,
+                    phone: validation.phone,
+                    summary: validation.summary,
+                    validatedAt: validation.validatedAt,
+                  },
+                };
+              }
+              return lead;
+            }),
+          }));
+        }
+
+        // Update expandedRowData if the order is expanded
+        if (expandedRowData[orderId]) {
+          setExpandedRowData((prev) => ({
+            ...prev,
+            [orderId]: {
+              ...prev[orderId],
+              leads: prev[orderId].leads?.map((lead) => {
+                const validation = validationMap.get(lead._id);
+                if (validation) {
+                  return {
+                    ...lead,
+                    ipqsValidation: {
+                      email: validation.email,
+                      phone: validation.phone,
+                      summary: validation.summary,
+                      validatedAt: validation.validatedAt,
+                    },
+                  };
+                }
+                return lead;
+              }),
+            },
+          }));
+        }
+
+        // Show success indicators on validated leads
+        if (validationData.results) {
+          const validatedLeadIds = validationData.results
+            .filter((r) => !r.alreadyValidated)
+            .map((r) => r.leadId);
+          if (validatedLeadIds.length > 0) {
+            setIpqsValidationSuccess(validatedLeadIds);
+            setTimeout(() => setIpqsValidationSuccess([]), 3000);
+          }
+        }
+
+        // Show notification
+        const newlyValidated = validationData.newlyValidated || 0;
+        const alreadyValidated = validationData.alreadyValidated || 0;
+        if (newlyValidated > 0) {
+          setNotification({
+            message: `Validated ${newlyValidated} lead(s)${alreadyValidated > 0 ? ` (${alreadyValidated} already validated)` : ""}`,
+            severity: "success",
+          });
+        } else if (alreadyValidated > 0) {
+          setNotification({
+            message: "All leads already validated",
+            severity: "info",
+          });
+        }
+      }
+    } catch (error) {
+      console.error("Error validating leads with IPQS:", error);
+      setNotification({
+        message: error.response?.data?.message || "Failed to validate leads",
+        severity: "error",
+      });
+    } finally {
+      setIpqsValidatingOrders((prev) => prev.filter((id) => id !== orderId));
+    }
+  }, [ipqsValidatingOrders, leadsPreviewModal.open, leadsPreviewModal.orderId, expandedRowData]);
+
+  // Toggle lead removal mode
+  const handleToggleLeadRemovalMode = useCallback(() => {
+    setLeadRemovalMode((prev) => !prev);
+    setSelectedLeadsForRemoval([]);
+  }, []);
+
+  // Toggle lead selection for removal
+  const handleToggleLeadSelection = useCallback((leadId) => {
+    setSelectedLeadsForRemoval((prev) =>
+      prev.includes(leadId)
+        ? prev.filter((id) => id !== leadId)
+        : [...prev, leadId]
+    );
+  }, []);
+
+  // Remove selected leads from order
+  const handleRemoveSelectedLeads = useCallback(async () => {
+    if (!leadsPreviewModal.orderId || selectedLeadsForRemoval.length === 0) return;
+
+    setRemovingLeads(true);
+    const orderId = leadsPreviewModal.orderId;
+    const successfulRemovals = [];
+    const failedRemovals = [];
+
+    for (const leadId of selectedLeadsForRemoval) {
+      try {
+        await api.delete(`/orders/${orderId}/leads/${leadId}`, {
+          data: { reason: "Removed via bulk removal" }
+        });
+        successfulRemovals.push(leadId);
+      } catch (error) {
+        console.error(`Failed to remove lead ${leadId}:`, error);
+        failedRemovals.push(leadId);
+      }
+    }
+
+    // Update UI
+    if (successfulRemovals.length > 0) {
+      // Update leadsPreviewModal
+      setLeadsPreviewModal((prev) => ({
+        ...prev,
+        leads: prev.leads.filter((lead) => !successfulRemovals.includes(lead._id)),
+      }));
+
+      // Update expandedRowData if the order is expanded
+      if (expandedRowData[orderId]) {
+        setExpandedRowData((prev) => ({
+          ...prev,
+          [orderId]: {
+            ...prev[orderId],
+            leads: prev[orderId].leads?.filter((lead) => !successfulRemovals.includes(lead._id)),
+          },
+        }));
+      }
+
+      // Refresh orders list
+      fetchOrders();
+
+      setNotification({
+        message: `Removed ${successfulRemovals.length} lead(s) from order`,
+        severity: "success",
+      });
+    }
+
+    if (failedRemovals.length > 0) {
+      setNotification({
+        message: `Failed to remove ${failedRemovals.length} lead(s)`,
+        severity: "error",
+      });
+    }
+
+    // Reset selection state
+    setSelectedLeadsForRemoval([]);
+    setLeadRemovalMode(false);
+    setRemovingLeads(false);
+  }, [leadsPreviewModal.orderId, selectedLeadsForRemoval, expandedRowData, fetchOrders]);
 
   const handleOpenPreviewActionsMenu = useCallback((event, lead) => {
     setPreviewActionsMenu({ anchorEl: event.currentTarget, lead });
@@ -3194,9 +3375,11 @@ const OrdersPage = () => {
         }));
       }
 
-      // Auto-validate the new lead with IPQS if the order has other validated leads
+      // Auto-validate the new lead with IPQS only if it's not already validated
       const newLeadId = replaceData.newLead?._id;
-      if (orderId && newLeadId) {
+      const newLeadAlreadyValidated = replaceData.newLead?.ipqsValidation?.validatedAt;
+
+      if (orderId && newLeadId && !newLeadAlreadyValidated) {
         try {
           const validateResponse = await api.post(
             `/orders/${orderId}/leads/${newLeadId}/validate-ipqs`
@@ -4909,25 +5092,33 @@ const OrdersPage = () => {
                                                   user?.role ===
                                                     "affiliate_manager" ||
                                                   user?.role ===
-                                                    "lead_manager") && (
-                                                  <Tooltip title="Validate lead emails and phones with IPQS">
-                                                    <Button
-                                                      size="small"
-                                                      startIcon={
-                                                        <VerifiedUserIcon />
-                                                      }
-                                                      onClick={() => {
-                                                        setIpqsOrderId(order._id);
-                                                        setIpqsOrderDetails(expandedDetails);
-                                                        setIpqsDialogOpen(true);
-                                                      }}
-                                                      variant="outlined"
-                                                      color="info"
-                                                    >
-                                                      IPQS Validate
-                                                    </Button>
-                                                  </Tooltip>
-                                                )}
+                                                    "lead_manager") && (() => {
+                                                  const allLeadsValidated = expandedDetails?.leads?.length > 0 &&
+                                                    expandedDetails.leads.every((lead) => lead.ipqsValidation?.validatedAt);
+                                                  const isValidating = ipqsValidatingOrders.includes(order._id);
+                                                  return (
+                                                    <Tooltip title={isValidating ? "Validating..." : allLeadsValidated ? "All leads already validated" : "Validate lead emails and phones with IPQS"}>
+                                                      <span>
+                                                        <Button
+                                                          size="small"
+                                                          startIcon={
+                                                            isValidating ? (
+                                                              <CircularProgress size={16} color="inherit" />
+                                                            ) : (
+                                                              <VerifiedUserIcon />
+                                                            )
+                                                          }
+                                                          onClick={() => handleDirectIPQSValidation(order._id)}
+                                                          variant="outlined"
+                                                          color="info"
+                                                          disabled={isValidating || allLeadsValidated}
+                                                        >
+                                                          {isValidating ? "Validating..." : "IPQS Validate"}
+                                                        </Button>
+                                                      </span>
+                                                    </Tooltip>
+                                                  );
+                                                })()}
                                                 {(user?.role === "admin" ||
                                                   user?.role ===
                                                     "affiliate_manager" ||
@@ -6763,17 +6954,6 @@ const OrdersPage = () => {
         onSuccess={handleReplaceLeadSuccess}
       />
 
-      {/* IPQS Validation Dialog */}
-      <IPQSValidationDialog
-        open={ipqsDialogOpen}
-        onClose={() => {
-          setIpqsDialogOpen(false);
-          setIpqsOrderId(null);
-          setIpqsOrderDetails(null);
-        }}
-        orderId={ipqsOrderId}
-        orderDetails={ipqsOrderDetails}
-      />
 
       {/* Remote Browser Dialog */}
       <RemoteBrowserDialog
@@ -8418,17 +8598,81 @@ const OrdersPage = () => {
               Leads Preview ({leadsPreviewModal.leads.length} leads)
             </Typography>
             <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
-              {["admin", "affiliate_manager"].includes(user?.role) && leadsPreviewModal.order && (
-                <Tooltip title="Add leads to this order">
-                  <IconButton
-                    aria-label="add leads"
-                    onClick={() => handleOpenAddLeadsDialog(leadsPreviewModal.order)}
+              {leadRemovalMode ? (
+                <>
+                  <Typography variant="body2" color="text.secondary" sx={{ mr: 1 }}>
+                    {selectedLeadsForRemoval.length} selected
+                  </Typography>
+                  <Button
                     size="small"
-                    color="primary"
+                    variant="contained"
+                    color="error"
+                    onClick={handleRemoveSelectedLeads}
+                    disabled={selectedLeadsForRemoval.length === 0 || removingLeads}
+                    startIcon={removingLeads ? <CircularProgress size={16} color="inherit" /> : <DeleteIcon />}
                   >
-                    <AddIcon />
-                  </IconButton>
-                </Tooltip>
+                    {removingLeads ? "Removing..." : "Remove"}
+                  </Button>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    onClick={handleToggleLeadRemovalMode}
+                    disabled={removingLeads}
+                  >
+                    Cancel
+                  </Button>
+                </>
+              ) : (
+                <>
+                  {["admin", "affiliate_manager", "lead_manager"].includes(user?.role) && leadsPreviewModal.order && (() => {
+                    const allLeadsValidated = leadsPreviewModal.leads.length > 0 &&
+                      leadsPreviewModal.leads.every((lead) => lead.ipqsValidation?.validatedAt);
+                    const isValidating = ipqsValidatingOrders.includes(leadsPreviewModal.orderId);
+                    return (
+                      <Tooltip title={isValidating ? "Validating..." : allLeadsValidated ? "All leads already validated" : "Validate lead emails and phones with IPQS"}>
+                        <span>
+                          <IconButton
+                            aria-label="IPQS check"
+                            onClick={() => handleDirectIPQSValidation(leadsPreviewModal.orderId, true)}
+                            size="small"
+                            color="info"
+                            disabled={isValidating || allLeadsValidated}
+                          >
+                            {isValidating ? (
+                              <CircularProgress size={20} color="inherit" />
+                            ) : (
+                              <VerifiedUserIcon />
+                            )}
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                    );
+                  })()}
+                  {["admin", "affiliate_manager", "lead_manager"].includes(user?.role) && leadsPreviewModal.order && leadsPreviewModal.leads.length > 0 && (
+                    <Tooltip title="Remove leads from this order">
+                      <IconButton
+                        aria-label="remove leads"
+                        onClick={handleToggleLeadRemovalMode}
+                        size="small"
+                        color="error"
+                      >
+                        <DeleteIcon />
+                      </IconButton>
+                    </Tooltip>
+                  )}
+                  {["admin", "affiliate_manager"].includes(user?.role) && leadsPreviewModal.order && (
+                    <Tooltip title="Add leads to this order">
+                      <IconButton
+                        aria-label="add leads"
+                        onClick={() => handleOpenAddLeadsDialog(leadsPreviewModal.order)}
+                        size="small"
+                        color="primary"
+                      >
+                        <AddIcon />
+                      </IconButton>
+                    </Tooltip>
+                  )}
+                </>
               )}
               <IconButton
                 aria-label="close"
@@ -8451,6 +8695,34 @@ const OrdersPage = () => {
             >
               <TableHead>
                 <TableRow>
+                  {leadRemovalMode && (
+                    <TableCell
+                      sx={{
+                        fontWeight: "bold",
+                        backgroundColor: "grey.100",
+                        py: 0.5,
+                        px: 0.5,
+                        width: 40,
+                      }}
+                    >
+                      <Checkbox
+                        size="small"
+                        checked={selectedLeadsForRemoval.length === leadsPreviewModal.leads.filter(l => !leadsPreviewModal.order?.removedLeads?.find(rl => rl.leadId === l._id || rl.leadId?._id === l._id)).length && selectedLeadsForRemoval.length > 0}
+                        indeterminate={selectedLeadsForRemoval.length > 0 && selectedLeadsForRemoval.length < leadsPreviewModal.leads.filter(l => !leadsPreviewModal.order?.removedLeads?.find(rl => rl.leadId === l._id || rl.leadId?._id === l._id)).length}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedLeadsForRemoval(
+                              leadsPreviewModal.leads
+                                .filter(l => !leadsPreviewModal.order?.removedLeads?.find(rl => rl.leadId === l._id || rl.leadId?._id === l._id))
+                                .map(l => l._id)
+                            );
+                          } else {
+                            setSelectedLeadsForRemoval([]);
+                          }
+                        }}
+                      />
+                    </TableCell>
+                  )}
                   <TableCell
                     sx={{
                       fontWeight: "bold",
@@ -8687,6 +8959,17 @@ const OrdersPage = () => {
                             }),
                           }}
                         >
+                        {/* Checkbox for removal selection */}
+                        {leadRemovalMode && (
+                          <TableCell sx={{ py: 0.5, px: 0.5 }}>
+                            <Checkbox
+                              size="small"
+                              checked={selectedLeadsForRemoval.includes(lead._id)}
+                              onChange={() => handleToggleLeadSelection(lead._id)}
+                              disabled={isRemoved}
+                            />
+                          </TableCell>
+                        )}
                         {/* Name */}
                         <TableCell sx={{ py: 0.5, px: 1, position: "relative" }}>
                           {/* IPQS Validation Success Indicator - overlays on top */}
