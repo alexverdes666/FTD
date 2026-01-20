@@ -6,6 +6,7 @@ const {
   ownerOrAdmin,
   isManager,
 } = require("../middleware/auth");
+const schedulerService = require("../services/scheduler");
 const {
   requireSensitiveActionVerification,
 } = require("../middleware/sensitiveAction");
@@ -84,6 +85,46 @@ router.get(
   getTopPerformers
 );
 router.post("/sync-performance", [protect, isAdmin], syncAgentPerformance);
+
+// ===== SIP Agent Sync Routes =====
+// These must come BEFORE /:id routes or Express will treat "sip-sync" as an ID
+// Preview what agents would be created from external SIP API
+router.get("/sip-sync/preview", [protect, isAdmin], async (req, res) => {
+  try {
+    const result = await schedulerService.getSipSyncPreview();
+    res.json({
+      success: true,
+      data: result
+    });
+  } catch (error) {
+    console.error("SIP sync preview error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to get SIP sync preview",
+      error: error.message
+    });
+  }
+});
+
+// Manually trigger SIP agent sync
+router.post("/sip-sync/trigger", [protect, isAdmin], async (req, res) => {
+  try {
+    const result = await schedulerService.triggerSipAgentSync();
+    res.json({
+      success: true,
+      message: "SIP agent sync completed",
+      data: result
+    });
+  } catch (error) {
+    console.error("SIP sync trigger error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to trigger SIP sync",
+      error: error.message
+    });
+  }
+});
+
 router.get("/agents-with-lead-stats", [protect], getAgentsWithLeadStats);
 router.post(
   "/agents-with-filtered-lead-stats",

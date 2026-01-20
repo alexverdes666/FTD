@@ -1,6 +1,7 @@
 const cron = require('node-cron');
 const { checkSimCardCooldownAndNotify } = require('../controllers/simCards');
 const User = require('../models/User');
+const sipSyncService = require('./sipSyncService');
 
 class SchedulerService {
   constructor() {
@@ -23,6 +24,7 @@ class SchedulerService {
   startAll() {
     this.startSimCardCooldownCheck();
     this.startDailyMidnightLogout();
+    this.startSipAgentSync();
     console.log('[Scheduler Service] All jobs started');
   }
 
@@ -88,6 +90,42 @@ class SchedulerService {
     });
 
     console.log(`[Scheduler Service] Daily midnight logout scheduled: ${schedule} UTC (00:00 GMT+2)`);
+  }
+
+  /**
+   * Schedule SIP agent sync
+   * Runs every 3 hours to sync agents from external SIP API
+   */
+  startSipAgentSync() {
+    // Schedule for every 3 hours
+    // Cron format: minute hour day month weekday
+    // '0 */3 * * *' means: at minute 0, every 3rd hour, every day
+    const schedule = process.env.SIP_SYNC_SCHEDULE || '0 */3 * * *';
+
+    const job = cron.schedule(schedule, async () => {
+      console.log('[Scheduler] Running SIP agent sync...');
+      try {
+        const result = await sipSyncService.syncAgents();
+        console.log('[Scheduler] SIP agent sync completed:', {
+          created: result.created,
+          existing: result.existingAgents,
+          errors: result.errors
+        });
+      } catch (error) {
+        console.error('[Scheduler] Error in SIP agent sync:', error);
+      }
+    }, {
+      scheduled: true,
+      timezone: process.env.TIMEZONE || 'UTC'
+    });
+
+    this.jobs.push({
+      name: 'sipAgentSync',
+      job,
+      schedule
+    });
+
+    console.log(`[Scheduler Service] SIP agent sync scheduled: ${schedule} (${process.env.TIMEZONE || 'UTC'})`);
   }
 
   /**
@@ -162,6 +200,39 @@ class SchedulerService {
       return result;
     } catch (error) {
       console.error('[Scheduler] Error in manual SIM card cooldown check:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Manually trigger SIP agent sync (for testing/admin purposes)
+   */
+  async triggerSipAgentSync() {
+    console.log('[Scheduler] Manually triggering SIP agent sync...');
+    try {
+      const result = await sipSyncService.syncAgents();
+      console.log('[Scheduler] Manual SIP agent sync completed:', result);
+      return result;
+    } catch (error) {
+      console.error('[Scheduler] Error in manual SIP agent sync:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get SIP agent sync preview (for admin to see what would be synced)
+   */
+  async getSipSyncPreview() {
+    console.log('[Scheduler] Getting SIP sync preview...');
+    try {
+      const result = await sipSyncService.getSyncPreview();
+      console.log('[Scheduler] SIP sync preview generated:', {
+        alreadyExist: result.alreadyExist,
+        toBeCreated: result.toBeCreated
+      });
+      return result;
+    } catch (error) {
+      console.error('[Scheduler] Error getting SIP sync preview:', error);
       throw error;
     }
   }
