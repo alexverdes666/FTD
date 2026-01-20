@@ -328,12 +328,12 @@ router.post(
   replaceLeadInOrder
 );
 
-// Add leads to an existing order (Admin only)
+// Add leads to an existing order (Admin and Affiliate Manager)
 router.post(
   "/:orderId/add-leads",
   [
     protect,
-    authorize("admin"),
+    authorize("admin", "affiliate_manager"),
     body("leads")
       .isArray({ min: 1 })
       .withMessage("At least one lead is required"),

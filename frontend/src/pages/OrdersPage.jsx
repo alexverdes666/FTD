@@ -8418,7 +8418,7 @@ const OrdersPage = () => {
               Leads Preview ({leadsPreviewModal.leads.length} leads)
             </Typography>
             <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
-              {user?.role === "admin" && leadsPreviewModal.order && (
+              {["admin", "affiliate_manager"].includes(user?.role) && leadsPreviewModal.order && (
                 <Tooltip title="Add leads to this order">
                   <IconButton
                     aria-label="add leads"
