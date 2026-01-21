@@ -1,12 +1,12 @@
 /**
  * Inactivity Service
- * Tracks user activity and triggers auto-logout after 15 minutes of inactivity
+ * Tracks user activity and triggers auto-logout after 2 hours of inactivity
  * Also handles scheduled daily logout at 00:00 GMT+2
  */
 
 class InactivityService {
   constructor() {
-    this.inactivityTimeout = 15 * 60 * 1000; // 15 minutes in milliseconds
+    this.inactivityTimeout = 2 * 60 * 60 * 1000; // 2 hours in milliseconds
     this.warningTime = 60 * 1000; // Show warning 1 minute before logout
     this.inactivityTimer = null;
     this.warningTimer = null;

@@ -292,6 +292,74 @@ const getDocumentStatusColor = (status) => {
       return "default";
   }
 };
+
+// IPQS Status color helper - matching OrdersPage styling
+const getIPQSStatusConfig = (status) => {
+  switch (status) {
+    case "clean":
+      return { color: "#2e7d32", bgcolor: "#c8e6c9", label: "Clean", textColor: "#1b5e20" };
+    case "low_risk":
+      return { color: "#1565c0", bgcolor: "#bbdefb", label: "Low Risk", textColor: "#0d47a1" };
+    case "medium_risk":
+      return { color: "#ef6c00", bgcolor: "#ffe0b2", label: "Medium Risk", textColor: "#e65100" };
+    case "high_risk":
+      return { color: "#c62828", bgcolor: "#ffcdd2", label: "High Risk", textColor: "#b71c1c" };
+    case "invalid":
+      return { color: "#c62828", bgcolor: "#ffcdd2", label: "Invalid", textColor: "#b71c1c" };
+    default:
+      return { color: "inherit", bgcolor: "transparent", label: "Unknown", textColor: "inherit" };
+  }
+};
+
+// Build IPQS tooltip content
+const buildIPQSTooltip = (validation, type) => {
+  if (!validation) return "Not validated";
+
+  const data = type === "email" ? validation.email : validation.phone;
+  const summary = validation.summary;
+
+  if (!data?.success) return data?.error || "Validation failed";
+
+  if (type === "email") {
+    const status = summary?.emailStatus || "unknown";
+    const config = getIPQSStatusConfig(status);
+    return (
+      <Box sx={{ p: 1, bgcolor: config.bgcolor, borderRadius: 1, borderLeft: `4px solid ${config.color}` }}>
+        <Typography variant="subtitle2" sx={{ color: config.textColor, fontWeight: "bold", mb: 0.5 }}>
+          {config.label} (Score: {data.fraud_score ?? "N/A"})
+        </Typography>
+        <Typography variant="caption" component="div" sx={{ color: "#212121" }}>Valid: {data.valid ? "Yes" : "No"}</Typography>
+        <Typography variant="caption" component="div" sx={{ color: "#212121" }}>Disposable: {data.disposable ? "Yes" : "No"}</Typography>
+        <Typography variant="caption" component="div" sx={{ color: "#212121" }}>Honeypot: {data.honeypot ? "Yes" : "No"}</Typography>
+        <Typography variant="caption" component="div" sx={{ color: "#212121" }}>Recent Abuse: {data.recent_abuse ? "Yes" : "No"}</Typography>
+        <Typography variant="caption" component="div" sx={{ color: "#212121" }}>Catch All: {data.catch_all ? "Yes" : "No"}</Typography>
+        <Typography variant="caption" component="div" sx={{ color: "#212121" }}>DNS Valid: {data.dns_valid ? "Yes" : "No"}</Typography>
+        <Typography variant="caption" component="div" sx={{ color: "#212121" }}>Deliverability: {data.deliverability || "N/A"}</Typography>
+        <Typography variant="caption" component="div" sx={{ color: "#212121" }}>Leaked: {data.leaked ? "Yes" : "No"}</Typography>
+      </Box>
+    );
+  } else {
+    const status = summary?.phoneStatus || "unknown";
+    const config = getIPQSStatusConfig(status);
+    return (
+      <Box sx={{ p: 1, bgcolor: config.bgcolor, borderRadius: 1, borderLeft: `4px solid ${config.color}` }}>
+        <Typography variant="subtitle2" sx={{ color: config.textColor, fontWeight: "bold", mb: 0.5 }}>
+          {config.label} (Score: {data.fraud_score ?? "N/A"})
+        </Typography>
+        <Typography variant="caption" component="div" sx={{ color: "#212121" }}>Valid: {data.valid ? "Yes" : "No"}</Typography>
+        <Typography variant="caption" component="div" sx={{ color: "#212121" }}>Active: {data.active ? "Yes" : "No"}</Typography>
+        <Typography variant="caption" component="div" sx={{ color: "#212121" }}>VOIP: {data.VOIP ? "Yes" : "No"}</Typography>
+        <Typography variant="caption" component="div" sx={{ color: "#212121" }}>Prepaid: {data.prepaid ? "Yes" : "No"}</Typography>
+        <Typography variant="caption" component="div" sx={{ color: "#212121" }}>Risky: {data.risky ? "Yes" : "No"}</Typography>
+        <Typography variant="caption" component="div" sx={{ color: "#212121" }}>Line Type: {data.line_type || "N/A"}</Typography>
+        <Typography variant="caption" component="div" sx={{ color: "#212121" }}>Carrier: {data.carrier || "N/A"}</Typography>
+        <Typography variant="caption" component="div" sx={{ color: "#212121" }}>Country: {data.country || "N/A"}</Typography>
+        <Typography variant="caption" component="div" sx={{ color: "#212121" }}>Do Not Call: {data.do_not_call ? "Yes" : "No"}</Typography>
+        <Typography variant="caption" component="div" sx={{ color: "#212121" }}>Spammer: {data.spammer ? "Yes" : "No"}</Typography>
+      </Box>
+    );
+  }
+};
 const LeadDetails = React.memo(({ lead }) => (
   <Box>
     <Grid container spacing={1.5}>
@@ -409,7 +477,48 @@ const LeadDetails = React.memo(({ lead }) => (
               <Typography variant="caption" color="text.secondary" sx={{ minWidth: 55 }}>
                 Email:
               </Typography>
-              <Typography variant="caption">{lead.newEmail}</Typography>
+              {(() => {
+                const emailStatus = lead.ipqsValidation?.summary?.emailStatus;
+                const emailConfig = emailStatus ? getIPQSStatusConfig(emailStatus) : null;
+                const hasEmailValidation = emailConfig && emailConfig.bgcolor !== "transparent";
+
+                return (
+                  <Tooltip
+                    title={lead.ipqsValidation ? buildIPQSTooltip(lead.ipqsValidation, "email") : "Not validated"}
+                    arrow
+                    placement="top"
+                    componentsProps={{
+                      tooltip: {
+                        sx: {
+                          bgcolor: "white",
+                          color: "#212121",
+                          boxShadow: 3,
+                          "& .MuiTooltip-arrow": { color: "white" },
+                          maxWidth: 300,
+                        },
+                      },
+                    }}
+                  >
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        cursor: "pointer",
+                        ...(hasEmailValidation && {
+                          backgroundColor: emailConfig.bgcolor,
+                          borderLeft: `3px solid ${emailConfig.color}`,
+                          px: 0.5,
+                          py: 0.25,
+                          borderRadius: 0.5,
+                          fontWeight: 500,
+                          color: "#212121",
+                        }),
+                      }}
+                    >
+                      {lead.newEmail}
+                    </Typography>
+                  </Tooltip>
+                );
+              })()}
               {lead.oldEmail && (
                 <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.65rem" }}>
                   (Prev: {lead.oldEmail})
@@ -420,7 +529,48 @@ const LeadDetails = React.memo(({ lead }) => (
               <Typography variant="caption" color="text.secondary" sx={{ minWidth: 55 }}>
                 Phone:
               </Typography>
-              <Typography variant="caption">{formatPhoneWithCountryCode(lead.newPhone, lead.country)}</Typography>
+              {(() => {
+                const phoneStatus = lead.ipqsValidation?.summary?.phoneStatus;
+                const phoneConfig = phoneStatus ? getIPQSStatusConfig(phoneStatus) : null;
+                const hasPhoneValidation = phoneConfig && phoneConfig.bgcolor !== "transparent";
+
+                return (
+                  <Tooltip
+                    title={lead.ipqsValidation ? buildIPQSTooltip(lead.ipqsValidation, "phone") : "Not validated"}
+                    arrow
+                    placement="bottom"
+                    componentsProps={{
+                      tooltip: {
+                        sx: {
+                          bgcolor: "white",
+                          color: "#212121",
+                          boxShadow: 3,
+                          "& .MuiTooltip-arrow": { color: "white" },
+                          maxWidth: 300,
+                        },
+                      },
+                    }}
+                  >
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        cursor: "pointer",
+                        ...(hasPhoneValidation && {
+                          backgroundColor: phoneConfig.bgcolor,
+                          borderLeft: `3px solid ${phoneConfig.color}`,
+                          px: 0.5,
+                          py: 0.25,
+                          borderRadius: 0.5,
+                          fontWeight: 500,
+                          color: "#212121",
+                        }),
+                      }}
+                    >
+                      {formatPhoneWithCountryCode(lead.newPhone, lead.country)}
+                    </Typography>
+                  </Tooltip>
+                );
+              })()}
               {lead.oldPhone && (
                 <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.65rem" }}>
                   (Prev: {formatPhoneWithCountryCode(lead.oldPhone, lead.country)})
@@ -2957,8 +3107,96 @@ const LeadsPage = () => {
                         <TableCell>
                           {lead.firstName} {lead.lastName}
                         </TableCell>
-                        <TableCell>{lead.newEmail}</TableCell>
-                        <TableCell>{formatPhoneWithCountryCode(lead.newPhone, lead.country)}</TableCell>
+                        <TableCell>
+                          {(() => {
+                            const emailStatus = lead.ipqsValidation?.summary?.emailStatus;
+                            const emailConfig = emailStatus ? getIPQSStatusConfig(emailStatus) : null;
+                            const hasEmailValidation = emailConfig && emailConfig.bgcolor !== "transparent";
+
+                            return (
+                              <Tooltip
+                                title={lead.ipqsValidation ? buildIPQSTooltip(lead.ipqsValidation, "email") : "Not validated"}
+                                arrow
+                                placement="top"
+                                componentsProps={{
+                                  tooltip: {
+                                    sx: {
+                                      bgcolor: "white",
+                                      color: "#212121",
+                                      boxShadow: 3,
+                                      "& .MuiTooltip-arrow": { color: "white" },
+                                      maxWidth: 300,
+                                    },
+                                  },
+                                }}
+                              >
+                                <Typography
+                                  variant="body2"
+                                  component="span"
+                                  sx={{
+                                    cursor: "pointer",
+                                    ...(hasEmailValidation && {
+                                      backgroundColor: emailConfig.bgcolor,
+                                      borderLeft: `3px solid ${emailConfig.color}`,
+                                      px: 0.5,
+                                      py: 0.25,
+                                      borderRadius: 0.5,
+                                      fontWeight: 500,
+                                      color: "#212121",
+                                    }),
+                                  }}
+                                >
+                                  {lead.newEmail}
+                                </Typography>
+                              </Tooltip>
+                            );
+                          })()}
+                        </TableCell>
+                        <TableCell>
+                          {(() => {
+                            const phoneStatus = lead.ipqsValidation?.summary?.phoneStatus;
+                            const phoneConfig = phoneStatus ? getIPQSStatusConfig(phoneStatus) : null;
+                            const hasPhoneValidation = phoneConfig && phoneConfig.bgcolor !== "transparent";
+
+                            return (
+                              <Tooltip
+                                title={lead.ipqsValidation ? buildIPQSTooltip(lead.ipqsValidation, "phone") : "Not validated"}
+                                arrow
+                                placement="top"
+                                componentsProps={{
+                                  tooltip: {
+                                    sx: {
+                                      bgcolor: "white",
+                                      color: "#212121",
+                                      boxShadow: 3,
+                                      "& .MuiTooltip-arrow": { color: "white" },
+                                      maxWidth: 300,
+                                    },
+                                  },
+                                }}
+                              >
+                                <Typography
+                                  variant="body2"
+                                  component="span"
+                                  sx={{
+                                    cursor: "pointer",
+                                    ...(hasPhoneValidation && {
+                                      backgroundColor: phoneConfig.bgcolor,
+                                      borderLeft: `3px solid ${phoneConfig.color}`,
+                                      px: 0.5,
+                                      py: 0.25,
+                                      borderRadius: 0.5,
+                                      fontWeight: 500,
+                                      color: "#212121",
+                                    }),
+                                  }}
+                                >
+                                  {formatPhoneWithCountryCode(lead.newPhone, lead.country)}
+                                </Typography>
+                              </Tooltip>
+                            );
+                          })()}
+                        </TableCell>
                         <TableCell>
                           <Chip
                             label={lead.leadType?.toUpperCase()}
@@ -3737,30 +3975,97 @@ const LeadRow = React.memo(
               display: "flex",
               flexDirection: "column",
               alignItems: "center",
-              gap: 0,
+              gap: 0.5,
             }}
           >
-            <Typography
-              variant="body2"
-              sx={{
-                fontSize: "0.7rem",
-                lineHeight: 1.1,
-                color: isArchived ? greyColor : "inherit",
-              }}
-            >
-              📧 {lead.newEmail}
-            </Typography>
-            <Typography
-              variant="body2"
-              sx={{
-                fontSize: "0.7rem",
-                lineHeight: 1.1,
-                color: isArchived ? greyColor : "inherit",
-              }}
-            >
-              📱{" "}
-              {formatPhoneWithCountryCode(lead.newPhone, lead.country)}
-            </Typography>
+            {(() => {
+              const emailStatus = lead.ipqsValidation?.summary?.emailStatus;
+              const emailConfig = emailStatus ? getIPQSStatusConfig(emailStatus) : null;
+              const hasEmailValidation = emailConfig && emailConfig.bgcolor !== "transparent";
+
+              return (
+                <Tooltip
+                  title={lead.ipqsValidation ? buildIPQSTooltip(lead.ipqsValidation, "email") : "Not validated"}
+                  arrow
+                  placement="top"
+                  componentsProps={{
+                    tooltip: {
+                      sx: {
+                        bgcolor: "white",
+                        color: "#212121",
+                        boxShadow: 3,
+                        "& .MuiTooltip-arrow": { color: "white" },
+                        maxWidth: 300,
+                      },
+                    },
+                  }}
+                >
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      fontSize: "0.7rem",
+                      lineHeight: 1.1,
+                      color: isArchived ? greyColor : "#212121",
+                      cursor: "pointer",
+                      ...(hasEmailValidation && !isArchived && {
+                        backgroundColor: emailConfig.bgcolor,
+                        borderLeft: `3px solid ${emailConfig.color}`,
+                        px: 0.5,
+                        py: 0.25,
+                        borderRadius: 0.5,
+                        fontWeight: 500,
+                      }),
+                    }}
+                  >
+                    📧 {lead.newEmail}
+                  </Typography>
+                </Tooltip>
+              );
+            })()}
+            {(() => {
+              const phoneStatus = lead.ipqsValidation?.summary?.phoneStatus;
+              const phoneConfig = phoneStatus ? getIPQSStatusConfig(phoneStatus) : null;
+              const hasPhoneValidation = phoneConfig && phoneConfig.bgcolor !== "transparent";
+
+              return (
+                <Tooltip
+                  title={lead.ipqsValidation ? buildIPQSTooltip(lead.ipqsValidation, "phone") : "Not validated"}
+                  arrow
+                  placement="bottom"
+                  componentsProps={{
+                    tooltip: {
+                      sx: {
+                        bgcolor: "white",
+                        color: "#212121",
+                        boxShadow: 3,
+                        "& .MuiTooltip-arrow": { color: "white" },
+                        maxWidth: 300,
+                      },
+                    },
+                  }}
+                >
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      fontSize: "0.7rem",
+                      lineHeight: 1.1,
+                      color: isArchived ? greyColor : "#212121",
+                      cursor: "pointer",
+                      ...(hasPhoneValidation && !isArchived && {
+                        backgroundColor: phoneConfig.bgcolor,
+                        borderLeft: `3px solid ${phoneConfig.color}`,
+                        px: 0.5,
+                        py: 0.25,
+                        borderRadius: 0.5,
+                        fontWeight: 500,
+                      }),
+                    }}
+                  >
+                    📱 {formatPhoneWithCountryCode(lead.newPhone, lead.country)}
+                  </Typography>
+                </Tooltip>
+              );
+            })()}
           </Box>
         </TableCell>
         <TableCell sx={{ ...cellSx, width: "70px", maxWidth: "70px" }}>
