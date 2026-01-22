@@ -5772,12 +5772,12 @@ const OrdersPage = () => {
                                         )
                                       }
                                       displayEmpty
-                                      error={!entry.agent && !entry.isOnCooldown}
-                                      disabled={entry.isOnCooldown}
+                                      error={!entry.agent && (!entry.isOnCooldown || user?.role === "admin")}
+                                      disabled={entry.isOnCooldown && user?.role !== "admin"}
                                     >
                                       <MenuItem value="">
                                         <em>
-                                          {entry.isOnCooldown
+                                          {entry.isOnCooldown && user?.role !== "admin"
                                             ? "On Cooldown"
                                             : "Select Agent"}
                                         </em>
