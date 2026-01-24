@@ -28,6 +28,8 @@ const {
   addLeadsToOrder,
   getAvailableLeadsForReplacement,
   replaceLeadInOrder,
+  restoreLeadToOrder,
+  undoLeadReplacement,
   validateOrderLeadsIPQS,
   getOrderValidationResults,
   validateSingleLeadIPQS,
@@ -326,6 +328,26 @@ router.post(
       .withMessage("newLeadId must be a valid MongoDB ObjectId"),
   ],
   replaceLeadInOrder
+);
+
+// Restore a removed lead back to an order (undo removal)
+router.post(
+  "/:orderId/leads/:leadId/restore",
+  [protect, authorize("admin", "affiliate_manager")],
+  restoreLeadToOrder
+);
+
+// Undo a lead replacement (swap back to the previous lead)
+router.post(
+  "/:orderId/leads/:newLeadId/undo-replace",
+  [
+    protect,
+    authorize("admin", "affiliate_manager"),
+    body("oldLeadId")
+      .isMongoId()
+      .withMessage("oldLeadId must be a valid MongoDB ObjectId"),
+  ],
+  undoLeadReplacement
 );
 
 // Add leads to an existing order (Admin, Affiliate Manager, Lead Manager)

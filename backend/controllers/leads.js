@@ -5066,6 +5066,172 @@ exports.assignSimCardToLeads = async (req, res, next) => {
   }
 };
 
+/**
+ * Batch validate leads with IPQS
+ * @route POST /api/leads/batch-validate-ipqs
+ * @body leadIds - Array of lead IDs to validate
+ * @query force - If true, revalidate even if already validated
+ * @access Protected (Admin, Affiliate Manager)
+ */
+exports.batchValidateIPQS = async (req, res, next) => {
+  try {
+    const { leadIds } = req.body;
+    const { force } = req.query;
+    const ipqsService = require("../services/ipqsService");
+
+    if (!leadIds || !Array.isArray(leadIds) || leadIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "leadIds must be a non-empty array",
+      });
+    }
+
+    // Validate all IDs
+    const invalidIds = leadIds.filter(
+      (id) => !mongoose.Types.ObjectId.isValid(id)
+    );
+    if (invalidIds.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid lead ID format: ${invalidIds.join(", ")}`,
+      });
+    }
+
+    // Find all leads
+    const leads = await Lead.find({ _id: { $in: leadIds } })
+      .select("_id firstName lastName newEmail newPhone country ipqsValidation")
+      .lean();
+
+    if (leads.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "No leads found with the provided IDs",
+      });
+    }
+
+    // Filter leads based on force parameter
+    const leadsToValidate = force === "true"
+      ? leads
+      : leads.filter((lead) => !ipqsService.isLeadValidated(lead));
+
+    if (leadsToValidate.length === 0) {
+      return res.json({
+        success: true,
+        message: "All selected leads are already validated",
+        data: {
+          results: leads.map((lead) => ({
+            leadId: lead._id,
+            firstName: lead.firstName,
+            lastName: lead.lastName,
+            ipqsValidation: lead.ipqsValidation,
+            alreadyValidated: true,
+          })),
+          stats: {
+            total: leads.length,
+            validated: leads.length,
+            newlyValidated: 0,
+            alreadyValidated: leads.length,
+            failed: 0,
+          },
+        },
+      });
+    }
+
+    console.log(
+      `[IPQS] Batch validating ${leadsToValidate.length} leads (force=${force})`
+    );
+
+    const results = [];
+    const alreadyValidated = leads.filter((lead) =>
+      ipqsService.isLeadValidated(lead)
+    );
+
+    // Add already validated leads to results if not forcing revalidation
+    if (force !== "true") {
+      alreadyValidated.forEach((lead) => {
+        results.push({
+          leadId: lead._id,
+          firstName: lead.firstName,
+          lastName: lead.lastName,
+          ipqsValidation: lead.ipqsValidation,
+          alreadyValidated: true,
+        });
+      });
+    }
+
+    // Process leads sequentially to avoid rate limiting
+    let successCount = 0;
+    let failedCount = 0;
+
+    for (const lead of leadsToValidate) {
+      try {
+        const result = await ipqsService.validateLead(lead);
+        const summary = ipqsService.getValidationSummary(result.email, result.phone);
+
+        // Update lead in database
+        await Lead.findByIdAndUpdate(lead._id, {
+          $set: {
+            ipqsValidation: {
+              email: result.email,
+              phone: result.phone,
+              summary: summary,
+              validatedAt: result.validatedAt,
+            },
+          },
+        });
+
+        results.push({
+          leadId: lead._id,
+          firstName: lead.firstName,
+          lastName: lead.lastName,
+          email: result.email,
+          phone: result.phone,
+          summary: summary,
+          validatedAt: result.validatedAt,
+          alreadyValidated: false,
+        });
+
+        successCount++;
+
+        // Small delay between requests to avoid rate limiting
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      } catch (error) {
+        console.error(`[IPQS] Error validating lead ${lead._id}:`, error.message);
+        results.push({
+          leadId: lead._id,
+          firstName: lead.firstName,
+          lastName: lead.lastName,
+          error: error.message,
+          alreadyValidated: false,
+        });
+        failedCount++;
+      }
+    }
+
+    console.log(
+      `[IPQS] Batch validation completed: ${successCount} success, ${failedCount} failed`
+    );
+
+    res.json({
+      success: true,
+      message: `Validated ${successCount} leads successfully${failedCount > 0 ? `, ${failedCount} failed` : ""}`,
+      data: {
+        results,
+        stats: {
+          total: leads.length,
+          validated: successCount + alreadyValidated.length,
+          newlyValidated: successCount,
+          alreadyValidated: force !== "true" ? alreadyValidated.length : 0,
+          failed: failedCount,
+        },
+      },
+    });
+  } catch (error) {
+    console.error("Error batch validating leads with IPQS:", error);
+    next(error);
+  }
+};
+
 // Get global lead audit logs (all changes across all leads)
 exports.getGlobalLeadAuditLogs = async (req, res, next) => {
   try {

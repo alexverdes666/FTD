@@ -201,10 +201,12 @@ const orderSchema = new Schema(
         enum: [
           "lead_added",
           "lead_removed",
+          "lead_restored",
           "lead_type_changed",
           "agent_changed",
           "ftd_swapped",
           "lead_replaced",
+          "lead_replacement_undone",
           "client_broker_changed",
           "client_broker_removed",
           "deposit_confirmed",

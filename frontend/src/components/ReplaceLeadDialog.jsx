@@ -47,7 +47,6 @@ const LEAD_CHANGE_REASONS = [
   "One or more leads from this order were already shaved",
   "Lead failed",
   "Agent is missing",
-  "Vankata e gei",
   "Other",
 ];
 

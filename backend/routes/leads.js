@@ -51,6 +51,7 @@ const {
   unmarkAsShaved,
   assignSimCardToLeads,
   getGlobalLeadAuditLogs,
+  batchValidateIPQS,
 } = require("../controllers/leads");
 const router = express.Router();
 router.get(
@@ -414,6 +415,22 @@ router.delete(
     isAdmin,
   ],
   bulkDeleteLeads
+);
+
+// Batch validate leads with IPQS
+router.post(
+  "/batch-validate-ipqs",
+  [
+    protect,
+    authorize("admin", "affiliate_manager"),
+    body("leadIds")
+      .isArray({ min: 1 })
+      .withMessage("leadIds must be a non-empty array"),
+    body("leadIds.*")
+      .isMongoId()
+      .withMessage("Each leadId must be a valid MongoDB ObjectId"),
+  ],
+  batchValidateIPQS
 );
 
 // Audit history routes (must come before /:id to avoid route conflicts)

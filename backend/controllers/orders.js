@@ -6399,6 +6399,395 @@ exports.replaceLeadInOrder = async (req, res, next) => {
 };
 
 /**
+ * Restore a removed lead back to an order (undo removal)
+ * POST /:orderId/leads/:leadId/restore
+ */
+exports.restoreLeadToOrder = async (req, res, next) => {
+  try {
+    const { orderId, leadId } = req.params;
+
+    console.log(`[RESTORE-LEAD] Starting lead restoration: order=${orderId}, lead=${leadId}`);
+
+    // Check user permissions - only admin and affiliate_manager
+    if (!["admin", "affiliate_manager"].includes(req.user.role)) {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied. Only admins and affiliate managers can restore leads.",
+      });
+    }
+
+    // Find the order
+    const Order = require("../models/Order");
+    const order = await Order.findById(orderId);
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found",
+      });
+    }
+
+    // For affiliate managers, ensure they can only modify their own orders
+    if (req.user.role === "affiliate_manager") {
+      if (order.requester.toString() !== req.user._id.toString()) {
+        return res.status(403).json({
+          success: false,
+          message: "Access denied. You can only restore leads in your own orders.",
+        });
+      }
+    }
+
+    // Find the removed lead entry
+    const removedIndex = order.removedLeads?.findIndex(
+      (rl) => rl.leadId.toString() === leadId
+    );
+    if (removedIndex === -1 || removedIndex === undefined) {
+      return res.status(400).json({
+        success: false,
+        message: "Lead was not found in the removed leads list",
+      });
+    }
+
+    const removedEntry = order.removedLeads[removedIndex];
+
+    // Find the lead
+    const Lead = require("../models/Lead");
+    const lead = await Lead.findById(leadId);
+    if (!lead) {
+      return res.status(404).json({
+        success: false,
+        message: "Lead not found",
+      });
+    }
+
+    // Check if lead is already assigned to another order
+    if (lead.orderId && lead.orderId.toString() !== orderId) {
+      return res.status(400).json({
+        success: false,
+        message: "Lead has already been assigned to another order and cannot be restored",
+      });
+    }
+
+    // Get client IP for audit log
+    const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+                     req.headers['x-real-ip'] ||
+                     req.connection?.remoteAddress ||
+                     req.socket?.remoteAddress ||
+                     'unknown';
+
+    // Restore the lead
+    lead.orderId = orderId;
+    lead.createdBy = req.user._id;
+
+    // Set lastUsedInOrder for FTD/Filler leads (restarts cooldown)
+    const leadType = removedEntry.leadType || lead.leadType;
+    if (leadType === "ftd" || leadType === "filler") {
+      lead.lastUsedInOrder = new Date();
+    }
+
+    // Remove from removedLeads array
+    order.removedLeads.splice(removedIndex, 1);
+
+    // Update fulfilled counts
+    if (!order.fulfilled) {
+      order.fulfilled = { ftd: 0, filler: 0, cold: 0 };
+    }
+    order.fulfilled[leadType] = (order.fulfilled[leadType] || 0) + 1;
+
+    // Update order status
+    const totalFulfilled =
+      (order.fulfilled?.ftd || 0) +
+      (order.fulfilled?.filler || 0) +
+      (order.fulfilled?.cold || 0);
+    const totalRequested =
+      (order.requests?.ftd || 0) +
+      (order.requests?.filler || 0) +
+      (order.requests?.cold || 0);
+
+    if (totalFulfilled >= totalRequested) {
+      order.status = "fulfilled";
+      order.cancelledAt = undefined;
+      order.cancellationReason = undefined;
+    } else if (totalFulfilled > 0) {
+      order.status = "partial";
+      order.cancelledAt = undefined;
+      order.cancellationReason = undefined;
+    }
+
+    // Add audit log entry
+    if (!order.auditLog) {
+      order.auditLog = [];
+    }
+    order.auditLog.push({
+      action: "lead_restored",
+      leadId: lead._id,
+      leadEmail: lead.newEmail,
+      performedBy: req.user._id,
+      performedAt: new Date(),
+      ipAddress: clientIp,
+      details: `Lead ${lead.firstName} ${lead.lastName} (${lead.newEmail}) restored to order by ${req.user.fullName || req.user.email}`,
+      previousValue: {
+        removedReason: removedEntry.reason,
+        removedAt: removedEntry.removedAt,
+      },
+    });
+
+    // Save both documents
+    await Promise.all([lead.save(), order.save()]);
+
+    // Populate the updated order for response
+    await order.populate([
+      { path: "requester", select: "fullName email role" },
+      {
+        path: "leads",
+        select:
+          "leadType orderedAs firstName lastName country email phone orderId assignedAgent assignedAgentAt newPhone newEmail depositConfirmed isShaved ipqsValidation",
+        populate: {
+          path: "assignedAgent",
+          select: "fullName email fourDigitCode",
+        },
+      },
+      { path: "removedLeads.removedBy", select: "fullName email" },
+    ]);
+
+    console.log(`[RESTORE-LEAD] Successfully restored lead ${leadId} to order ${orderId}`);
+
+    res.status(200).json({
+      success: true,
+      message: `Lead ${lead.firstName} ${lead.lastName} has been restored to the order`,
+      data: {
+        order,
+        restoredLead: {
+          _id: lead._id,
+          firstName: lead.firstName,
+          lastName: lead.lastName,
+          newEmail: lead.newEmail,
+          leadType: leadType,
+        },
+      },
+    });
+  } catch (error) {
+    console.error("Error restoring lead to order:", error);
+    next(error);
+  }
+};
+
+/**
+ * Undo a lead replacement (swap back to the previous lead)
+ * POST /:orderId/leads/:newLeadId/undo-replace
+ */
+exports.undoLeadReplacement = async (req, res, next) => {
+  try {
+    const { orderId, newLeadId } = req.params;
+    const { oldLeadId } = req.body;
+
+    console.log(`[UNDO-REPLACE] Starting undo replacement: order=${orderId}, newLead=${newLeadId}, oldLead=${oldLeadId}`);
+
+    if (!oldLeadId) {
+      return res.status(400).json({
+        success: false,
+        message: "oldLeadId is required to undo the replacement",
+      });
+    }
+
+    // Check user permissions - only admin and affiliate_manager
+    if (!["admin", "affiliate_manager"].includes(req.user.role)) {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied. Only admins and affiliate managers can undo replacements.",
+      });
+    }
+
+    // Find the order
+    const Order = require("../models/Order");
+    const order = await Order.findById(orderId);
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found",
+      });
+    }
+
+    // For affiliate managers, ensure they can only modify their own orders
+    if (req.user.role === "affiliate_manager") {
+      if (order.requester.toString() !== req.user._id.toString()) {
+        return res.status(403).json({
+          success: false,
+          message: "Access denied. You can only undo replacements in your own orders.",
+        });
+      }
+    }
+
+    // Check if new lead is in the order
+    const leadInOrder = order.leads.some((id) => id.toString() === newLeadId);
+    if (!leadInOrder) {
+      return res.status(400).json({
+        success: false,
+        message: "The replacement lead is not in this order (may have already been undone)",
+      });
+    }
+
+    // Find both leads
+    const Lead = require("../models/Lead");
+    const [newLead, oldLead] = await Promise.all([
+      Lead.findById(newLeadId),
+      Lead.findById(oldLeadId),
+    ]);
+
+    if (!newLead) {
+      return res.status(404).json({
+        success: false,
+        message: "Current lead not found",
+      });
+    }
+    if (!oldLead) {
+      return res.status(404).json({
+        success: false,
+        message: "Original lead not found",
+      });
+    }
+
+    // Check if old lead is already assigned to another order
+    if (oldLead.orderId && oldLead.orderId.toString() !== orderId) {
+      return res.status(400).json({
+        success: false,
+        message: "Original lead has already been assigned to another order and cannot be restored",
+      });
+    }
+
+    // Get the metadata for the lead position
+    const leadMetadataIndex = order.leadsMetadata?.findIndex(
+      (meta) => meta.leadId.toString() === newLeadId
+    );
+    const leadMetadata = leadMetadataIndex !== -1 ? order.leadsMetadata[leadMetadataIndex] : null;
+    const orderedAs = leadMetadata?.orderedAs || newLead.leadType;
+
+    // Verify old lead is in replacement history
+    const replacementHistory = leadMetadata?.replacementHistory || [];
+    if (!replacementHistory.some((id) => id.toString() === oldLeadId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Original lead is not found in the replacement history for this position",
+      });
+    }
+
+    // Get client IP for audit log
+    const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+                     req.headers['x-real-ip'] ||
+                     req.connection?.remoteAddress ||
+                     req.socket?.remoteAddress ||
+                     'unknown';
+
+    // Start transaction
+    const session = await Lead.startSession();
+    await session.withTransaction(async () => {
+      // Reset the new lead (current one)
+      newLead.orderId = undefined;
+      newLead.createdBy = undefined;
+      newLead.lastUsedInOrder = undefined;
+
+      // Restore the old lead
+      oldLead.orderId = orderId;
+      oldLead.createdBy = req.user._id;
+      if (orderedAs === "ftd" || orderedAs === "filler") {
+        oldLead.lastUsedInOrder = new Date();
+      }
+
+      // Add audit log entry
+      if (!order.auditLog) {
+        order.auditLog = [];
+      }
+      order.auditLog.push({
+        action: "lead_replacement_undone",
+        leadId: oldLead._id,
+        leadEmail: oldLead.newEmail,
+        performedBy: req.user._id,
+        performedAt: new Date(),
+        ipAddress: clientIp,
+        details: `Lead replacement undone: ${newLead.firstName} ${newLead.lastName} (${newLead.newEmail}) replaced back with ${oldLead.firstName} ${oldLead.lastName} (${oldLead.newEmail}) by ${req.user.fullName || req.user.email}`,
+        previousValue: {
+          leadId: newLead._id,
+          leadEmail: newLead.newEmail,
+          leadName: `${newLead.firstName} ${newLead.lastName}`,
+        },
+        newValue: {
+          leadId: oldLead._id,
+          leadEmail: oldLead.newEmail,
+          leadName: `${oldLead.firstName} ${oldLead.lastName}`,
+        },
+      });
+
+      // Save leads
+      await newLead.save({ session });
+      await oldLead.save({ session });
+
+      // Update order.leads array
+      const leadIndex = order.leads.findIndex((id) => id.toString() === newLeadId);
+      if (leadIndex !== -1) {
+        order.leads[leadIndex] = oldLead._id;
+      }
+
+      // Update leadsMetadata - remove old lead from replacement history and update leadId
+      if (leadMetadataIndex !== -1 && order.leadsMetadata) {
+        // Remove old lead from replacement history
+        order.leadsMetadata[leadMetadataIndex].replacementHistory =
+          order.leadsMetadata[leadMetadataIndex].replacementHistory.filter(
+            (id) => id.toString() !== oldLeadId
+          );
+        // Add new lead to history (the one we're removing)
+        order.leadsMetadata[leadMetadataIndex].replacementHistory.push(newLead._id);
+        // Update leadId back to old lead
+        order.leadsMetadata[leadMetadataIndex].leadId = oldLead._id;
+      }
+
+      await order.save({ session });
+    });
+
+    await session.endSession();
+
+    console.log(`[UNDO-REPLACE] Successfully undid replacement in order ${orderId}`);
+
+    // Populate the order for response
+    const populatedOrder = await Order.findById(orderId)
+      .populate("leads", "firstName lastName newEmail newPhone country leadType assignedAgent depositConfirmed shaved ipqsValidation")
+      .populate({
+        path: "leads",
+        populate: { path: "assignedAgent", select: "fullName email fourDigitCode" }
+      })
+      .populate("requester", "fullName email")
+      .populate("selectedClientNetwork", "name")
+      .populate("selectedOurNetwork", "name")
+      .populate("selectedCampaign", "name")
+      .lean();
+
+    res.json({
+      success: true,
+      message: "Lead replacement has been undone",
+      data: {
+        order: populatedOrder,
+        restoredLead: {
+          _id: oldLead._id,
+          firstName: oldLead.firstName,
+          lastName: oldLead.lastName,
+          newEmail: oldLead.newEmail,
+          newPhone: oldLead.newPhone,
+        },
+        removedLead: {
+          _id: newLead._id,
+          firstName: newLead.firstName,
+          lastName: newLead.lastName,
+          newEmail: newLead.newEmail,
+          newPhone: newLead.newPhone,
+        },
+        orderedAs,
+      },
+    });
+  } catch (error) {
+    console.error("Error undoing lead replacement:", error);
+    next(error);
+  }
+};
+
+/**
  * Validate leads in an order using IPQS (IP Quality Score)
  * Only validates leads that haven't been validated yet (one-time validation)
  * @route POST /api/orders/:orderId/validate-leads

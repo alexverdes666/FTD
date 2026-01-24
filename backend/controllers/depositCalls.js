@@ -4,6 +4,7 @@ const Order = require("../models/Order");
 const User = require("../models/User");
 const ClientBroker = require("../models/ClientBroker");
 const mongoose = require("mongoose");
+const { ObjectId } = mongoose.Types;
 
 // Get all deposit calls with filters
 exports.getDepositCalls = async (req, res, next) => {
@@ -14,6 +15,8 @@ exports.getDepositCalls = async (req, res, next) => {
       accountManager,
       assignedAgent,
       clientBrokerId,
+      clientNetwork,
+      ourNetwork,
       status = "active",
       startDate,
       endDate,
@@ -70,13 +73,46 @@ exports.getDepositCalls = async (req, res, next) => {
       query.createdAt = dateQuery;
     }
 
-    // Build aggregation for search
+    // Build aggregation for search or network filtering
     let depositCalls;
     let total;
 
-    if (search) {
-      // Use aggregation for search across populated fields
-      const searchRegex = new RegExp(search, "i");
+    // Need aggregation if searching or filtering by lead fields (clientNetwork, ourNetwork)
+    const needsAggregation = search || clientNetwork || ourNetwork;
+
+    if (needsAggregation) {
+      // Use aggregation for search across populated fields or network filtering
+      const searchRegex = search ? new RegExp(search, "i") : null;
+
+      // Build lead match conditions
+      const leadMatchConditions = [];
+
+      if (searchRegex) {
+        leadMatchConditions.push({
+          $or: [
+            { ftdName: searchRegex },
+            { ftdEmail: searchRegex },
+            { ftdPhone: searchRegex },
+            { "lead.firstName": searchRegex },
+            { "lead.lastName": searchRegex },
+          ],
+        });
+      }
+
+      if (clientNetwork) {
+        // Filter by clientNetwork ID in the clientNetworkHistory array
+        leadMatchConditions.push({
+          "lead.clientNetworkHistory.clientNetwork": new ObjectId(clientNetwork)
+        });
+      }
+
+      if (ourNetwork) {
+        // Filter by ourNetwork ID in the ourNetworkHistory array
+        leadMatchConditions.push({
+          "lead.ourNetworkHistory.ourNetwork": new ObjectId(ourNetwork)
+        });
+      }
+
       const pipeline = [
         { $match: query },
         {
@@ -88,21 +124,22 @@ exports.getDepositCalls = async (req, res, next) => {
           },
         },
         { $unwind: { path: "$lead", preserveNullAndEmptyArrays: true } },
-        {
-          $match: {
-            $or: [
-              { ftdName: searchRegex },
-              { ftdEmail: searchRegex },
-              { ftdPhone: searchRegex },
-              { "lead.firstName": searchRegex },
-              { "lead.lastName": searchRegex },
-            ],
-          },
-        },
+      ];
+
+      // Add lead field matching if we have conditions
+      if (leadMatchConditions.length > 0) {
+        pipeline.push({
+          $match: leadMatchConditions.length === 1
+            ? leadMatchConditions[0]
+            : { $and: leadMatchConditions },
+        });
+      }
+
+      pipeline.push(
         { $sort: { createdAt: -1 } },
         { $skip: (parseInt(page) - 1) * parseInt(limit) },
-        { $limit: parseInt(limit) },
-      ];
+        { $limit: parseInt(limit) }
+      );
 
       depositCalls = await DepositCall.aggregate(pipeline);
 
@@ -118,19 +155,17 @@ exports.getDepositCalls = async (req, res, next) => {
           },
         },
         { $unwind: { path: "$lead", preserveNullAndEmptyArrays: true } },
-        {
-          $match: {
-            $or: [
-              { ftdName: searchRegex },
-              { ftdEmail: searchRegex },
-              { ftdPhone: searchRegex },
-              { "lead.firstName": searchRegex },
-              { "lead.lastName": searchRegex },
-            ],
-          },
-        },
-        { $count: "total" },
       ];
+
+      if (leadMatchConditions.length > 0) {
+        countPipeline.push({
+          $match: leadMatchConditions.length === 1
+            ? leadMatchConditions[0]
+            : { $and: leadMatchConditions },
+        });
+      }
+
+      countPipeline.push({ $count: "total" });
 
       const countResult = await DepositCall.aggregate(countPipeline);
       total = countResult[0]?.total || 0;
@@ -139,7 +174,11 @@ exports.getDepositCalls = async (req, res, next) => {
       await DepositCall.populate(depositCalls, [
         {
           path: "leadId",
-          select: "firstName lastName newEmail newPhone country",
+          select: "firstName lastName newEmail newPhone country clientNetwork ourNetwork clientNetworkHistory ourNetworkHistory",
+          populate: [
+            { path: "clientNetworkHistory.clientNetwork", select: "name" },
+            { path: "ourNetworkHistory.ourNetwork", select: "name" },
+          ],
         },
         { path: "orderId", select: "createdAt plannedDate status" },
         { path: "clientBrokerId", select: "name domain" },
@@ -152,7 +191,14 @@ exports.getDepositCalls = async (req, res, next) => {
       total = await DepositCall.countDocuments(query);
 
       depositCalls = await DepositCall.find(query)
-        .populate("leadId", "firstName lastName newEmail newPhone country")
+        .populate({
+          path: "leadId",
+          select: "firstName lastName newEmail newPhone country clientNetwork ourNetwork clientNetworkHistory ourNetworkHistory",
+          populate: [
+            { path: "clientNetworkHistory.clientNetwork", select: "name" },
+            { path: "ourNetworkHistory.ourNetwork", select: "name" },
+          ],
+        })
         .populate("orderId", "createdAt plannedDate status")
         .populate("clientBrokerId", "name domain")
         .populate("accountManager", "fullName email")

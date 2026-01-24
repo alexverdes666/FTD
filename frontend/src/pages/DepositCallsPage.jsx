@@ -49,7 +49,8 @@ import {
   ChevronRight as ChevronRightIcon,
   Phone as PhoneIcon,
   Email as EmailIcon,
-  Person as PersonIcon
+  Person as PersonIcon,
+  FormatListBulleted as ListIcon
 } from '@mui/icons-material';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -275,6 +276,8 @@ const DepositCallsPage = () => {
   const [selectedAM, setSelectedAM] = useState('');
   const [selectedAgent, setSelectedAgent] = useState('');
   const [selectedBroker, setSelectedBroker] = useState('');
+  const [selectedClientNetwork, setSelectedClientNetwork] = useState('');
+  const [selectedOurNetwork, setSelectedOurNetwork] = useState('');
   const [status, setStatus] = useState('active');
   
   // Pagination
@@ -286,6 +289,8 @@ const DepositCallsPage = () => {
   const [accountManagers, setAccountManagers] = useState([]);
   const [agents, setAgents] = useState([]);
   const [brokers, setBrokers] = useState([]);
+  const [clientNetworks, setClientNetworks] = useState([]);
+  const [ourNetworks, setOurNetworks] = useState([]);
 
   // Calendar state
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -297,6 +302,20 @@ const DepositCallsPage = () => {
 
   // Pending approvals count
   const [pendingCount, setPendingCount] = useState(0);
+
+  // Client Networks Display Dialog State
+  const [clientNetworksDialog, setClientNetworksDialog] = useState({
+    open: false,
+    networks: [],
+    leadName: "",
+  });
+
+  // Our Networks Display Dialog State
+  const [ourNetworksDialog, setOurNetworksDialog] = useState({
+    open: false,
+    networks: [],
+    leadName: "",
+  });
 
   // Fetch filter options
   useEffect(() => {
@@ -319,6 +338,18 @@ const DepositCallsPage = () => {
           const brokerResponse = await api.get('/client-brokers?isActive=true&limit=1000');
           if (brokerResponse.data.success) {
             setBrokers(brokerResponse.data.data || []);
+          }
+
+          // Fetch Client Networks
+          const clientNetworkResponse = await api.get('/client-networks?isActive=true&limit=1000');
+          if (clientNetworkResponse.data.success) {
+            setClientNetworks(clientNetworkResponse.data.data || []);
+          }
+
+          // Fetch Our Networks
+          const ourNetworkResponse = await api.get('/our-networks?isActive=true&limit=1000');
+          if (ourNetworkResponse.data.success) {
+            setOurNetworks(ourNetworkResponse.data.data || []);
           }
         }
       } catch (err) {
@@ -344,9 +375,11 @@ const DepositCallsPage = () => {
       if (selectedAM) params.accountManager = selectedAM;
       if (selectedAgent) params.assignedAgent = selectedAgent;
       if (selectedBroker) params.clientBrokerId = selectedBroker;
+      if (selectedClientNetwork) params.clientNetwork = selectedClientNetwork;
+      if (selectedOurNetwork) params.ourNetwork = selectedOurNetwork;
 
       const response = await depositCallsService.getDepositCalls(params);
-      
+
       if (response.success) {
         setDepositCalls(response.data || []);
         setTotalCount(response.pagination?.total || 0);
@@ -356,7 +389,7 @@ const DepositCallsPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [page, rowsPerPage, search, selectedAM, selectedAgent, selectedBroker, status]);
+  }, [page, rowsPerPage, search, selectedAM, selectedAgent, selectedBroker, selectedClientNetwork, selectedOurNetwork, status]);
 
   // Fetch calendar events
   const fetchCalendarEvents = useCallback(async () => {
@@ -474,6 +507,39 @@ const DepositCallsPage = () => {
     }
   };
 
+  // Network dialog handlers
+  const handleOpenClientNetworksDialog = useCallback((networks, leadName) => {
+    setClientNetworksDialog({
+      open: true,
+      networks: networks || [],
+      leadName,
+    });
+  }, []);
+
+  const handleCloseClientNetworksDialog = useCallback(() => {
+    setClientNetworksDialog({
+      open: false,
+      networks: [],
+      leadName: "",
+    });
+  }, []);
+
+  const handleOpenOurNetworksDialog = useCallback((networks, leadName) => {
+    setOurNetworksDialog({
+      open: true,
+      networks: networks || [],
+      leadName,
+    });
+  }, []);
+
+  const handleCloseOurNetworksDialog = useCallback(() => {
+    setOurNetworksDialog({
+      open: false,
+      networks: [],
+      leadName: "",
+    });
+  }, []);
+
   // Calendar helpers
   const getDaysInMonth = () => new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate();
   const getFirstDayOfMonth = () => new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).getDay();
@@ -571,34 +637,6 @@ const DepositCallsPage = () => {
 
   return (
     <Box sx={{ width: "100%", typography: "body1" }}>
-      <Box sx={{ mb: 3 }}>
-        <Box display="flex" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={2}>
-          <Box>
-            <Typography variant="h4" fontWeight="bold">
-              Deposit Calls Follow-Up
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Track and manage FTD deposit call appointments
-            </Typography>
-          </Box>
-          <Box display="flex" gap={1}>
-            {(isAdmin || isAM) && pendingCount > 0 && (
-              <Chip
-                icon={<ScheduleIcon />}
-                label={`${pendingCount} Pending Approval${pendingCount !== 1 ? 's' : ''}`}
-                color="warning"
-                variant="filled"
-              />
-            )}
-            <Tooltip title="Refresh">
-              <IconButton onClick={() => { fetchDepositCalls(); if (tabValue === 1) fetchCalendarEvents(); }} color="primary">
-                <RefreshIcon />
-              </IconButton>
-            </Tooltip>
-          </Box>
-        </Box>
-      </Box>
-
       {error && (
         <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
           {error}
@@ -684,6 +722,38 @@ const DepositCallsPage = () => {
                   </Select>
                 </FormControl>
               </Grid>
+
+              <Grid item xs={12} sm={6} md={2}>
+                <FormControl fullWidth size="small">
+                  <InputLabel>Client Network</InputLabel>
+                  <Select
+                    value={selectedClientNetwork}
+                    onChange={(e) => setSelectedClientNetwork(e.target.value)}
+                    label="Client Network"
+                  >
+                    <MenuItem value="">All Client Networks</MenuItem>
+                    {clientNetworks.map(network => (
+                      <MenuItem key={network._id} value={network._id}>{network.name}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+
+              <Grid item xs={12} sm={6} md={2}>
+                <FormControl fullWidth size="small">
+                  <InputLabel>Our Network</InputLabel>
+                  <Select
+                    value={selectedOurNetwork}
+                    onChange={(e) => setSelectedOurNetwork(e.target.value)}
+                    label="Our Network"
+                  >
+                    <MenuItem value="">All Our Networks</MenuItem>
+                    {ourNetworks.map(network => (
+                      <MenuItem key={network._id} value={network._id}>{network.name}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
             </>
           )}
 
@@ -700,6 +770,23 @@ const DepositCallsPage = () => {
                 <MenuItem value="">All</MenuItem>
               </Select>
             </FormControl>
+          </Grid>
+
+          <Grid item xs="auto" sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 1 }}>
+            {(isAdmin || isAM) && pendingCount > 0 && (
+              <Chip
+                icon={<ScheduleIcon />}
+                label={`${pendingCount} Pending Approval${pendingCount !== 1 ? 's' : ''}`}
+                color="warning"
+                variant="filled"
+                size="small"
+              />
+            )}
+            <Tooltip title="Refresh">
+              <IconButton onClick={() => { fetchDepositCalls(); if (tabValue === 1) fetchCalendarEvents(); }} color="primary">
+                <RefreshIcon />
+              </IconButton>
+            </Tooltip>
           </Grid>
         </Grid>
       </Paper>
@@ -727,6 +814,8 @@ const DepositCallsPage = () => {
                   <TableHead>
                     <TableRow>
                       <TableCell sx={{ minWidth: 120, fontWeight: 'bold', bgcolor: 'grey.100' }}>Client Broker</TableCell>
+                      <TableCell sx={{ minWidth: 120, fontWeight: 'bold', bgcolor: 'grey.100' }}>Client Network</TableCell>
+                      <TableCell sx={{ minWidth: 120, fontWeight: 'bold', bgcolor: 'grey.100' }}>Our Network</TableCell>
                       <TableCell sx={{ minWidth: 120, fontWeight: 'bold', bgcolor: 'grey.100' }}>Account Manager</TableCell>
                       <TableCell sx={{ minWidth: 140, fontWeight: 'bold', bgcolor: 'grey.100' }}>FTD Name</TableCell>
                       <TableCell sx={{ minWidth: 160, fontWeight: 'bold', bgcolor: 'grey.100' }}>FTD Email</TableCell>
@@ -745,6 +834,56 @@ const DepositCallsPage = () => {
                           <Typography variant="body2" fontWeight="medium">
                             {dc.clientBrokerId?.name || '-'}
                           </Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                            <Typography variant="body2" sx={{ whiteSpace: "nowrap", fontSize: "0.75rem" }}>
+                              {(dc.leadId?.clientNetworkHistory || dc.lead?.clientNetworkHistory)?.length > 0
+                                ? (dc.leadId?.clientNetworkHistory || dc.lead?.clientNetworkHistory)[(dc.leadId?.clientNetworkHistory || dc.lead?.clientNetworkHistory).length - 1]?.clientNetwork?.name || "-"
+                                : "-"}
+                            </Typography>
+                            {(dc.leadId?.clientNetworkHistory || dc.lead?.clientNetworkHistory)?.length > 0 && (
+                              <Tooltip title="View all client networks">
+                                <IconButton
+                                  size="small"
+                                  onClick={() =>
+                                    handleOpenClientNetworksDialog(
+                                      dc.leadId?.clientNetworkHistory || dc.lead?.clientNetworkHistory,
+                                      dc.ftdName || `${dc.leadId?.firstName} ${dc.leadId?.lastName}`
+                                    )
+                                  }
+                                  sx={{ p: 0.25 }}
+                                >
+                                  <ListIcon sx={{ fontSize: 16 }} />
+                                </IconButton>
+                              </Tooltip>
+                            )}
+                          </Box>
+                        </TableCell>
+                        <TableCell>
+                          <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                            <Typography variant="body2" sx={{ whiteSpace: "nowrap", fontSize: "0.75rem" }}>
+                              {(dc.leadId?.ourNetworkHistory || dc.lead?.ourNetworkHistory)?.length > 0
+                                ? (dc.leadId?.ourNetworkHistory || dc.lead?.ourNetworkHistory)[(dc.leadId?.ourNetworkHistory || dc.lead?.ourNetworkHistory).length - 1]?.ourNetwork?.name || "-"
+                                : "-"}
+                            </Typography>
+                            {(dc.leadId?.ourNetworkHistory || dc.lead?.ourNetworkHistory)?.length > 0 && (
+                              <Tooltip title="View all our networks">
+                                <IconButton
+                                  size="small"
+                                  onClick={() =>
+                                    handleOpenOurNetworksDialog(
+                                      dc.leadId?.ourNetworkHistory || dc.lead?.ourNetworkHistory,
+                                      dc.ftdName || `${dc.leadId?.firstName} ${dc.leadId?.lastName}`
+                                    )
+                                  }
+                                  sx={{ p: 0.25 }}
+                                >
+                                  <ListIcon sx={{ fontSize: 16 }} />
+                                </IconButton>
+                              </Tooltip>
+                            )}
+                          </Box>
                         </TableCell>
                         <TableCell>
                           <Box display="flex" alignItems="center" gap={0.5}>
@@ -1011,6 +1150,118 @@ const DepositCallsPage = () => {
           </Dialog>
         </Paper>
       )}
+
+      {/* Client Networks Display Dialog */}
+      <Dialog
+        open={clientNetworksDialog.open}
+        onClose={handleCloseClientNetworksDialog}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          Client Networks
+          {clientNetworksDialog.leadName && (
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+              for {clientNetworksDialog.leadName}
+            </Typography>
+          )}
+        </DialogTitle>
+        <DialogContent>
+          {clientNetworksDialog.networks.length > 0 ? (
+            <TableContainer>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Network Name</TableCell>
+                    <TableCell>Assigned At</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {clientNetworksDialog.networks.map((entry, index) => (
+                    <TableRow key={index}>
+                      <TableCell>
+                        <Typography variant="body2">
+                          {entry.clientNetwork?.name || "-"}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2" color="text.secondary">
+                          {entry.assignedAt
+                            ? new Date(entry.assignedAt).toLocaleString()
+                            : "-"}
+                        </Typography>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          ) : (
+            <Typography variant="body2" color="text.secondary">
+              No client networks assigned
+            </Typography>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseClientNetworksDialog}>Close</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Our Networks Display Dialog */}
+      <Dialog
+        open={ourNetworksDialog.open}
+        onClose={handleCloseOurNetworksDialog}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          Our Networks
+          {ourNetworksDialog.leadName && (
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+              for {ourNetworksDialog.leadName}
+            </Typography>
+          )}
+        </DialogTitle>
+        <DialogContent>
+          {ourNetworksDialog.networks.length > 0 ? (
+            <TableContainer>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Network Name</TableCell>
+                    <TableCell>Assigned At</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {ourNetworksDialog.networks.map((entry, index) => (
+                    <TableRow key={index}>
+                      <TableCell>
+                        <Typography variant="body2">
+                          {entry.ourNetwork?.name || "-"}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2" color="text.secondary">
+                          {entry.assignedAt
+                            ? new Date(entry.assignedAt).toLocaleString()
+                            : "-"}
+                        </Typography>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          ) : (
+            <Typography variant="body2" color="text.secondary">
+              No our networks assigned
+            </Typography>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseOurNetworksDialog}>Close</Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

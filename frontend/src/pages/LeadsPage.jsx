@@ -1184,6 +1184,10 @@ const LeadsPage = () => {
   const [expandedRows, setExpandedRows] = useState(new Set());
   const [pendingRequests, setPendingRequests] = useState(new Map()); // Map<"leadId-orderId", pendingRequest>
 
+  // IPQS batch validation state
+  const [ipqsValidating, setIpqsValidating] = useState(false);
+  const [ipqsValidationSuccess, setIpqsValidationSuccess] = useState([]);
+
   // Local search input state for instant UI updates (initialized from URL params)
   const [searchInput, setSearchInput] = useState(
     () => searchParams.get("search") || ""
@@ -1624,6 +1628,75 @@ const LeadsPage = () => {
     }
   };
 
+  // Batch IPQS validation for selected leads
+  const handleBatchIPQSValidation = async () => {
+    if (selectedLeads.size === 0) return;
+
+    try {
+      setIpqsValidating(true);
+      setError(null);
+
+      const leadIds = Array.from(selectedLeads);
+
+      const response = await api.post("/leads/batch-validate-ipqs", {
+        leadIds,
+      });
+
+      if (response.data.success) {
+        const { stats, results } = response.data.data;
+
+        // Update the leads in state with the new IPQS validation data
+        setLeads((prevLeads) =>
+          prevLeads.map((lead) => {
+            const result = results.find((r) => r.leadId === lead._id);
+            if (result && !result.error) {
+              return {
+                ...lead,
+                ipqsValidation: result.alreadyValidated
+                  ? lead.ipqsValidation
+                  : {
+                      email: result.email,
+                      phone: result.phone,
+                      summary: result.summary,
+                      validatedAt: result.validatedAt,
+                    },
+              };
+            }
+            return lead;
+          })
+        );
+
+        // Show success animation for validated leads
+        const validatedLeadIds = results
+          .filter((r) => !r.error && !r.alreadyValidated)
+          .map((r) => r.leadId);
+        setIpqsValidationSuccess(validatedLeadIds);
+        setTimeout(() => setIpqsValidationSuccess([]), 2000);
+
+        // Show success message
+        if (stats.newlyValidated > 0 || stats.alreadyValidated > 0) {
+          let message = `IPQS Validation complete: ${stats.newlyValidated} newly validated`;
+          if (stats.alreadyValidated > 0) {
+            message += `, ${stats.alreadyValidated} already validated`;
+          }
+          if (stats.failed > 0) {
+            message += `, ${stats.failed} failed`;
+          }
+          setSuccess(message);
+        } else if (stats.failed > 0) {
+          setError(`IPQS validation failed for ${stats.failed} lead(s)`);
+        } else {
+          setSuccess("All selected leads are already validated");
+        }
+      }
+    } catch (err) {
+      console.error("Error batch validating IPQS:", err);
+      setError(err.response?.data?.message || "Failed to validate leads with IPQS");
+    } finally {
+      setIpqsValidating(false);
+    }
+  };
+
   // Fetch archived leads
   const fetchArchivedLeads = useCallback(
     async (page = 1, search = "") => {
@@ -1882,7 +1955,8 @@ const LeadsPage = () => {
       {/* Floating action bar for selected leads */}
       {(canAssignLeads && numSelected > 0 && numAssignableSelected === 0) ||
       (isAdminOrManager && numAssignableSelected > 0) ||
-      (isAdminOrManager && numAssignedAgentSelected > 0) ? (
+      (isAdminOrManager && numAssignedAgentSelected > 0) ||
+      (isAdminOrManager && numSelected > 0) ? (
         <Box
           sx={{
             position: "fixed",
@@ -1907,8 +1981,7 @@ const LeadsPage = () => {
         >
           {canAssignLeads && numSelected > 0 && numAssignableSelected === 0 && (
             <Alert severity="info" sx={{ py: 0.5, px: 2 }}>
-              Cold leads cannot be assigned to agents. Only FTD and Filler leads
-              can be assigned.
+              Cold leads cannot be assigned to agents, but can be IPQS validated.
             </Alert>
           )}
           {isAdminOrManager && numAssignableSelected > 0 && (
@@ -1951,6 +2024,28 @@ const LeadsPage = () => {
               }}
             >
               Unassign from Agent ({numAssignedAgentSelected})
+            </Button>
+          )}
+          {isAdminOrManager && numSelected > 0 && (
+            <Button
+              variant="contained"
+              color="info"
+              startIcon={ipqsValidating ? <CircularProgress size={16} color="inherit" /> : <CheckCircleIcon />}
+              onClick={handleBatchIPQSValidation}
+              disabled={ipqsValidating}
+              sx={{
+                borderRadius: 2,
+                px: 3,
+                py: 1,
+                transition: "all 0.2s",
+                boxShadow: 4,
+                "&:hover": {
+                  transform: "translateY(-2px)",
+                  boxShadow: 6,
+                },
+              }}
+            >
+              {ipqsValidating ? "Validating..." : `IPQS Check (${numSelected})`}
             </Button>
           )}
         </Box>
@@ -2476,6 +2571,7 @@ const LeadsPage = () => {
                         handleEditLead={handleEditLead}
                         updateCallNumber={updateCallNumber}
                         onViewHistory={handleOpenAuditHistory}
+                        ipqsValidationSuccess={ipqsValidationSuccess}
                       />
                       {expandedRows.has(lead._id) && (
                         <TableRow
@@ -3810,6 +3906,7 @@ const LeadRow = React.memo(
     handleEditLead,
     updateCallNumber,
     onViewHistory,
+    ipqsValidationSuccess = [],
   }) => {
     const [anchorEl, setAnchorEl] = useState(null);
     const menuOpen = Boolean(anchorEl);
@@ -3890,6 +3987,8 @@ const LeadRow = React.memo(
       padding: "0",
       textAlign: "center",
     };
+    const isIPQSValidated = ipqsValidationSuccess.includes(lead._id);
+
     return (
       <TableRow
         hover
@@ -3907,16 +4006,46 @@ const LeadRow = React.memo(
           ...(isArchived && {
             bgcolor: "#f5f5f5",
           }),
+          ...(isIPQSValidated && {
+            animation: "ipqsSuccessFlash 2s ease-in-out",
+            "@keyframes ipqsSuccessFlash": {
+              "0%": { backgroundColor: "rgba(76, 175, 80, 0.3)" },
+              "50%": { backgroundColor: "rgba(76, 175, 80, 0.15)" },
+              "100%": { backgroundColor: "transparent" },
+            },
+          }),
+          position: "relative",
         }}
       >
+        {/* IPQS Validation Success Indicator */}
+        {isIPQSValidated && (
+          <Box
+            sx={{
+              position: "absolute",
+              left: 8,
+              top: "50%",
+              transform: "translateY(-50%)",
+              zIndex: 10,
+              animation: "ipqsCheckFadeInOut 2s ease-in-out",
+              "@keyframes ipqsCheckFadeInOut": {
+                "0%": { opacity: 0, transform: "translateY(-50%) scale(0.5)" },
+                "20%": { opacity: 1, transform: "translateY(-50%) scale(1.2)" },
+                "40%": { transform: "translateY(-50%) scale(1)" },
+                "100%": { opacity: 0 },
+              },
+            }}
+          >
+            <CheckCircleIcon sx={{ color: "success.main", fontSize: 20 }} />
+          </Box>
+        )}
         {canAssignLeads && (
           <TableCell padding="checkbox" sx={checkboxCellSx}>
             <Tooltip
               title={
                 isArchived
-                  ? "Archived leads cannot be assigned"
+                  ? "Archived leads cannot be selected"
                   : lead.leadType === "cold"
-                  ? "Cold leads cannot be assigned to agents"
+                  ? "Cold leads can be selected for IPQS validation only"
                   : ""
               }
               arrow
@@ -3928,7 +4057,7 @@ const LeadRow = React.memo(
                 <Checkbox
                   checked={selectedLeads.has(lead._id)}
                   onChange={onSelectLead(lead._id)}
-                  disabled={lead.leadType === "cold" || isArchived}
+                  disabled={isArchived}
                   sx={{ padding: "4px" }}
                 />
               </span>

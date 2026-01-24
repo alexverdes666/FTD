@@ -85,6 +85,7 @@ import {
   Cancel as CancelIcon,
   Warning as WarningIcon,
   Restore as RestoreIcon,
+  Undo as UndoIcon,
   VerifiedUser as VerifiedUserIcon,
   Launch as LaunchIcon,
 } from "@mui/icons-material";
@@ -463,6 +464,24 @@ const OrdersPage = () => {
   const [leadRemovalMode, setLeadRemovalMode] = useState(false);
   const [selectedLeadsForRemoval, setSelectedLeadsForRemoval] = useState([]);
   const [removingLeads, setRemovingLeads] = useState(false);
+
+  // Undo action state - tracks the last undoable action for lead removal/replacement
+  const [undoAction, setUndoAction] = useState(null);
+  // undoAction structure: { type: 'removal' | 'replacement', orderId, leadId, oldLeadId?, leadName, timestamp }
+  const [undoing, setUndoing] = useState(false);
+
+  // Restore lead state
+  const [restoringLead, setRestoringLead] = useState(null);
+
+  // Undo replacement state
+  const [undoingReplacement, setUndoingReplacement] = useState(null);
+
+  // Removal reason dialog state
+  const [removalReasonDialog, setRemovalReasonDialog] = useState({
+    open: false,
+    reason: "",
+    customReason: "",
+  });
 
   // Actions menu state for leads preview modal
   const [previewActionsMenu, setPreviewActionsMenu] = useState({
@@ -953,7 +972,6 @@ const OrdersPage = () => {
     "One or more leads from this order were already shaved",
     "Lead failed",
     "Agent is missing",
-    "Vankata e gei",
     "Other",
   ];
 
@@ -2481,20 +2499,33 @@ const OrdersPage = () => {
   }, []);
 
   // Remove selected leads from order
-  const handleRemoveSelectedLeads = useCallback(async () => {
-    if (!leadsPreviewModal.orderId || selectedLeadsForRemoval.length === 0) return;
+  const handleRemoveSelectedLeads = useCallback(async (reason) => {
+    if (!leadsPreviewModal.orderId || selectedLeadsForRemoval.length === 0 || !reason) return;
 
     setRemovingLeads(true);
     const orderId = leadsPreviewModal.orderId;
     const successfulRemovals = [];
     const failedRemovals = [];
+    const removedLeadDetails = [];
+
+    // Get lead details before removing for undo functionality
+    const leadsToRemove = leadsPreviewModal.leads.filter(
+      (lead) => selectedLeadsForRemoval.includes(lead._id)
+    );
 
     for (const leadId of selectedLeadsForRemoval) {
       try {
         await api.delete(`/orders/${orderId}/leads/${leadId}`, {
-          data: { reason: "Removed via bulk removal" }
+          data: { reason }
         });
         successfulRemovals.push(leadId);
+        const leadInfo = leadsToRemove.find((l) => l._id === leadId);
+        if (leadInfo) {
+          removedLeadDetails.push({
+            leadId,
+            leadName: `${leadInfo.firstName} ${leadInfo.lastName}`,
+          });
+        }
       } catch (error) {
         console.error(`Failed to remove lead ${leadId}:`, error);
         failedRemovals.push(leadId);
@@ -2503,25 +2534,43 @@ const OrdersPage = () => {
 
     // Update UI
     if (successfulRemovals.length > 0) {
-      // Update leadsPreviewModal
-      setLeadsPreviewModal((prev) => ({
-        ...prev,
-        leads: prev.leads.filter((lead) => !successfulRemovals.includes(lead._id)),
-      }));
+      // Refresh the order to get updated removedLeads list
+      try {
+        const response = await api.get(`/orders/${orderId}`);
+        if (response.data.success) {
+          // Update leadsPreviewModal with fresh data including removedLeads
+          setLeadsPreviewModal((prev) => ({
+            ...prev,
+            leads: response.data.data.leads || prev.leads,
+            order: response.data.data,
+          }));
 
-      // Update expandedRowData if the order is expanded
-      if (expandedRowData[orderId]) {
-        setExpandedRowData((prev) => ({
-          ...prev,
-          [orderId]: {
-            ...prev[orderId],
-            leads: prev[orderId].leads?.filter((lead) => !successfulRemovals.includes(lead._id)),
-          },
-        }));
+          // Update expandedRowData if the order is expanded
+          if (expandedRowData[orderId]) {
+            setExpandedRowData((prev) => ({
+              ...prev,
+              [orderId]: {
+                ...prev[orderId],
+                leads: response.data.data.leads || prev[orderId].leads,
+                removedLeads: response.data.data.removedLeads,
+              },
+            }));
+          }
+        }
+      } catch (err) {
+        console.error("Failed to refresh order data:", err);
       }
 
       // Refresh orders list
       fetchOrders();
+
+      // Set undo action for the removed leads
+      setUndoAction({
+        type: "removal",
+        orderId,
+        removedLeads: removedLeadDetails,
+        timestamp: Date.now(),
+      });
 
       setNotification({
         message: `Removed ${successfulRemovals.length} lead(s) from order`,
@@ -2540,7 +2589,246 @@ const OrdersPage = () => {
     setSelectedLeadsForRemoval([]);
     setLeadRemovalMode(false);
     setRemovingLeads(false);
-  }, [leadsPreviewModal.orderId, selectedLeadsForRemoval, expandedRowData, fetchOrders]);
+    setRemovalReasonDialog({ open: false, reason: "", customReason: "" });
+  }, [leadsPreviewModal.orderId, leadsPreviewModal.leads, selectedLeadsForRemoval, expandedRowData, fetchOrders]);
+
+  // Handle undo action (restore removed leads or undo replacement)
+  const handleUndoAction = useCallback(async () => {
+    if (!undoAction) return;
+
+    setUndoing(true);
+    try {
+      if (undoAction.type === "removal") {
+        // Restore removed leads
+        const successfulRestores = [];
+        const failedRestores = [];
+
+        for (const removedLead of undoAction.removedLeads) {
+          try {
+            await api.post(`/orders/${undoAction.orderId}/leads/${removedLead.leadId}/restore`);
+            successfulRestores.push(removedLead);
+          } catch (error) {
+            console.error(`Failed to restore lead ${removedLead.leadId}:`, error);
+            failedRestores.push(removedLead);
+          }
+        }
+
+        if (successfulRestores.length > 0) {
+          // Refresh orders list
+          fetchOrders();
+
+          // Refresh leads preview modal if open
+          if (leadsPreviewModal.open && leadsPreviewModal.orderId === undoAction.orderId) {
+            try {
+              const response = await api.get(`/orders/${undoAction.orderId}`);
+              if (response.data.success) {
+                setLeadsPreviewModal((prev) => ({
+                  ...prev,
+                  leads: response.data.data.leads || [],
+                  order: response.data.data,
+                }));
+              }
+            } catch (err) {
+              console.error("Failed to refresh leads preview:", err);
+            }
+          }
+
+          setNotification({
+            message: `Restored ${successfulRestores.length} lead(s) to order`,
+            severity: "success",
+          });
+        }
+
+        if (failedRestores.length > 0) {
+          setNotification({
+            message: `Failed to restore ${failedRestores.length} lead(s) - they may have been assigned to another order`,
+            severity: "error",
+          });
+        }
+      } else if (undoAction.type === "replacement") {
+        // Undo lead replacement
+        try {
+          const response = await api.post(
+            `/orders/${undoAction.orderId}/leads/${undoAction.newLeadId}/undo-replace`,
+            { oldLeadId: undoAction.oldLeadId }
+          );
+
+          if (response.data.success) {
+            // Refresh orders list
+            fetchOrders();
+
+            // Update leads preview modal if open
+            if (leadsPreviewModal.open && leadsPreviewModal.orderId === undoAction.orderId) {
+              setLeadsPreviewModal((prev) => ({
+                ...prev,
+                leads: response.data.data.order?.leads || prev.leads,
+                order: response.data.data.order || prev.order,
+              }));
+            }
+
+            // Update expandedRowData if the order is expanded
+            if (expandedRowData[undoAction.orderId]) {
+              setExpandedRowData((prev) => ({
+                ...prev,
+                [undoAction.orderId]: {
+                  ...prev[undoAction.orderId],
+                  leads: response.data.data.order?.leads || prev[undoAction.orderId].leads,
+                },
+              }));
+            }
+
+            setNotification({
+              message: `Replacement undone: restored ${undoAction.oldLeadName}`,
+              severity: "success",
+            });
+          }
+        } catch (error) {
+          console.error("Failed to undo replacement:", error);
+          setNotification({
+            message: error.response?.data?.message || "Failed to undo replacement - the original lead may have been assigned to another order",
+            severity: "error",
+          });
+        }
+      }
+    } finally {
+      setUndoing(false);
+      setUndoAction(null);
+    }
+  }, [undoAction, fetchOrders, leadsPreviewModal.open, leadsPreviewModal.orderId, expandedRowData]);
+
+  // Clear undo action after 30 seconds
+  useEffect(() => {
+    if (undoAction) {
+      const timer = setTimeout(() => {
+        setUndoAction(null);
+      }, 30000); // 30 seconds window to undo
+      return () => clearTimeout(timer);
+    }
+  }, [undoAction]);
+
+  // Dismiss undo action
+  const handleDismissUndo = useCallback(() => {
+    setUndoAction(null);
+  }, []);
+
+  // Restore a single removed lead
+  const handleRestoreLead = useCallback(async (orderId, lead) => {
+    if (!orderId || !lead?._id) return;
+
+    setRestoringLead(lead._id);
+    try {
+      const response = await api.post(`/orders/${orderId}/leads/${lead._id}/restore`);
+
+      if (response.data.success) {
+        // Refresh orders list
+        fetchOrders();
+
+        // Update leads preview modal
+        if (leadsPreviewModal.open && leadsPreviewModal.orderId === orderId) {
+          setLeadsPreviewModal((prev) => ({
+            ...prev,
+            leads: response.data.data.order?.leads || prev.leads,
+            order: response.data.data.order || prev.order,
+          }));
+        }
+
+        // Update expandedRowData if the order is expanded
+        if (expandedRowData[orderId]) {
+          setExpandedRowData((prev) => ({
+            ...prev,
+            [orderId]: {
+              ...prev[orderId],
+              leads: response.data.data.order?.leads || prev[orderId].leads,
+            },
+          }));
+        }
+
+        setNotification({
+          message: `Lead ${lead.firstName} ${lead.lastName} has been restored to the order`,
+          severity: "success",
+        });
+      }
+    } catch (error) {
+      console.error("Failed to restore lead:", error);
+      setNotification({
+        message: error.response?.data?.message || "Failed to restore lead - it may have been assigned to another order",
+        severity: "error",
+      });
+    } finally {
+      setRestoringLead(null);
+    }
+  }, [fetchOrders, leadsPreviewModal.open, leadsPreviewModal.orderId, expandedRowData]);
+
+  // Open removal reason dialog
+  const handleOpenRemovalReasonDialog = useCallback(() => {
+    if (selectedLeadsForRemoval.length === 0) return;
+    setRemovalReasonDialog({
+      open: true,
+      reason: "",
+      customReason: "",
+    });
+  }, [selectedLeadsForRemoval.length]);
+
+  // Close removal reason dialog
+  const handleCloseRemovalReasonDialog = useCallback(() => {
+    setRemovalReasonDialog({
+      open: false,
+      reason: "",
+      customReason: "",
+    });
+  }, []);
+
+  // Undo replacement from actions menu
+  const handleUndoReplacementFromMenu = useCallback(async (orderId, newLeadId, oldLeadId) => {
+    if (!orderId || !newLeadId || !oldLeadId) return;
+
+    setUndoingReplacement(newLeadId);
+    try {
+      const response = await api.post(
+        `/orders/${orderId}/leads/${newLeadId}/undo-replace`,
+        { oldLeadId }
+      );
+
+      if (response.data.success) {
+        // Refresh orders list
+        fetchOrders();
+
+        // Update leads preview modal
+        if (leadsPreviewModal.open && leadsPreviewModal.orderId === orderId) {
+          setLeadsPreviewModal((prev) => ({
+            ...prev,
+            leads: response.data.data.order?.leads || prev.leads,
+            order: response.data.data.order || prev.order,
+          }));
+        }
+
+        // Update expandedRowData if the order is expanded
+        if (expandedRowData[orderId]) {
+          setExpandedRowData((prev) => ({
+            ...prev,
+            [orderId]: {
+              ...prev[orderId],
+              leads: response.data.data.order?.leads || prev[orderId].leads,
+              leadsMetadata: response.data.data.order?.leadsMetadata || prev[orderId].leadsMetadata,
+            },
+          }));
+        }
+
+        setNotification({
+          message: `Replacement undone: restored ${response.data.data.restoredLead?.firstName} ${response.data.data.restoredLead?.lastName}`,
+          severity: "success",
+        });
+      }
+    } catch (error) {
+      console.error("Failed to undo replacement:", error);
+      setNotification({
+        message: error.response?.data?.message || "Failed to undo replacement - the original lead may have been assigned to another order",
+        severity: "error",
+      });
+    } finally {
+      setUndoingReplacement(null);
+    }
+  }, [fetchOrders, leadsPreviewModal.open, leadsPreviewModal.orderId, expandedRowData]);
 
   const handleOpenPreviewActionsMenu = useCallback((event, lead) => {
     setPreviewActionsMenu({ anchorEl: event.currentTarget, lead });
@@ -3343,6 +3631,17 @@ const OrdersPage = () => {
       setNotification({
         message: `Lead successfully replaced: ${replaceData.oldLead.firstName} ${replaceData.oldLead.lastName} replaced with ${replaceData.newLead.firstName} ${replaceData.newLead.lastName}`,
         severity: "success",
+      });
+
+      // Set undo action for the replacement
+      setUndoAction({
+        type: "replacement",
+        orderId,
+        newLeadId: replaceData.newLead._id,
+        oldLeadId: replaceData.oldLead._id,
+        newLeadName: `${replaceData.newLead.firstName} ${replaceData.newLead.lastName}`,
+        oldLeadName: `${replaceData.oldLead.firstName} ${replaceData.oldLead.lastName}`,
+        timestamp: Date.now(),
       });
 
       // Update orders list immediately with new data
@@ -7169,6 +7468,128 @@ const OrdersPage = () => {
         anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
       />
 
+      {/* Undo Action Snackbar */}
+      <Snackbar
+        open={!!undoAction}
+        autoHideDuration={30000}
+        onClose={handleDismissUndo}
+        anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+      >
+        <Alert
+          severity="info"
+          sx={{
+            width: "100%",
+            alignItems: "center",
+          }}
+          action={
+            <Box sx={{ display: "flex", gap: 1 }}>
+              <Button
+                color="inherit"
+                size="small"
+                onClick={handleUndoAction}
+                disabled={undoing}
+                startIcon={undoing ? <CircularProgress size={16} color="inherit" /> : <UndoIcon />}
+              >
+                {undoing ? "Undoing..." : "Undo"}
+              </Button>
+              <IconButton
+                size="small"
+                color="inherit"
+                onClick={handleDismissUndo}
+                disabled={undoing}
+              >
+                <CloseIcon fontSize="small" />
+              </IconButton>
+            </Box>
+          }
+        >
+          {undoAction?.type === "removal"
+            ? `Removed ${undoAction.removedLeads?.length || 0} lead(s) from order`
+            : undoAction?.type === "replacement"
+            ? `Replaced ${undoAction.oldLeadName} with ${undoAction.newLeadName}`
+            : "Action completed"}
+        </Alert>
+      </Snackbar>
+
+      {/* Lead Removal Reason Dialog */}
+      <Dialog
+        open={removalReasonDialog.open}
+        onClose={handleCloseRemovalReasonDialog}
+        maxWidth="sm"
+        fullWidth
+        disableEscapeKeyDown={removingLeads}
+      >
+        <DialogTitle>
+          <Box display="flex" alignItems="center" gap={1}>
+            <DeleteIcon color="error" />
+            <Typography variant="h6">Remove Leads from Order</Typography>
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          <Typography sx={{ mb: 2 }}>
+            You are about to remove <strong>{selectedLeadsForRemoval.length} lead(s)</strong> from this order.
+            Please select a reason for this action.
+          </Typography>
+          <FormControl fullWidth required sx={{ mb: 2 }}>
+            <InputLabel id="removal-reason-label">Reason for removal *</InputLabel>
+            <Select
+              labelId="removal-reason-label"
+              value={removalReasonDialog.reason}
+              label="Reason for removal *"
+              onChange={(e) => {
+                setRemovalReasonDialog((prev) => ({
+                  ...prev,
+                  reason: e.target.value,
+                  customReason: e.target.value !== "Other" ? "" : prev.customReason,
+                }));
+              }}
+            >
+              <MenuItem value="Lead is not sent">Lead is not sent</MenuItem>
+              <MenuItem value="Email not working">Email not working</MenuItem>
+              <MenuItem value="Phone not working">Phone not working</MenuItem>
+              <MenuItem value="One or more leads from this order were already shaved">One or more leads from this order were already shaved</MenuItem>
+              <MenuItem value="Lead failed">Lead failed</MenuItem>
+              <MenuItem value="Agent is missing">Agent is missing</MenuItem>
+              <MenuItem value="Other">Other</MenuItem>
+            </Select>
+          </FormControl>
+          {removalReasonDialog.reason === "Other" && (
+            <TextField
+              fullWidth
+              required
+              label="Please specify the reason *"
+              value={removalReasonDialog.customReason}
+              onChange={(e) => setRemovalReasonDialog((prev) => ({ ...prev, customReason: e.target.value }))}
+              multiline
+              rows={2}
+            />
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseRemovalReasonDialog} disabled={removingLeads}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            color="error"
+            onClick={() => {
+              const finalReason = removalReasonDialog.reason === "Other"
+                ? removalReasonDialog.customReason
+                : removalReasonDialog.reason;
+              handleRemoveSelectedLeads(finalReason);
+            }}
+            disabled={
+              removingLeads ||
+              !removalReasonDialog.reason ||
+              (removalReasonDialog.reason === "Other" && !removalReasonDialog.customReason.trim())
+            }
+            startIcon={removingLeads ? <CircularProgress size={20} color="inherit" /> : <DeleteIcon />}
+          >
+            {removingLeads ? "Removing..." : "Confirm Removal"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       {/* Create New Broker Dialog */}
       <Dialog
         open={createBrokerDialog.open}
@@ -8607,7 +9028,7 @@ const OrdersPage = () => {
                     size="small"
                     variant="contained"
                     color="error"
-                    onClick={handleRemoveSelectedLeads}
+                    onClick={handleOpenRemovalReasonDialog}
                     disabled={selectedLeadsForRemoval.length === 0 || removingLeads}
                     startIcon={removingLeads ? <CircularProgress size={16} color="inherit" /> : <DeleteIcon />}
                   >
@@ -9402,9 +9823,12 @@ const OrdersPage = () => {
                             size="small"
                             onClick={(e) => handleOpenPreviewActionsMenu(e, lead)}
                             sx={{ p: 0.25 }}
-                            disabled={isRemoved}
                           >
-                            <MoreVertIcon sx={{ fontSize: 18 }} />
+                            {isRemoved ? (
+                              <RestoreIcon sx={{ fontSize: 18, color: "info.main" }} />
+                            ) : (
+                              <MoreVertIcon sx={{ fontSize: 18 }} />
+                            )}
                           </IconButton>
                         </TableCell>
                       </TableRow>
@@ -9441,6 +9865,44 @@ const OrdersPage = () => {
             const leadType = getDisplayLeadType(lead);
             const isFtdOrFiller = leadType === "ftd" || leadType === "filler";
             const order = leadsPreviewModal.order;
+
+            // Check if lead is removed
+            const isRemovedLead = order?.removedLeads?.some(
+              (rl) => rl.leadId === lead._id || rl.leadId?._id === lead._id
+            );
+
+            // Check if this lead has a replacement history (meaning it replaced another lead)
+            const leadMetadata = order?.leadsMetadata?.find(
+              (meta) => meta.leadId?.toString() === lead._id || meta.leadId === lead._id
+            );
+            const replacementHistory = leadMetadata?.replacementHistory || [];
+            const canUndoReplacement = replacementHistory.length > 0 &&
+              (user?.role === "admin" || user?.role === "affiliate_manager");
+            const lastReplacedLeadId = replacementHistory.length > 0
+              ? replacementHistory[replacementHistory.length - 1]
+              : null;
+
+            // For removed leads, show only restore option
+            if (isRemovedLead) {
+              return (
+                <MenuItem
+                  onClick={() => {
+                    handleRestoreLead(order._id, lead);
+                    handleClosePreviewActionsMenu();
+                  }}
+                  disabled={restoringLead === lead._id}
+                >
+                  <ListItemIcon>
+                    {restoringLead === lead._id ? (
+                      <CircularProgress size={20} />
+                    ) : (
+                      <RestoreIcon fontSize="small" color="info" />
+                    )}
+                  </ListItemIcon>
+                  {restoringLead === lead._id ? "Restoring..." : "Restore Lead"}
+                </MenuItem>
+              );
+            }
 
             return (
               <>
@@ -9486,6 +9948,26 @@ const OrdersPage = () => {
                       <SwapHorizIcon fontSize="small" color="secondary" />
                     </ListItemIcon>
                     Replace Lead
+                  </MenuItem>
+                )}
+
+                {/* Undo Replacement - Admin and Affiliate Manager only, when lead has replacement history */}
+                {canUndoReplacement && order && (
+                  <MenuItem
+                    onClick={() => {
+                      handleUndoReplacementFromMenu(order._id, lead._id, lastReplacedLeadId);
+                      handleClosePreviewActionsMenu();
+                    }}
+                    disabled={undoingReplacement === lead._id}
+                  >
+                    <ListItemIcon>
+                      {undoingReplacement === lead._id ? (
+                        <CircularProgress size={20} />
+                      ) : (
+                        <UndoIcon fontSize="small" color="warning" />
+                      )}
+                    </ListItemIcon>
+                    {undoingReplacement === lead._id ? "Undoing..." : "Undo Replacement"}
                   </MenuItem>
                 )}
 
