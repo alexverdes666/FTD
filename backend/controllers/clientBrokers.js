@@ -2,6 +2,9 @@ const { validationResult } = require("express-validator");
 const ClientBroker = require("../models/ClientBroker");
 const Lead = require("../models/Lead");
 const Order = require("../models/Order");
+const PSP = require("../models/PSP");
+const AgentComment = require("../models/AgentComment");
+const ClientBrokerAuditService = require("../services/clientBrokerAuditService");
 exports.getClientBrokers = async (req, res, next) => {
   try {
     const {
@@ -97,9 +100,13 @@ exports.createClientBroker = async (req, res, next) => {
     }
 
     const clientBroker = new ClientBroker(brokerData);
-    
+
     await clientBroker.save();
     await clientBroker.populate("createdBy", "fullName email");
+
+    // Log the creation
+    await ClientBrokerAuditService.logBrokerCreated(clientBroker, req.user, req);
+
     res.status(201).json({
       success: true,
       message: "Client broker created successfully",
@@ -145,6 +152,15 @@ exports.updateClientBroker = async (req, res, next) => {
         message: "Client broker not found",
       });
     }
+
+    // Store previous data for audit logging
+    const previousData = {
+      name: clientBroker.name,
+      domain: clientBroker.domain,
+      description: clientBroker.description,
+      isActive: clientBroker.isActive,
+    };
+
     if (name !== undefined) clientBroker.name = name;
     if (domain !== undefined) {
       // Convert empty domain string to null to work with sparse unique index
@@ -154,6 +170,16 @@ exports.updateClientBroker = async (req, res, next) => {
     if (isActive !== undefined) clientBroker.isActive = isActive;
     await clientBroker.save();
     await clientBroker.populate("createdBy", "fullName email");
+
+    // Log the update with detailed changes
+    const newData = {
+      name: name !== undefined ? name : undefined,
+      domain: domain !== undefined ? (domain && domain.trim() ? domain.trim() : null) : undefined,
+      description: description !== undefined ? description : undefined,
+      isActive: isActive !== undefined ? isActive : undefined,
+    };
+    await ClientBrokerAuditService.logBrokerUpdated(clientBroker, previousData, newData, req.user, req);
+
     res.status(200).json({
       success: true,
       message: "Client broker updated successfully",
@@ -200,6 +226,10 @@ exports.deleteClientBroker = async (req, res, next) => {
         },
       });
     }
+
+    // Log the deletion before actually deleting
+    await ClientBrokerAuditService.logBrokerDeleted(clientBroker, req.user, req);
+
     await ClientBroker.findByIdAndDelete(req.params.id);
     res.status(200).json({
       success: true,
@@ -453,6 +483,188 @@ exports.getBrokerStats = async (req, res, next) => {
         aggregatedStats: stats,
         topBrokers,
       },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Get full client broker profile
+ * Includes PSPs and comments
+ */
+exports.getClientBrokerProfile = async (req, res, next) => {
+  try {
+    const clientBroker = await ClientBroker.findById(req.params.id)
+      .populate("createdBy", "fullName email")
+      .populate("psps", "name description website isActive");
+
+    if (!clientBroker) {
+      return res.status(404).json({
+        success: false,
+        message: "Client broker not found",
+      });
+    }
+
+    // Get comments for this broker
+    const comments = await AgentComment.find({
+      targetType: "client_broker",
+      targetId: clientBroker._id,
+      parentComment: null, // Only top-level comments
+    })
+      .populate("agent", "fullName email")
+      .populate("ourNetwork", "name")
+      .populate("resolvedBy", "fullName email")
+      .populate({
+        path: "replies",
+        populate: { path: "agent", select: "fullName email" },
+      })
+      .sort({ createdAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        ...clientBroker.toObject(),
+        comments,
+        commentsCount: comments.length,
+        unresolvedCommentsCount: comments.filter((c) => !c.isResolved).length,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Add PSP to client broker
+ */
+exports.addPSP = async (req, res, next) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: "Validation error",
+        errors: errors.array(),
+      });
+    }
+
+    const clientBroker = await ClientBroker.findById(req.params.id);
+    if (!clientBroker) {
+      return res.status(404).json({
+        success: false,
+        message: "Client broker not found",
+      });
+    }
+
+    const { pspId } = req.body;
+
+    // Check if PSP exists
+    const psp = await PSP.findById(pspId);
+    if (!psp) {
+      return res.status(404).json({
+        success: false,
+        message: "PSP not found",
+      });
+    }
+
+    // Check if PSP is already linked
+    if (clientBroker.psps.includes(pspId)) {
+      return res.status(400).json({
+        success: false,
+        message: "PSP is already linked to this broker",
+      });
+    }
+
+    clientBroker.psps.push(pspId);
+    await clientBroker.save();
+    await clientBroker.populate("psps", "name description website isActive");
+
+    // Log the PSP addition
+    await ClientBrokerAuditService.logPSPAdded(clientBroker, psp, req.user, req);
+
+    res.status(200).json({
+      success: true,
+      message: "PSP added to broker successfully",
+      data: clientBroker,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Remove PSP from client broker
+ */
+exports.removePSP = async (req, res, next) => {
+  try {
+    const clientBroker = await ClientBroker.findById(req.params.id);
+    if (!clientBroker) {
+      return res.status(404).json({
+        success: false,
+        message: "Client broker not found",
+      });
+    }
+
+    const { pspId } = req.params;
+
+    // Check if PSP exists
+    const psp = await PSP.findById(pspId);
+    if (!psp) {
+      return res.status(404).json({
+        success: false,
+        message: "PSP not found",
+      });
+    }
+
+    // Check if PSP is linked
+    const pspIndex = clientBroker.psps.findIndex(
+      (p) => p.toString() === pspId
+    );
+    if (pspIndex === -1) {
+      return res.status(400).json({
+        success: false,
+        message: "PSP is not linked to this broker",
+      });
+    }
+
+    clientBroker.psps.splice(pspIndex, 1);
+    await clientBroker.save();
+    await clientBroker.populate("psps", "name description website isActive");
+
+    // Log the PSP removal
+    await ClientBrokerAuditService.logPSPRemoved(clientBroker, psp, req.user, req);
+
+    res.status(200).json({
+      success: true,
+      message: "PSP removed from broker successfully",
+      data: clientBroker,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Get client broker audit logs
+ */
+exports.getBrokerAuditLogs = async (req, res, next) => {
+  try {
+    const { page = 1, limit = 20, category, action, startDate, endDate } = req.query;
+
+    const result = await ClientBrokerAuditService.getBrokerLogs(req.params.id, {
+      page: parseInt(page),
+      limit: parseInt(limit),
+      category,
+      action,
+      startDate,
+      endDate,
+    });
+
+    res.status(200).json({
+      success: true,
+      data: result.logs,
+      pagination: result.pagination,
     });
   } catch (error) {
     next(error);

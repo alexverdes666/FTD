@@ -1,7 +1,23 @@
 const AgentComment = require("../models/AgentComment");
 const ClientNetwork = require("../models/ClientNetwork");
 const ClientBroker = require("../models/ClientBroker");
+const PSP = require("../models/PSP");
+const OurNetwork = require("../models/OurNetwork");
 const User = require("../models/User");
+
+// Helper function to find target by type
+const findTargetByType = async (targetType, targetId) => {
+  switch (targetType) {
+    case "client_network":
+      return await ClientNetwork.findById(targetId);
+    case "client_broker":
+      return await ClientBroker.findById(targetId);
+    case "psp":
+      return await PSP.findById(targetId);
+    default:
+      return null;
+  }
+};
 
 // Get all comments with filtering
 const getComments = async (req, res) => {
@@ -59,12 +75,7 @@ const getCommentsByTarget = async (req, res) => {
     const { targetType, targetId } = req.params;
 
     // Validate target exists
-    let target;
-    if (targetType === "client_network") {
-      target = await ClientNetwork.findById(targetId);
-    } else if (targetType === "client_broker") {
-      target = await ClientBroker.findById(targetId);
-    }
+    const target = await findTargetByType(targetType, targetId);
 
     if (!target) {
       return res.status(404).json({
@@ -98,16 +109,11 @@ const getCommentsByTarget = async (req, res) => {
 // Create a new comment
 const createComment = async (req, res) => {
   try {
-    const { targetType, targetId, comment, status, parentCommentId } = req.body;
+    const { targetType, targetId, comment, status, parentCommentId, ourNetworkId } = req.body;
     const agentId = req.user.id;
 
     // Validate target exists
-    let target;
-    if (targetType === "client_network") {
-      target = await ClientNetwork.findById(targetId);
-    } else if (targetType === "client_broker") {
-      target = await ClientBroker.findById(targetId);
-    }
+    const target = await findTargetByType(targetType, targetId);
 
     if (!target) {
       return res.status(404).json({
@@ -125,7 +131,7 @@ const createComment = async (req, res) => {
           message: "Parent comment not found",
         });
       }
-      
+
       // Ensure parent comment is for the same target
       if (parentComment.targetType !== targetType || parentComment.targetId.toString() !== targetId) {
         return res.status(400).json({
@@ -153,6 +159,15 @@ const createComment = async (req, res) => {
       }
     }
 
+    // Auto-set ourNetwork from affiliate manager's assigned network if not provided
+    let ourNetwork = ourNetworkId || null;
+    if (!ourNetwork && req.user.role === "affiliate_manager") {
+      const assignedNetwork = await OurNetwork.findOne({ assignedAffiliateManager: req.user.id });
+      if (assignedNetwork) {
+        ourNetwork = assignedNetwork._id;
+      }
+    }
+
     const newComment = new AgentComment({
       agent: agentId,
       targetType,
@@ -161,12 +176,14 @@ const createComment = async (req, res) => {
       status: parentCommentId ? undefined : status, // Replies don't need status
       parentComment: parentCommentId || null,
       isReply: !!parentCommentId,
+      ourNetwork,
     });
 
     await newComment.save();
 
     // Populate the comment with agent details
     await newComment.populate("agent", "fullName email");
+    await newComment.populate("ourNetwork", "name");
 
     res.status(201).json({
       success: true,

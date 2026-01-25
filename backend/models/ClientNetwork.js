@@ -1,4 +1,64 @@
 const mongoose = require("mongoose");
+
+// Employee sub-schema
+const employeeSchema = new mongoose.Schema(
+  {
+    name: {
+      type: String,
+      required: [true, "Employee name is required"],
+      trim: true,
+    },
+    telegramUsername: {
+      type: String,
+      trim: true,
+    },
+    position: {
+      type: String,
+      enum: ["finance", "boss", "manager", "affiliate_manager", "tech_support"],
+      required: [true, "Employee position is required"],
+    },
+    isActive: {
+      type: Boolean,
+      default: true,
+    },
+    addedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+    addedAt: {
+      type: Date,
+      default: Date.now,
+    },
+  },
+  { _id: true }
+);
+
+// Reference sub-schema
+const referenceSchema = new mongoose.Schema(
+  {
+    clientNetwork: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "ClientNetwork",
+      required: true,
+    },
+    notes: {
+      type: String,
+      trim: true,
+    },
+    addedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+    addedAt: {
+      type: Date,
+      default: Date.now,
+    },
+  },
+  { _id: true }
+);
+
 const clientNetworkSchema = new mongoose.Schema(
   {
     name: {
@@ -20,6 +80,8 @@ const clientNetworkSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    employees: [employeeSchema],
+    references: [referenceSchema],
   },
   {
     timestamps: true,

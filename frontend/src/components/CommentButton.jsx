@@ -536,6 +536,7 @@ const formatTargetType = (targetType) => {
   const typeMap = {
     client_network: "Client Network",
     client_broker: "Client Broker",
+    psp: "PSP",
   };
   return typeMap[targetType] || targetType;
 };

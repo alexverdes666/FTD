@@ -65,6 +65,9 @@ import SimCardsPage from "./pages/SimCardsPage.jsx";
 import NumberPage from "./pages/NumberPage.jsx";
 import SMSPage from "./pages/SMSPage.jsx";
 import AccountManagementPage from "./pages/AccountManagementPage.jsx";
+import ClientNetworkProfilePage from "./pages/ClientNetworkProfilePage.jsx";
+import ClientBrokerProfilePage from "./pages/ClientBrokerProfilePage.jsx";
+import PSPProfilePage from "./pages/PSPProfilePage.jsx";
 import GatewayManagementPage from "./pages/GatewayManagementPage.jsx";
 import AgentSchedulePage from "./pages/AgentSchedulePage.jsx";
 import AgentCallsCalendarPage from "./pages/AgentCallsCalendarPage.jsx";
@@ -463,8 +466,32 @@ function AppContent() {
             <Route
               path="account-management"
               element={
-                <ProtectedRoute allowedRoles={["admin"]}>
+                <ProtectedRoute allowedRoles={["admin", "affiliate_manager"]}>
                   <AccountManagementPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="client-network/:id"
+              element={
+                <ProtectedRoute allowedRoles={["admin", "affiliate_manager"]}>
+                  <ClientNetworkProfilePage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="client-broker/:id"
+              element={
+                <ProtectedRoute allowedRoles={["admin", "affiliate_manager"]}>
+                  <ClientBrokerProfilePage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="psp/:id"
+              element={
+                <ProtectedRoute allowedRoles={["admin", "affiliate_manager"]}>
+                  <PSPProfilePage />
                 </ProtectedRoute>
               }
             />

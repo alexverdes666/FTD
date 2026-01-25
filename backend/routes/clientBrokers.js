@@ -3,6 +3,7 @@ const { body } = require("express-validator");
 const {
     getClientBrokers,
     getClientBroker,
+    getClientBrokerProfile,
     createClientBroker,
     updateClientBroker,
     deleteClientBroker,
@@ -10,11 +11,33 @@ const {
     unassignLeadFromBroker,
     getBrokerLeads,
     getBrokerStats,
+    addPSP,
+    removePSP,
+    getBrokerAuditLogs,
 } = require("../controllers/clientBrokers");
 const { protect, isAdmin, authorize } = require("../middleware/auth");
 const router = express.Router();
 router.get("/", protect, getClientBrokers);
 router.get("/stats", protect, getBrokerStats);
+
+// Profile and audit log routes (must be before /:id)
+router.get("/:id/profile", protect, getClientBrokerProfile);
+router.get("/:id/audit-logs", protect, isAdmin, getBrokerAuditLogs);
+
+// PSP management routes
+router.post(
+    "/:id/psps",
+    [
+        protect,
+        isAdmin,
+        body("pspId")
+            .isMongoId()
+            .withMessage("Valid PSP ID is required"),
+    ],
+    addPSP
+);
+router.delete("/:id/psps/:pspId", [protect, isAdmin], removePSP);
+
 router.get("/:id", protect, getClientBroker);
 router.post(
     "/",

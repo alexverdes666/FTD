@@ -41,6 +41,12 @@ const clientBrokerSchema = new mongoose.Schema(
     lastAssignedAt: {
       type: Date,
     },
+    psps: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "PSP",
+      },
+    ],
   },
   {
     timestamps: true,
@@ -53,6 +59,7 @@ clientBrokerSchema.index({ isActive: 1 });
 clientBrokerSchema.index({ assignedLeads: 1 });
 clientBrokerSchema.index({ createdBy: 1 });
 clientBrokerSchema.index({ lastAssignedAt: -1 });
+clientBrokerSchema.index({ psps: 1 });
 // Text index for global search
 clientBrokerSchema.index(
   { name: "text", domain: "text", description: "text" },

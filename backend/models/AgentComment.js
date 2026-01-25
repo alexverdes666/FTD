@@ -9,8 +9,13 @@ const agentCommentSchema = new mongoose.Schema(
     },
     targetType: {
       type: String,
-      enum: ["client_network", "client_broker"],
+      enum: ["client_network", "client_broker", "psp"],
       required: true,
+    },
+    // For grouping comments by Our Network (auto-set from affiliate manager's assigned network)
+    ourNetwork: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "OurNetwork",
     },
     targetId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -82,6 +87,7 @@ agentCommentSchema.index({ status: 1 });
 agentCommentSchema.index({ isResolved: 1 });
 agentCommentSchema.index({ createdAt: -1 });
 agentCommentSchema.index({ parentComment: 1 }); // New index for threaded comments
+agentCommentSchema.index({ ourNetwork: 1 }); // Index for grouping by Our Network
 
 // Static method to get comments with target details
 agentCommentSchema.statics.getCommentsWithTargets = async function (filters = {}, options = {}) {
@@ -115,27 +121,36 @@ agentCommentSchema.statics.getCommentsWithTargets = async function (filters = {}
   // Manually populate target data
   const ClientNetwork = mongoose.model("ClientNetwork");
   const ClientBroker = mongoose.model("ClientBroker");
+  const PSP = mongoose.model("PSP");
 
   const commentsWithTargets = await Promise.all(comments.map(async (comment) => {
     try {
       const commentObj = comment.toObject();
-      
+
       if (comment.targetType === "client_network") {
         const target = await ClientNetwork.findById(comment.targetId).select("name description isActive");
         commentObj.target = target ? target.toObject() : { name: "Deleted Network", description: "", isActive: false };
       } else if (comment.targetType === "client_broker") {
         const target = await ClientBroker.findById(comment.targetId).select("name description isActive");
         commentObj.target = target ? target.toObject() : { name: "Deleted Broker", description: "", isActive: false };
+      } else if (comment.targetType === "psp") {
+        const target = await PSP.findById(comment.targetId).select("name description isActive");
+        commentObj.target = target ? target.toObject() : { name: "Deleted PSP", description: "", isActive: false };
       }
-      
+
       return commentObj;
     } catch (error) {
       console.error(`Error populating target for comment ${comment._id}:`, error);
       const commentObj = comment.toObject();
-      commentObj.target = { 
-        name: `Unknown ${comment.targetType === "client_network" ? "Network" : "Broker"}`, 
-        description: "", 
-        isActive: false 
+      const targetNames = {
+        client_network: "Network",
+        client_broker: "Broker",
+        psp: "PSP"
+      };
+      commentObj.target = {
+        name: `Unknown ${targetNames[comment.targetType] || "Target"}`,
+        description: "",
+        isActive: false
       };
       return commentObj;
     }
@@ -165,27 +180,36 @@ agentCommentSchema.statics.getCommentsByTarget = async function (targetType, tar
   // Manually populate target data
   const ClientNetwork = mongoose.model("ClientNetwork");
   const ClientBroker = mongoose.model("ClientBroker");
+  const PSP = mongoose.model("PSP");
 
   const commentsWithTargets = await Promise.all(comments.map(async (comment) => {
     try {
       const commentObj = comment.toObject();
-      
+
       if (comment.targetType === "client_network") {
         const target = await ClientNetwork.findById(comment.targetId).select("name description isActive");
         commentObj.target = target ? target.toObject() : { name: "Deleted Network", description: "", isActive: false };
       } else if (comment.targetType === "client_broker") {
         const target = await ClientBroker.findById(comment.targetId).select("name description isActive");
         commentObj.target = target ? target.toObject() : { name: "Deleted Broker", description: "", isActive: false };
+      } else if (comment.targetType === "psp") {
+        const target = await PSP.findById(comment.targetId).select("name description isActive");
+        commentObj.target = target ? target.toObject() : { name: "Deleted PSP", description: "", isActive: false };
       }
-      
+
       return commentObj;
     } catch (error) {
       console.error(`Error populating target for comment ${comment._id}:`, error);
       const commentObj = comment.toObject();
-      commentObj.target = { 
-        name: `Unknown ${comment.targetType === "client_network" ? "Network" : "Broker"}`, 
-        description: "", 
-        isActive: false 
+      const targetNames = {
+        client_network: "Network",
+        client_broker: "Broker",
+        psp: "PSP"
+      };
+      commentObj.target = {
+        name: `Unknown ${targetNames[comment.targetType] || "Target"}`,
+        description: "",
+        isActive: false
       };
       return commentObj;
     }
