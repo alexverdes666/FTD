@@ -53,6 +53,15 @@ import {
   Assessment as AssessmentIcon,
   MonetizationOn as MoneyIcon,
   TableChart as TableChartIcon,
+  Summarize as SummaryIcon,
+  AttachMoney as AttachMoneyIcon,
+  CallMade as CallIcon,
+  SimCard as SimCardIcon,
+  DataUsage as DataUsageIcon,
+  Receipt as ReceiptIcon,
+  VerifiedUser as VerifiedIcon,
+  ContentCut as ShavedIcon,
+  People as FillersIcon,
 } from "@mui/icons-material";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
@@ -120,6 +129,10 @@ const AffiliateManagersPage = () => {
   const [overviewStats, setOverviewStats] = useState(null);
   const [overviewLoading, setOverviewLoading] = useState(true);
 
+  // Summary state (for new Summary tab)
+  const [summaryData, setSummaryData] = useState([]);
+  const [selectedSummaryManager, setSelectedSummaryManager] = useState("");
+
   // General state
   const [alert, setAlert] = useState({
     show: false,
@@ -144,6 +157,37 @@ const AffiliateManagersPage = () => {
       loadCommissionData();
     }
   }, [affiliateManagers, commissionPeriod, selectedMonth, selectedYear, tabValue]);
+
+  // Generate summary data when affiliate managers are loaded or selection changes
+  useEffect(() => {
+    if (affiliateManagers.length > 0) {
+      generateSummaryData();
+    }
+  }, [affiliateManagers, selectedSummaryManager, selectedMonth, selectedYear]);
+
+  const generateSummaryData = () => {
+    // Generate summary data for each affiliate manager (frontend only - placeholder data)
+    const data = affiliateManagers.map((manager) => ({
+      managerId: manager._id,
+      managerName: manager.fullName,
+      totalMoneyIn: 0,
+      totalMoneyExpenses: 0,
+      totalCommissionsAM: 0,
+      totalFTDs: 0,
+      shavedFTDs: 0,
+      totalFillers: 0,
+      firstCalls: 0,
+      secondCalls: 0,
+      thirdCalls: 0,
+      fourthCalls: 0,
+      fifthCalls: 0,
+      totalVerifiedFTDs: 0,
+      totalSimCardUsed: 0,
+      totalDataUsed: 0,
+      otherFixedExpenses: 0,
+    }));
+    setSummaryData(data);
+  };
 
   const showAlert = (message, severity = "info") => {
     setAlert({ show: true, message, severity });
@@ -872,6 +916,357 @@ const AffiliateManagersPage = () => {
     </Box>
   );
 
+  const renderSummaryTab = () => {
+    const filteredSummaryData = selectedSummaryManager
+      ? summaryData.filter((item) => item.managerId === selectedSummaryManager)
+      : summaryData;
+
+    return (
+      <Box>
+        {/* Filters */}
+        <Card sx={{ mb: 3 }}>
+          <CardContent>
+            <Box display="flex" alignItems="center" gap={2} flexWrap="wrap">
+              <Typography variant="h6" sx={{ mr: 2 }}>
+                Filter:
+              </Typography>
+              <FormControl size="small" sx={{ minWidth: 200 }}>
+                <InputLabel>Affiliate Manager</InputLabel>
+                <Select
+                  value={selectedSummaryManager}
+                  onChange={(e) => setSelectedSummaryManager(e.target.value)}
+                  label="Affiliate Manager"
+                >
+                  <MenuItem value="">All Managers</MenuItem>
+                  {affiliateManagers.map((manager) => (
+                    <MenuItem key={manager._id} value={manager._id}>
+                      {manager.fullName}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <FormControl size="small" sx={{ minWidth: 120 }}>
+                <InputLabel>Month</InputLabel>
+                <Select
+                  value={selectedMonth}
+                  onChange={(e) => setSelectedMonth(e.target.value)}
+                  label="Month"
+                >
+                  {Array.from({ length: 12 }, (_, i) => (
+                    <MenuItem key={i + 1} value={i + 1}>
+                      {new Date(2024, i).toLocaleDateString("en-US", {
+                        month: "long",
+                      })}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <FormControl size="small" sx={{ minWidth: 100 }}>
+                <InputLabel>Year</InputLabel>
+                <Select
+                  value={selectedYear}
+                  onChange={(e) => setSelectedYear(e.target.value)}
+                  label="Year"
+                >
+                  {Array.from({ length: 5 }, (_, i) => {
+                    const year = new Date().getFullYear() - 2 + i;
+                    return (
+                      <MenuItem key={year} value={year}>
+                        {year}
+                      </MenuItem>
+                    );
+                  })}
+                </Select>
+              </FormControl>
+              <Button
+                variant="outlined"
+                startIcon={<RefreshIcon />}
+                onClick={generateSummaryData}
+              >
+                Refresh
+              </Button>
+            </Box>
+          </CardContent>
+        </Card>
+
+        {/* Summary Cards for each Affiliate Manager */}
+        {filteredSummaryData.map((summary) => (
+          <Card key={summary.managerId} sx={{ mb: 3 }}>
+            <CardHeader
+              avatar={
+                <Avatar sx={{ bgcolor: "primary.main" }}>
+                  {summary.managerName?.charAt(0) || "A"}
+                </Avatar>
+              }
+              title={
+                <Typography variant="h6" fontWeight="bold">
+                  {summary.managerName}
+                </Typography>
+              }
+              subheader={`Summary for ${new Date(
+                selectedYear,
+                selectedMonth - 1
+              ).toLocaleDateString("en-US", { month: "long", year: "numeric" })}`}
+            />
+            <CardContent>
+              <Grid container spacing={2}>
+                {/* Money Section */}
+                <Grid item xs={12}>
+                  <Typography
+                    variant="subtitle1"
+                    fontWeight="bold"
+                    color="primary"
+                    sx={{ mb: 1, display: "flex", alignItems: "center", gap: 1 }}
+                  >
+                    <AttachMoneyIcon /> Financial Metrics
+                  </Typography>
+                  <Divider sx={{ mb: 2 }} />
+                </Grid>
+                <Grid item xs={12} sm={6} md={3}>
+                  <Paper
+                    sx={{
+                      p: 2,
+                      textAlign: "center",
+                      bgcolor: "success.light",
+                      color: "success.contrastText",
+                    }}
+                    elevation={2}
+                  >
+                    <Typography variant="h5" fontWeight="bold">
+                      {formatCurrency(summary.totalMoneyIn)}
+                    </Typography>
+                    <Typography variant="body2">Total Money In</Typography>
+                  </Paper>
+                </Grid>
+                <Grid item xs={12} sm={6} md={3}>
+                  <Paper
+                    sx={{
+                      p: 2,
+                      textAlign: "center",
+                      bgcolor: "error.light",
+                      color: "error.contrastText",
+                    }}
+                    elevation={2}
+                  >
+                    <Typography variant="h5" fontWeight="bold">
+                      {formatCurrency(summary.totalMoneyExpenses)}
+                    </Typography>
+                    <Typography variant="body2">Total Money Expenses</Typography>
+                  </Paper>
+                </Grid>
+                <Grid item xs={12} sm={6} md={3}>
+                  <Paper
+                    sx={{
+                      p: 2,
+                      textAlign: "center",
+                      bgcolor: "secondary.light",
+                      color: "secondary.contrastText",
+                    }}
+                    elevation={2}
+                  >
+                    <Typography variant="h5" fontWeight="bold">
+                      {formatCurrency(summary.totalCommissionsAM)}
+                    </Typography>
+                    <Typography variant="body2">Total Commissions (AM)</Typography>
+                  </Paper>
+                </Grid>
+                <Grid item xs={12} sm={6} md={3}>
+                  <Paper
+                    sx={{
+                      p: 2,
+                      textAlign: "center",
+                      bgcolor: "warning.light",
+                      color: "warning.contrastText",
+                    }}
+                    elevation={2}
+                  >
+                    <Typography variant="h5" fontWeight="bold">
+                      {formatCurrency(summary.otherFixedExpenses)}
+                    </Typography>
+                    <Typography variant="body2">Other Fixed Expenses</Typography>
+                  </Paper>
+                </Grid>
+
+                {/* FTD Section */}
+                <Grid item xs={12} sx={{ mt: 2 }}>
+                  <Typography
+                    variant="subtitle1"
+                    fontWeight="bold"
+                    color="primary"
+                    sx={{ mb: 1, display: "flex", alignItems: "center", gap: 1 }}
+                  >
+                    <VerifiedIcon /> FTD Metrics
+                  </Typography>
+                  <Divider sx={{ mb: 2 }} />
+                </Grid>
+                <Grid item xs={12} sm={6} md={2.4}>
+                  <Paper sx={{ p: 2, textAlign: "center" }} elevation={2}>
+                    <Typography variant="h5" fontWeight="bold" color="primary">
+                      {summary.totalFTDs}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Total FTD's
+                    </Typography>
+                  </Paper>
+                </Grid>
+                <Grid item xs={12} sm={6} md={2.4}>
+                  <Paper sx={{ p: 2, textAlign: "center" }} elevation={2}>
+                    <Typography variant="h5" fontWeight="bold" color="error.main">
+                      {summary.shavedFTDs}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Shaved FTD's
+                    </Typography>
+                  </Paper>
+                </Grid>
+                <Grid item xs={12} sm={6} md={2.4}>
+                  <Paper sx={{ p: 2, textAlign: "center" }} elevation={2}>
+                    <Typography variant="h5" fontWeight="bold" color="success.main">
+                      {summary.totalVerifiedFTDs}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Total Verified FTD's
+                    </Typography>
+                  </Paper>
+                </Grid>
+                <Grid item xs={12} sm={6} md={2.4}>
+                  <Paper sx={{ p: 2, textAlign: "center" }} elevation={2}>
+                    <Typography variant="h5" fontWeight="bold" color="info.main">
+                      {summary.totalFillers}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Total Fillers
+                    </Typography>
+                  </Paper>
+                </Grid>
+
+                {/* Calls Section */}
+                <Grid item xs={12} sx={{ mt: 2 }}>
+                  <Typography
+                    variant="subtitle1"
+                    fontWeight="bold"
+                    color="primary"
+                    sx={{ mb: 1, display: "flex", alignItems: "center", gap: 1 }}
+                  >
+                    <CallIcon /> Call Metrics
+                  </Typography>
+                  <Divider sx={{ mb: 2 }} />
+                </Grid>
+                <Grid item xs={12} sm={6} md={2.4}>
+                  <Paper sx={{ p: 2, textAlign: "center" }} elevation={2}>
+                    <Typography variant="h5" fontWeight="bold">
+                      {summary.firstCalls}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      1st Calls
+                    </Typography>
+                  </Paper>
+                </Grid>
+                <Grid item xs={12} sm={6} md={2.4}>
+                  <Paper sx={{ p: 2, textAlign: "center" }} elevation={2}>
+                    <Typography variant="h5" fontWeight="bold">
+                      {summary.secondCalls}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      2nd Calls
+                    </Typography>
+                  </Paper>
+                </Grid>
+                <Grid item xs={12} sm={6} md={2.4}>
+                  <Paper sx={{ p: 2, textAlign: "center" }} elevation={2}>
+                    <Typography variant="h5" fontWeight="bold">
+                      {summary.thirdCalls}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      3rd Calls
+                    </Typography>
+                  </Paper>
+                </Grid>
+                <Grid item xs={12} sm={6} md={2.4}>
+                  <Paper sx={{ p: 2, textAlign: "center" }} elevation={2}>
+                    <Typography variant="h5" fontWeight="bold">
+                      {summary.fourthCalls}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      4th Calls
+                    </Typography>
+                  </Paper>
+                </Grid>
+                <Grid item xs={12} sm={6} md={2.4}>
+                  <Paper sx={{ p: 2, textAlign: "center" }} elevation={2}>
+                    <Typography variant="h5" fontWeight="bold">
+                      {summary.fifthCalls}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      5th Calls
+                    </Typography>
+                  </Paper>
+                </Grid>
+
+                {/* Resources Section */}
+                <Grid item xs={12} sx={{ mt: 2 }}>
+                  <Typography
+                    variant="subtitle1"
+                    fontWeight="bold"
+                    color="primary"
+                    sx={{ mb: 1, display: "flex", alignItems: "center", gap: 1 }}
+                  >
+                    <SimCardIcon /> Resource Usage
+                  </Typography>
+                  <Divider sx={{ mb: 2 }} />
+                </Grid>
+                <Grid item xs={12} sm={6} md={6}>
+                  <Paper sx={{ p: 2, textAlign: "center" }} elevation={2}>
+                    <Box display="flex" alignItems="center" justifyContent="center" gap={1}>
+                      <SimCardIcon color="primary" />
+                      <Typography variant="h5" fontWeight="bold">
+                        {summary.totalSimCardUsed}
+                      </Typography>
+                    </Box>
+                    <Typography variant="body2" color="text.secondary">
+                      Total SIM Cards Used
+                    </Typography>
+                  </Paper>
+                </Grid>
+                <Grid item xs={12} sm={6} md={6}>
+                  <Paper sx={{ p: 2, textAlign: "center" }} elevation={2}>
+                    <Box display="flex" alignItems="center" justifyContent="center" gap={1}>
+                      <DataUsageIcon color="primary" />
+                      <Typography variant="h5" fontWeight="bold">
+                        {summary.totalDataUsed} GB
+                      </Typography>
+                    </Box>
+                    <Typography variant="body2" color="text.secondary">
+                      Total Data Used
+                    </Typography>
+                  </Paper>
+                </Grid>
+              </Grid>
+            </CardContent>
+          </Card>
+        ))}
+
+        {filteredSummaryData.length === 0 && (
+          <Card>
+            <CardContent>
+              <Box
+                display="flex"
+                justifyContent="center"
+                alignItems="center"
+                minHeight={200}
+              >
+                <Typography variant="body1" color="text.secondary">
+                  No summary data available. Please select an affiliate manager or
+                  check if there are any affiliate managers in the system.
+                </Typography>
+              </Box>
+            </CardContent>
+          </Card>
+        )}
+      </Box>
+    );
+  };
+
   const renderSalaryCommissionsTab = () => (
     <Box>
       {/* Month/Year Selector */}
@@ -1313,6 +1708,11 @@ const AffiliateManagersPage = () => {
               label="Salary & Commissions"
               iconPosition="start"
             />
+            <Tab
+              icon={<SummaryIcon />}
+              label="Summary"
+              iconPosition="start"
+            />
           </Tabs>
         </Card>
 
@@ -1320,6 +1720,7 @@ const AffiliateManagersPage = () => {
         {tabValue === 0 && renderOverviewTab()}
         {tabValue === 1 && renderPerformanceTablesTab()}
         {tabValue === 2 && renderSalaryCommissionsTab()}
+        {tabValue === 3 && renderSummaryTab()}
 
         {/* Table Editor Dialog */}
         <Dialog

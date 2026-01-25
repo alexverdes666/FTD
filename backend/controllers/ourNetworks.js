@@ -7,11 +7,19 @@ const NetworkAuditService = require("../services/networkAuditService");
 
 exports.getOurNetworks = async (req, res, next) => {
   try {
-    const { page = 1, limit = 10, search, isActive } = req.query;
+    const { page = 1, limit = 10, search, isActive, isArchived } = req.query;
     const filter = {};
 
     if (isActive !== undefined) {
       filter.isActive = isActive === "true";
+    }
+
+    // By default, exclude archived networks unless explicitly requested
+    if (isArchived === "true") {
+      filter.isArchived = true;
+    } else {
+      // Show non-archived networks (including those without isArchived field)
+      filter.$or = [{ isArchived: false }, { isArchived: { $exists: false } }];
     }
 
     if (req.user.role === "affiliate_manager") {
@@ -344,6 +352,51 @@ exports.deleteOurNetwork = async (req, res, next) => {
   }
 };
 
+exports.archiveOurNetwork = async (req, res, next) => {
+  try {
+    const ourNetwork = await OurNetwork.findById(req.params.id);
+    if (!ourNetwork) {
+      return res.status(404).json({
+        success: false,
+        message: "Our network not found",
+      });
+    }
+
+    const { isArchived } = req.body;
+
+    // Store previous data for audit logging
+    const previousData = {
+      isArchived: ourNetwork.isArchived,
+    };
+
+    ourNetwork.isArchived = isArchived;
+    await ourNetwork.save();
+    await ourNetwork.populate([
+      { path: "assignedAffiliateManager", select: "fullName email" },
+      { path: "createdBy", select: "fullName email" },
+    ]);
+
+    // Log the archive/unarchive action
+    await NetworkAuditService.logNetworkUpdated(
+      ourNetwork,
+      previousData,
+      { isArchived },
+      req.user,
+      req
+    );
+
+    res.status(200).json({
+      success: true,
+      message: isArchived
+        ? "Our network archived successfully"
+        : "Our network activated successfully",
+      data: ourNetwork,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 exports.getMyOurNetworks = async (req, res, next) => {
   try {
     if (req.user.role !== "affiliate_manager") {
@@ -357,6 +410,7 @@ exports.getMyOurNetworks = async (req, res, next) => {
     const ourNetworks = await OurNetwork.find({
       assignedAffiliateManager: req.user._id,
       isActive: true,
+      $or: [{ isArchived: false }, { isArchived: { $exists: false } }],
     })
       .populate("assignedAffiliateManager", "fullName email")
       .populate("createdBy", "fullName email")

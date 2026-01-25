@@ -6,6 +6,7 @@ const {
   createOurNetwork,
   updateOurNetwork,
   deleteOurNetwork,
+  archiveOurNetwork,
   getMyOurNetworks,
   getNetworkAuditLogs,
   getAllAuditLogs,
@@ -206,6 +207,18 @@ router.delete(
     }),
   ],
   deleteOurNetwork
+);
+
+router.patch(
+  "/:id/archive",
+  [
+    protect,
+    isAdmin,
+    body("isArchived")
+      .isBoolean()
+      .withMessage("isArchived must be a boolean"),
+  ],
+  archiveOurNetwork
 );
 
 // Audit log routes

@@ -71,7 +71,13 @@ import {
   createAgentFine,
   resolveAgentFine,
   deleteAgentFine,
+  respondToFine,
+  adminDecideFine,
+  getPendingApprovalFines,
+  getDisputedFines,
 } from '../services/agentFines';
+import FineImageUpload from './FineImageUpload';
+import FineDetailDialog from './FineDetailDialog';
 import { getGlobalBonusRates } from '../services/systemConfiguration';
 import { selectUser } from '../store/slices/authSlice';
 import api from '../services/api';
@@ -115,9 +121,14 @@ const AdminBonusManagement = () => {
     description: '',
     notes: ''
   });
+  const [fineImages, setFineImages] = useState([]); // Images for new fine
   const [fineDate, setFineDate] = useState(dayjs()); // For month/year selection
   const [finesFilterDate, setFinesFilterDate] = useState(dayjs()); // For filtering fines display
   const [processingFine, setProcessingFine] = useState(false);
+  const [pendingApprovalFines, setPendingApprovalFines] = useState([]);
+  const [disputedFines, setDisputedFines] = useState([]);
+  const [selectedFineDetail, setSelectedFineDetail] = useState(null);
+  const [showFineDetailDialog, setShowFineDetailDialog] = useState(false);
 
 
 
@@ -183,17 +194,39 @@ const AdminBonusManagement = () => {
   const loadFines = async () => {
     try {
       setFinesLoading(true);
-      
+
       if (user && user.role === 'agent') {
-        // For agents, load their month-specific fines
+        // For agents, load their month-specific fines and pending approval fines
         const year = finesFilterDate.year();
         const month = finesFilterDate.month() + 1;
-        const finesData = await getAgentFines(user._id, true, year, month);
+        const [finesData, pendingData] = await Promise.all([
+          getAgentFines(user._id, true, year, month),
+          getPendingApprovalFines(),
+        ]);
         setFines(finesData);
+        setPendingApprovalFines(pendingData);
       } else {
-        // For admins/affiliate managers, load all fines (we'll filter on display)
-        const finesData = await getAllAgentFines(); // No filtering for admin bonus management view
+        // For admins/affiliate managers, load all fines
+        const finesData = await getAllAgentFines();
         setFines(finesData);
+
+        // Load pending approval fines
+        try {
+          const pendingData = await getPendingApprovalFines();
+          setPendingApprovalFines(pendingData);
+        } catch (e) {
+          console.error('Failed to load pending fines:', e);
+        }
+
+        // Admin also loads disputed fines
+        if (user && user.role === 'admin') {
+          try {
+            const disputedData = await getDisputedFines();
+            setDisputedFines(disputedData);
+          } catch (e) {
+            console.error('Failed to load disputed fines:', e);
+          }
+        }
       }
     } catch (error) {
       console.error('Failed to load fines:', error);
@@ -292,6 +325,7 @@ const AdminBonusManagement = () => {
       description: '',
       notes: ''
     });
+    setFineImages([]); // Reset images
     setFineDate(dayjs()); // Reset to current month/year
   };
 
@@ -310,12 +344,13 @@ const AdminBonusManagement = () => {
         description: fineFormData.description,
         notes: fineFormData.notes,
         fineMonth: fineDate.month() + 1,
-        fineYear: fineDate.year()
+        fineYear: fineDate.year(),
+        images: fineImages.map(img => img._id), // Include image IDs
       });
 
       await loadFines();
       handleCloseFineForm();
-      showAlert('Fine created successfully', 'success');
+      showAlert('Fine created successfully. Awaiting agent approval.', 'success');
     } catch (error) {
       console.error('Failed to create fine:', error);
       showAlert('Failed to create fine', 'error');
@@ -405,19 +440,48 @@ const AdminBonusManagement = () => {
 
   const getAgentTotalFines = (agentId) => {
     const filteredFines = getFilteredFines();
+    // Only count approved and admin_approved fines as active deductions
     return filteredFines
-      .filter(fine => fine.agent._id === agentId && fine.status === 'active')
+      .filter(fine => fine.agent._id === agentId && ['approved', 'admin_approved'].includes(fine.status))
       .reduce((sum, fine) => sum + fine.amount, 0);
   };
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'active': return 'error';
-      case 'paid': return 'success';
-      case 'waived': return 'info';
-      case 'disputed': return 'warning';
+      case 'pending_approval': return 'warning';
+      case 'approved': return 'success';
+      case 'disputed': return 'error';
+      case 'admin_approved': return 'success';
+      case 'admin_rejected': return 'default';
+      case 'paid': return 'info';
+      case 'waived': return 'secondary';
+      case 'active': return 'error'; // Legacy support
       default: return 'default';
     }
+  };
+
+  const getStatusLabel = (status) => {
+    switch (status) {
+      case 'pending_approval': return 'Pending Approval';
+      case 'approved': return 'Approved';
+      case 'disputed': return 'Disputed';
+      case 'admin_approved': return 'Admin Approved';
+      case 'admin_rejected': return 'Admin Rejected';
+      case 'paid': return 'Paid';
+      case 'waived': return 'Waived';
+      case 'active': return 'Active'; // Legacy support
+      default: return status;
+    }
+  };
+
+  const handleViewFineDetail = (fine) => {
+    setSelectedFineDetail(fine);
+    setShowFineDetailDialog(true);
+  };
+
+  const handleFineUpdated = (updatedFine) => {
+    // Refresh fines list
+    loadFines();
   };
 
   if (loading || finesLoading) {
@@ -899,6 +963,121 @@ const AdminBonusManagement = () => {
                 </TableBody>
               </Table>
             </TableContainer>
+
+            {/* Pending Approval Fines Section - For Agents */}
+            {isAgent() && pendingApprovalFines.length > 0 && (
+              <Box sx={{ mt: 3 }}>
+                <Divider sx={{ mb: 2 }} />
+                <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <WarningIcon color="warning" />
+                  Fines Awaiting Your Approval ({pendingApprovalFines.length})
+                </Typography>
+                <Alert severity="warning" sx={{ mb: 2 }}>
+                  Please review and respond to the fines below. You can approve or dispute each fine.
+                </Alert>
+                <TableContainer component={Paper} variant="outlined">
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Amount</TableCell>
+                        <TableCell>Reason</TableCell>
+                        <TableCell>Period</TableCell>
+                        <TableCell>Imposed By</TableCell>
+                        <TableCell>Images</TableCell>
+                        <TableCell align="center">Actions</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {pendingApprovalFines.map((fine) => (
+                        <TableRow key={fine._id}>
+                          <TableCell>
+                            <Typography fontWeight="bold" color="error.main">
+                              {formatCurrency(fine.amount)}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>{fine.reason}</TableCell>
+                          <TableCell>
+                            {fine.fineMonth && fine.fineYear
+                              ? `${String(fine.fineMonth).padStart(2, '0')}/${fine.fineYear}`
+                              : 'N/A'}
+                          </TableCell>
+                          <TableCell>{fine.imposedBy?.fullName || 'N/A'}</TableCell>
+                          <TableCell>
+                            {fine.images?.length > 0 ? (
+                              <Chip label={`${fine.images.length} image(s)`} size="small" variant="outlined" />
+                            ) : 'None'}
+                          </TableCell>
+                          <TableCell align="center">
+                            <Button
+                              size="small"
+                              variant="contained"
+                              onClick={() => handleViewFineDetail(fine)}
+                            >
+                              Review
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </Box>
+            )}
+
+            {/* Disputed Fines Section - For Admin */}
+            {user?.role === 'admin' && disputedFines.length > 0 && (
+              <Box sx={{ mt: 3 }}>
+                <Divider sx={{ mb: 2 }} />
+                <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <GavelIcon color="error" />
+                  Disputed Fines Awaiting Admin Decision ({disputedFines.length})
+                </Typography>
+                <Alert severity="error" sx={{ mb: 2 }}>
+                  The following fines have been disputed by agents and require your decision.
+                </Alert>
+                <TableContainer component={Paper} variant="outlined">
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Agent</TableCell>
+                        <TableCell>Amount</TableCell>
+                        <TableCell>Reason</TableCell>
+                        <TableCell>Dispute Reason</TableCell>
+                        <TableCell align="center">Actions</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {disputedFines.map((fine) => (
+                        <TableRow key={fine._id}>
+                          <TableCell>{fine.agent?.fullName || 'N/A'}</TableCell>
+                          <TableCell>
+                            <Typography fontWeight="bold" color="error.main">
+                              {formatCurrency(fine.amount)}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>{fine.reason}</TableCell>
+                          <TableCell>
+                            <Typography variant="body2" color="warning.main">
+                              {fine.agentResponse?.disputeReason || 'No reason provided'}
+                            </Typography>
+                          </TableCell>
+                          <TableCell align="center">
+                            <Button
+                              size="small"
+                              variant="contained"
+                              color="warning"
+                              onClick={() => handleViewFineDetail(fine)}
+                            >
+                              Review & Decide
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </Box>
+            )}
           </CardContent>
         </Card>
       )}
@@ -988,6 +1167,18 @@ const AdminBonusManagement = () => {
                 onChange={(e) => setFineFormData(prev => ({ ...prev, notes: e.target.value }))}
               />
             </Grid>
+            <Grid item xs={12}>
+              <Divider sx={{ my: 1 }} />
+              <Typography variant="subtitle2" gutterBottom>
+                Evidence Images (Optional)
+              </Typography>
+              <FineImageUpload
+                images={fineImages}
+                onImagesChange={setFineImages}
+                maxImages={5}
+                disabled={processingFine}
+              />
+            </Grid>
           </Grid>
         </DialogContent>
         <DialogActions>
@@ -1067,7 +1258,7 @@ const AdminBonusManagement = () => {
                       </TableCell>
                       <TableCell>
                         <Chip
-                          label={fine.status}
+                          label={getStatusLabel(fine.status)}
                           color={getStatusColor(fine.status)}
                           size="small"
                         />
@@ -1079,7 +1270,20 @@ const AdminBonusManagement = () => {
                       </TableCell>
                       <TableCell>
                         <Box display="flex" gap={1}>
-                          {fine.status === 'active' && (
+                          <Tooltip title="View Details">
+                            <IconButton
+                              size="small"
+                              onClick={() => {
+                                handleCloseFinesView();
+                                handleViewFineDetail(fine);
+                              }}
+                              color="primary"
+                            >
+                              <ViewIcon />
+                            </IconButton>
+                          </Tooltip>
+                          {/* Only show resolve buttons for approved/admin_approved fines */}
+                          {['approved', 'admin_approved'].includes(fine.status) && user?.role === 'admin' && (
                             <>
                               <Tooltip title="Mark as Paid">
                                 <IconButton
@@ -1103,16 +1307,18 @@ const AdminBonusManagement = () => {
                               </Tooltip>
                             </>
                           )}
-                          <Tooltip title="Delete Fine">
-                            <IconButton
-                              size="small"
-                              onClick={() => handleDeleteFine(fine._id)}
-                              color="error"
-                              disabled={processingFine}
-                            >
-                              <DeleteIcon />
-                            </IconButton>
-                          </Tooltip>
+                          {user?.role === 'admin' && (
+                            <Tooltip title="Delete Fine">
+                              <IconButton
+                                size="small"
+                                onClick={() => handleDeleteFine(fine._id)}
+                                color="error"
+                                disabled={processingFine}
+                              >
+                                <DeleteIcon />
+                              </IconButton>
+                            </Tooltip>
+                          )}
                         </Box>
                       </TableCell>
                     </TableRow>
@@ -1126,6 +1332,17 @@ const AdminBonusManagement = () => {
           <Button onClick={handleCloseFinesView}>Close</Button>
         </DialogActions>
       </Dialog>
+
+      {/* Fine Detail Dialog */}
+      <FineDetailDialog
+        open={showFineDetailDialog}
+        onClose={() => {
+          setShowFineDetailDialog(false);
+          setSelectedFineDetail(null);
+        }}
+        fine={selectedFineDetail}
+        onFineUpdated={handleFineUpdated}
+      />
 
     </Box>
   );

@@ -277,7 +277,7 @@ const MainLayout = () => {
           key: "payroll",
           children: [
             {
-              text: "Payroll",
+              text: "Agents",
               icon: <PaymentIcon />,
               path: "/payroll",
             },
@@ -379,7 +379,7 @@ const MainLayout = () => {
           key: "payroll",
           children: [
             {
-              text: "Payroll",
+              text: "Agents",
               icon: <PaymentIcon />,
               path: "/payroll",
             },
@@ -476,7 +476,7 @@ const MainLayout = () => {
           key: "payroll",
           children: [
             {
-              text: "Payroll",
+              text: "Agents",
               icon: <PaymentIcon />,
               path: "/payroll",
             },

@@ -1,5 +1,6 @@
 const AgentFine = require("../models/AgentFine");
 const User = require("../models/User");
+const FineImage = require("../models/FineImage");
 
 // Get all fines for all agents (admin view)
 const getAllAgentFines = async (req, res) => {
@@ -87,12 +88,12 @@ const getAgentFines = async (req, res) => {
   }
 };
 
-// Create a new fine for an agent
+// Create a new fine for an agent (managers and admins)
 const createAgentFine = async (req, res) => {
   try {
     const { agentId } = req.params;
-    const { amount, reason, description, notes, fineMonth, fineYear } = req.body;
-    const adminId = req.user.id;
+    const { amount, reason, description, notes, fineMonth, fineYear, images } = req.body;
+    const managerId = req.user.id;
 
     // Validate that the agent exists
     const agent = await User.findById(agentId);
@@ -130,25 +131,50 @@ const createAgentFine = async (req, res) => {
       });
     }
 
-    // Create the fine with month/year
+    // Validate images if provided
+    let imageIds = [];
+    if (images && Array.isArray(images) && images.length > 0) {
+      // Verify all image IDs are valid
+      const validImages = await FineImage.find({ _id: { $in: images } });
+      if (validImages.length !== images.length) {
+        return res.status(400).json({
+          success: false,
+          message: "One or more invalid image IDs provided",
+        });
+      }
+      imageIds = images;
+    }
+
+    // Create the fine with month/year and pending_approval status
     const fine = await AgentFine.create({
       agent: agentId,
       amount: parseFloat(amount),
       reason: reason.trim(),
       description: description?.trim() || "",
-      imposedBy: adminId,
+      imposedBy: managerId,
       notes: notes?.trim() || "",
       fineMonth: targetMonth,
       fineYear: targetYear,
+      images: imageIds,
+      status: "pending_approval", // Initial status awaiting agent approval
     });
+
+    // Update images with fineId reference
+    if (imageIds.length > 0) {
+      await FineImage.updateMany(
+        { _id: { $in: imageIds } },
+        { $set: { fineId: fine._id } }
+      );
+    }
 
     // Populate the response
     await fine.populate("agent", "fullName email");
     await fine.populate("imposedBy", "fullName email");
+    await fine.populate("images");
 
     res.status(201).json({
       success: true,
-      message: "Fine created successfully",
+      message: "Fine created successfully. Awaiting agent approval.",
       data: fine,
     });
   } catch (error) {
@@ -165,8 +191,8 @@ const createAgentFine = async (req, res) => {
 const updateAgentFine = async (req, res) => {
   try {
     const { fineId } = req.params;
-    const { amount, reason, description, notes } = req.body;
-    const adminId = req.user.id;
+    const { amount, reason, description, notes, images } = req.body;
+    const managerId = req.user.id;
 
     const fine = await AgentFine.findById(fineId);
     if (!fine) {
@@ -176,11 +202,11 @@ const updateAgentFine = async (req, res) => {
       });
     }
 
-    // Only allow updating if the fine is still active
-    if (fine.status !== "active") {
+    // Only allow updating if the fine is still pending_approval
+    if (!["pending_approval"].includes(fine.status)) {
       return res.status(400).json({
         success: false,
-        message: "Cannot update a resolved fine",
+        message: "Cannot update a fine that has been responded to or resolved",
       });
     }
 
@@ -213,11 +239,40 @@ const updateAgentFine = async (req, res) => {
       fine.notes = notes.trim();
     }
 
+    // Update images if provided
+    if (images !== undefined && Array.isArray(images)) {
+      // Remove old fineId from previous images
+      if (fine.images && fine.images.length > 0) {
+        await FineImage.updateMany(
+          { _id: { $in: fine.images } },
+          { $set: { fineId: null } }
+        );
+      }
+
+      // Validate new images
+      if (images.length > 0) {
+        const validImages = await FineImage.find({ _id: { $in: images } });
+        if (validImages.length !== images.length) {
+          return res.status(400).json({
+            success: false,
+            message: "One or more invalid image IDs provided",
+          });
+        }
+        // Update new images with fineId
+        await FineImage.updateMany(
+          { _id: { $in: images } },
+          { $set: { fineId: fine._id } }
+        );
+      }
+      fine.images = images;
+    }
+
     await fine.save();
 
     // Populate the response
     await fine.populate("agent", "fullName email");
     await fine.populate("imposedBy", "fullName email");
+    await fine.populate("images");
 
     res.json({
       success: true,
@@ -234,7 +289,7 @@ const updateAgentFine = async (req, res) => {
   }
 };
 
-// Resolve a fine (mark as paid, waived, etc.)
+// Resolve a fine (mark as paid, waived - only for approved/admin_approved fines)
 const resolveAgentFine = async (req, res) => {
   try {
     const { fineId } = req.params;
@@ -249,12 +304,20 @@ const resolveAgentFine = async (req, res) => {
       });
     }
 
-    // Validate status
-    const validStatuses = ["paid", "waived", "disputed"];
+    // Validate status - only paid or waived are valid resolutions
+    const validStatuses = ["paid", "waived"];
     if (!validStatuses.includes(status)) {
       return res.status(400).json({
         success: false,
-        message: "Invalid status. Must be one of: paid, waived, disputed",
+        message: "Invalid status. Must be one of: paid, waived",
+      });
+    }
+
+    // Only allow resolving fines that are approved or admin_approved
+    if (!["approved", "admin_approved"].includes(fine.status)) {
+      return res.status(400).json({
+        success: false,
+        message: "Can only resolve fines that have been approved",
       });
     }
 
@@ -265,6 +328,7 @@ const resolveAgentFine = async (req, res) => {
     await fine.populate("agent", "fullName email");
     await fine.populate("imposedBy", "fullName email");
     await fine.populate("resolvedBy", "fullName email");
+    await fine.populate("images");
 
     res.json({
       success: true,
@@ -276,6 +340,197 @@ const resolveAgentFine = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to resolve agent fine",
+      error: error.message,
+    });
+  }
+};
+
+// Agent response to fine (approve or dispute)
+const agentRespondToFine = async (req, res) => {
+  try {
+    const { fineId } = req.params;
+    const { action, disputeReason, description, images } = req.body;
+    const agentId = req.user.id;
+
+    const fine = await AgentFine.findById(fineId);
+    if (!fine) {
+      return res.status(404).json({
+        success: false,
+        message: "Fine not found",
+      });
+    }
+
+    // Check if user is the agent for this fine
+    if (fine.agent.toString() !== agentId) {
+      return res.status(403).json({
+        success: false,
+        message: "You can only respond to your own fines",
+      });
+    }
+
+    // Only allow response to pending_approval fines
+    if (fine.status !== "pending_approval") {
+      return res.status(400).json({
+        success: false,
+        message: "This fine has already been responded to",
+      });
+    }
+
+    // Validate action
+    if (!["approved", "disputed"].includes(action)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid action. Must be 'approved' or 'disputed'",
+      });
+    }
+
+    // If disputing, require a reason
+    if (action === "disputed" && (!disputeReason || disputeReason.trim() === "")) {
+      return res.status(400).json({
+        success: false,
+        message: "Dispute reason is required when disputing a fine",
+      });
+    }
+
+    // Update fine with agent response
+    fine.agentResponse = {
+      action,
+      disputeReason: action === "disputed" ? disputeReason.trim() : undefined,
+      description: description ? description.trim() : undefined,
+      images: images && images.length > 0 ? images : undefined,
+      respondedAt: new Date(),
+    };
+
+    // Update status based on action
+    fine.status = action; // 'approved' or 'disputed'
+
+    await fine.save();
+
+    // Populate the response
+    await fine.populate("agent", "fullName email");
+    await fine.populate("imposedBy", "fullName email");
+    await fine.populate("images");
+    await fine.populate("agentResponse.images");
+
+    res.json({
+      success: true,
+      message: action === "approved"
+        ? "Fine approved successfully"
+        : "Fine disputed. Awaiting admin review.",
+      data: fine,
+    });
+  } catch (error) {
+    console.error("Error responding to agent fine:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to respond to fine",
+      error: error.message,
+    });
+  }
+};
+
+// Admin decision on disputed fine
+const adminDecideFine = async (req, res) => {
+  try {
+    const { fineId } = req.params;
+    const { action, notes } = req.body;
+    const adminId = req.user.id;
+
+    const fine = await AgentFine.findById(fineId);
+    if (!fine) {
+      return res.status(404).json({
+        success: false,
+        message: "Fine not found",
+      });
+    }
+
+    // Only allow decision on disputed fines
+    if (fine.status !== "disputed") {
+      return res.status(400).json({
+        success: false,
+        message: "Can only make decisions on disputed fines",
+      });
+    }
+
+    // Validate action
+    if (!["approved", "rejected"].includes(action)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid action. Must be 'approved' or 'rejected'",
+      });
+    }
+
+    // Update fine with admin decision
+    fine.adminDecision = {
+      action,
+      notes: notes?.trim() || undefined,
+      decidedBy: adminId,
+      decidedAt: new Date(),
+    };
+
+    // Update status based on admin decision
+    fine.status = action === "approved" ? "admin_approved" : "admin_rejected";
+
+    await fine.save();
+
+    // Populate the response
+    await fine.populate("agent", "fullName email");
+    await fine.populate("imposedBy", "fullName email");
+    await fine.populate("adminDecision.decidedBy", "fullName email");
+    await fine.populate("images");
+
+    res.json({
+      success: true,
+      message: action === "approved"
+        ? "Disputed fine approved by admin"
+        : "Disputed fine rejected by admin",
+      data: fine,
+    });
+  } catch (error) {
+    console.error("Error making admin decision on fine:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to make decision on fine",
+      error: error.message,
+    });
+  }
+};
+
+// Get fines pending agent approval (for agent's own fines)
+const getPendingApprovalFines = async (req, res) => {
+  try {
+    const agentId = req.user.role === "agent" ? req.user.id : null;
+
+    const fines = await AgentFine.getPendingApprovalFines(agentId);
+
+    res.json({
+      success: true,
+      data: fines,
+    });
+  } catch (error) {
+    console.error("Error fetching pending approval fines:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch pending approval fines",
+      error: error.message,
+    });
+  }
+};
+
+// Get disputed fines for admin review
+const getDisputedFines = async (req, res) => {
+  try {
+    const fines = await AgentFine.getDisputedFines();
+
+    res.json({
+      success: true,
+      data: fines,
+    });
+  } catch (error) {
+    console.error("Error fetching disputed fines:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch disputed fines",
       error: error.message,
     });
   }
@@ -391,4 +646,8 @@ module.exports = {
   deleteAgentFine,
   getAgentTotalFines,
   getAgentMonthlyFines,
+  agentRespondToFine,
+  adminDecideFine,
+  getPendingApprovalFines,
+  getDisputedFines,
 };

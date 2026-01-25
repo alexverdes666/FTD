@@ -62,7 +62,11 @@ const AgentCallsTable = ({ agentCalls, loading = false, agentBonusesData = [], a
   };
 
   const getAgentFines = (agentName) => {
-    const agentFines = agentFinesData.filter(fine => fine.agent.fullName === agentName && fine.status === 'active');
+    // Only count approved and admin_approved fines as active deductions
+    const agentFines = agentFinesData.filter(fine =>
+      fine.agent.fullName === agentName &&
+      ['approved', 'admin_approved', 'active'].includes(fine.status) // Include 'active' for backward compatibility
+    );
     return agentFines.reduce((total, fine) => total + fine.amount, 0);
   };
 

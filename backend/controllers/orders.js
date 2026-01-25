@@ -4128,10 +4128,58 @@ exports.cancelLeadFromOrder = async (req, res, next) => {
       `[CANCEL-LEAD-DEBUG] Cleared cooldown for cancelled lead (now available for reuse)`
     );
 
-    // Note: We keep all assignment histories as permanent records (not cleared on cancel)
-    // This includes clientNetworkHistory, ourNetworkHistory, campaignHistory, and clientBrokerHistory
-    // These histories are used for filtering and preventing duplicate assignments in future orders
-    // assignedAgent and assignedClientBrokers are also preserved
+    // Remove assignment histories that were inherited from this specific order
+    // This undoes the assignments that were made when the lead was added to the order
+    const orderIdStr = orderId.toString();
+
+    // Remove client network history entries for this order
+    if (lead.clientNetworkHistory && lead.clientNetworkHistory.length > 0) {
+      lead.clientNetworkHistory = lead.clientNetworkHistory.filter(
+        (entry) => !entry.orderId || entry.orderId.toString() !== orderIdStr
+      );
+    }
+
+    // Remove our network history entries for this order
+    if (lead.ourNetworkHistory && lead.ourNetworkHistory.length > 0) {
+      lead.ourNetworkHistory = lead.ourNetworkHistory.filter(
+        (entry) => !entry.orderId || entry.orderId.toString() !== orderIdStr
+      );
+    }
+
+    // Remove campaign history entries for this order
+    if (lead.campaignHistory && lead.campaignHistory.length > 0) {
+      lead.campaignHistory = lead.campaignHistory.filter(
+        (entry) => !entry.orderId || entry.orderId.toString() !== orderIdStr
+      );
+    }
+
+    // Remove client broker history entries for this order and update assignedClientBrokers
+    if (lead.clientBrokerHistory && lead.clientBrokerHistory.length > 0) {
+      // Get broker IDs that were assigned via this order (before filtering)
+      const brokerIdsFromThisOrder = lead.clientBrokerHistory
+        .filter((entry) => entry.orderId && entry.orderId.toString() === orderIdStr)
+        .map((entry) => entry.clientBroker.toString());
+
+      // Filter out history entries for this order
+      lead.clientBrokerHistory = lead.clientBrokerHistory.filter(
+        (entry) => !entry.orderId || entry.orderId.toString() !== orderIdStr
+      );
+
+      // Remove broker IDs from assignedClientBrokers if they were only assigned via this order
+      // (i.e., they no longer appear in any remaining history entry)
+      if (lead.assignedClientBrokers && brokerIdsFromThisOrder.length > 0) {
+        const remainingBrokerIds = new Set(
+          lead.clientBrokerHistory.map((entry) => entry.clientBroker.toString())
+        );
+        lead.assignedClientBrokers = lead.assignedClientBrokers.filter(
+          (brokerId) => remainingBrokerIds.has(brokerId.toString())
+        );
+      }
+    }
+
+    console.log(
+      `[CANCEL-LEAD-DEBUG] Removed order-specific assignment histories for order ${orderId}`
+    );
 
     // Update client brokers to remove this lead from their active lists
     if (lead.assignedClientBrokers && lead.assignedClientBrokers.length > 0) {
@@ -6280,6 +6328,52 @@ exports.replaceLeadInOrder = async (req, res, next) => {
       // Clear cooldown for replaced lead (allows immediate reuse)
       oldLead.lastUsedInOrder = undefined;
 
+      // Remove assignment histories from old lead that were inherited from this order
+      const orderIdStr = orderId.toString();
+
+      // Remove client network history entries for this order
+      if (oldLead.clientNetworkHistory && oldLead.clientNetworkHistory.length > 0) {
+        oldLead.clientNetworkHistory = oldLead.clientNetworkHistory.filter(
+          (entry) => !entry.orderId || entry.orderId.toString() !== orderIdStr
+        );
+      }
+
+      // Remove our network history entries for this order
+      if (oldLead.ourNetworkHistory && oldLead.ourNetworkHistory.length > 0) {
+        oldLead.ourNetworkHistory = oldLead.ourNetworkHistory.filter(
+          (entry) => !entry.orderId || entry.orderId.toString() !== orderIdStr
+        );
+      }
+
+      // Remove campaign history entries for this order
+      if (oldLead.campaignHistory && oldLead.campaignHistory.length > 0) {
+        oldLead.campaignHistory = oldLead.campaignHistory.filter(
+          (entry) => !entry.orderId || entry.orderId.toString() !== orderIdStr
+        );
+      }
+
+      // Remove client broker history entries for this order and update assignedClientBrokers
+      if (oldLead.clientBrokerHistory && oldLead.clientBrokerHistory.length > 0) {
+        const brokerIdsFromThisOrder = oldLead.clientBrokerHistory
+          .filter((entry) => entry.orderId && entry.orderId.toString() === orderIdStr)
+          .map((entry) => entry.clientBroker.toString());
+
+        oldLead.clientBrokerHistory = oldLead.clientBrokerHistory.filter(
+          (entry) => !entry.orderId || entry.orderId.toString() !== orderIdStr
+        );
+
+        if (oldLead.assignedClientBrokers && brokerIdsFromThisOrder.length > 0) {
+          const remainingBrokerIds = new Set(
+            oldLead.clientBrokerHistory.map((entry) => entry.clientBroker.toString())
+          );
+          oldLead.assignedClientBrokers = oldLead.assignedClientBrokers.filter(
+            (brokerId) => remainingBrokerIds.has(brokerId.toString())
+          );
+        }
+      }
+
+      console.log(`[REPLACE-LEAD] Removed order-specific assignment histories from old lead ${leadId}`);
+
       // Assign new lead to order
       newLead.orderId = orderId;
       newLead.createdBy = req.user._id;
@@ -6416,9 +6510,12 @@ exports.restoreLeadToOrder = async (req, res, next) => {
       });
     }
 
-    // Find the order
+    // Find the order with populated selections for re-adding assignments
     const Order = require("../models/Order");
-    const order = await Order.findById(orderId);
+    const order = await Order.findById(orderId)
+      .populate("selectedClientNetwork")
+      .populate("selectedOurNetwork")
+      .populate("selectedCampaign");
     if (!order) {
       return res.status(404).json({
         success: false,
@@ -6483,6 +6580,69 @@ exports.restoreLeadToOrder = async (req, res, next) => {
     if (leadType === "ftd" || leadType === "filler") {
       lead.lastUsedInOrder = new Date();
     }
+
+    // Re-add assignment histories from the order (restore inherited assignments)
+    // Add client network to history if the order has one
+    if (order.selectedClientNetwork) {
+      if (!lead.clientNetworkHistory) {
+        lead.clientNetworkHistory = [];
+      }
+      lead.clientNetworkHistory.push({
+        clientNetwork: order.selectedClientNetwork._id,
+        assignedAt: new Date(),
+        assignedBy: req.user._id,
+        orderId: order._id,
+      });
+    }
+
+    // Add our network to history if the order has one
+    if (order.selectedOurNetwork) {
+      if (!lead.ourNetworkHistory) {
+        lead.ourNetworkHistory = [];
+      }
+      lead.ourNetworkHistory.push({
+        ourNetwork: order.selectedOurNetwork._id,
+        assignedAt: new Date(),
+        assignedBy: req.user._id,
+        orderId: order._id,
+      });
+    }
+
+    // Add client brokers to history if the order has any
+    if (order.selectedClientBrokers && order.selectedClientBrokers.length > 0) {
+      order.selectedClientBrokers.forEach((brokerId) => {
+        if (!lead.assignedClientBrokers) {
+          lead.assignedClientBrokers = [];
+        }
+        if (!lead.assignedClientBrokers.some((id) => id.toString() === brokerId.toString())) {
+          lead.assignedClientBrokers.push(brokerId);
+        }
+        if (!lead.clientBrokerHistory) {
+          lead.clientBrokerHistory = [];
+        }
+        lead.clientBrokerHistory.push({
+          clientBroker: brokerId,
+          assignedAt: new Date(),
+          assignedBy: req.user._id,
+          orderId: order._id,
+        });
+      });
+    }
+
+    // Add campaign to history if the order has one
+    if (order.selectedCampaign) {
+      if (!lead.campaignHistory) {
+        lead.campaignHistory = [];
+      }
+      lead.campaignHistory.push({
+        campaign: order.selectedCampaign._id,
+        assignedAt: new Date(),
+        assignedBy: req.user._id,
+        orderId: order._id,
+      });
+    }
+
+    console.log(`[RESTORE-LEAD] Re-added order assignment histories to lead ${leadId}`);
 
     // Remove from removedLeads array
     order.removedLeads.splice(removedIndex, 1);
@@ -6597,9 +6757,12 @@ exports.undoLeadReplacement = async (req, res, next) => {
       });
     }
 
-    // Find the order
+    // Find the order with populated selections for re-adding assignments
     const Order = require("../models/Order");
-    const order = await Order.findById(orderId);
+    const order = await Order.findById(orderId)
+      .populate("selectedClientNetwork")
+      .populate("selectedOurNetwork")
+      .populate("selectedCampaign");
     if (!order) {
       return res.status(404).json({
         success: false,
@@ -6680,10 +6843,47 @@ exports.undoLeadReplacement = async (req, res, next) => {
     // Start transaction
     const session = await Lead.startSession();
     await session.withTransaction(async () => {
+      const orderIdStr = orderId.toString();
+
       // Reset the new lead (current one)
       newLead.orderId = undefined;
       newLead.createdBy = undefined;
       newLead.lastUsedInOrder = undefined;
+
+      // Remove assignment histories from new lead that were inherited from this order
+      if (newLead.clientNetworkHistory && newLead.clientNetworkHistory.length > 0) {
+        newLead.clientNetworkHistory = newLead.clientNetworkHistory.filter(
+          (entry) => !entry.orderId || entry.orderId.toString() !== orderIdStr
+        );
+      }
+      if (newLead.ourNetworkHistory && newLead.ourNetworkHistory.length > 0) {
+        newLead.ourNetworkHistory = newLead.ourNetworkHistory.filter(
+          (entry) => !entry.orderId || entry.orderId.toString() !== orderIdStr
+        );
+      }
+      if (newLead.campaignHistory && newLead.campaignHistory.length > 0) {
+        newLead.campaignHistory = newLead.campaignHistory.filter(
+          (entry) => !entry.orderId || entry.orderId.toString() !== orderIdStr
+        );
+      }
+      if (newLead.clientBrokerHistory && newLead.clientBrokerHistory.length > 0) {
+        const brokerIdsFromThisOrder = newLead.clientBrokerHistory
+          .filter((entry) => entry.orderId && entry.orderId.toString() === orderIdStr)
+          .map((entry) => entry.clientBroker.toString());
+
+        newLead.clientBrokerHistory = newLead.clientBrokerHistory.filter(
+          (entry) => !entry.orderId || entry.orderId.toString() !== orderIdStr
+        );
+
+        if (newLead.assignedClientBrokers && brokerIdsFromThisOrder.length > 0) {
+          const remainingBrokerIds = new Set(
+            newLead.clientBrokerHistory.map((entry) => entry.clientBroker.toString())
+          );
+          newLead.assignedClientBrokers = newLead.assignedClientBrokers.filter(
+            (brokerId) => remainingBrokerIds.has(brokerId.toString())
+          );
+        }
+      }
 
       // Restore the old lead
       oldLead.orderId = orderId;
@@ -6691,6 +6891,62 @@ exports.undoLeadReplacement = async (req, res, next) => {
       if (orderedAs === "ftd" || orderedAs === "filler") {
         oldLead.lastUsedInOrder = new Date();
       }
+
+      // Re-add assignment histories to old lead from the order
+      if (order.selectedClientNetwork) {
+        if (!oldLead.clientNetworkHistory) {
+          oldLead.clientNetworkHistory = [];
+        }
+        oldLead.clientNetworkHistory.push({
+          clientNetwork: order.selectedClientNetwork._id,
+          assignedAt: new Date(),
+          assignedBy: req.user._id,
+          orderId: order._id,
+        });
+      }
+      if (order.selectedOurNetwork) {
+        if (!oldLead.ourNetworkHistory) {
+          oldLead.ourNetworkHistory = [];
+        }
+        oldLead.ourNetworkHistory.push({
+          ourNetwork: order.selectedOurNetwork._id,
+          assignedAt: new Date(),
+          assignedBy: req.user._id,
+          orderId: order._id,
+        });
+      }
+      if (order.selectedClientBrokers && order.selectedClientBrokers.length > 0) {
+        order.selectedClientBrokers.forEach((brokerId) => {
+          if (!oldLead.assignedClientBrokers) {
+            oldLead.assignedClientBrokers = [];
+          }
+          if (!oldLead.assignedClientBrokers.some((id) => id.toString() === brokerId.toString())) {
+            oldLead.assignedClientBrokers.push(brokerId);
+          }
+          if (!oldLead.clientBrokerHistory) {
+            oldLead.clientBrokerHistory = [];
+          }
+          oldLead.clientBrokerHistory.push({
+            clientBroker: brokerId,
+            assignedAt: new Date(),
+            assignedBy: req.user._id,
+            orderId: order._id,
+          });
+        });
+      }
+      if (order.selectedCampaign) {
+        if (!oldLead.campaignHistory) {
+          oldLead.campaignHistory = [];
+        }
+        oldLead.campaignHistory.push({
+          campaign: order.selectedCampaign._id,
+          assignedAt: new Date(),
+          assignedBy: req.user._id,
+          orderId: order._id,
+        });
+      }
+
+      console.log(`[UNDO-REPLACE] Transferred assignment histories from new lead ${newLeadId} to old lead ${oldLeadId}`);
 
       // Add audit log entry
       if (!order.auditLog) {

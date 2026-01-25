@@ -98,7 +98,8 @@ import {
   getAllAgentCallCounts,
   calculateBonusFromCallCounts,
 } from "../services/agentCallCounts";
-import { getAllAgentFines, getFinesSummary, getAgentFines } from "../services/agentFines";
+import { getAllAgentFines, getFinesSummary, getAgentFines, getPendingApprovalFines, respondToFine } from "../services/agentFines";
+import FineDetailDialog from "../components/FineDetailDialog";
 import api from "../services/api";
 
 const PayrollPage = () => {
@@ -151,6 +152,11 @@ const PayrollPage = () => {
   const [finesLoading, setFinesLoading] = useState(false);
   const [bonusesStats, setBonusesStats] = useState(null);
   const [finesStats, setFinesStats] = useState(null);
+
+  // Pending approval fines for agents
+  const [pendingApprovalFines, setPendingApprovalFines] = useState([]);
+  const [selectedFineDetail, setSelectedFineDetail] = useState(null);
+  const [showFineDetailDialog, setShowFineDetailDialog] = useState(false);
 
   // Add loading states for individual data fetches
   const [bonusDataLoading, setBonusDataLoading] = useState(false);
@@ -756,7 +762,9 @@ const PayrollPage = () => {
 
     const totalStats = data.reduce(
       (acc, fine) => {
-        const isActive = fine.status === "active";
+        // Active fines are those approved or admin_approved (include 'active' for backward compatibility)
+        const isActive = ['approved', 'admin_approved', 'active'].includes(fine.status);
+        const isPending = fine.status === 'pending_approval';
         return {
           totalFines: acc.totalFines + 1,
           totalAmount: acc.totalAmount + fine.amount,
@@ -766,6 +774,7 @@ const PayrollPage = () => {
           waivedFines: acc.waivedFines + (fine.status === "waived" ? 1 : 0),
           disputedFines:
             acc.disputedFines + (fine.status === "disputed" ? 1 : 0),
+          pendingFines: (acc.pendingFines || 0) + (isPending ? 1 : 0),
         };
       },
       {
@@ -867,8 +876,30 @@ const PayrollPage = () => {
       const agentFines = await getAgentFines(user.id, false, year, month);
       setAgentFinesData(agentFines);
       calculateFinesStats(agentFines);
+
+      // Load pending approval fines for agent
+      try {
+        const pendingFines = await getPendingApprovalFines();
+        setPendingApprovalFines(pendingFines);
+      } catch (e) {
+        console.error("Error loading pending fines:", e);
+        setPendingApprovalFines([]);
+      }
     } catch (err) {
       console.error("Error loading agent data for month:", err);
+    }
+  };
+
+  // Handle fine detail dialog
+  const handleViewFineDetail = (fine) => {
+    setSelectedFineDetail(fine);
+    setShowFineDetailDialog(true);
+  };
+
+  const handleFineUpdated = (updatedFine) => {
+    // Refresh fines data
+    if (selectedAgentMonth) {
+      loadAgentDataForMonth();
     }
   };
 
@@ -1087,10 +1118,11 @@ const PayrollPage = () => {
       }
     }
 
-    // Calculate fines from agent fines data
+    // Calculate fines from agent fines data (only approved/admin_approved count as deductions)
     if (agentFinesData && agentFinesData.length > 0) {
       fines = agentFinesData.reduce((total, fine) => {
-        return total + (fine.status === "active" ? fine.amount : 0);
+        const isActive = ['approved', 'admin_approved', 'active'].includes(fine.status);
+        return total + (isActive ? fine.amount : 0);
       }, 0);
     }
 
@@ -1500,7 +1532,7 @@ const PayrollPage = () => {
               {user.role === "admin" && (
                 <Tab icon={<PhoneIcon />} label="Agent Calls" />
               )}
-              {user.role === "admin" && (
+              {(user.role === "admin" || user.role === "affiliate_manager") && (
                 <Tab icon={<SettingsIcon />} label="Bonus Management" />
               )}
             </Tabs>
@@ -1879,15 +1911,13 @@ const PayrollPage = () => {
                                 return "";
                               const fines = agentFinesData.reduce(
                                 (total, fine) => {
-                                  return (
-                                    total +
-                                    (fine.status === "active" ? fine.amount : 0)
-                                  );
+                                  const isActive = ['approved', 'admin_approved', 'active'].includes(fine.status);
+                                  return total + (isActive ? fine.amount : 0);
                                 },
                                 0
                               );
                               return fines > 0
-                                ? ` - ⚠️ Fines: $${fines.toFixed(2)}`
+                                ? ` - Fines: $${fines.toFixed(2)}`
                                 : "";
                             })()}
                           </Typography>
@@ -2904,6 +2934,147 @@ const PayrollPage = () => {
                   </CardContent>
                 </Card>
               </Grid>
+
+              {/* Pending Approval Fines Section - For Agents */}
+              {pendingApprovalFines.length > 0 && (
+                <Grid item xs={12}>
+                  <Card sx={{ mt: 2 }}>
+                    <CardHeader
+                      title={
+                        <Box display="flex" alignItems="center" gap={1}>
+                          <WarningIcon color="warning" />
+                          <Typography variant="h6">
+                            Fines Awaiting Your Approval ({pendingApprovalFines.length})
+                          </Typography>
+                        </Box>
+                      }
+                    />
+                    <CardContent>
+                      <Alert severity="warning" sx={{ mb: 2 }}>
+                        Please review and respond to the fines below. You can approve or dispute each fine.
+                      </Alert>
+                      <TableContainer component={Paper} variant="outlined">
+                        <Table size="small">
+                          <TableHead>
+                            <TableRow>
+                              <TableCell>Amount</TableCell>
+                              <TableCell>Reason</TableCell>
+                              <TableCell>Period</TableCell>
+                              <TableCell>Imposed By</TableCell>
+                              <TableCell>Evidence</TableCell>
+                              <TableCell align="center">Actions</TableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {pendingApprovalFines.map((fine) => (
+                              <TableRow key={fine._id}>
+                                <TableCell>
+                                  <Typography fontWeight="bold" color="error.main">
+                                    ${fine.amount.toFixed(2)}
+                                  </Typography>
+                                </TableCell>
+                                <TableCell>{fine.reason}</TableCell>
+                                <TableCell>
+                                  {fine.fineMonth && fine.fineYear
+                                    ? `${String(fine.fineMonth).padStart(2, '0')}/${fine.fineYear}`
+                                    : 'N/A'}
+                                </TableCell>
+                                <TableCell>{fine.imposedBy?.fullName || 'N/A'}</TableCell>
+                                <TableCell>
+                                  {fine.images?.length > 0 ? (
+                                    <Chip label={`${fine.images.length} image(s)`} size="small" variant="outlined" />
+                                  ) : 'None'}
+                                </TableCell>
+                                <TableCell align="center">
+                                  <Button
+                                    size="small"
+                                    variant="contained"
+                                    onClick={() => handleViewFineDetail(fine)}
+                                  >
+                                    Review
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </TableContainer>
+                    </CardContent>
+                  </Card>
+                </Grid>
+              )}
+
+              {/* All Agent Fines Summary */}
+              {agentFinesData.length > 0 && (
+                <Grid item xs={12}>
+                  <Card sx={{ mt: 2 }}>
+                    <CardHeader
+                      title={
+                        <Box display="flex" alignItems="center" gap={1}>
+                          <WarningIcon color="error" />
+                          <Typography variant="h6">
+                            My Fines This Month ({agentFinesData.length})
+                          </Typography>
+                        </Box>
+                      }
+                    />
+                    <CardContent>
+                      <TableContainer component={Paper} variant="outlined">
+                        <Table size="small">
+                          <TableHead>
+                            <TableRow>
+                              <TableCell>Amount</TableCell>
+                              <TableCell>Reason</TableCell>
+                              <TableCell>Period</TableCell>
+                              <TableCell>Status</TableCell>
+                              <TableCell align="center">Actions</TableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {agentFinesData.map((fine) => (
+                              <TableRow key={fine._id}>
+                                <TableCell>
+                                  <Typography fontWeight="bold" color="error.main">
+                                    ${fine.amount.toFixed(2)}
+                                  </Typography>
+                                </TableCell>
+                                <TableCell>{fine.reason}</TableCell>
+                                <TableCell>
+                                  {fine.fineMonth && fine.fineYear
+                                    ? `${String(fine.fineMonth).padStart(2, '0')}/${fine.fineYear}`
+                                    : 'N/A'}
+                                </TableCell>
+                                <TableCell>
+                                  <Chip
+                                    label={fine.status.replace('_', ' ').toUpperCase()}
+                                    size="small"
+                                    color={
+                                      fine.status === 'approved' || fine.status === 'admin_approved' ? 'error' :
+                                      fine.status === 'disputed' ? 'warning' :
+                                      fine.status === 'admin_rejected' ? 'success' :
+                                      fine.status === 'pending_approval' ? 'info' :
+                                      'default'
+                                    }
+                                  />
+                                </TableCell>
+                                <TableCell align="center">
+                                  <Button
+                                    size="small"
+                                    variant="outlined"
+                                    onClick={() => handleViewFineDetail(fine)}
+                                  >
+                                    View
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </TableContainer>
+                    </CardContent>
+                  </Card>
+                </Grid>
+              )}
             </Grid>
           </motion.div>
         )}
@@ -3485,8 +3656,8 @@ const PayrollPage = () => {
           </motion.div>
         )}
 
-        {/* Bonus Management Tab (Admin Only) */}
-        {tabValue === 1 && user?.role === "admin" && (
+        {/* Bonus Management Tab (Admin and Affiliate Manager) */}
+        {((tabValue === 1 && user?.role === "admin") || (tabValue === 0 && user?.role === "affiliate_manager")) && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -3521,6 +3692,19 @@ const PayrollPage = () => {
             tableData={affiliateManagerTableData}
             onWithdrawalRequest={handleAffiliateManagerWithdrawalRequest}
             user={user}
+          />
+        )}
+
+        {/* Fine Detail Dialog - For Agent fine review */}
+        {user?.role === "agent" && (
+          <FineDetailDialog
+            open={showFineDetailDialog}
+            onClose={() => {
+              setShowFineDetailDialog(false);
+              setSelectedFineDetail(null);
+            }}
+            fine={selectedFineDetail}
+            onFineUpdated={handleFineUpdated}
           />
         )}
       </Box>

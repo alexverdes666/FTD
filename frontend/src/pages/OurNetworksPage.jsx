@@ -52,8 +52,8 @@ import {
   Rocket as RocketIcon,
   CurrencyBitcoin as BitcoinIcon,
   MoreVert as MoreVertIcon,
-  ToggleOn as ToggleOnIcon,
-  ToggleOff as ToggleOffIcon,
+  Archive as ArchiveIcon,
+  Unarchive as UnarchiveIcon,
 } from "@mui/icons-material";
 import { useForm, Controller, useFieldArray } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
@@ -177,7 +177,7 @@ const OurNetworksPage = () => {
   // Initialize search from URL params (for global search integration)
   const [searchTerm, setSearchTerm] = useState(() => searchParams.get("search") || "");
   const debouncedSearchTerm = useDebounce(searchTerm, 500); // Debounce search for 500ms
-  const [showActiveOnly, setShowActiveOnly] = useState(true);
+  const [showArchived, setShowArchived] = useState(false);
   const [openDialog, setOpenDialog] = useState(false);
   const [editingNetwork, setEditingNetwork] = useState(null);
   const [viewingNetwork, setViewingNetwork] = useState(null);
@@ -295,7 +295,7 @@ const OurNetworksPage = () => {
         params.append("page", page + 1);
         params.append("limit", rowsPerPage);
         if (debouncedSearchTerm) params.append("search", debouncedSearchTerm);
-        if (showActiveOnly) params.append("isActive", "true");
+        if (showArchived) params.append("isArchived", "true");
       }
 
       const url =
@@ -344,9 +344,9 @@ const OurNetworksPage = () => {
                 if (tronAddresses.some(addr => addr?.toLowerCase().includes(keyword))) return true;
               }
               
-              // Search in active status
-              if (network.isActive && keyword === "active") return true;
-              if (!network.isActive && keyword === "inactive") return true;
+              // Search in archived status
+              if (!network.isArchived && keyword === "active") return true;
+              if (network.isArchived && keyword === "archived") return true;
               
               return false;
             };
@@ -356,10 +356,10 @@ const OurNetworksPage = () => {
           });
         }
 
-        // Apply active filter (though backend already returns only active networks)
-        if (showActiveOnly) {
+        // Filter archived networks for affiliate managers
+        if (!showArchived) {
           filteredNetworks = filteredNetworks.filter(
-            (network) => network.isActive
+            (network) => !network.isArchived || network.isArchived === undefined
           );
         }
 
@@ -378,7 +378,7 @@ const OurNetworksPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [page, rowsPerPage, debouncedSearchTerm, showActiveOnly, user?.role]);
+  }, [page, rowsPerPage, debouncedSearchTerm, showArchived, user?.role]);
 
   const fetchNetworkSummary = useCallback(
     async (networkId) => {
@@ -597,79 +597,23 @@ const OurNetworksPage = () => {
     }
   };
 
-  const handleDelete = async (networkId) => {
-    // Find the network name for the confirmation message
-    const networkToDelete = ourNetworks.find((n) => n._id === networkId);
-    const networkName = networkToDelete?.name || "this network";
-
-    if (
-      !window.confirm(
-        `Are you sure you want to delete "${networkName}"? This action requires 2FA verification.`
-      )
-    ) {
-      return;
-    }
-
+  const handleArchive = async (network, archive) => {
     try {
-      // Use sensitive action verification for deleting networks
-      await executeSensitiveAction({
-        actionName: "Delete Network",
-        actionDescription: `This will permanently delete the network "${networkName}" and all associated wallet configurations.`,
-        apiCall: async (headers) => {
-          return await api.delete(`/our-networks/${networkId}`, { headers });
-        },
+      await api.patch(`/our-networks/${network._id}/archive`, {
+        isArchived: archive,
       });
       setNotification({
-        message: "Our network deleted successfully!",
+        message: archive
+          ? `Network "${network.name}" archived successfully!`
+          : `Network "${network.name}" activated successfully!`,
         severity: "success",
       });
       fetchOurNetworks();
     } catch (error) {
-      // Don't show error if user cancelled the action
-      if (error.message === "User cancelled sensitive action") {
-        return;
-      }
-      setNotification({
-        message:
-          error.response?.data?.message || "Failed to delete our network",
-        severity: "error",
-      });
-    }
-  };
-
-  const handleToggleActive = async (network) => {
-    const newStatus = !network.isActive;
-    try {
-      // Use sensitive action verification for toggling network status
-      await executeSensitiveAction({
-        actionName: newStatus ? "Activate Network" : "Deactivate Network",
-        actionDescription: `This will ${
-          newStatus ? "activate" : "deactivate"
-        } the network "${network.name}".`,
-        apiCall: async (headers) => {
-          return await api.put(
-            `/our-networks/${network._id}`,
-            { isActive: newStatus },
-            { headers }
-          );
-        },
-      });
-      setNotification({
-        message: `Our network ${
-          newStatus ? "activated" : "deactivated"
-        } successfully!`,
-        severity: "success",
-      });
-      fetchOurNetworks();
-    } catch (error) {
-      // Don't show error if user cancelled the action
-      if (error.message === "User cancelled sensitive action") {
-        return;
-      }
       setNotification({
         message:
           error.response?.data?.message ||
-          "Failed to update our network status",
+          `Failed to ${archive ? "archive" : "activate"} network`,
         severity: "error",
       });
     }
@@ -793,6 +737,19 @@ const OurNetworksPage = () => {
                 justifyContent: "flex-start",
               }}
             >
+              {user?.role === "admin" && (
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={showArchived}
+                      onChange={(e) => setShowArchived(e.target.checked)}
+                    />
+                  }
+                  label="Show Archived"
+                  sx={{ whiteSpace: "nowrap" }}
+                />
+              )}
+
               <FormControlLabel
                 control={
                   <Switch
@@ -940,7 +897,16 @@ const OurNetworksPage = () => {
               </TableRow>
             ) : (
               ourNetworks.map((network) => (
-                <TableRow key={network._id} hover>
+                <TableRow
+                  key={network._id}
+                  hover
+                  sx={{
+                    ...(network.isArchived && {
+                      opacity: 0.5,
+                      backgroundColor: "action.hover",
+                    }),
+                  }}
+                >
                   <TableCell>
                     <Typography variant="subtitle2" fontWeight="medium">
                       {network.name}
@@ -1136,8 +1102,8 @@ const OurNetworksPage = () => {
                   </TableCell>
                   <TableCell align="center">
                     <Chip
-                      label={network.isActive ? "Active" : "Inactive"}
-                      color={network.isActive ? "success" : "default"}
+                      label={network.isArchived ? "Archived" : "Active"}
+                      color={network.isArchived ? "default" : "success"}
                       size="small"
                     />
                   </TableCell>
@@ -1464,8 +1430,8 @@ const OurNetworksPage = () => {
                   Status
                 </Typography>
                 <Chip
-                  label={viewingNetwork.isActive ? "Active" : "Inactive"}
-                  color={viewingNetwork.isActive ? "success" : "default"}
+                  label={viewingNetwork.isArchived ? "Archived" : "Active"}
+                  color={viewingNetwork.isArchived ? "default" : "success"}
                   size="small"
                 />
               </Box>
@@ -1979,39 +1945,21 @@ const OurNetworksPage = () => {
 
           user?.role === "admin" && (
             <MenuItem
-              key="toggle"
+              key="archive"
               onClick={() => {
-                handleToggleActive(menuNetwork);
+                handleArchive(menuNetwork, !menuNetwork.isArchived);
                 handleMenuClose();
               }}
             >
               <ListItemIcon>
-                {menuNetwork.isActive ? (
-                  <ToggleOffIcon fontSize="small" />
+                {menuNetwork.isArchived ? (
+                  <UnarchiveIcon fontSize="small" />
                 ) : (
-                  <ToggleOnIcon fontSize="small" />
+                  <ArchiveIcon fontSize="small" />
                 )}
               </ListItemIcon>
               <ListItemText>
-                {menuNetwork.isActive ? "Deactivate" : "Activate"}
-              </ListItemText>
-            </MenuItem>
-          ),
-
-          user?.role === "admin" && (
-            <MenuItem
-              key="delete"
-              onClick={() => {
-                handleDelete(menuNetwork._id);
-                handleMenuClose();
-              }}
-              sx={{ color: "error.main" }}
-            >
-              <ListItemIcon>
-                <DeleteIcon fontSize="small" color="error" />
-              </ListItemIcon>
-              <ListItemText primaryTypographyProps={{ color: "error" }}>
-                Delete
+                {menuNetwork.isArchived ? "Activate" : "Archive"}
               </ListItemText>
             </MenuItem>
           ),

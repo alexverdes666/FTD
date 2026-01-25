@@ -85,8 +85,10 @@ const WithdrawalModal = ({
       const finesData = await getAgentFines(user.id, false, year, month);
       console.log("Agent monthly fines data:", finesData);
 
-      // Filter only active fines (not paid, waived, or disputed)
-      const activeFines = finesData.filter((fine) => fine.status === "active");
+      // Filter only active fines (approved or admin_approved, include 'active' for backward compatibility)
+      const activeFines = finesData.filter((fine) =>
+        ['approved', 'admin_approved', 'active'].includes(fine.status)
+      );
       setAgentFines(activeFines);
     } catch (error) {
       console.error("Error fetching agent fines:", error);
@@ -184,9 +186,9 @@ const WithdrawalModal = ({
       }
     }
 
-    // Calculate fines from agent fines data
+    // Calculate fines from agent fines data (only approved/admin_approved count as deductions)
     const totalActiveFines = agentFinesData.reduce(
-      (sum, fine) => sum + (fine.status === 'active' ? fine.amount : 0),
+      (sum, fine) => sum + (['approved', 'admin_approved', 'active'].includes(fine.status) ? fine.amount : 0),
       0
     );
 
@@ -215,7 +217,9 @@ const WithdrawalModal = ({
   };
 
   const getTotalFines = () => {
-    return agentFinesData.reduce((sum, fine) => sum + (fine.status === 'active' ? fine.amount : 0), 0);
+    return agentFinesData.reduce((sum, fine) =>
+      sum + (['approved', 'admin_approved', 'active'].includes(fine.status) ? fine.amount : 0), 0
+    );
   };
 
   const totalEarnings = calculateTotalEarnings();

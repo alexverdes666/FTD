@@ -115,13 +115,71 @@ export const getAgentMonthlyFines = async (agentId, year = null, month = null) =
     const params = {};
     if (year) params.year = year;
     if (month) params.month = month;
-    
+
     const response = await api.get(`/agent-fines/agent/${agentId}/monthly`, {
       params,
     });
     return response.data.data;
   } catch (error) {
     console.error("Error fetching agent monthly fines:", error);
+    throw error;
+  }
+};
+
+// Agent respond to fine (approve or dispute)
+export const respondToFine = async (fineId, action, disputeReason = null, description = null, images = null) => {
+  try {
+    const data = { action };
+    if (disputeReason) {
+      data.disputeReason = disputeReason;
+    }
+    if (description) {
+      data.description = description;
+    }
+    if (images && images.length > 0) {
+      data.images = images;
+    }
+    const response = await api.patch(`/agent-fines/${fineId}/agent-response`, data);
+    return response.data.data;
+  } catch (error) {
+    console.error("Error responding to fine:", error);
+    throw error;
+  }
+};
+
+// Admin decision on disputed fine
+export const adminDecideFine = async (fineId, action, notes = null) => {
+  try {
+    const data = { action };
+    if (notes) {
+      data.notes = notes;
+    }
+    const response = await api.patch(`/agent-fines/${fineId}/admin-decision`, data);
+    return response.data.data;
+  } catch (error) {
+    console.error("Error making admin decision on fine:", error);
+    throw error;
+  }
+};
+
+// Get fines pending agent approval
+export const getPendingApprovalFines = async () => {
+  try {
+    const response = await api.get("/agent-fines/pending-approval");
+    return response.data.data;
+  } catch (error) {
+    console.error("Error fetching pending approval fines:", error);
+    throw error;
+  }
+};
+
+// Get disputed fines for admin review
+export const getDisputedFines = async () => {
+  try {
+    const response = await api.get("/agent-fines/disputed");
+    return response.data.data;
+  } catch (error) {
+    console.error("Error fetching disputed fines:", error);
     throw error;
   }
 };

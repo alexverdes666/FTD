@@ -27,11 +27,52 @@ const agentFineSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
-    // Status of the fine
+    // Status of the fine - approval workflow
     status: {
       type: String,
-      enum: ["active", "paid", "waived", "disputed"],
-      default: "active",
+      enum: ["pending_approval", "approved", "disputed", "admin_approved", "admin_rejected", "paid", "waived"],
+      default: "pending_approval",
+    },
+    // Images attached to fine (evidence)
+    images: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "FineImage"
+    }],
+    // Agent response to the fine
+    agentResponse: {
+      action: {
+        type: String,
+        enum: ["approved", "disputed"]
+      },
+      disputeReason: {
+        type: String,
+        maxlength: 1000
+      },
+      description: {
+        type: String,
+        maxlength: 2000
+      },
+      images: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "FineImage"
+      }],
+      respondedAt: Date
+    },
+    // Admin decision for disputed fines
+    adminDecision: {
+      action: {
+        type: String,
+        enum: ["approved", "rejected"]
+      },
+      notes: {
+        type: String,
+        maxlength: 1000
+      },
+      decidedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User"
+      },
+      decidedAt: Date
     },
     // Date when the fine was imposed
     imposedDate: {
@@ -102,7 +143,8 @@ agentFineSchema.statics.getAgentFines = function (
 ) {
   const query = { agent: agentId, isActive: true };
   if (!includeResolved) {
-    query.status = "active";
+    // Active fines are those that are approved or admin_approved and not yet paid/waived
+    query.status = { $in: ["pending_approval", "approved", "disputed", "admin_approved"] };
   }
   
   // Add month/year filtering if provided
@@ -117,6 +159,9 @@ agentFineSchema.statics.getAgentFines = function (
     .populate("agent", "fullName email")
     .populate("imposedBy", "fullName email")
     .populate("resolvedBy", "fullName email")
+    .populate("images")
+    .populate("agentResponse.images")
+    .populate("adminDecision.decidedBy", "fullName email")
     .sort({ imposedDate: -1 });
 };
 
@@ -126,14 +171,18 @@ agentFineSchema.statics.getAllActiveFines = function () {
     .populate("agent", "fullName email")
     .populate("imposedBy", "fullName email")
     .populate("resolvedBy", "fullName email")
+    .populate("images")
+    .populate("agentResponse.images")
+    .populate("adminDecision.decidedBy", "fullName email")
     .sort({ imposedDate: -1 });
 };
 
-// Static method to get total active fines for an agent
+// Static method to get total active fines for an agent (fines that count toward deduction)
 agentFineSchema.statics.getTotalActiveFines = function (agentId, year = null, month = null) {
   const matchQuery = {
     agent: new mongoose.Types.ObjectId(agentId),
-    status: "active",
+    // Only approved or admin_approved fines count as active
+    status: { $in: ["approved", "admin_approved"] },
     isActive: true,
   };
   
@@ -159,12 +208,19 @@ agentFineSchema.statics.getFinesSummary = function () {
       $group: {
         _id: "$agent",
         totalFines: { $sum: "$amount" },
+        // Active fines are those approved or admin_approved (that count toward deduction)
         activeFines: {
-          $sum: { $cond: [{ $eq: ["$status", "active"] }, "$amount", 0] },
+          $sum: { $cond: [{ $in: ["$status", ["approved", "admin_approved"]] }, "$amount", 0] },
         },
         fineCount: { $sum: 1 },
         activeFineCount: {
-          $sum: { $cond: [{ $eq: ["$status", "active"] }, 1, 0] },
+          $sum: { $cond: [{ $in: ["$status", ["approved", "admin_approved"]] }, 1, 0] },
+        },
+        pendingApprovalCount: {
+          $sum: { $cond: [{ $eq: ["$status", "pending_approval"] }, 1, 0] },
+        },
+        disputedCount: {
+          $sum: { $cond: [{ $eq: ["$status", "disputed"] }, 1, 0] },
         },
       },
     },
@@ -187,12 +243,15 @@ agentFineSchema.statics.getMonthlyFines = function (agentId, year, month) {
     agent: agentId,
     fineYear: year,
     fineMonth: month,
-    status: "active",
+    // Include approved and admin_approved fines for monthly totals
+    status: { $in: ["approved", "admin_approved"] },
     isActive: true,
   })
     .populate("agent", "fullName email")
     .populate("imposedBy", "fullName email")
     .populate("resolvedBy", "fullName email")
+    .populate("images")
+    .populate("agentResponse.images")
     .sort({ imposedDate: -1 });
 };
 
@@ -204,12 +263,43 @@ agentFineSchema.statics.getTotalMonthlyFines = function (agentId, year, month) {
         agent: new mongoose.Types.ObjectId(agentId),
         fineYear: year,
         fineMonth: month,
-        status: "active",
+        // Only approved and admin_approved count toward deductions
+        status: { $in: ["approved", "admin_approved"] },
         isActive: true,
       },
     },
     { $group: { _id: null, totalFines: { $sum: "$amount" } } },
   ]);
+};
+
+// Static method to get fines pending agent approval
+agentFineSchema.statics.getPendingApprovalFines = function (agentId = null) {
+  const query = {
+    status: "pending_approval",
+    isActive: true,
+  };
+  if (agentId) {
+    query.agent = agentId;
+  }
+  return this.find(query)
+    .populate("agent", "fullName email")
+    .populate("imposedBy", "fullName email")
+    .populate("images")
+    .populate("agentResponse.images")
+    .sort({ imposedDate: -1 });
+};
+
+// Static method to get disputed fines for admin review
+agentFineSchema.statics.getDisputedFines = function () {
+  return this.find({
+    status: "disputed",
+    isActive: true,
+  })
+    .populate("agent", "fullName email")
+    .populate("imposedBy", "fullName email")
+    .populate("images")
+    .populate("agentResponse.images")
+    .sort({ imposedDate: -1 });
 };
 
 // Instance method to resolve a fine

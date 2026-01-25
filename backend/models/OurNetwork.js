@@ -26,6 +26,10 @@ const ourNetworkSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    isArchived: {
+      type: Boolean,
+      default: false,
+    },
     cryptoWallets: {
       ethereum: {
         type: [String],
@@ -87,6 +91,7 @@ ourNetworkSchema.index({ name: 1 });
 ourNetworkSchema.index({ assignedAffiliateManager: 1 });
 ourNetworkSchema.index({ createdBy: 1 });
 ourNetworkSchema.index({ isActive: 1 });
+ourNetworkSchema.index({ isArchived: 1 });
 // Text index for global search
 ourNetworkSchema.index(
   { name: "text", description: "text" },
