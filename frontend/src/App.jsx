@@ -81,8 +81,6 @@ import SearchResultsPage from "./pages/SearchResultsPage.jsx";
 import SheetsPage from "./pages/SheetsPage.jsx";
 import WorkspacePage from "./pages/WorkspacePage.jsx";
 
-import GlobalPen from "./components/GlobalPen.jsx";
-
 // Component to handle role-based default routing
 const RoleBasedRedirect = () => {
   const user = useSelector(selectUser);
@@ -570,7 +568,6 @@ function AppContent() {
           },
         }}
       />
-      <GlobalPen />
       <DisclaimerModal open={disclaimerOpen} onAgree={handleAgree} />
 
       {/* Inactivity Warning Dialog */}

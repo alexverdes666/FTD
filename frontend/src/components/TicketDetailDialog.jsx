@@ -205,17 +205,17 @@ const TicketDetailDialog = ({
   const handleResolveTicket = async () => {
     try {
       setResolving(true);
-      await ticketsService.resolveTicket(ticketId, resolutionNote);
+      const response = await ticketsService.resolveTicket(ticketId, resolutionNote);
       toast.success('Ticket resolved successfully');
       setShowResolveForm(false);
       setResolutionNote('');
-      
-      // Reload ticket details
-      await loadTicketDetails();
-      
-      // Notify parent of update
+
+      // Update local ticket state with response data
+      setTicket(response.data);
+
+      // Notify parent of update with the full updated ticket
       if (onTicketUpdate) {
-        onTicketUpdate({ ...ticket, status: 'resolved' });
+        onTicketUpdate(response.data);
       }
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to resolve ticket');
@@ -301,7 +301,7 @@ const TicketDetailDialog = ({
                         {ticket.createdBy.fullName}
                       </Typography>
                       <Typography variant="caption" color="textSecondary" sx={{ fontSize: '0.65rem' }}>
-                        {ticketsService.formatTimeAgo(ticket.createdAt)}
+                        {ticketsService.formatExactDateTime(ticket.createdAt)}
                       </Typography>
                     </Box>
                   </Box>
@@ -370,7 +370,7 @@ const TicketDetailDialog = ({
                       Resolved by {ticket.resolution.resolvedBy.fullName}
                     </Typography>
                     <Typography variant="caption" display="block">
-                      {ticketsService.formatTimeAgo(ticket.resolution.resolvedAt)}
+                      {ticketsService.formatExactDateTime(ticket.resolution.resolvedAt)}
                     </Typography>
                     {ticket.resolution.resolutionNote && (
                       <Typography variant="caption" display="block" sx={{ mt: 0.25 }}>
@@ -506,12 +506,12 @@ const TicketDetailDialog = ({
                           </Stack>
                         )}
                         
-                        <Typography 
-                          variant="caption" 
+                        <Typography
+                          variant="caption"
                           color="text.disabled"
                           sx={{ mt: 0.25, fontSize: '0.6rem' }}
                         >
-                          {ticketsService.formatTimeAgo(comment.createdAt)}
+                          {ticketsService.formatExactDateTime(comment.createdAt)}
                         </Typography>
                       </Box>
                     </Box>

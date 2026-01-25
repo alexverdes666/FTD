@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useSelector } from 'react-redux';
 import {
   Box,
@@ -42,7 +42,6 @@ import {
   Comment as CommentIcon,
   FilterList as FilterIcon,
   Clear as ClearIcon,
-  Refresh as RefreshIcon,
   Search as SearchIcon,
   Schedule as ScheduleIcon,
   Image as ImageIcon,
@@ -117,22 +116,24 @@ const TicketsPage = () => {
   });
 
   // Load data
-  const loadTickets = useCallback(async () => {
+  const loadTickets = useCallback(async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const params = {
         page: pagination.page,
         limit: pagination.limit,
         ...ticketsService.buildTicketFilters(filters)
       };
-      
+
       const response = await ticketsService.getTickets(params);
       setTickets(response.data);
       setPagination(response.pagination);
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Failed to load tickets');
+      if (!silent) {
+        toast.error(error.response?.data?.message || 'Failed to load tickets');
+      }
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [pagination.page, pagination.limit, filters]);
 
@@ -155,6 +156,24 @@ const TicketsPage = () => {
   useEffect(() => {
     loadStats();
   }, [loadStats]);
+
+  // Auto-refresh tickets every 30 seconds (silent refresh)
+  const autoRefreshRef = useRef(null);
+
+  useEffect(() => {
+    autoRefreshRef.current = setInterval(() => {
+      loadTickets(true); // Silent refresh - no loading spinner
+      if (user?.role === 'admin') {
+        loadStats();
+      }
+    }, 30000);
+
+    return () => {
+      if (autoRefreshRef.current) {
+        clearInterval(autoRefreshRef.current);
+      }
+    };
+  }, [loadTickets, loadStats, user?.role]);
 
   // Event handlers
   const handleFilterChange = (field, value) => {
@@ -276,25 +295,49 @@ const TicketsPage = () => {
         return;
       }
 
-      await ticketsService.addComment(selectedTicket._id, commentData);
+      const response = await ticketsService.addComment(selectedTicket._id, commentData);
       toast.success('Comment added successfully');
       setCommentDialogOpen(false);
       setCommentData({ message: '', isInternal: false });
-      loadTickets();
+
+      // Update only the specific ticket in local state
+      setTickets(prev => prev.map(ticket =>
+        ticket._id === selectedTicket._id ? response.data : ticket
+      ));
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to add comment');
     }
+  };
+
+  // Helper function to check if a ticket matches current filters
+  const ticketMatchesFilters = (ticket) => {
+    if (filters.status && ticket.status !== filters.status) return false;
+    if (filters.category && ticket.category !== filters.category) return false;
+    if (filters.priority && ticket.priority !== filters.priority) return false;
+    return true;
   };
 
   // Assignment functionality removed - only admins handle all tickets
 
   const handleResolveTicket = async () => {
     try {
-      await ticketsService.resolveTicket(selectedTicket._id, resolveData.resolutionNote);
+      const response = await ticketsService.resolveTicket(selectedTicket._id, resolveData.resolutionNote);
       toast.success('Ticket resolved successfully');
       setResolveDialogOpen(false);
       setResolveData({ resolutionNote: '' });
-      loadTickets();
+
+      // Check if resolved ticket still matches current filters
+      if (ticketMatchesFilters(response.data)) {
+        // Update the ticket in the list
+        setTickets(prev => prev.map(ticket =>
+          ticket._id === selectedTicket._id ? response.data : ticket
+        ));
+      } else {
+        // Remove from list if it no longer matches filters
+        setTickets(prev => prev.filter(ticket => ticket._id !== selectedTicket._id));
+      }
+
+      // Refresh stats in the background
       loadStats();
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to resolve ticket');
@@ -308,7 +351,11 @@ const TicketsPage = () => {
     try {
       await ticketsService.deleteTicket(ticket._id);
       toast.success('Ticket deleted successfully');
-      loadTickets();
+
+      // Remove the ticket from local state
+      setTickets(prev => prev.filter(t => t._id !== ticket._id));
+
+      // Refresh stats in the background
       loadStats();
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to delete ticket');
@@ -334,10 +381,16 @@ const TicketsPage = () => {
   };
 
   const handleTicketUpdate = (updatedTicket) => {
-    // Update the ticket in the list
-    setTickets(prev => prev.map(ticket => 
-      ticket._id === updatedTicket._id ? updatedTicket : ticket
-    ));
+    // Check if updated ticket still matches current filters
+    if (ticketMatchesFilters(updatedTicket)) {
+      // Update the ticket in the list
+      setTickets(prev => prev.map(ticket =>
+        ticket._id === updatedTicket._id ? updatedTicket : ticket
+      ));
+    } else {
+      // Remove from list if it no longer matches filters
+      setTickets(prev => prev.filter(ticket => ticket._id !== updatedTicket._id));
+    }
     loadStats(); // Refresh stats
   };
 
@@ -361,7 +414,7 @@ const TicketsPage = () => {
             startIcon={<FilterIcon />}
             onClick={() => setShowFilters(!showFilters)}
             variant={showFilters ? 'contained' : 'outlined'}
-            sx={{ 
+            sx={{
               borderRadius: 2,
               textTransform: 'none',
               px: 2
@@ -369,26 +422,11 @@ const TicketsPage = () => {
           >
             Filters
           </Button>
-          <Tooltip title="Refresh tickets">
-            <IconButton
-              onClick={loadTickets}
-              sx={{ 
-                border: `1px solid ${alpha(theme.palette.divider, 0.3)}`,
-                borderRadius: 2,
-                '&:hover': {
-                  bgcolor: alpha(theme.palette.primary.main, 0.05),
-                  borderColor: 'primary.main'
-                }
-              }}
-            >
-              <RefreshIcon />
-            </IconButton>
-          </Tooltip>
           <Button
             startIcon={<AddIcon />}
             onClick={() => setCreateDialogOpen(true)}
             variant="contained"
-            sx={{ 
+            sx={{
               borderRadius: 2,
               textTransform: 'none',
               px: 2.5,

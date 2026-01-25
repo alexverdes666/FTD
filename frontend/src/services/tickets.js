@@ -207,17 +207,28 @@ export const formatTimeAgo = (date) => {
   const now = new Date();
   const then = new Date(date);
   const diffInMs = now - then;
-  
+
   const minutes = Math.floor(diffInMs / (1000 * 60));
   const hours = Math.floor(diffInMs / (1000 * 60 * 60));
   const days = Math.floor(diffInMs / (1000 * 60 * 60 * 24));
-  
+
   if (minutes < 1) return 'Just now';
   if (minutes < 60) return `${minutes}m ago`;
   if (hours < 24) return `${hours}h ago`;
   if (days < 30) return `${days}d ago`;
-  
+
   return then.toLocaleDateString();
+};
+
+export const formatExactDateTime = (date) => {
+  const d = new Date(date);
+  const day = d.getDate().toString().padStart(2, '0');
+  const month = (d.getMonth() + 1).toString().padStart(2, '0');
+  const year = d.getFullYear();
+  const hours = d.getHours().toString().padStart(2, '0');
+  const minutes = d.getMinutes().toString().padStart(2, '0');
+
+  return `${day}/${month}/${year} ${hours}:${minutes}`;
 };
 
 export const isTicketOverdue = (ticket) => {
@@ -287,6 +298,7 @@ export default {
   validateTicketData,
   buildTicketFilters,
   formatTimeAgo,
+  formatExactDateTime,
   isTicketOverdue,
   calculateTicketMetrics
 };
