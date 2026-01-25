@@ -11,6 +11,9 @@ const {
   getRelatedAccounts,
   switchAccount,
   verify2FAAndLogin,
+  getMySessions,
+  terminateSession,
+  terminateAllSessions,
 } = require("../controllers/auth");
 const router = express.Router();
 router.post(
@@ -87,6 +90,11 @@ router.put(
   ],
   changePassword
 );
+
+// Session management routes
+router.get("/sessions", protect, getMySessions);
+router.post("/sessions/terminate-all", protect, terminateAllSessions);
+router.delete("/sessions/:sessionId", protect, terminateSession);
 
 // Account switching routes
 router.get("/related-accounts", protect, getRelatedAccounts);

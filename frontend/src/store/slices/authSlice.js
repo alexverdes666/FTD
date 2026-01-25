@@ -14,6 +14,14 @@ const initialState = {
   twoFactorUserId: null,
   twoFactorToken: null,
   useQRAuth: false,
+  // Session management state
+  sessions: {
+    activeSessions: [],
+    sessionHistory: [],
+    currentDeviceId: null,
+    isLoading: false,
+    error: null,
+  },
 };
 export const login = createAsyncThunk(
   "auth/login",
@@ -262,6 +270,53 @@ export const switchUserAccount = createAsyncThunk(
     }
   }
 );
+
+// Session management thunks
+export const fetchMySessions = createAsyncThunk(
+  "auth/fetchMySessions",
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await api.get("/auth/sessions");
+      return response.data.data;
+    } catch (error) {
+      return rejectWithValue(
+        error.response?.data?.message || "Failed to fetch sessions"
+      );
+    }
+  }
+);
+
+export const terminateSession = createAsyncThunk(
+  "auth/terminateSession",
+  async (sessionId, { rejectWithValue }) => {
+    try {
+      const response = await api.delete(`/auth/sessions/${sessionId}`);
+      return { sessionId, ...response.data };
+    } catch (error) {
+      return rejectWithValue(
+        error.response?.data?.message || "Failed to terminate session"
+      );
+    }
+  }
+);
+
+export const terminateAllSessions = createAsyncThunk(
+  "auth/terminateAllSessions",
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await api.post("/auth/sessions/terminate-all");
+      // Update the token with the new one
+      if (response.data.data?.newToken) {
+        localStorage.setItem("token", response.data.data.newToken);
+      }
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(
+        error.response?.data?.message || "Failed to terminate all sessions"
+      );
+    }
+  }
+);
 const authSlice = createSlice({
   name: "auth",
   initialState,
@@ -278,6 +333,13 @@ const authSlice = createSlice({
       state.twoFactorUserId = null;
       state.twoFactorToken = null;
       state.useQRAuth = false;
+      state.sessions = {
+        activeSessions: [],
+        sessionHistory: [],
+        currentDeviceId: null,
+        isLoading: false,
+        error: null,
+      };
       localStorage.removeItem("token");
     },
     clearError: (state) => {
@@ -494,6 +556,84 @@ const authSlice = createSlice({
         state.requires2FA = false;
         state.twoFactorUserId = null;
         state.twoFactorToken = null;
+      })
+      // Session management
+      .addCase(fetchMySessions.pending, (state) => {
+        if (!state.sessions) {
+          state.sessions = { activeSessions: [], sessionHistory: [], currentDeviceId: null, isLoading: false, error: null };
+        }
+        state.sessions.isLoading = true;
+        state.sessions.error = null;
+      })
+      .addCase(fetchMySessions.fulfilled, (state, action) => {
+        if (!state.sessions) {
+          state.sessions = { activeSessions: [], sessionHistory: [], currentDeviceId: null, isLoading: false, error: null };
+        }
+        state.sessions.isLoading = false;
+        state.sessions.activeSessions = action.payload.activeSessions;
+        state.sessions.sessionHistory = action.payload.sessionHistory;
+        state.sessions.currentDeviceId = action.payload.currentDeviceId;
+        state.sessions.error = null;
+      })
+      .addCase(fetchMySessions.rejected, (state, action) => {
+        if (!state.sessions) {
+          state.sessions = { activeSessions: [], sessionHistory: [], currentDeviceId: null, isLoading: false, error: null };
+        }
+        state.sessions.isLoading = false;
+        state.sessions.error = action.payload;
+      })
+      .addCase(terminateSession.pending, (state) => {
+        if (!state.sessions) {
+          state.sessions = { activeSessions: [], sessionHistory: [], currentDeviceId: null, isLoading: false, error: null };
+        }
+        state.sessions.isLoading = true;
+        state.sessions.error = null;
+      })
+      .addCase(terminateSession.fulfilled, (state, action) => {
+        if (!state.sessions) {
+          state.sessions = { activeSessions: [], sessionHistory: [], currentDeviceId: null, isLoading: false, error: null };
+        }
+        state.sessions.isLoading = false;
+        // Remove the terminated session from active sessions
+        state.sessions.activeSessions = state.sessions.activeSessions.filter(
+          (s) => s.id !== action.payload.sessionId
+        );
+        state.sessions.error = null;
+      })
+      .addCase(terminateSession.rejected, (state, action) => {
+        if (!state.sessions) {
+          state.sessions = { activeSessions: [], sessionHistory: [], currentDeviceId: null, isLoading: false, error: null };
+        }
+        state.sessions.isLoading = false;
+        state.sessions.error = action.payload;
+      })
+      .addCase(terminateAllSessions.pending, (state) => {
+        if (!state.sessions) {
+          state.sessions = { activeSessions: [], sessionHistory: [], currentDeviceId: null, isLoading: false, error: null };
+        }
+        state.sessions.isLoading = true;
+        state.sessions.error = null;
+      })
+      .addCase(terminateAllSessions.fulfilled, (state, action) => {
+        if (!state.sessions) {
+          state.sessions = { activeSessions: [], sessionHistory: [], currentDeviceId: null, isLoading: false, error: null };
+        }
+        state.sessions.isLoading = false;
+        // Keep only the current session (if it exists)
+        const currentSession = state.sessions.activeSessions.find(s => s.isCurrent);
+        state.sessions.activeSessions = currentSession ? [currentSession] : [];
+        // Update token if provided
+        if (action.payload.data?.newToken) {
+          state.token = action.payload.data.newToken;
+        }
+        state.sessions.error = null;
+      })
+      .addCase(terminateAllSessions.rejected, (state, action) => {
+        if (!state.sessions) {
+          state.sessions = { activeSessions: [], sessionHistory: [], currentDeviceId: null, isLoading: false, error: null };
+        }
+        state.sessions.isLoading = false;
+        state.sessions.error = action.payload;
       });
   },
 });
@@ -506,4 +646,11 @@ export const selectAuthLoading = (state) => state.auth.isLoading;
 export const selectAuthError = (state) => state.auth.error;
 export const selectAgentPerformanceData = (state) =>
   state.auth.agentPerformanceData;
+export const selectSessions = (state) => state.auth.sessions || {
+  activeSessions: [],
+  sessionHistory: [],
+  currentDeviceId: null,
+  isLoading: false,
+  error: null,
+};
 export default authSlice.reducer;

@@ -568,6 +568,13 @@ class ActivityTrackerService {
       typingSpeed: this.calculateTypingSpeed()
     };
   }
+
+  /**
+   * Get current session ID (MongoDB _id from backend)
+   */
+  getCurrentSessionId() {
+    return this.sessionId;
+  }
 }
 
 // Create singleton instance

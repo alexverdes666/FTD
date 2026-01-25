@@ -1,16 +1,26 @@
 const { validationResult } = require("express-validator");
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
+const LoginSession = require("../models/LoginSession");
 const axios = require("axios");
 const { getClientIP, isAdminIPAllowed } = require("../middleware/auth");
+
 const generateToken = (id, originalUserId = null) => {
   const payload = { id };
   if (originalUserId) {
     payload.originalUserId = originalUserId;
   }
-  return jwt.sign(payload, process.env.JWT_SECRET, {
+  const token = jwt.sign(payload, process.env.JWT_SECRET, {
     expiresIn: process.env.JWT_EXPIRE || "30d",
   });
+  // Decode to get iat (issued at) for session tracking
+  const decoded = jwt.decode(token);
+  return { token, iat: decoded.iat };
+};
+
+// Helper to generate token (returns just token string for backward compatibility)
+const generateTokenString = (id, originalUserId = null) => {
+  return generateToken(id, originalUserId).token;
 };
 exports.register = async (req, res, next) => {
   try {
@@ -115,7 +125,16 @@ exports.login = async (req, res, next) => {
       });
     }
 
-    const token = generateToken(user._id);
+    const { token, iat } = generateToken(user._id);
+
+    // Create login session
+    try {
+      await LoginSession.createSession(user._id, iat, req);
+    } catch (sessionError) {
+      console.error("Failed to create login session:", sessionError);
+      // Don't fail login if session creation fails
+    }
+
     let agentPerformanceData = null;
     if (user.role === "agent" && user.fullName) {
       try {
@@ -454,7 +473,14 @@ exports.verify2FAAndLogin = async (req, res, next) => {
     }
 
     // 2FA verified, generate full access token
-    const accessToken = generateToken(user._id);
+    const { token: accessToken, iat } = generateToken(user._id);
+
+    // Create login session
+    try {
+      await LoginSession.createSession(user._id, iat, req);
+    } catch (sessionError) {
+      console.error("Failed to create login session:", sessionError);
+    }
 
     let agentPerformanceData = null;
     if (user.role === "agent" && user.fullName) {
@@ -486,6 +512,162 @@ exports.verify2FAAndLogin = async (req, res, next) => {
     });
   } catch (error) {
     console.error("Error in verify2FAAndLogin:", error);
+    next(error);
+  }
+};
+
+// Get current user's login sessions (active and history)
+exports.getMySessions = async (req, res, next) => {
+  try {
+    // Get token issue time from the current request to identify current session
+    const jwt = require("jsonwebtoken");
+    const token = req.headers.authorization?.split(" ")[1];
+    let currentTokenIat = null;
+
+    if (token) {
+      try {
+        const decoded = jwt.decode(token);
+        currentTokenIat = decoded?.iat;
+      } catch (e) {
+        // Ignore decode errors
+      }
+    }
+
+    // Get active login sessions
+    const activeSessions = await LoginSession.find({
+      user: req.user.id,
+      isActive: true,
+    }).sort({ lastActivityAt: -1 });
+
+    // Get session history (last 20 ended sessions)
+    const sessionHistory = await LoginSession.find({
+      user: req.user.id,
+      isActive: false,
+    })
+      .sort({ logoutAt: -1 })
+      .limit(20);
+
+    // Format sessions for response
+    const formatSession = (session) => {
+      // Check if this is the current session by comparing token issue time
+      const isCurrent = currentTokenIat && session.tokenIssuedAt &&
+        Math.floor(session.tokenIssuedAt.getTime() / 1000) === currentTokenIat;
+
+      return session.toAPIResponse(isCurrent);
+    };
+
+    res.status(200).json({
+      success: true,
+      data: {
+        activeSessions: activeSessions.map(formatSession),
+        sessionHistory: sessionHistory.map(formatSession),
+      },
+    });
+  } catch (error) {
+    console.error("Error in getMySessions:", error);
+    next(error);
+  }
+};
+
+// Terminate a specific login session
+exports.terminateSession = async (req, res, next) => {
+  try {
+    const { sessionId } = req.params;
+
+    // Find the session and verify it belongs to the current user
+    const session = await LoginSession.findOne({
+      _id: sessionId,
+      user: req.user.id,
+    });
+
+    if (!session) {
+      return res.status(404).json({
+        success: false,
+        message: "Session not found",
+      });
+    }
+
+    if (!session.isActive) {
+      return res.status(400).json({
+        success: false,
+        message: "Session is already ended",
+      });
+    }
+
+    // End the session
+    await LoginSession.endSession(sessionId, 'kicked');
+
+    res.status(200).json({
+      success: true,
+      message: "Session terminated successfully",
+    });
+  } catch (error) {
+    console.error("Error in terminateSession:", error);
+    next(error);
+  }
+};
+
+// Terminate all login sessions except current
+exports.terminateAllSessions = async (req, res, next) => {
+  try {
+    // Get current session by token issue time
+    const jwt = require("jsonwebtoken");
+    const token = req.headers.authorization?.split(" ")[1];
+    let currentSession = null;
+
+    if (token) {
+      try {
+        const decoded = jwt.decode(token);
+        if (decoded?.iat) {
+          currentSession = await LoginSession.findOne({
+            user: req.user.id,
+            isActive: true,
+            tokenIssuedAt: new Date(decoded.iat * 1000)
+          });
+        }
+      } catch (e) {
+        // Ignore decode errors
+      }
+    }
+
+    // End all sessions except current
+    const result = await LoginSession.endAllSessionsExcept(
+      req.user.id,
+      currentSession?._id,
+      'kicked'
+    );
+
+    // Invalidate all existing tokens by setting tokenInvalidatedAt
+    await User.findByIdAndUpdate(req.user.id, {
+      tokenInvalidatedAt: new Date(),
+    });
+
+    // Generate a new token for the current session
+    const { token: newToken, iat } = generateToken(req.user.id, req.user.originalUserId || null);
+
+    // Create a new login session for the new token
+    if (currentSession) {
+      // Update the current session with new token info
+      currentSession.tokenIssuedAt = new Date(iat * 1000);
+      currentSession.isActive = true;
+      currentSession.logoutAt = null;
+      currentSession.endReason = null;
+      await currentSession.save();
+    } else {
+      // Create new session
+      await LoginSession.createSession(req.user.id, iat, req);
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `Terminated ${result.modifiedCount} session(s). All other devices have been logged out.`,
+      data: {
+        terminatedCount: result.modifiedCount,
+        newToken,
+      },
+    });
+  } catch (error) {
+    console.error("Error in terminateAllSessions:", error);
     next(error);
   }
 };
@@ -586,7 +768,14 @@ exports.switchAccount = async (req, res, next) => {
     // If we are switching back to root, we don't need to store originalUserId anymore (or we can, but it's redundant)
     // Actually, it's cleaner to keep it null if we are the root user.
     const newOriginalUserId = isSwitchingToRoot ? null : rootUserId;
-    const token = generateToken(targetUser._id, newOriginalUserId);
+    const { token, iat } = generateToken(targetUser._id, newOriginalUserId);
+
+    // Create login session for the switched account
+    try {
+      await LoginSession.createSession(targetUser._id, iat, req);
+    } catch (sessionError) {
+      console.error("Failed to create login session for account switch:", sessionError);
+    }
 
     let agentPerformanceData = null;
     if (targetUser.role === "agent" && targetUser.fullName) {

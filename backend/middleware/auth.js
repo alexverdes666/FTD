@@ -97,6 +97,30 @@ exports.protect = async (req, res, next) => {
       if (decoded.originalUserId) {
         req.user.originalUserId = decoded.originalUserId;
       }
+
+      // Check if the login session is still active (for session kick functionality)
+      if (decoded.iat) {
+        const LoginSession = require("../models/LoginSession");
+        const session = await LoginSession.findOne({
+          user: user._id,
+          tokenIssuedAt: new Date(decoded.iat * 1000),
+        });
+
+        // If session exists and is not active, reject the request
+        if (session && !session.isActive) {
+          return res.status(401).json({
+            success: false,
+            message: "Session has been terminated. Please log in again.",
+          });
+        }
+
+        // Update session activity (non-blocking)
+        if (session) {
+          session.lastActivityAt = new Date();
+          session.save().catch(() => {});
+        }
+      }
+
       next();
     } catch (err) {
       return res.status(401).json({
