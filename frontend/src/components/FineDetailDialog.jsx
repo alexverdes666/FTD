@@ -302,6 +302,25 @@ const FineDetailDialog = ({ open, onClose, fine, onFineUpdated }) => {
               </Typography>
             </Grid>
 
+            {/* Lead Reference */}
+            {fine.lead && (
+              <>
+                <Grid item xs={12}>
+                  <Divider sx={{ my: 1 }} />
+                  <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
+                    Related Lead
+                  </Typography>
+                </Grid>
+                <Grid item xs={12}>
+                  <Typography variant="body1" gutterBottom>
+                    {fine.lead.firstName && fine.lead.lastName
+                      ? `${fine.lead.firstName} ${fine.lead.lastName}`
+                      : fine.lead.email || fine.lead.phone || 'N/A'}
+                  </Typography>
+                </Grid>
+              </>
+            )}
+
             {/* Evidence Images */}
             {fine.images && fine.images.length > 0 && (
               <Grid item xs={12}>

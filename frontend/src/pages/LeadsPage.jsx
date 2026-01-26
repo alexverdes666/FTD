@@ -4370,6 +4370,23 @@ const LeadRow = React.memo(
                 <EditIcon sx={{ fontSize: "1rem" }} />
               </IconButton>
             )}
+            {user?.role === ROLES.AFFILIATE_MANAGER && (
+              <Tooltip title="View History">
+                <IconButton
+                  size="small"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onViewHistory(
+                      lead._id,
+                      `${lead.firstName} ${lead.lastName}`
+                    );
+                  }}
+                  sx={{ padding: "4px" }}
+                >
+                  <HistoryIcon sx={{ fontSize: "1rem", color: "info.main" }} />
+                </IconButton>
+              </Tooltip>
+            )}
             <IconButton
               size="small"
               onClick={handleMenuOpen}

@@ -88,6 +88,7 @@ import {
   Undo as UndoIcon,
   VerifiedUser as VerifiedUserIcon,
   Launch as LaunchIcon,
+  Gavel as GavelIcon,
 } from "@mui/icons-material";
 import { useForm, Controller } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
@@ -114,6 +115,7 @@ import CopyPreferencesDialog, {
 } from "../components/CopyPreferencesDialog";
 import ReplaceLeadDialog from "../components/ReplaceLeadDialog";
 import RemoteBrowserDialog from "../components/RemoteBrowserDialog";
+import ApplyAgentFineDialog from "../components/ApplyAgentFineDialog";
 import { formatPhoneWithCountryCode } from "../utils/phoneUtils";
 
 const createOrderSchema = (userRole) => {
@@ -521,6 +523,13 @@ const OrdersPage = () => {
     open: false,
     campaigns: [],
     leadName: "",
+  });
+
+  // Apply Agent Fine Dialog State
+  const [applyFineDialog, setApplyFineDialog] = useState({
+    open: false,
+    agent: null,
+    lead: null,
   });
 
   const {
@@ -3847,6 +3856,37 @@ const OrdersPage = () => {
         message: `Failed to copy ${fieldName}`,
       });
     }
+  }, []);
+
+  // Apply Fine Dialog Handlers
+  const handleOpenApplyFineDialog = useCallback((lead) => {
+    if (!lead.assignedAgent) {
+      setNotification({
+        message: "Cannot apply fine - lead has no assigned agent",
+        severity: "warning",
+      });
+      return;
+    }
+    setApplyFineDialog({
+      open: true,
+      agent: lead.assignedAgent,
+      lead: lead,
+    });
+  }, []);
+
+  const handleCloseApplyFineDialog = useCallback(() => {
+    setApplyFineDialog({
+      open: false,
+      agent: null,
+      lead: null,
+    });
+  }, []);
+
+  const handleApplyFineSuccess = useCallback(() => {
+    setNotification({
+      message: "Fine applied successfully. Awaiting agent approval.",
+      severity: "success",
+    });
   }, []);
 
   // Confirm Deposit Handler
@@ -7261,6 +7301,15 @@ const OrdersPage = () => {
         lead={browserDialog.lead}
       />
 
+      {/* Apply Agent Fine Dialog */}
+      <ApplyAgentFineDialog
+        open={applyFineDialog.open}
+        onClose={handleCloseApplyFineDialog}
+        onSuccess={handleApplyFineSuccess}
+        agent={applyFineDialog.agent}
+        lead={applyFineDialog.lead}
+      />
+
       {/* Gender Fallback Modal */}
       <GenderFallbackModal
         open={genderFallbackModalOpen}
@@ -9983,6 +10032,21 @@ const OrdersPage = () => {
                   </ListItemIcon>
                   Assign to Agent
                 </MenuItem>
+
+                {/* Apply Fine to Agent - Only show if lead has an assigned agent */}
+                {lead.assignedAgent && (user?.role === "admin" || user?.role === "affiliate_manager") && (
+                  <MenuItem
+                    onClick={() => {
+                      handleOpenApplyFineDialog(lead);
+                      handleClosePreviewActionsMenu();
+                    }}
+                  >
+                    <ListItemIcon>
+                      <GavelIcon fontSize="small" color="warning" />
+                    </ListItemIcon>
+                    Apply Fine to Agent
+                  </MenuItem>
+                )}
 
                 {/* IPQS Recheck */}
                 <MenuItem onClick={() => handleIPQSRecheckLead(lead)}>

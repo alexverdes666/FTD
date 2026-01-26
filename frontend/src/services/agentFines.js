@@ -63,6 +63,7 @@ export const getAgentTotalFines = async (agentId, year = null, month = null) => 
 };
 
 // Create a new fine for an agent
+// fineData can include: amount, reason, description, notes, fineMonth, fineYear, images, leadId
 export const createAgentFine = async (agentId, fineData) => {
   try {
     const response = await api.post(`/agent-fines/agent/${agentId}`, fineData);

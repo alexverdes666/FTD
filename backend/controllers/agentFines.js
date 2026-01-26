@@ -92,7 +92,7 @@ const getAgentFines = async (req, res) => {
 const createAgentFine = async (req, res) => {
   try {
     const { agentId } = req.params;
-    const { amount, reason, description, notes, fineMonth, fineYear, images } = req.body;
+    const { amount, reason, description, notes, fineMonth, fineYear, images, leadId } = req.body;
     const managerId = req.user.id;
 
     // Validate that the agent exists
@@ -145,8 +145,23 @@ const createAgentFine = async (req, res) => {
       imageIds = images;
     }
 
+    // Check if a fine already exists for this lead (if leadId provided)
+    if (leadId) {
+      const existingFine = await AgentFine.findOne({
+        lead: leadId,
+        isActive: true,
+        status: { $nin: ["admin_rejected", "waived"] }, // Allow new fine if previous was rejected or waived
+      });
+      if (existingFine) {
+        return res.status(400).json({
+          success: false,
+          message: "A fine already exists for this lead",
+        });
+      }
+    }
+
     // Create the fine with month/year and pending_approval status
-    const fine = await AgentFine.create({
+    const fineData = {
       agent: agentId,
       amount: parseFloat(amount),
       reason: reason.trim(),
@@ -157,7 +172,14 @@ const createAgentFine = async (req, res) => {
       fineYear: targetYear,
       images: imageIds,
       status: "pending_approval", // Initial status awaiting agent approval
-    });
+    };
+
+    // Add lead reference if provided
+    if (leadId) {
+      fineData.lead = leadId;
+    }
+
+    const fine = await AgentFine.create(fineData);
 
     // Update images with fineId reference
     if (imageIds.length > 0) {
@@ -171,6 +193,9 @@ const createAgentFine = async (req, res) => {
     await fine.populate("agent", "fullName email");
     await fine.populate("imposedBy", "fullName email");
     await fine.populate("images");
+    if (fine.lead) {
+      await fine.populate("lead", "firstName lastName email phone");
+    }
 
     res.status(201).json({
       success: true,

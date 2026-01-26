@@ -106,6 +106,11 @@ const agentFineSchema = new mongoose.Schema(
       type: String,
       maxlength: 500,
     },
+    // Reference to related lead (when fine is applied for a specific lead)
+    lead: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Lead",
+    },
     isActive: {
       type: Boolean,
       default: true,
@@ -125,6 +130,7 @@ agentFineSchema.index({ imposedDate: -1 });
 agentFineSchema.index({ agent: 1, status: 1 });
 agentFineSchema.index({ agent: 1, fineYear: 1, fineMonth: 1 });
 agentFineSchema.index({ fineYear: 1, fineMonth: 1 });
+agentFineSchema.index({ lead: 1 });
 
 // Virtual for fine age in days
 agentFineSchema.virtual("ageInDays").get(function () {
@@ -162,6 +168,7 @@ agentFineSchema.statics.getAgentFines = function (
     .populate("images")
     .populate("agentResponse.images")
     .populate("adminDecision.decidedBy", "fullName email")
+        .populate("lead", "firstName lastName email phone")
     .sort({ imposedDate: -1 });
 };
 
@@ -174,6 +181,7 @@ agentFineSchema.statics.getAllActiveFines = function () {
     .populate("images")
     .populate("agentResponse.images")
     .populate("adminDecision.decidedBy", "fullName email")
+        .populate("lead", "firstName lastName email phone")
     .sort({ imposedDate: -1 });
 };
 
@@ -252,6 +260,7 @@ agentFineSchema.statics.getMonthlyFines = function (agentId, year, month) {
     .populate("resolvedBy", "fullName email")
     .populate("images")
     .populate("agentResponse.images")
+        .populate("lead", "firstName lastName email phone")
     .sort({ imposedDate: -1 });
 };
 
@@ -286,6 +295,7 @@ agentFineSchema.statics.getPendingApprovalFines = function (agentId = null) {
     .populate("imposedBy", "fullName email")
     .populate("images")
     .populate("agentResponse.images")
+        .populate("lead", "firstName lastName email phone")
     .sort({ imposedDate: -1 });
 };
 
@@ -299,6 +309,7 @@ agentFineSchema.statics.getDisputedFines = function () {
     .populate("imposedBy", "fullName email")
     .populate("images")
     .populate("agentResponse.images")
+        .populate("lead", "firstName lastName email phone")
     .sort({ imposedDate: -1 });
 };
 
