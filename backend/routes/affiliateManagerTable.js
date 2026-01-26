@@ -47,9 +47,9 @@ const paramValidation = [
 // Routes
 
 // Get all affiliate manager tables (Admin only)
-router.get('/all', 
-  protect, 
-  isAdmin, 
+router.get('/all',
+  protect,
+  isAdmin,
   [
     query('period').optional().isIn(['daily', 'weekly', 'monthly', 'yearly']).withMessage('Invalid period'),
     query('date').optional().isISO8601().withMessage('Invalid date format'),
@@ -57,6 +57,17 @@ router.get('/all',
     query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('Limit must be between 1 and 100')
   ],
   affiliateManagerTableController.getAllAffiliateManagerTables
+);
+
+// Get affiliate manager summary statistics (FTDs, Shaved, Fillers)
+router.get('/summary',
+  protect,
+  isAdmin,
+  [
+    query('month').optional().isInt({ min: 1, max: 12 }).withMessage('Month must be between 1 and 12'),
+    query('year').optional().isInt({ min: 2020, max: 2100 }).withMessage('Invalid year')
+  ],
+  affiliateManagerTableController.getAffiliateManagerSummary
 );
 
 // Get table statistics (Admin only)
