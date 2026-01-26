@@ -90,6 +90,11 @@ const leadSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    depositPSP: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "PSP",
+      default: null,
+    },
     depositHistory: [
       {
         action: {
@@ -105,6 +110,10 @@ const leadSchema = new mongoose.Schema(
         performedAt: {
           type: Date,
           default: Date.now,
+        },
+        psp: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "PSP",
         },
       },
     ],

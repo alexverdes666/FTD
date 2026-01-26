@@ -3094,6 +3094,10 @@ exports.getOrders = async (req, res, next) => {
               select: "fullName email",
             },
             {
+              path: "depositPSP",
+              select: "name website",
+            },
+            {
               path: "shavedBy",
               select: "fullName email",
             },
@@ -3249,6 +3253,10 @@ exports.getOrders = async (req, res, next) => {
             select: "fullName email",
           },
           {
+            path: "depositPSP",
+            select: "name website cardNumber cardExpiry cardCVC",
+          },
+          {
             path: "shavedBy",
             select: "fullName email",
           },
@@ -3337,6 +3345,10 @@ exports.getOrderById = async (req, res, next) => {
           {
             path: "depositConfirmedBy",
             select: "fullName email",
+          },
+          {
+            path: "depositPSP",
+            select: "name website cardNumber cardExpiry cardCVC",
           },
           {
             path: "shavedBy",

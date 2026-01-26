@@ -676,16 +676,16 @@ const LeadQuickView = ({
 
         {/* Deposit Confirmation Status */}
         {lead.depositConfirmed && (
-          <Box sx={{ flex: "1 1 200px", minWidth: 200 }}>
+          <Box sx={{ flex: "1 1 280px", minWidth: 280 }}>
             <Typography
               variant="subtitle2"
               sx={{ fontWeight: 600, mb: 1, color: "success.main" }}
             >
               Deposit Status
             </Typography>
-            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-              <CallIcon fontSize="small" color="success" />
-              <Box>
+            <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1 }}>
+              <CallIcon fontSize="small" color="success" sx={{ mt: 0.5 }} />
+              <Box sx={{ flex: 1 }}>
                 <Typography
                   variant="caption"
                   color="text.secondary"
@@ -696,8 +696,61 @@ const LeadQuickView = ({
                 <Typography variant="body2" sx={{ fontWeight: 500, color: "success.main" }}>
                   Deposit Confirmed
                 </Typography>
+                {lead.depositPSP && (
+                  <>
+                    <Typography variant="caption" color="primary.main" display="block" sx={{ fontWeight: 600, mt: 0.5 }}>
+                      PSP: {typeof lead.depositPSP === "object"
+                        ? lead.depositPSP.name
+                        : lead.depositPSP}
+                    </Typography>
+                    {/* Mini Card Preview */}
+                    {typeof lead.depositPSP === "object" && lead.depositPSP.cardNumber && (
+                      <Box
+                        sx={{
+                          mt: 1,
+                          p: 1.5,
+                          borderRadius: 2,
+                          background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                          color: "white",
+                          maxWidth: 220,
+                        }}
+                      >
+                        <Typography
+                          sx={{
+                            fontSize: "0.85rem",
+                            fontFamily: "'Courier New', monospace",
+                            letterSpacing: "0.1em",
+                            mb: 1,
+                          }}
+                        >
+                          {(() => {
+                            const num = lead.depositPSP.cardNumber;
+                            if (!num) return "•••• •••• •••• ••••";
+                            const cleaned = num.replace(/\D/g, "");
+                            const groups = cleaned.match(/.{1,4}/g) || [];
+                            return groups.join(" ");
+                          })()}
+                        </Typography>
+                        <Box sx={{ display: "flex", gap: 2, fontSize: "0.7rem" }}>
+                          <Box>
+                            <Typography sx={{ fontSize: "0.55rem", opacity: 0.7 }}>EXPIRY</Typography>
+                            <Typography sx={{ fontFamily: "'Courier New', monospace" }}>
+                              {lead.depositPSP.cardExpiry || "MM/YY"}
+                            </Typography>
+                          </Box>
+                          <Box>
+                            <Typography sx={{ fontSize: "0.55rem", opacity: 0.7 }}>CVC</Typography>
+                            <Typography sx={{ fontFamily: "'Courier New', monospace" }}>
+                              {lead.depositPSP.cardCVC || "•••"}
+                            </Typography>
+                          </Box>
+                        </Box>
+                      </Box>
+                    )}
+                  </>
+                )}
                 {lead.depositConfirmedBy && (
-                  <Typography variant="caption" color="text.secondary">
+                  <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5 }} display="block">
                     By: {typeof lead.depositConfirmedBy === "object"
                       ? lead.depositConfirmedBy.fullName
                       : "Unknown"}
