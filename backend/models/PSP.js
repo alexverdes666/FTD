@@ -14,6 +14,20 @@ const pspSchema = new mongoose.Schema(
     },
     website: {
       type: String,
+      required: [true, "Website URL is required"],
+      trim: true,
+    },
+    // Card preview fields
+    cardNumber: {
+      type: String,
+      trim: true,
+    },
+    cardExpiry: {
+      type: String,
+      trim: true,
+    },
+    cardCVC: {
+      type: String,
       trim: true,
     },
     isActive: {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Box,
@@ -17,6 +17,7 @@ import {
   Tooltip,
   CircularProgress,
   Link,
+  InputAdornment,
 } from "@mui/material";
 import {
   Add as AddIcon,
@@ -25,6 +26,7 @@ import {
   Visibility as ViewIcon,
   Search as SearchIcon,
   Language as WebIcon,
+  CreditCard as CreditCardIcon,
 } from "@mui/icons-material";
 import { DataGrid } from "@mui/x-data-grid";
 import { useForm, Controller } from "react-hook-form";
@@ -37,19 +39,139 @@ import toast from "react-hot-toast";
 import CommentButton from "../CommentButton";
 
 const pspSchema = yup.object({
-  name: yup
+  website: yup
     .string()
-    .required("Name is required")
-    .max(100, "Name must be less than 100 characters"),
-  website: yup.string().max(200, "Website must be less than 200 characters"),
+    .required("Website URL is required")
+    .max(200, "Website must be less than 200 characters"),
   description: yup
     .string()
     .max(500, "Description must be less than 500 characters"),
+  cardNumber: yup
+    .string()
+    .max(30, "Card number must be less than 30 characters"),
+  cardExpiry: yup
+    .string()
+    .matches(/^$|^(0[1-9]|1[0-2])\/([0-9]{2})$/, "Must be in MM/YY format"),
+  cardCVC: yup
+    .string()
+    .matches(/^$|^[0-9]{3,4}$/, "Must be 3-4 digits"),
 });
+
+// Card Preview Component
+const CardPreview = ({ cardNumber, cardExpiry, cardCVC }) => {
+  const formatCardNumber = (num) => {
+    if (!num) return "•••• •••• •••• ••••";
+    // Remove non-digits and format
+    const cleaned = num.replace(/\D/g, "");
+    const groups = cleaned.match(/.{1,4}/g) || [];
+    const formatted = groups.join(" ");
+    // Pad with dots if needed
+    if (formatted.length < 19) {
+      return formatted + " " + "•••• •••• •••• ••••".slice(formatted.length + 1);
+    }
+    return formatted;
+  };
+
+  return (
+    <Box
+      sx={{
+        width: "100%",
+        maxWidth: 380,
+        height: 220,
+        borderRadius: 3,
+        background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+        p: 3,
+        color: "white",
+        position: "relative",
+        boxShadow: "0 10px 30px rgba(102, 126, 234, 0.4)",
+        overflow: "hidden",
+        mx: "auto",
+        "&::before": {
+          content: '""',
+          position: "absolute",
+          top: -50,
+          right: -50,
+          width: 150,
+          height: 150,
+          borderRadius: "50%",
+          background: "rgba(255,255,255,0.1)",
+        },
+        "&::after": {
+          content: '""',
+          position: "absolute",
+          bottom: -80,
+          left: -80,
+          width: 200,
+          height: 200,
+          borderRadius: "50%",
+          background: "rgba(255,255,255,0.05)",
+        },
+      }}
+    >
+      {/* Card Chip */}
+      <Box
+        sx={{
+          width: 50,
+          height: 35,
+          borderRadius: 1,
+          background: "linear-gradient(135deg, #ffd700 0%, #ffb700 100%)",
+          mb: 3,
+        }}
+      />
+
+      {/* Card Number */}
+      <Typography
+        sx={{
+          fontSize: "1.4rem",
+          fontFamily: "'Courier New', monospace",
+          letterSpacing: "0.15em",
+          mb: 3,
+          textShadow: "0 2px 4px rgba(0,0,0,0.2)",
+        }}
+      >
+        {formatCardNumber(cardNumber)}
+      </Typography>
+
+      {/* Card Details Row */}
+      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
+        <Box>
+          <Typography sx={{ fontSize: "0.65rem", opacity: 0.7, mb: 0.5 }}>
+            VALID THRU
+          </Typography>
+          <Typography
+            sx={{
+              fontSize: "1rem",
+              fontFamily: "'Courier New', monospace",
+              letterSpacing: "0.1em",
+            }}
+          >
+            {cardExpiry || "MM/YY"}
+          </Typography>
+        </Box>
+        <Box>
+          <Typography sx={{ fontSize: "0.65rem", opacity: 0.7, mb: 0.5 }}>
+            CVC
+          </Typography>
+          <Typography
+            sx={{
+              fontSize: "1rem",
+              fontFamily: "'Courier New', monospace",
+              letterSpacing: "0.1em",
+            }}
+          >
+            {cardCVC || "•••"}
+          </Typography>
+        </Box>
+        <CreditCardIcon sx={{ fontSize: 40, opacity: 0.8 }} />
+      </Box>
+    </Box>
+  );
+};
 
 const PSPsTab = () => {
   const navigate = useNavigate();
   const user = useSelector(selectUser);
+  const isAdmin = user?.role === "admin";
 
   const [psps, setPsps] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -60,19 +182,34 @@ const PSPsTab = () => {
   const [openDialog, setOpenDialog] = useState(false);
   const [editingPSP, setEditingPSP] = useState(null);
 
+  // Refs for auto-focus flow
+  const websiteRef = useRef(null);
+  const cardNumberRef = useRef(null);
+  const cardExpiryRef = useRef(null);
+  const cardCVCRef = useRef(null);
+  const submitButtonRef = useRef(null);
+
   const {
     control,
     handleSubmit,
     reset,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm({
     resolver: yupResolver(pspSchema),
     defaultValues: {
-      name: "",
       website: "",
       description: "",
+      cardNumber: "",
+      cardExpiry: "",
+      cardCVC: "",
     },
   });
+
+  // Watch card fields for live preview
+  const watchedCardNumber = watch("cardNumber");
+  const watchedCardExpiry = watch("cardExpiry");
+  const watchedCardCVC = watch("cardCVC");
 
   const fetchPSPs = useCallback(async () => {
     try {
@@ -103,14 +240,20 @@ const PSPsTab = () => {
     setEditingPSP(psp);
     if (psp) {
       reset({
-        name: psp.name,
         website: psp.website || "",
         description: psp.description || "",
+        cardNumber: psp.cardNumber || "",
+        cardExpiry: psp.cardExpiry || "",
+        cardCVC: psp.cardCVC || "",
       });
     } else {
-      reset({ name: "", website: "", description: "" });
+      reset({ website: "", description: "", cardNumber: "", cardExpiry: "", cardCVC: "" });
     }
     setOpenDialog(true);
+    // Auto-focus on website field after dialog opens
+    setTimeout(() => {
+      websiteRef.current?.focus();
+    }, 100);
   };
 
   const handleCloseDialog = () => {
@@ -160,6 +303,62 @@ const PSPsTab = () => {
     }
   };
 
+  // Format card number for display (with spaces)
+  const formatCardNumberDisplay = (value) => {
+    if (!value) return "";
+    const cleaned = value.replace(/\D/g, "");
+    const groups = cleaned.match(/.{1,4}/g) || [];
+    return groups.join(" ");
+  };
+
+  // Format card number input
+  const handleCardNumberChange = (e, onChange) => {
+    // Remove all non-digits and spaces
+    let value = e.target.value.replace(/\D/g, "");
+    if (value.length > 16) value = value.slice(0, 16);
+    onChange(value);
+
+    // Auto-move to expiry when 16 digits entered
+    if (value.length === 16) {
+      setTimeout(() => cardExpiryRef.current?.focus(), 50);
+    }
+  };
+
+  // Format expiry input
+  const handleExpiryChange = (e, onChange) => {
+    let value = e.target.value.replace(/\D/g, "");
+    if (value.length > 4) value = value.slice(0, 4);
+    if (value.length >= 2) {
+      value = value.slice(0, 2) + "/" + value.slice(2);
+    }
+    onChange(value);
+
+    // Auto-move to CVC when expiry is complete (MM/YY = 5 chars)
+    if (value.length === 5) {
+      setTimeout(() => cardCVCRef.current?.focus(), 50);
+    }
+  };
+
+  // Format CVC input
+  const handleCVCChange = (e, onChange) => {
+    let value = e.target.value.replace(/\D/g, "");
+    if (value.length > 4) value = value.slice(0, 4);
+    onChange(value);
+
+    // Auto-move to submit button when CVC is complete (3-4 digits)
+    if (value.length >= 3) {
+      setTimeout(() => submitButtonRef.current?.focus(), 50);
+    }
+  };
+
+  // Handle website field - move to card number on Enter
+  const handleWebsiteKeyDown = (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      cardNumberRef.current?.focus();
+    }
+  };
+
   const columns = [
     {
       field: "name",
@@ -204,6 +403,22 @@ const PSPsTab = () => {
         ),
     },
     {
+      field: "cardNumber",
+      headerName: "Card",
+      width: 100,
+      align: "center",
+      headerAlign: "center",
+      renderCell: (params) => (
+        params.value ? (
+          <Tooltip title={`•••• ${params.value.slice(-4)}`}>
+            <CreditCardIcon color="primary" fontSize="small" />
+          </Tooltip>
+        ) : (
+          <Typography variant="body2" color="text.secondary">-</Typography>
+        )
+      ),
+    },
+    {
       field: "isActive",
       headerName: "Status",
       width: 100,
@@ -242,7 +457,7 @@ const PSPsTab = () => {
               <ViewIcon fontSize="small" />
             </IconButton>
           </Tooltip>
-          {user?.role === "admin" && (
+          {isAdmin && (
             <>
               <Tooltip title="Edit">
                 <IconButton
@@ -282,8 +497,6 @@ const PSPsTab = () => {
     },
   ];
 
-  const canCreate = user?.role === "admin" || user?.role === "affiliate_manager";
-
   return (
     <Box>
       {/* Filters */}
@@ -307,7 +520,7 @@ const PSPsTab = () => {
             }
             label="Active only"
           />
-          {canCreate && (
+          {isAdmin && (
             <Box sx={{ ml: "auto" }}>
               <Button
                 variant="contained"
@@ -351,28 +564,26 @@ const PSPsTab = () => {
           <DialogContent>
             <Box sx={{ display: "flex", flexDirection: "column", gap: 2, pt: 1 }}>
               <Controller
-                name="name"
-                control={control}
-                render={({ field }) => (
-                  <TextField
-                    {...field}
-                    label="PSP Name"
-                    fullWidth
-                    error={!!errors.name}
-                    helperText={errors.name?.message}
-                  />
-                )}
-              />
-              <Controller
                 name="website"
                 control={control}
                 render={({ field }) => (
                   <TextField
                     {...field}
-                    label="Website"
+                    inputRef={websiteRef}
+                    label="Website URL"
+                    placeholder="e.g., stripe.com"
                     fullWidth
+                    required
                     error={!!errors.website}
-                    helperText={errors.website?.message}
+                    helperText={errors.website?.message || "The PSP name will be extracted from this URL"}
+                    onKeyDown={handleWebsiteKeyDown}
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <WebIcon color="action" />
+                        </InputAdornment>
+                      ),
+                    }}
                   />
                 )}
               />
@@ -385,17 +596,102 @@ const PSPsTab = () => {
                     label="Description"
                     fullWidth
                     multiline
-                    rows={3}
+                    rows={2}
                     error={!!errors.description}
                     helperText={errors.description?.message}
                   />
                 )}
               />
+
+              {/* Card Preview Section */}
+              <Box sx={{ mt: 2 }}>
+                <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                  Card Preview (Optional)
+                </Typography>
+
+                {/* Live Card Preview */}
+                <Box sx={{ mb: 3 }}>
+                  <CardPreview
+                    cardNumber={watchedCardNumber}
+                    cardExpiry={watchedCardExpiry}
+                    cardCVC={watchedCardCVC}
+                  />
+                </Box>
+
+                {/* Card Input Fields */}
+                <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                  <Controller
+                    name="cardNumber"
+                    control={control}
+                    render={({ field: { onChange, value, ...field } }) => (
+                      <TextField
+                        {...field}
+                        inputRef={cardNumberRef}
+                        value={formatCardNumberDisplay(value)}
+                        onChange={(e) => handleCardNumberChange(e, onChange)}
+                        label="Card Number"
+                        placeholder="1234 5678 9012 3456"
+                        fullWidth
+                        error={!!errors.cardNumber}
+                        helperText={errors.cardNumber?.message}
+                        InputProps={{
+                          startAdornment: (
+                            <InputAdornment position="start">
+                              <CreditCardIcon color="action" />
+                            </InputAdornment>
+                          ),
+                        }}
+                      />
+                    )}
+                  />
+                  <Box sx={{ display: "flex", gap: 2 }}>
+                    <Controller
+                      name="cardExpiry"
+                      control={control}
+                      render={({ field: { onChange, value, ...field } }) => (
+                        <TextField
+                          {...field}
+                          inputRef={cardExpiryRef}
+                          value={value}
+                          onChange={(e) => handleExpiryChange(e, onChange)}
+                          label="Expiry Date"
+                          placeholder="MM/YY"
+                          fullWidth
+                          error={!!errors.cardExpiry}
+                          helperText={errors.cardExpiry?.message}
+                        />
+                      )}
+                    />
+                    <Controller
+                      name="cardCVC"
+                      control={control}
+                      render={({ field: { onChange, value, ...field } }) => (
+                        <TextField
+                          {...field}
+                          inputRef={cardCVCRef}
+                          value={value}
+                          onChange={(e) => handleCVCChange(e, onChange)}
+                          label="CVC"
+                          placeholder="123"
+                          fullWidth
+                          error={!!errors.cardCVC}
+                          helperText={errors.cardCVC?.message}
+                        />
+                      )}
+                    />
+                  </Box>
+                </Box>
+              </Box>
             </Box>
           </DialogContent>
           <DialogActions>
             <Button onClick={handleCloseDialog}>Cancel</Button>
-            <Button type="submit" variant="contained" disabled={isSubmitting}>
+            <Button
+              ref={submitButtonRef}
+              type="submit"
+              variant="contained"
+              disabled={isSubmitting}
+            >
               {isSubmitting ? <CircularProgress size={20} /> : editingPSP ? "Update" : "Create"}
             </Button>
           </DialogActions>

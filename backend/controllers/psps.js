@@ -109,6 +109,32 @@ exports.getPSPProfile = async (req, res, next) => {
 };
 
 /**
+ * Extract domain name from URL
+ */
+const extractDomainName = (url) => {
+  try {
+    // Add protocol if missing
+    let urlWithProtocol = url;
+    if (!url.startsWith("http://") && !url.startsWith("https://")) {
+      urlWithProtocol = "https://" + url;
+    }
+    const urlObj = new URL(urlWithProtocol);
+    // Get hostname and remove 'www.' prefix if present
+    let domain = urlObj.hostname.replace(/^www\./, "");
+    // Remove TLD to get just the name (e.g., "stripe.com" -> "stripe")
+    const parts = domain.split(".");
+    if (parts.length >= 2) {
+      // Return the main domain name (before the TLD)
+      return parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
+    }
+    return domain.charAt(0).toUpperCase() + domain.slice(1);
+  } catch (error) {
+    // If URL parsing fails, just return the input with capitalized first letter
+    return url.charAt(0).toUpperCase() + url.slice(1);
+  }
+};
+
+/**
  * Create new PSP
  */
 exports.createPSP = async (req, res, next) => {
@@ -122,12 +148,18 @@ exports.createPSP = async (req, res, next) => {
       });
     }
 
-    const { name, description, website } = req.body;
+    const { description, website, cardNumber, cardExpiry, cardCVC } = req.body;
+
+    // Auto-extract name from website URL
+    const name = extractDomainName(website);
 
     const psp = new PSP({
       name,
       description,
       website,
+      cardNumber,
+      cardExpiry,
+      cardCVC,
       createdBy: req.user._id,
     });
 
@@ -146,7 +178,7 @@ exports.createPSP = async (req, res, next) => {
     if (error.code === 11000) {
       return res.status(400).json({
         success: false,
-        message: "PSP name already exists",
+        message: "A PSP with this domain already exists",
       });
     }
     next(error);
@@ -167,7 +199,7 @@ exports.updatePSP = async (req, res, next) => {
       });
     }
 
-    const { name, description, website, isActive } = req.body;
+    const { name, description, website, cardNumber, cardExpiry, cardCVC, isActive } = req.body;
 
     const psp = await PSP.findById(req.params.id);
     if (!psp) {
@@ -182,13 +214,23 @@ exports.updatePSP = async (req, res, next) => {
       name: psp.name,
       description: psp.description,
       website: psp.website,
+      cardNumber: psp.cardNumber,
+      cardExpiry: psp.cardExpiry,
+      cardCVC: psp.cardCVC,
       isActive: psp.isActive,
     };
 
     // Apply updates
     if (name !== undefined) psp.name = name;
     if (description !== undefined) psp.description = description;
-    if (website !== undefined) psp.website = website;
+    // If website changes, update the name automatically
+    if (website !== undefined) {
+      psp.website = website;
+      psp.name = extractDomainName(website);
+    }
+    if (cardNumber !== undefined) psp.cardNumber = cardNumber;
+    if (cardExpiry !== undefined) psp.cardExpiry = cardExpiry;
+    if (cardCVC !== undefined) psp.cardCVC = cardCVC;
     if (isActive !== undefined) psp.isActive = isActive;
 
     await psp.save();
@@ -196,9 +238,12 @@ exports.updatePSP = async (req, res, next) => {
 
     // Prepare new data for audit logging
     const newData = {
-      name: name !== undefined ? name : undefined,
+      name: name !== undefined ? name : (website !== undefined ? psp.name : undefined),
       description: description !== undefined ? description : undefined,
       website: website !== undefined ? website : undefined,
+      cardNumber: cardNumber !== undefined ? cardNumber : undefined,
+      cardExpiry: cardExpiry !== undefined ? cardExpiry : undefined,
+      cardCVC: cardCVC !== undefined ? cardCVC : undefined,
       isActive: isActive !== undefined ? isActive : undefined,
     };
 
@@ -214,7 +259,7 @@ exports.updatePSP = async (req, res, next) => {
     if (error.code === 11000) {
       return res.status(400).json({
         success: false,
-        message: "PSP name already exists",
+        message: "A PSP with this domain already exists",
       });
     }
     next(error);

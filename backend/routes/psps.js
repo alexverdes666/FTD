@@ -25,26 +25,42 @@ router.get("/:id/profile", protect, getPSPProfile);
 // Get single PSP
 router.get("/:id", protect, getPSP);
 
-// Create PSP (admin and affiliate_manager)
+// Create PSP (admin only)
 router.post(
   "/",
   [
     protect,
-    authorize("admin", "affiliate_manager"),
-    body("name")
+    isAdmin,
+    body("website")
       .trim()
-      .isLength({ min: 1, max: 100 })
-      .withMessage("Name is required and must be less than 100 characters"),
+      .isLength({ min: 1, max: 200 })
+      .withMessage("Website URL is required and must be less than 200 characters"),
     body("description")
       .optional()
       .trim()
       .isLength({ max: 500 })
       .withMessage("Description must be less than 500 characters"),
-    body("website")
+    body("cardNumber")
       .optional()
       .trim()
-      .isLength({ max: 200 })
-      .withMessage("Website must be less than 200 characters"),
+      .isLength({ max: 30 })
+      .withMessage("Card number must be less than 30 characters"),
+    body("cardExpiry")
+      .optional()
+      .trim()
+      .custom((value) => {
+        if (!value || value === "") return true;
+        return /^(0[1-9]|1[0-2])\/([0-9]{2})$/.test(value);
+      })
+      .withMessage("Card expiry must be in MM/YY format"),
+    body("cardCVC")
+      .optional()
+      .trim()
+      .custom((value) => {
+        if (!value || value === "") return true;
+        return /^[0-9]{3,4}$/.test(value);
+      })
+      .withMessage("Card CVC must be 3-4 digits"),
   ],
   createPSP
 );
@@ -70,6 +86,27 @@ router.put(
       .trim()
       .isLength({ max: 200 })
       .withMessage("Website must be less than 200 characters"),
+    body("cardNumber")
+      .optional()
+      .trim()
+      .isLength({ max: 30 })
+      .withMessage("Card number must be less than 30 characters"),
+    body("cardExpiry")
+      .optional()
+      .trim()
+      .custom((value) => {
+        if (!value || value === "") return true;
+        return /^(0[1-9]|1[0-2])\/([0-9]{2})$/.test(value);
+      })
+      .withMessage("Card expiry must be in MM/YY format"),
+    body("cardCVC")
+      .optional()
+      .trim()
+      .custom((value) => {
+        if (!value || value === "") return true;
+        return /^[0-9]{3,4}$/.test(value);
+      })
+      .withMessage("Card CVC must be 3-4 digits"),
     body("isActive")
       .optional()
       .isBoolean()
