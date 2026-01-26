@@ -89,7 +89,6 @@ import AgentMonthlyHistory from "../components/AgentMonthlyHistory";
 import AgentCallsTable from "../components/AgentCallsTable";
 import { createWithdrawalRequest, getAgentWithdrawalsByMonth } from "../services/withdrawals";
 import {
-  getAvailableMonths,
   getFormattedAgentCalls,
   getCurrentPeriod,
   formatMonthYear,
@@ -495,18 +494,43 @@ const PayrollPage = () => {
     }
   };
 
+  // Generate months from January 2025 to current date
+  const generateAvailableMonths = () => {
+    const months = [];
+    const startYear = 2025;
+    const startMonth = 1; // January
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1;
+
+    // Generate months from current to January 2025 (newest first)
+    for (let year = currentYear; year >= startYear; year--) {
+      const endMonth = year === currentYear ? currentMonth : 12;
+      const beginMonth = year === startYear ? startMonth : 1;
+
+      for (let month = endMonth; month >= beginMonth; month--) {
+        months.push({
+          year,
+          month,
+          report_count: 0 // Default value since we're generating locally
+        });
+      }
+    }
+
+    return months;
+  };
+
   // Agent calls functions
   const loadAvailableMonths = async () => {
     try {
-      const response = await getAvailableMonths();
-      if (response.success) {
-        setAvailableMonths(response.data);
+      // Generate months locally from January 2025 to current date
+      const generatedMonths = generateAvailableMonths();
+      setAvailableMonths(generatedMonths);
 
-        // If no current period selected and we have months, select the latest one
-        if (!selectedPeriod && response.data.length > 0) {
-          const latestMonth = response.data[0]; // Assuming sorted by latest first
-          setSelectedPeriod(`${latestMonth.year}-${latestMonth.month}`);
-        }
+      // If no current period selected and we have months, select the latest one
+      if (!selectedPeriod && generatedMonths.length > 0) {
+        const latestMonth = generatedMonths[0]; // Latest first
+        setSelectedPeriod(`${latestMonth.year}-${latestMonth.month}`);
       }
     } catch (err) {
       console.error("Error loading available months:", err);
