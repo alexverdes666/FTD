@@ -1,6 +1,8 @@
 const { validationResult } = require("express-validator");
 const AffiliateManagerTable = require("../models/AffiliateManagerTable");
 const User = require("../models/User");
+const Order = require("../models/Order");
+const Lead = require("../models/Lead");
 
 // Get affiliate manager table data
 exports.getAffiliateManagerTable = async (req, res, next) => {
@@ -725,6 +727,110 @@ exports.getTableStatistics = async (req, res, next) => {
           averageHyperNet,
         },
         byAffiliateManager: affiliateManagerStats,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Get summary statistics for affiliate managers (FTDs, Shaved, Fillers)
+exports.getAffiliateManagerSummary = async (req, res, next) => {
+  try {
+    const { month, year } = req.query;
+
+    // Parse month and year, default to current month/year
+    const targetMonth = month ? parseInt(month) : new Date().getMonth() + 1;
+    const targetYear = year ? parseInt(year) : new Date().getFullYear();
+
+    // Calculate date range for the selected month
+    const startDate = new Date(targetYear, targetMonth - 1, 1);
+    const endDate = new Date(targetYear, targetMonth, 0, 23, 59, 59, 999);
+
+    // Get all active affiliate managers
+    const affiliateManagers = await User.find({
+      role: "affiliate_manager",
+      isActive: true,
+      status: "approved",
+    }).select("_id fullName email");
+
+    if (affiliateManagers.length === 0) {
+      return res.status(200).json({
+        success: true,
+        data: [],
+      });
+    }
+
+    const summaryData = [];
+
+    for (const manager of affiliateManagers) {
+      // Get all orders created by this affiliate manager within the date range
+      const orders = await Order.find({
+        requester: manager._id,
+        createdAt: { $gte: startDate, $lte: endDate },
+      }).select("leads leadsMetadata");
+
+      // Count FTDs and Fillers from orders
+      let totalFTDs = 0;
+      let totalFillers = 0;
+      const leadIdsInOrders = new Set();
+
+      for (const order of orders) {
+        if (order.leadsMetadata && order.leadsMetadata.length > 0) {
+          for (const metadata of order.leadsMetadata) {
+            if (metadata.orderedAs === "ftd") {
+              totalFTDs++;
+              if (metadata.leadId) {
+                leadIdsInOrders.add(metadata.leadId.toString());
+              }
+            } else if (metadata.orderedAs === "filler") {
+              totalFillers++;
+            }
+          }
+        }
+      }
+
+      // Count shaved FTDs - leads that are in orders by this manager and marked as shaved
+      let shavedFTDs = 0;
+      if (leadIdsInOrders.size > 0) {
+        const leadIdsArray = Array.from(leadIdsInOrders);
+        shavedFTDs = await Lead.countDocuments({
+          _id: { $in: leadIdsArray },
+          shaved: true,
+        });
+      }
+
+      summaryData.push({
+        managerId: manager._id,
+        managerName: manager.fullName,
+        managerEmail: manager.email,
+        totalFTDs,
+        shavedFTDs,
+        totalFillers,
+        totalVerifiedFTDs: totalFTDs - shavedFTDs,
+        // Placeholder values for metrics not yet implemented
+        totalMoneyIn: 0,
+        totalMoneyExpenses: 0,
+        totalCommissionsAM: 0,
+        firstCalls: 0,
+        secondCalls: 0,
+        thirdCalls: 0,
+        fourthCalls: 0,
+        fifthCalls: 0,
+        totalSimCardUsed: 0,
+        totalDataUsed: 0,
+        otherFixedExpenses: 0,
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: summaryData,
+      period: {
+        month: targetMonth,
+        year: targetYear,
+        startDate,
+        endDate,
       },
     });
   } catch (error) {

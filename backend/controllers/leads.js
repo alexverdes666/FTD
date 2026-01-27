@@ -4464,12 +4464,37 @@ exports.confirmDeposit = async (req, res, next) => {
     const leadId = req.params.id;
     const userId = req.user._id;
     const userRole = req.user.role;
+    const { pspId } = req.body;
 
     // Only admin and affiliate_manager can confirm deposits
     if (userRole !== "admin" && userRole !== "affiliate_manager") {
       return res.status(403).json({
         success: false,
         message: "Only admins and affiliate managers can confirm deposits",
+      });
+    }
+
+    // Validate PSP is provided
+    if (!pspId) {
+      return res.status(400).json({
+        success: false,
+        message: "Please select a PSP for this deposit",
+      });
+    }
+
+    // Validate PSP exists and is active
+    const PSP = require("../models/PSP");
+    const psp = await PSP.findById(pspId);
+    if (!psp) {
+      return res.status(404).json({
+        success: false,
+        message: "Selected PSP not found",
+      });
+    }
+    if (!psp.isActive) {
+      return res.status(400).json({
+        success: false,
+        message: "Selected PSP is not active",
       });
     }
 
@@ -4501,12 +4526,14 @@ exports.confirmDeposit = async (req, res, next) => {
     lead.depositConfirmed = true;
     lead.depositConfirmedBy = userId;
     lead.depositConfirmedAt = new Date();
+    lead.depositPSP = pspId;
 
     // Add to deposit history
     lead.depositHistory.push({
       action: "confirmed",
       performedBy: userId,
       performedAt: new Date(),
+      psp: pspId,
     });
 
     await lead.save();
@@ -4527,11 +4554,11 @@ exports.confirmDeposit = async (req, res, next) => {
         order.auditLog.push({
           action: "deposit_confirmed",
           leadId: lead._id,
-          leadEmail: lead.email,
+          leadEmail: lead.newEmail,
           performedBy: userId,
           performedAt: new Date(),
           ipAddress: clientIp,
-          details: `Deposit confirmed for lead ${lead.firstName} ${lead.lastName} (${lead.email}) by ${req.user.fullName || req.user.email}`,
+          details: `Deposit confirmed for lead ${lead.firstName} ${lead.lastName} (${lead.newEmail}) using PSP "${psp.name}" by ${req.user.fullName || req.user.email}`,
         });
         await order.save();
       }
@@ -4540,6 +4567,7 @@ exports.confirmDeposit = async (req, res, next) => {
     // Populate the confirmedBy field for response
     await lead.populate("depositConfirmedBy", "fullName email");
     await lead.populate("assignedAgent", "fullName email fourDigitCode");
+    await lead.populate("depositPSP", "name website cardNumber cardExpiry cardCVC");
 
     res.status(200).json({
       success: true,
@@ -4585,6 +4613,7 @@ exports.unconfirmDeposit = async (req, res, next) => {
     lead.depositConfirmed = false;
     lead.depositConfirmedBy = null;
     lead.depositConfirmedAt = null;
+    lead.depositPSP = null;
 
     // Add to deposit history
     lead.depositHistory.push({
@@ -4611,11 +4640,11 @@ exports.unconfirmDeposit = async (req, res, next) => {
         order.auditLog.push({
           action: "deposit_unconfirmed",
           leadId: lead._id,
-          leadEmail: lead.email,
+          leadEmail: lead.newEmail,
           performedBy: req.user._id,
           performedAt: new Date(),
           ipAddress: clientIp,
-          details: `Deposit unconfirmed for lead ${lead.firstName} ${lead.lastName} (${lead.email}) by ${req.user.fullName || req.user.email}`,
+          details: `Deposit unconfirmed for lead ${lead.firstName} ${lead.lastName} (${lead.newEmail}) by ${req.user.fullName || req.user.email}`,
         });
         await order.save();
       }

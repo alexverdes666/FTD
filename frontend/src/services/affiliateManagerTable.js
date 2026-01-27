@@ -127,6 +127,19 @@ export const getTableStatistics = async (params = {}) => {
   }
 };
 
+// Get affiliate manager summary (FTDs, Shaved, Fillers)
+export const getAffiliateManagerSummary = async (params = {}) => {
+  try {
+    const response = await api.get("/affiliate-manager-table/summary", {
+      params,
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching affiliate manager summary:", error);
+    throw error;
+  }
+};
+
 // Helper functions for table data formatting
 export const formatCurrency = (amount, currency = "USD") => {
   return new Intl.NumberFormat("en-US", {

@@ -73,6 +73,7 @@ import {
   getAffiliateManagerTable,
   formatCurrency,
   refreshTotalMoneyFromCrypto,
+  getAffiliateManagerSummary,
 } from "../services/affiliateManagerTable";
 import {
   getAllSalaryConfigurations,
@@ -131,6 +132,7 @@ const AffiliateManagersPage = () => {
 
   // Summary state (for new Summary tab)
   const [summaryData, setSummaryData] = useState([]);
+  const [summaryLoading, setSummaryLoading] = useState(false);
   const [selectedSummaryManager, setSelectedSummaryManager] = useState("");
 
   // General state
@@ -160,33 +162,29 @@ const AffiliateManagersPage = () => {
 
   // Generate summary data when affiliate managers are loaded or selection changes
   useEffect(() => {
-    if (affiliateManagers.length > 0) {
-      generateSummaryData();
+    if (affiliateManagers.length > 0 && tabValue === 3) {
+      fetchSummaryData();
     }
-  }, [affiliateManagers, selectedSummaryManager, selectedMonth, selectedYear]);
+  }, [affiliateManagers, selectedMonth, selectedYear, tabValue]);
 
-  const generateSummaryData = () => {
-    // Generate summary data for each affiliate manager (frontend only - placeholder data)
-    const data = affiliateManagers.map((manager) => ({
-      managerId: manager._id,
-      managerName: manager.fullName,
-      totalMoneyIn: 0,
-      totalMoneyExpenses: 0,
-      totalCommissionsAM: 0,
-      totalFTDs: 0,
-      shavedFTDs: 0,
-      totalFillers: 0,
-      firstCalls: 0,
-      secondCalls: 0,
-      thirdCalls: 0,
-      fourthCalls: 0,
-      fifthCalls: 0,
-      totalVerifiedFTDs: 0,
-      totalSimCardUsed: 0,
-      totalDataUsed: 0,
-      otherFixedExpenses: 0,
-    }));
-    setSummaryData(data);
+  const fetchSummaryData = async () => {
+    setSummaryLoading(true);
+    try {
+      const response = await getAffiliateManagerSummary({
+        month: selectedMonth,
+        year: selectedYear,
+      });
+      if (response.success) {
+        setSummaryData(response.data);
+      } else {
+        showAlert("Failed to fetch summary data", "error");
+      }
+    } catch (error) {
+      console.error("Error fetching summary data:", error);
+      showAlert("Error fetching summary data", "error");
+    } finally {
+      setSummaryLoading(false);
+    }
   };
 
   const showAlert = (message, severity = "info") => {
@@ -980,17 +978,25 @@ const AffiliateManagersPage = () => {
               </FormControl>
               <Button
                 variant="outlined"
-                startIcon={<RefreshIcon />}
-                onClick={generateSummaryData}
+                startIcon={summaryLoading ? <CircularProgress size={20} /> : <RefreshIcon />}
+                onClick={fetchSummaryData}
+                disabled={summaryLoading}
               >
-                Refresh
+                {summaryLoading ? "Loading..." : "Refresh"}
               </Button>
             </Box>
           </CardContent>
         </Card>
 
+        {/* Loading indicator */}
+        {summaryLoading && (
+          <Box display="flex" justifyContent="center" my={4}>
+            <CircularProgress />
+          </Box>
+        )}
+
         {/* Summary Cards for each Affiliate Manager */}
-        {filteredSummaryData.map((summary) => (
+        {!summaryLoading && filteredSummaryData.map((summary) => (
           <Card key={summary.managerId} sx={{ mb: 3 }}>
             <CardHeader
               avatar={
@@ -1246,7 +1252,7 @@ const AffiliateManagersPage = () => {
           </Card>
         ))}
 
-        {filteredSummaryData.length === 0 && (
+        {!summaryLoading && filteredSummaryData.length === 0 && (
           <Card>
             <CardContent>
               <Box
