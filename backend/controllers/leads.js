@@ -4464,7 +4464,7 @@ exports.confirmDeposit = async (req, res, next) => {
     const leadId = req.params.id;
     const userId = req.user._id;
     const userRole = req.user.role;
-    const { pspId } = req.body;
+    const { pspId, orderId } = req.body;
 
     // Only admin and affiliate_manager can confirm deposits
     if (userRole !== "admin" && userRole !== "affiliate_manager") {
@@ -4479,6 +4479,14 @@ exports.confirmDeposit = async (req, res, next) => {
       return res.status(400).json({
         success: false,
         message: "Please select a PSP for this deposit",
+      });
+    }
+
+    // Validate orderId is provided (required for per-order tracking)
+    if (!orderId) {
+      return res.status(400).json({
+        success: false,
+        message: "Order ID is required for confirming deposit",
       });
     }
 
@@ -4515,64 +4523,83 @@ exports.confirmDeposit = async (req, res, next) => {
       });
     }
 
-    // Affiliate managers can only confirm once (cannot change after confirming)
-    if (userRole === "affiliate_manager" && lead.depositConfirmed) {
-      return res.status(403).json({
+    // Find the order and check if lead is in it
+    const Order = require("../models/Order");
+    const order = await Order.findById(orderId);
+    if (!order) {
+      return res.status(404).json({
         success: false,
-        message: "Deposit has already been confirmed. Only admins can modify this.",
+        message: "Order not found",
       });
     }
 
-    lead.depositConfirmed = true;
-    lead.depositConfirmedBy = userId;
-    lead.depositConfirmedAt = new Date();
-    lead.depositPSP = pspId;
+    // Find the lead's metadata entry in the order
+    const leadMetadataIndex = order.leadsMetadata.findIndex(
+      (meta) => meta.leadId.toString() === leadId
+    );
 
-    // Add to deposit history
-    lead.depositHistory.push({
-      action: "confirmed",
-      performedBy: userId,
-      performedAt: new Date(),
-      psp: pspId,
-    });
-
-    await lead.save();
-
-    // Add audit log to associated order if exists
-    if (lead.orderId) {
-      const Order = require("../models/Order");
-      const order = await Order.findById(lead.orderId);
-      if (order) {
-        const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
-                         req.headers['x-real-ip'] ||
-                         req.connection?.remoteAddress ||
-                         req.socket?.remoteAddress ||
-                         'unknown';
-        if (!order.auditLog) {
-          order.auditLog = [];
-        }
-        order.auditLog.push({
-          action: "deposit_confirmed",
-          leadId: lead._id,
-          leadEmail: lead.newEmail,
-          performedBy: userId,
-          performedAt: new Date(),
-          ipAddress: clientIp,
-          details: `Deposit confirmed for lead ${lead.firstName} ${lead.lastName} (${lead.newEmail}) using PSP "${psp.name}" by ${req.user.fullName || req.user.email}`,
-        });
-        await order.save();
-      }
+    if (leadMetadataIndex === -1) {
+      return res.status(400).json({
+        success: false,
+        message: "Lead is not part of this order",
+      });
     }
 
-    // Populate the confirmedBy field for response
-    await lead.populate("depositConfirmedBy", "fullName email");
+    const leadMetadata = order.leadsMetadata[leadMetadataIndex];
+
+    // Affiliate managers can only confirm once (cannot change after confirming)
+    if (userRole === "affiliate_manager" && leadMetadata.depositConfirmed) {
+      return res.status(403).json({
+        success: false,
+        message: "Deposit has already been confirmed for this order. Only admins can modify this.",
+      });
+    }
+
+    // Update the order's leadsMetadata (not the lead document)
+    order.leadsMetadata[leadMetadataIndex].depositConfirmed = true;
+    order.leadsMetadata[leadMetadataIndex].depositConfirmedBy = userId;
+    order.leadsMetadata[leadMetadataIndex].depositConfirmedAt = new Date();
+    order.leadsMetadata[leadMetadataIndex].depositPSP = pspId;
+
+    // Add audit log to order
+    const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+                     req.headers['x-real-ip'] ||
+                     req.connection?.remoteAddress ||
+                     req.socket?.remoteAddress ||
+                     'unknown';
+    if (!order.auditLog) {
+      order.auditLog = [];
+    }
+    order.auditLog.push({
+      action: "deposit_confirmed",
+      leadId: lead._id,
+      leadEmail: lead.newEmail,
+      performedBy: userId,
+      performedAt: new Date(),
+      ipAddress: clientIp,
+      details: `Deposit confirmed for lead ${lead.firstName} ${lead.lastName} (${lead.newEmail}) using PSP "${psp.name}" by ${req.user.fullName || req.user.email}`,
+    });
+
+    await order.save();
+
+    // Populate order metadata for response
+    await order.populate("leadsMetadata.depositConfirmedBy", "fullName email");
+    await order.populate("leadsMetadata.depositPSP", "name website cardNumber cardExpiry cardCVC");
+
+    // Also populate lead for response
     await lead.populate("assignedAgent", "fullName email fourDigitCode");
-    await lead.populate("depositPSP", "name website cardNumber cardExpiry cardCVC");
+
+    // Return the updated metadata along with lead info
+    const updatedMetadata = order.leadsMetadata[leadMetadataIndex];
 
     res.status(200).json({
       success: true,
       message: "Deposit confirmed successfully",
-      data: lead,
+      data: {
+        ...lead.toObject(),
+        // Include order-specific metadata
+        orderMetadata: updatedMetadata,
+      },
     });
   } catch (error) {
     console.error("Error confirming deposit:", error);
@@ -4585,12 +4612,21 @@ exports.unconfirmDeposit = async (req, res, next) => {
   try {
     const leadId = req.params.id;
     const userRole = req.user.role;
+    const { orderId } = req.body;
 
     // Only admin can unconfirm deposits
     if (userRole !== "admin") {
       return res.status(403).json({
         success: false,
         message: "Only admins can unconfirm deposits",
+      });
+    }
+
+    // Validate orderId is provided
+    if (!orderId) {
+      return res.status(400).json({
+        success: false,
+        message: "Order ID is required for unconfirming deposit",
       });
     }
 
@@ -4603,59 +4639,76 @@ exports.unconfirmDeposit = async (req, res, next) => {
       });
     }
 
-    if (!lead.depositConfirmed) {
-      return res.status(400).json({
+    // Find the order
+    const Order = require("../models/Order");
+    const order = await Order.findById(orderId);
+    if (!order) {
+      return res.status(404).json({
         success: false,
-        message: "Deposit is not confirmed",
+        message: "Order not found",
       });
     }
 
-    lead.depositConfirmed = false;
-    lead.depositConfirmedBy = null;
-    lead.depositConfirmedAt = null;
-    lead.depositPSP = null;
+    // Find the lead's metadata entry in the order
+    const leadMetadataIndex = order.leadsMetadata.findIndex(
+      (meta) => meta.leadId.toString() === leadId
+    );
 
-    // Add to deposit history
-    lead.depositHistory.push({
-      action: "unconfirmed",
-      performedBy: req.user._id,
-      performedAt: new Date(),
-    });
-
-    await lead.save();
-
-    // Add audit log to associated order if exists
-    if (lead.orderId) {
-      const Order = require("../models/Order");
-      const order = await Order.findById(lead.orderId);
-      if (order) {
-        const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
-                         req.headers['x-real-ip'] ||
-                         req.connection?.remoteAddress ||
-                         req.socket?.remoteAddress ||
-                         'unknown';
-        if (!order.auditLog) {
-          order.auditLog = [];
-        }
-        order.auditLog.push({
-          action: "deposit_unconfirmed",
-          leadId: lead._id,
-          leadEmail: lead.newEmail,
-          performedBy: req.user._id,
-          performedAt: new Date(),
-          ipAddress: clientIp,
-          details: `Deposit unconfirmed for lead ${lead.firstName} ${lead.lastName} (${lead.newEmail}) by ${req.user.fullName || req.user.email}`,
-        });
-        await order.save();
-      }
+    if (leadMetadataIndex === -1) {
+      return res.status(400).json({
+        success: false,
+        message: "Lead is not part of this order",
+      });
     }
 
+    const leadMetadata = order.leadsMetadata[leadMetadataIndex];
+
+    if (!leadMetadata.depositConfirmed) {
+      return res.status(400).json({
+        success: false,
+        message: "Deposit is not confirmed for this order",
+      });
+    }
+
+    // Reset deposit fields in the order's leadsMetadata
+    order.leadsMetadata[leadMetadataIndex].depositConfirmed = false;
+    order.leadsMetadata[leadMetadataIndex].depositConfirmedBy = null;
+    order.leadsMetadata[leadMetadataIndex].depositConfirmedAt = null;
+    order.leadsMetadata[leadMetadataIndex].depositPSP = null;
+
+    // Add audit log to order
+    const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+                     req.headers['x-real-ip'] ||
+                     req.connection?.remoteAddress ||
+                     req.socket?.remoteAddress ||
+                     'unknown';
+    if (!order.auditLog) {
+      order.auditLog = [];
+    }
+    order.auditLog.push({
+      action: "deposit_unconfirmed",
+      leadId: lead._id,
+      leadEmail: lead.newEmail,
+      performedBy: req.user._id,
+      performedAt: new Date(),
+      ipAddress: clientIp,
+      details: `Deposit unconfirmed for lead ${lead.firstName} ${lead.lastName} (${lead.newEmail}) by ${req.user.fullName || req.user.email}`,
+    });
+
+    await order.save();
+
     await lead.populate("assignedAgent", "fullName email fourDigitCode");
+
+    // Return the updated metadata along with lead info
+    const updatedMetadata = order.leadsMetadata[leadMetadataIndex];
 
     res.status(200).json({
       success: true,
       message: "Deposit unconfirmed successfully",
-      data: lead,
+      data: {
+        ...lead.toObject(),
+        orderMetadata: updatedMetadata,
+      },
     });
   } catch (error) {
     console.error("Error unconfirming deposit:", error);
@@ -4669,7 +4722,7 @@ exports.markAsShaved = async (req, res, next) => {
     const leadId = req.params.id;
     const userId = req.user._id;
     const userRole = req.user.role;
-    const { refundsManagerId } = req.body;
+    const { refundsManagerId, orderId } = req.body;
 
     // Only admin and affiliate_manager can mark as shaved
     if (userRole !== "admin" && userRole !== "affiliate_manager") {
@@ -4684,6 +4737,14 @@ exports.markAsShaved = async (req, res, next) => {
       return res.status(400).json({
         success: false,
         message: "Please select a refunds manager",
+      });
+    }
+
+    // Validate orderId is provided (required for per-order tracking)
+    if (!orderId) {
+      return res.status(400).json({
+        success: false,
+        message: "Order ID is required for marking as shaved",
       });
     }
 
@@ -4704,8 +4765,32 @@ exports.markAsShaved = async (req, res, next) => {
       });
     }
 
-    // Check if deposit is confirmed
-    if (!lead.depositConfirmed) {
+    // Find the order
+    const Order = require("../models/Order");
+    const order = await Order.findById(orderId);
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found",
+      });
+    }
+
+    // Find the lead's metadata entry in the order
+    const leadMetadataIndex = order.leadsMetadata.findIndex(
+      (meta) => meta.leadId.toString() === leadId
+    );
+
+    if (leadMetadataIndex === -1) {
+      return res.status(400).json({
+        success: false,
+        message: "Lead is not part of this order",
+      });
+    }
+
+    const leadMetadata = order.leadsMetadata[leadMetadataIndex];
+
+    // Check if deposit is confirmed in this order
+    if (!leadMetadata.depositConfirmed) {
       return res.status(400).json({
         success: false,
         message: "Please confirm the deposit first before marking as shaved",
@@ -4713,10 +4798,10 @@ exports.markAsShaved = async (req, res, next) => {
     }
 
     // Affiliate managers can only set once (cannot change after assignment)
-    if (userRole === "affiliate_manager" && lead.shaved && lead.shavedRefundsManager) {
+    if (userRole === "affiliate_manager" && leadMetadata.shaved && leadMetadata.shavedRefundsManager) {
       return res.status(403).json({
         success: false,
-        message: "This lead is already marked as shaved. Only admins can modify the assignment.",
+        message: "This lead is already marked as shaved for this order. Only admins can modify the assignment.",
       });
     }
 
@@ -4737,72 +4822,48 @@ exports.markAsShaved = async (req, res, next) => {
     }
 
     // Determine if this is a new shaved mark or a manager change
-    const isNewShaved = !lead.shaved;
-    const isManagerChange = lead.shaved && lead.shavedRefundsManager &&
-      lead.shavedRefundsManager.toString() !== refundsManagerId;
+    const isNewShaved = !leadMetadata.shaved;
+    const isManagerChange = leadMetadata.shaved && leadMetadata.shavedRefundsManager &&
+      leadMetadata.shavedRefundsManager.toString() !== refundsManagerId;
 
-    // Update lead fields
-    lead.shaved = true;
-    lead.shavedBy = userId;
-    lead.shavedAt = new Date();
-    lead.shavedRefundsManager = refundsManagerId;
-    lead.shavedManagerAssignedBy = userId;
-    lead.shavedManagerAssignedAt = new Date();
+    // Update the order's leadsMetadata (not the lead document)
+    order.leadsMetadata[leadMetadataIndex].shaved = true;
+    order.leadsMetadata[leadMetadataIndex].shavedBy = userId;
+    order.leadsMetadata[leadMetadataIndex].shavedAt = new Date();
+    order.leadsMetadata[leadMetadataIndex].shavedRefundsManager = refundsManagerId;
+    order.leadsMetadata[leadMetadataIndex].shavedManagerAssignedBy = userId;
+    order.leadsMetadata[leadMetadataIndex].shavedManagerAssignedAt = new Date();
 
-    // Add to shaved history
-    if (isNewShaved) {
-      lead.shavedHistory.push({
-        action: "shaved",
-        performedBy: userId,
-        performedAt: new Date(),
-        refundsManager: refundsManagerId,
-      });
-    } else if (isManagerChange) {
-      lead.shavedHistory.push({
-        action: "manager_changed",
-        performedBy: userId,
-        performedAt: new Date(),
-        refundsManager: refundsManagerId,
-      });
+    // Add audit log to order
+    const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+                     req.headers['x-real-ip'] ||
+                     req.connection?.remoteAddress ||
+                     req.socket?.remoteAddress ||
+                     'unknown';
+    if (!order.auditLog) {
+      order.auditLog = [];
     }
+    order.auditLog.push({
+      action: "shaved",
+      leadId: lead._id,
+      leadEmail: lead.newEmail,
+      performedBy: userId,
+      performedAt: new Date(),
+      ipAddress: clientIp,
+      details: `Lead ${lead.firstName} ${lead.lastName} (${lead.newEmail}) marked as shaved by ${req.user.fullName || req.user.email}. Refunds manager: ${refundsManager.fullName}`,
+      newValue: {
+        refundsManagerId: refundsManagerId,
+        refundsManagerName: refundsManager.fullName,
+      },
+    });
 
-    await lead.save();
-
-    // Add audit log to associated order if exists
-    if (lead.orderId) {
-      const Order = require("../models/Order");
-      const order = await Order.findById(lead.orderId);
-      if (order) {
-        const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
-                         req.headers['x-real-ip'] ||
-                         req.connection?.remoteAddress ||
-                         req.socket?.remoteAddress ||
-                         'unknown';
-        if (!order.auditLog) {
-          order.auditLog = [];
-        }
-        order.auditLog.push({
-          action: "shaved",
-          leadId: lead._id,
-          leadEmail: lead.email,
-          performedBy: userId,
-          performedAt: new Date(),
-          ipAddress: clientIp,
-          details: `Lead ${lead.firstName} ${lead.lastName} (${lead.email}) marked as shaved by ${req.user.fullName || req.user.email}. Refunds manager: ${refundsManager.fullName}`,
-          newValue: {
-            refundsManagerId: refundsManagerId,
-            refundsManagerName: refundsManager.fullName,
-          },
-        });
-        await order.save();
-      }
-    }
+    await order.save();
 
     // Create or update RefundAssignment so the refunds manager can see this lead
     const RefundAssignment = require("../models/RefundAssignment");
 
-    // Check if a RefundAssignment already exists for this lead
-    let refundAssignment = await RefundAssignment.findOne({ leadId: leadId });
+    // Check if a RefundAssignment already exists for this lead AND order
+    let refundAssignment = await RefundAssignment.findOne({ leadId: leadId, orderId: orderId });
 
     if (refundAssignment) {
       // Update existing assignment with new refunds manager
@@ -4813,7 +4874,7 @@ exports.markAsShaved = async (req, res, next) => {
       // Create new RefundAssignment
       refundAssignment = new RefundAssignment({
         source: "order",
-        orderId: lead.orderId,
+        orderId: orderId,
         leadId: leadId,
         assignedBy: userId,
         refundsManager: refundsManagerId,
@@ -4823,16 +4884,24 @@ exports.markAsShaved = async (req, res, next) => {
       await refundAssignment.save();
     }
 
-    // Populate for response
-    await lead.populate("shavedBy", "fullName email");
-    await lead.populate("shavedRefundsManager", "fullName email");
-    await lead.populate("shavedManagerAssignedBy", "fullName email");
+    // Populate order metadata for response
+    await order.populate("leadsMetadata.shavedBy", "fullName email");
+    await order.populate("leadsMetadata.shavedRefundsManager", "fullName email");
+    await order.populate("leadsMetadata.shavedManagerAssignedBy", "fullName email");
+
+    // Also populate lead for response
     await lead.populate("assignedAgent", "fullName email fourDigitCode");
+
+    // Return the updated metadata along with lead info
+    const updatedMetadata = order.leadsMetadata[leadMetadataIndex];
 
     res.status(200).json({
       success: true,
       message: "Lead marked as shaved successfully",
-      data: lead,
+      data: {
+        ...lead.toObject(),
+        orderMetadata: updatedMetadata,
+      },
     });
   } catch (error) {
     console.error("Error marking lead as shaved:", error);
@@ -4845,12 +4914,21 @@ exports.unmarkAsShaved = async (req, res, next) => {
   try {
     const leadId = req.params.id;
     const userRole = req.user.role;
+    const { orderId } = req.body;
 
     // Only admin can unmark shaved
     if (userRole !== "admin") {
       return res.status(403).json({
         success: false,
         message: "Only admins can unmark leads as shaved",
+      });
+    }
+
+    // Validate orderId is provided
+    if (!orderId) {
+      return res.status(400).json({
+        success: false,
+        message: "Order ID is required for unmarking as shaved",
       });
     }
 
@@ -4863,66 +4941,82 @@ exports.unmarkAsShaved = async (req, res, next) => {
       });
     }
 
-    if (!lead.shaved) {
-      return res.status(400).json({
+    // Find the order
+    const Order = require("../models/Order");
+    const order = await Order.findById(orderId);
+    if (!order) {
+      return res.status(404).json({
         success: false,
-        message: "Lead is not marked as shaved",
+        message: "Order not found",
       });
     }
 
-    // Add to history before clearing
-    lead.shavedHistory.push({
-      action: "unshaved",
-      performedBy: req.user._id,
-      performedAt: new Date(),
-    });
+    // Find the lead's metadata entry in the order
+    const leadMetadataIndex = order.leadsMetadata.findIndex(
+      (meta) => meta.leadId.toString() === leadId
+    );
 
-    // Clear shaved fields
-    lead.shaved = false;
-    lead.shavedBy = null;
-    lead.shavedAt = null;
-    lead.shavedRefundsManager = null;
-    lead.shavedManagerAssignedBy = null;
-    lead.shavedManagerAssignedAt = null;
-
-    await lead.save();
-
-    // Add audit log to associated order if exists
-    if (lead.orderId) {
-      const Order = require("../models/Order");
-      const order = await Order.findById(lead.orderId);
-      if (order) {
-        const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
-                         req.headers['x-real-ip'] ||
-                         req.connection?.remoteAddress ||
-                         req.socket?.remoteAddress ||
-                         'unknown';
-        if (!order.auditLog) {
-          order.auditLog = [];
-        }
-        order.auditLog.push({
-          action: "unshaved",
-          leadId: lead._id,
-          leadEmail: lead.email,
-          performedBy: req.user._id,
-          performedAt: new Date(),
-          ipAddress: clientIp,
-          details: `Lead ${lead.firstName} ${lead.lastName} (${lead.email}) unmarked as shaved by ${req.user.fullName || req.user.email}`,
-        });
-        await order.save();
-      }
+    if (leadMetadataIndex === -1) {
+      return res.status(400).json({
+        success: false,
+        message: "Lead is not part of this order",
+      });
     }
 
-    // Delete the RefundAssignment for this lead
+    const leadMetadata = order.leadsMetadata[leadMetadataIndex];
+
+    if (!leadMetadata.shaved) {
+      return res.status(400).json({
+        success: false,
+        message: "Lead is not marked as shaved for this order",
+      });
+    }
+
+    // Clear shaved fields in the order's leadsMetadata
+    order.leadsMetadata[leadMetadataIndex].shaved = false;
+    order.leadsMetadata[leadMetadataIndex].shavedBy = null;
+    order.leadsMetadata[leadMetadataIndex].shavedAt = null;
+    order.leadsMetadata[leadMetadataIndex].shavedRefundsManager = null;
+    order.leadsMetadata[leadMetadataIndex].shavedManagerAssignedBy = null;
+    order.leadsMetadata[leadMetadataIndex].shavedManagerAssignedAt = null;
+
+    // Add audit log to order
+    const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+                     req.headers['x-real-ip'] ||
+                     req.connection?.remoteAddress ||
+                     req.socket?.remoteAddress ||
+                     'unknown';
+    if (!order.auditLog) {
+      order.auditLog = [];
+    }
+    order.auditLog.push({
+      action: "unshaved",
+      leadId: lead._id,
+      leadEmail: lead.newEmail,
+      performedBy: req.user._id,
+      performedAt: new Date(),
+      ipAddress: clientIp,
+      details: `Lead ${lead.firstName} ${lead.lastName} (${lead.newEmail}) unmarked as shaved by ${req.user.fullName || req.user.email}`,
+    });
+
+    await order.save();
+
+    // Delete the RefundAssignment for this lead AND order
     const RefundAssignment = require("../models/RefundAssignment");
-    await RefundAssignment.deleteOne({ leadId: leadId });
+    await RefundAssignment.deleteOne({ leadId: leadId, orderId: orderId });
 
     await lead.populate("assignedAgent", "fullName email fourDigitCode");
+
+    // Return the updated metadata along with lead info
+    const updatedMetadata = order.leadsMetadata[leadMetadataIndex];
 
     res.status(200).json({
       success: true,
       message: "Lead unmarked as shaved successfully",
-      data: lead,
+      data: {
+        ...lead.toObject(),
+        orderMetadata: updatedMetadata,
+      },
     });
   } catch (error) {
     console.error("Error unmarking lead as shaved:", error);

@@ -2958,15 +2958,6 @@ const PayrollPage = () => {
                 </Card>
               </Grid>
 
-              {/* Call Bonuses Section - For Agents */}
-              <Grid item xs={12}>
-                <Card>
-                  <CardContent>
-                    <CallBonusesSection />
-                  </CardContent>
-                </Card>
-              </Grid>
-
               {/* Pending Approval Fines Section - For Agents */}
               {pendingApprovalFines.length > 0 && (
                 <Grid item xs={12}>

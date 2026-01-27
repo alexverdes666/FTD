@@ -11,6 +11,7 @@ const {
   getRelatedAccounts,
   switchAccount,
   verify2FAAndLogin,
+  verify2FAAndSwitch,
   getMySessions,
   terminateSession,
   terminateAllSessions,
@@ -58,6 +59,15 @@ router.post(
     body("token").exists().withMessage("Verification token is required"),
   ],
   verify2FAAndLogin
+);
+router.post(
+  "/verify-2fa-switch",
+  [
+    authActivityLogger,
+    body("tempToken").exists().withMessage("Temp token is required"),
+    body("token").exists().withMessage("Verification token is required"),
+  ],
+  verify2FAAndSwitch
 );
 router.get("/me", protect, getMe);
 router.put(

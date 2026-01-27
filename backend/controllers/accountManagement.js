@@ -137,14 +137,22 @@ exports.linkAccounts = async (req, res, next) => {
 
     // Create the complete list of all accounts in the group (primary + linked)
     const allAccountIds = [primaryAccountId, ...linkedAccountIds];
-    
+
     // Update each account individually to ensure they don't include themselves in linkedAccounts
     // This ensures bidirectional linking - everyone can switch to everyone else (but not to themselves)
+    // IMPORTANT: We merge with existing linked accounts instead of replacing them
     for (const accountId of allAccountIds) {
-      const linkedAccountsForThisUser = allAccountIds.filter(id => id !== accountId.toString());
-      
+      const newLinkedAccountsForThisUser = allAccountIds.filter(id => id !== accountId.toString());
+
+      // Fetch existing linked accounts for this user
+      const existingUser = await User.findById(accountId).select('linkedAccounts');
+      const existingLinkedIds = (existingUser?.linkedAccounts || []).map(id => id.toString());
+
+      // Merge existing and new linked accounts, removing duplicates
+      const mergedLinkedAccounts = [...new Set([...existingLinkedIds, ...newLinkedAccountsForThisUser])];
+
       await User.findByIdAndUpdate(accountId, {
-        linkedAccounts: linkedAccountsForThisUser,
+        linkedAccounts: mergedLinkedAccounts,
         primaryAccount: accountId === primaryAccountId ? null : primaryAccountId
       });
     }

@@ -93,6 +93,7 @@ import AssignLeadToAgentDialog from "../components/AssignLeadToAgentDialog";
 import LeadAuditHistoryModal from "../components/LeadAuditHistoryModal";
 import LeadGlobalAuditDialog from "../components/LeadGlobalAuditDialog";
 import LeadCommentsDialog from "../components/LeadCommentsDialog";
+import CallBonusesSection from "../components/CallBonusesSection";
 
 import api from "../services/api";
 import { selectUser } from "../store/slices/authSlice";
@@ -1183,10 +1184,20 @@ const LeadsPage = () => {
   const [globalAuditDialogOpen, setGlobalAuditDialogOpen] = useState(false);
   const [expandedRows, setExpandedRows] = useState(new Set());
   const [pendingRequests, setPendingRequests] = useState(new Map()); // Map<"leadId-orderId", pendingRequest>
+  const [callNumberConfirmDialog, setCallNumberConfirmDialog] = useState({
+    open: false,
+    leadId: null,
+    orderId: null,
+    newCallNumber: null,
+    currentCallNumber: null,
+  });
 
   // IPQS batch validation state
   const [ipqsValidating, setIpqsValidating] = useState(false);
   const [ipqsValidationSuccess, setIpqsValidationSuccess] = useState([]);
+
+  // Call Bonuses section expansion state (for agents)
+  const [callBonusesExpanded, setCallBonusesExpanded] = useState(true);
 
   // Local search input state for instant UI updates (initialized from URL params)
   const [searchInput, setSearchInput] = useState(
@@ -1488,6 +1499,41 @@ const LeadsPage = () => {
     },
     [fetchLeads, setSuccess, setError]
   );
+
+  const handleCallNumberChange = useCallback(
+    (leadId, newCallNumber, orderId, currentCallNumber) => {
+      setCallNumberConfirmDialog({
+        open: true,
+        leadId,
+        orderId,
+        newCallNumber,
+        currentCallNumber,
+      });
+    },
+    []
+  );
+
+  const handleCallNumberConfirm = useCallback(() => {
+    const { leadId, orderId, newCallNumber } = callNumberConfirmDialog;
+    updateCallNumber(leadId, newCallNumber, orderId);
+    setCallNumberConfirmDialog({
+      open: false,
+      leadId: null,
+      orderId: null,
+      newCallNumber: null,
+      currentCallNumber: null,
+    });
+  }, [callNumberConfirmDialog, updateCallNumber]);
+
+  const handleCallNumberCancel = useCallback(() => {
+    setCallNumberConfirmDialog({
+      open: false,
+      leadId: null,
+      orderId: null,
+      newCallNumber: null,
+      currentCallNumber: null,
+    });
+  }, []);
 
   const updateVerification = useCallback(
     async (leadId, verified, orderId) => {
@@ -2064,6 +2110,51 @@ const LeadsPage = () => {
           {error}
         </Alert>
       )}
+
+      {/* Call Bonuses Section - For Agents Only */}
+      {isAgent && (
+        <Paper
+          elevation={0}
+          sx={{
+            p: 2,
+            mb: 3,
+            borderRadius: 2,
+            border: "1px solid",
+            borderColor: "divider",
+          }}
+        >
+          <Box
+            display="flex"
+            justifyContent="space-between"
+            alignItems="center"
+            mb={callBonusesExpanded ? 2 : 0}
+          >
+            <Typography variant="h6" display="flex" alignItems="center" gap={1}>
+              <PhoneIcon color="primary" />
+              Call Bonuses
+            </Typography>
+            <IconButton
+              onClick={() => setCallBonusesExpanded(!callBonusesExpanded)}
+              size="small"
+            >
+              {callBonusesExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+            </IconButton>
+          </Box>
+          <Collapse in={callBonusesExpanded}>
+            <CallBonusesSection
+              leads={leads.map(groupedLead => ({
+                _id: groupedLead.leadId,
+                firstName: groupedLead.leadInfo?.firstName,
+                lastName: groupedLead.leadInfo?.lastName,
+                newEmail: groupedLead.leadInfo?.newEmail,
+                newPhone: groupedLead.leadInfo?.newPhone,
+                leadType: groupedLead.leadInfo?.leadType,
+              })).filter(lead => lead._id)}
+            />
+          </Collapse>
+        </Paper>
+      )}
+
       {}
       <Paper
         elevation={0}
@@ -2539,6 +2630,7 @@ const LeadsPage = () => {
                       onComment={handleOpenCommentDialog}
                       onUpdateStatus={updateLeadStatus}
                       updateCallNumber={updateCallNumber}
+                      handleCallNumberChange={handleCallNumberChange}
                       updateVerification={updateVerification}
                       getAvailableCallOptions={getAvailableCallOptions}
                       pendingRequests={pendingRequests}
@@ -2951,6 +3043,40 @@ const LeadsPage = () => {
             startIcon={unassignLoading ? <CircularProgress size={20} /> : <PersonRemoveIcon />}
           >
             {unassignLoading ? "Unassigning..." : `Unassign ${numAssignedAgentSelected} Lead(s)`}
+          </Button>
+        </DialogActions>
+      </Dialog>
+      {/* Call Number Confirmation Dialog */}
+      <Dialog
+        open={callNumberConfirmDialog.open}
+        onClose={handleCallNumberCancel}
+        maxWidth="xs"
+        fullWidth
+        sx={{
+          "& .MuiBackdrop-root": {
+            backdropFilter: "blur(5px)",
+          },
+        }}
+      >
+        <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+          <PhoneIcon color="primary" />
+          Confirm Call Status Change
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Are you sure you want to change the call status from{" "}
+            <strong>{callNumberConfirmDialog.currentCallNumber || "None"}</strong> to{" "}
+            <strong>{callNumberConfirmDialog.newCallNumber || "None"}</strong>?
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCallNumberCancel}>Cancel</Button>
+          <Button
+            onClick={handleCallNumberConfirm}
+            color="primary"
+            variant="contained"
+          >
+            Confirm
           </Button>
         </DialogActions>
       </Dialog>
@@ -3383,6 +3509,7 @@ const GroupedLeadRow = React.memo(
     onComment,
     onUpdateStatus,
     updateCallNumber,
+    handleCallNumberChange,
     updateVerification,
     getAvailableCallOptions,
     pendingRequests,
@@ -3605,10 +3732,11 @@ const GroupedLeadRow = React.memo(
                                   <Select
                                     value={order.callNumber || ""}
                                     onChange={(e) =>
-                                      updateCallNumber(
+                                      handleCallNumberChange(
                                         leadId,
                                         e.target.value,
-                                        order.orderId
+                                        order.orderId,
+                                        order.callNumber
                                       )
                                     }
                                     displayEmpty

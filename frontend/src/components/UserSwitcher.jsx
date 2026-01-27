@@ -21,12 +21,14 @@ import {
   Keyboard
 } from '@mui/icons-material';
 import { useDispatch, useSelector } from 'react-redux';
+import { useNavigate } from 'react-router-dom';
 import { selectUser, switchUserAccount, fetchRelatedAccounts } from '../store/slices/authSlice';
 import { addRecentAccount } from '../utils/accountHistory';
 import toast from 'react-hot-toast';
 
 const UserSwitcher = ({ onOpenQuickSwitcher }) => {
   const dispatch = useDispatch();
+  const navigate = useNavigate();
   const user = useSelector(selectUser);
   const [anchorEl, setAnchorEl] = useState(null);
   const [relatedAccounts, setRelatedAccounts] = useState([]);
@@ -70,18 +72,15 @@ const UserSwitcher = ({ onOpenQuickSwitcher }) => {
 
   const handleAccountSwitch = async (accountId) => {
     if (switching) return;
-    
+
     setSwitching(true);
     handleClose();
-    
+
     try {
       const result = await dispatch(switchUserAccount(accountId)).unwrap();
-      
+
       if (result.requires2FA) {
-        toast('Please complete authentication to switch account', {
-          icon: '🔒',
-          duration: 4000
-        });
+        // MainLayout will show the 2FA dialog
         return;
       }
 
@@ -89,14 +88,15 @@ const UserSwitcher = ({ onOpenQuickSwitcher }) => {
       if (result.user) {
         addRecentAccount(result.user);
       }
-      
+
       toast.success('Account switched successfully', {
         duration: 2000,
         icon: '🔄'
       });
       // Clear related accounts to force refresh on next open
       setRelatedAccounts([]);
-      // No page reload needed - Redux state update handles everything
+      // Redirect to dashboard after switching accounts
+      navigate('/');
     } catch (error) {
       console.error('Failed to switch account:', error);
       toast.error(error?.message || 'Failed to switch account');

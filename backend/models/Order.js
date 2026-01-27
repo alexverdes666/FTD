@@ -105,6 +105,18 @@ const orderSchema = new Schema(
         ref: "Lead",
         default: []
       }],
+      // Deposit tracking for this order (per-order, not per-lead)
+      depositConfirmed: { type: Boolean, default: false },
+      depositConfirmedBy: { type: SchemaTypes.ObjectId, ref: "User" },
+      depositConfirmedAt: { type: Date },
+      depositPSP: { type: SchemaTypes.ObjectId, ref: "PSP" },
+      // Shaved tracking for this order (per-order, not per-lead)
+      shaved: { type: Boolean, default: false },
+      shavedBy: { type: SchemaTypes.ObjectId, ref: "User" },
+      shavedAt: { type: Date },
+      shavedRefundsManager: { type: SchemaTypes.ObjectId, ref: "User" },
+      shavedManagerAssignedBy: { type: SchemaTypes.ObjectId, ref: "User" },
+      shavedManagerAssignedAt: { type: Date },
       _id: false
     }],
     // Track leads that have been removed from the order (soft delete)

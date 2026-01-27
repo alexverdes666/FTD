@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -15,14 +15,21 @@ import {
   CircularProgress,
   Chip,
   Paper,
+  FormControl,
+  InputLabel,
+  Select,
+  ListItemText,
 } from '@mui/material';
 import {
   Phone as PhoneIcon,
   AccessTime as AccessTimeIcon,
   AttachMoney as MoneyIcon,
   Send as SendIcon,
+  Person as PersonIcon,
+  Contacts as ContactsIcon,
 } from '@mui/icons-material';
 import { createDeclaration, previewBonus } from '../services/callDeclarations';
+import api from '../services/api';
 
 const CALL_TYPES = [
   { value: 'deposit', label: 'Deposit Call', bonus: 10.0 },
@@ -32,13 +39,42 @@ const CALL_TYPES = [
   { value: 'fourth_call', label: '4th Call', bonus: 10.0 },
 ];
 
-const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated }) => {
+const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, leads: passedLeads = [] }) => {
   const [callType, setCallType] = useState('');
   const [description, setDescription] = useState('');
   const [bonusPreview, setBonusPreview] = useState(null);
   const [loading, setLoading] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  // New state for affiliate manager and lead selection
+  const [affiliateManagerId, setAffiliateManagerId] = useState('');
+  const [leadId, setLeadId] = useState('');
+  const [affiliateManagers, setAffiliateManagers] = useState([]);
+  const [affiliateManagersLoading, setAffiliateManagersLoading] = useState(false);
+
+  // Fetch affiliate managers only
+  const fetchAffiliateManagers = useCallback(async () => {
+    setAffiliateManagersLoading(true);
+    try {
+      // Fetch affiliate managers from the call-declarations endpoint (accessible to agents)
+      const response = await api.get('/call-declarations/affiliate-managers');
+
+      const affiliateManagersList = response.data.success ? (response.data.data || []) : [];
+      setAffiliateManagers(affiliateManagersList);
+    } catch (err) {
+      console.error('Error fetching affiliate managers:', err);
+    } finally {
+      setAffiliateManagersLoading(false);
+    }
+  }, []);
+
+  // Fetch affiliate managers when dialog opens
+  useEffect(() => {
+    if (open) {
+      fetchAffiliateManagers();
+    }
+  }, [open, fetchAffiliateManagers]);
 
   // Reset form when dialog opens/closes
   useEffect(() => {
@@ -47,6 +83,8 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated }) =>
       setDescription('');
       setBonusPreview(null);
       setError(null);
+      setAffiliateManagerId('');
+      setLeadId('');
     }
   }, [open]);
 
@@ -90,6 +128,14 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated }) =>
       setError('Please select a call type');
       return;
     }
+    if (!affiliateManagerId) {
+      setError('Please select an affiliate manager');
+      return;
+    }
+    if (!leadId) {
+      setError('Please select a lead');
+      return;
+    }
 
     setLoading(true);
     setError(null);
@@ -103,6 +149,8 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated }) =>
         destinationNumber: call.destinationNumber,
         callType,
         description: description.trim() || undefined,
+        affiliateManagerId,
+        leadId,
       };
 
       const newDeclaration = await createDeclaration(declarationData);
@@ -125,7 +173,7 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated }) =>
   if (!call) return null;
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
       <DialogTitle>
         <Box display="flex" alignItems="center" gap={1}>
           <PhoneIcon color="primary" />
@@ -226,6 +274,76 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated }) =>
           ))}
         </TextField>
 
+        {/* Affiliate Manager Selection */}
+        <TextField
+          select
+          fullWidth
+          label="Assign To *"
+          value={affiliateManagerId}
+          onChange={(e) => setAffiliateManagerId(e.target.value)}
+          disabled={loading || affiliateManagersLoading}
+          sx={{ mb: 2 }}
+          helperText="Select the affiliate manager for approval"
+          InputProps={{
+            startAdornment: affiliateManagersLoading ? (
+              <CircularProgress size={16} sx={{ mr: 1 }} />
+            ) : (
+              <PersonIcon color="action" sx={{ mr: 1 }} />
+            ),
+          }}
+        >
+          {affiliateManagers.length === 0 && !affiliateManagersLoading ? (
+            <MenuItem disabled>No affiliate managers available</MenuItem>
+          ) : (
+            affiliateManagers.map((user) => (
+              <MenuItem key={user._id} value={user._id}>
+                <Box display="flex" alignItems="center" gap={1} width="100%">
+                  <span>{user.fullName}</span>
+                  <Typography variant="caption" color="text.secondary" sx={{ ml: 'auto' }}>
+                    {user.email}
+                  </Typography>
+                </Box>
+              </MenuItem>
+            ))
+          )}
+        </TextField>
+
+        {/* Lead Selection */}
+        <TextField
+          select
+          fullWidth
+          label="Lead *"
+          value={leadId}
+          onChange={(e) => setLeadId(e.target.value)}
+          disabled={loading || !passedLeads || passedLeads.length === 0}
+          sx={{ mb: 2 }}
+          helperText={
+            !passedLeads || passedLeads.length === 0
+              ? "No leads assigned to you"
+              : "Select the lead this call was for"
+          }
+          InputProps={{
+            startAdornment: <ContactsIcon color="action" sx={{ mr: 1 }} />,
+          }}
+        >
+          {(!passedLeads || passedLeads.length === 0) ? (
+            <MenuItem disabled>No leads available</MenuItem>
+          ) : (
+            passedLeads.map((lead) => (
+              <MenuItem key={lead._id || lead.leadId} value={lead._id || lead.leadId}>
+                <Box>
+                  <Typography variant="body2">
+                    {lead.firstName} {lead.lastName}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {lead.newEmail} | {lead.newPhone}
+                  </Typography>
+                </Box>
+              </MenuItem>
+            ))
+          )}
+        </TextField>
+
         <TextField
           fullWidth
           multiline
@@ -304,7 +422,7 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated }) =>
           variant="contained"
           color="primary"
           onClick={handleSubmit}
-          disabled={loading || !callType}
+          disabled={loading || !callType || !affiliateManagerId || !leadId}
           startIcon={loading ? <CircularProgress size={16} /> : <SendIcon />}
         >
           {loading ? 'Submitting...' : 'Submit Declaration'}

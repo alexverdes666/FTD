@@ -537,6 +537,7 @@ const OrdersPage = () => {
   const [pspDepositDialog, setPspDepositDialog] = useState({
     open: false,
     lead: null,
+    orderId: null,
     psps: [],
     loading: false,
     selectedPsp: null,
@@ -942,6 +943,7 @@ const OrdersPage = () => {
   const [markShavedDialog, setMarkShavedDialog] = useState({
     open: false,
     lead: null,
+    orderId: null,
     loading: false,
   });
 
@@ -1006,6 +1008,36 @@ const OrdersPage = () => {
 
   const [campaignInput, setCampaignInput] = useState("");
   const [campaignOpen, setCampaignOpen] = useState(false);
+
+  // Helper function to get lead metadata from order
+  // This merges order-specific deposit/shaved status into the lead object
+  const getLeadWithOrderMetadata = useCallback((lead, order) => {
+    if (!order || !order.leadsMetadata || !lead) return lead;
+
+    const leadId = lead._id || lead.id;
+    const metadata = order.leadsMetadata.find(
+      (meta) => meta.leadId === leadId || meta.leadId?._id === leadId ||
+                (typeof meta.leadId === 'string' && meta.leadId === leadId)
+    );
+
+    if (!metadata) return lead;
+
+    // Merge order-specific metadata into lead object for display
+    return {
+      ...lead,
+      // Override lead-level deposit/shaved with order-level values
+      depositConfirmed: metadata.depositConfirmed || false,
+      depositConfirmedBy: metadata.depositConfirmedBy,
+      depositConfirmedAt: metadata.depositConfirmedAt,
+      depositPSP: metadata.depositPSP,
+      shaved: metadata.shaved || false,
+      shavedBy: metadata.shavedBy,
+      shavedAt: metadata.shavedAt,
+      shavedRefundsManager: metadata.shavedRefundsManager,
+      shavedManagerAssignedBy: metadata.shavedManagerAssignedBy,
+      shavedManagerAssignedAt: metadata.shavedManagerAssignedAt,
+    };
+  }, []);
 
   const fetchOrders = useCallback(async () => {
     setLoading(true);
@@ -3901,12 +3933,16 @@ const OrdersPage = () => {
 
   // Open PSP selection dialog for confirm deposit
   const handleConfirmDeposit = useCallback(
-    async (lead) => {
+    async (lead, orderId) => {
+      // Use passed orderId or fall back to hoveredOrderId
+      const targetOrderId = orderId || hoveredOrderId;
+
       // Fetch active PSPs first
       try {
         setPspDepositDialog({
           open: true,
           lead: lead,
+          orderId: targetOrderId,
           psps: [],
           loading: true,
           selectedPsp: null,
@@ -3930,23 +3966,32 @@ const OrdersPage = () => {
         setPspDepositDialog({
           open: false,
           lead: null,
+          orderId: null,
           psps: [],
           loading: false,
           selectedPsp: null,
         });
       }
     },
-    []
+    [hoveredOrderId]
   );
 
   // Handle PSP selection and confirm deposit
   const handlePspDepositConfirm = useCallback(
     async () => {
-      const { lead, selectedPsp } = pspDepositDialog;
+      const { lead, selectedPsp, orderId } = pspDepositDialog;
 
       if (!selectedPsp) {
         setNotification({
           message: "Please select a PSP",
+          severity: "error",
+        });
+        return;
+      }
+
+      if (!orderId) {
+        setNotification({
+          message: "Order context is required to confirm deposit",
           severity: "error",
         });
         return;
@@ -3957,14 +4002,18 @@ const OrdersPage = () => {
 
         const response = await api.put(`/leads/${lead._id}/confirm-deposit`, {
           pspId: selectedPsp._id,
+          orderId: orderId,
         });
 
-        // Update local state instantly
+        // Get the order metadata from response
+        const orderMetadata = response.data.data?.orderMetadata || {};
+
+        // Update local state with order metadata
         const updatedLeadData = {
-          depositConfirmed: true,
-          depositConfirmedBy: response.data.data?.depositConfirmedBy || user,
-          depositConfirmedAt: new Date().toISOString(),
-          depositPSP: response.data.data?.depositPSP || selectedPsp,
+          depositConfirmed: orderMetadata.depositConfirmed || true,
+          depositConfirmedBy: orderMetadata.depositConfirmedBy || user,
+          depositConfirmedAt: orderMetadata.depositConfirmedAt || new Date().toISOString(),
+          depositPSP: orderMetadata.depositPSP || selectedPsp,
         };
 
         setAssignedLeadsModal((prev) => ({
@@ -3975,12 +4024,49 @@ const OrdersPage = () => {
         }));
 
         // Also update preview modal if open
-        setLeadsPreviewModal((prev) => ({
-          ...prev,
-          leads: prev.leads.map((l) =>
-            l._id === lead._id ? { ...l, ...updatedLeadData } : l
-          ),
-        }));
+        setLeadsPreviewModal((prev) => {
+          // Also update order's leadsMetadata if we have the order
+          let updatedOrder = prev.order;
+          if (updatedOrder && updatedOrder.leadsMetadata) {
+            updatedOrder = {
+              ...updatedOrder,
+              leadsMetadata: updatedOrder.leadsMetadata.map((meta) =>
+                meta.leadId === lead._id || meta.leadId?._id === lead._id
+                  ? { ...meta, ...orderMetadata }
+                  : meta
+              ),
+            };
+          }
+          return {
+            ...prev,
+            leads: prev.leads.map((l) =>
+              l._id === lead._id ? { ...l, ...updatedLeadData } : l
+            ),
+            order: updatedOrder,
+          };
+        });
+
+        // Update expandedRowData if order is expanded
+        if (orderId && expandedRowData[orderId]) {
+          setExpandedRowData((prev) => {
+            const orderData = prev[orderId];
+            if (!orderData) return prev;
+            return {
+              ...prev,
+              [orderId]: {
+                ...orderData,
+                leads: orderData.leads?.map((l) =>
+                  l._id === lead._id ? { ...l, ...updatedLeadData } : l
+                ),
+                leadsMetadata: orderData.leadsMetadata?.map((meta) =>
+                  meta.leadId === lead._id || meta.leadId?._id === lead._id
+                    ? { ...meta, ...orderMetadata }
+                    : meta
+                ),
+              },
+            };
+          });
+        }
 
         setNotification({
           message: "Deposit confirmed successfully",
@@ -3991,6 +4077,7 @@ const OrdersPage = () => {
         setPspDepositDialog({
           open: false,
           lead: null,
+          orderId: null,
           psps: [],
           loading: false,
           selectedPsp: null,
@@ -4007,7 +4094,7 @@ const OrdersPage = () => {
         setPspDepositDialog((prev) => ({ ...prev, loading: false }));
       }
     },
-    [pspDepositDialog, fetchOrders, user]
+    [pspDepositDialog, fetchOrders, user, expandedRowData]
   );
 
   // Close PSP deposit dialog
@@ -4015,6 +4102,7 @@ const OrdersPage = () => {
     setPspDepositDialog({
       open: false,
       lead: null,
+      orderId: null,
       psps: [],
       loading: false,
       selectedPsp: null,
@@ -4023,14 +4111,27 @@ const OrdersPage = () => {
 
   // Unconfirm Deposit Handler (admin only)
   const handleUnconfirmDeposit = useCallback(
-    async (lead) => {
+    async (lead, orderId) => {
+      // Use passed orderId or fall back to hoveredOrderId
+      const targetOrderId = orderId || hoveredOrderId;
+
+      if (!targetOrderId) {
+        setNotification({
+          message: "Order context is required to unconfirm deposit",
+          severity: "error",
+        });
+        return;
+      }
+
       // Ask for confirmation
       if (!window.confirm(`Are you sure you want to unconfirm deposit for ${lead.firstName} ${lead.lastName}?`)) {
         return;
       }
 
       try {
-        await api.put(`/leads/${lead._id}/unconfirm-deposit`);
+        await api.put(`/leads/${lead._id}/unconfirm-deposit`, {
+          orderId: targetOrderId,
+        });
 
         // Update local state instantly
         const updatedLeadData = {
@@ -4048,12 +4149,48 @@ const OrdersPage = () => {
         }));
 
         // Also update preview modal if open
-        setLeadsPreviewModal((prev) => ({
-          ...prev,
-          leads: prev.leads.map((l) =>
-            l._id === lead._id ? { ...l, ...updatedLeadData } : l
-          ),
-        }));
+        setLeadsPreviewModal((prev) => {
+          let updatedOrder = prev.order;
+          if (updatedOrder && updatedOrder.leadsMetadata) {
+            updatedOrder = {
+              ...updatedOrder,
+              leadsMetadata: updatedOrder.leadsMetadata.map((meta) =>
+                meta.leadId === lead._id || meta.leadId?._id === lead._id
+                  ? { ...meta, ...updatedLeadData }
+                  : meta
+              ),
+            };
+          }
+          return {
+            ...prev,
+            leads: prev.leads.map((l) =>
+              l._id === lead._id ? { ...l, ...updatedLeadData } : l
+            ),
+            order: updatedOrder,
+          };
+        });
+
+        // Update expandedRowData if order is expanded
+        if (targetOrderId && expandedRowData[targetOrderId]) {
+          setExpandedRowData((prev) => {
+            const orderData = prev[targetOrderId];
+            if (!orderData) return prev;
+            return {
+              ...prev,
+              [targetOrderId]: {
+                ...orderData,
+                leads: orderData.leads?.map((l) =>
+                  l._id === lead._id ? { ...l, ...updatedLeadData } : l
+                ),
+                leadsMetadata: orderData.leadsMetadata?.map((meta) =>
+                  meta.leadId === lead._id || meta.leadId?._id === lead._id
+                    ? { ...meta, ...updatedLeadData }
+                    : meta
+                ),
+              },
+            };
+          });
+        }
 
         setNotification({
           message: "Deposit unconfirmed successfully",
@@ -4070,39 +4207,54 @@ const OrdersPage = () => {
         });
       }
     },
-    [fetchOrders]
+    [fetchOrders, hoveredOrderId, expandedRowData]
   );
 
   // Mark as Shaved Handler - opens the dialog
-  const handleMarkAsShaved = useCallback((lead) => {
+  const handleMarkAsShaved = useCallback((lead, orderId) => {
+    // Use passed orderId or fall back to hoveredOrderId
+    const targetOrderId = orderId || hoveredOrderId;
     setMarkShavedDialog({
       open: true,
       lead: lead,
+      orderId: targetOrderId,
       loading: false,
     });
-  }, []);
+  }, [hoveredOrderId]);
 
   // Confirm Mark as Shaved Handler - called when dialog is confirmed
   const handleConfirmMarkAsShaved = useCallback(
     async (refundsManagerId) => {
-      const lead = markShavedDialog.lead;
+      const { lead, orderId } = markShavedDialog;
       if (!lead) return;
+
+      if (!orderId) {
+        setNotification({
+          message: "Order context is required to mark as shaved",
+          severity: "error",
+        });
+        return;
+      }
 
       setMarkShavedDialog((prev) => ({ ...prev, loading: true }));
 
       try {
         const response = await api.put(`/leads/${lead._id}/mark-shaved`, {
           refundsManagerId,
+          orderId: orderId,
         });
 
-        // Update local state instantly
+        // Get the order metadata from response
+        const orderMetadata = response.data.data?.orderMetadata || {};
+
+        // Update local state with order metadata
         const updatedLeadData = {
-          shaved: true,
-          shavedBy: response.data.data?.shavedBy || user,
-          shavedAt: new Date().toISOString(),
-          shavedRefundsManager: response.data.data?.shavedRefundsManager,
-          shavedManagerAssignedBy: response.data.data?.shavedManagerAssignedBy || user,
-          shavedManagerAssignedAt: new Date().toISOString(),
+          shaved: orderMetadata.shaved || true,
+          shavedBy: orderMetadata.shavedBy || user,
+          shavedAt: orderMetadata.shavedAt || new Date().toISOString(),
+          shavedRefundsManager: orderMetadata.shavedRefundsManager,
+          shavedManagerAssignedBy: orderMetadata.shavedManagerAssignedBy || user,
+          shavedManagerAssignedAt: orderMetadata.shavedManagerAssignedAt || new Date().toISOString(),
         };
 
         setAssignedLeadsModal((prev) => ({
@@ -4112,12 +4264,48 @@ const OrdersPage = () => {
           ),
         }));
 
-        setLeadsPreviewModal((prev) => ({
-          ...prev,
-          leads: prev.leads.map((l) =>
-            l._id === lead._id ? { ...l, ...updatedLeadData } : l
-          ),
-        }));
+        setLeadsPreviewModal((prev) => {
+          let updatedOrder = prev.order;
+          if (updatedOrder && updatedOrder.leadsMetadata) {
+            updatedOrder = {
+              ...updatedOrder,
+              leadsMetadata: updatedOrder.leadsMetadata.map((meta) =>
+                meta.leadId === lead._id || meta.leadId?._id === lead._id
+                  ? { ...meta, ...orderMetadata }
+                  : meta
+              ),
+            };
+          }
+          return {
+            ...prev,
+            leads: prev.leads.map((l) =>
+              l._id === lead._id ? { ...l, ...updatedLeadData } : l
+            ),
+            order: updatedOrder,
+          };
+        });
+
+        // Update expandedRowData if order is expanded
+        if (orderId && expandedRowData[orderId]) {
+          setExpandedRowData((prev) => {
+            const orderData = prev[orderId];
+            if (!orderData) return prev;
+            return {
+              ...prev,
+              [orderId]: {
+                ...orderData,
+                leads: orderData.leads?.map((l) =>
+                  l._id === lead._id ? { ...l, ...updatedLeadData } : l
+                ),
+                leadsMetadata: orderData.leadsMetadata?.map((meta) =>
+                  meta.leadId === lead._id || meta.leadId?._id === lead._id
+                    ? { ...meta, ...orderMetadata }
+                    : meta
+                ),
+              },
+            };
+          });
+        }
 
         setNotification({
           message: "Lead marked as shaved successfully",
@@ -4125,7 +4313,7 @@ const OrdersPage = () => {
         });
 
         // Close dialog
-        setMarkShavedDialog({ open: false, lead: null, loading: false });
+        setMarkShavedDialog({ open: false, lead: null, orderId: null, loading: false });
 
         // Refresh orders in background
         fetchOrders();
@@ -4138,18 +4326,31 @@ const OrdersPage = () => {
         });
       }
     },
-    [markShavedDialog.lead, fetchOrders, user]
+    [markShavedDialog, fetchOrders, user, expandedRowData]
   );
 
   // Unmark as Shaved Handler (admin only)
   const handleUnmarkAsShaved = useCallback(
-    async (lead) => {
+    async (lead, orderId) => {
+      // Use passed orderId or fall back to hoveredOrderId
+      const targetOrderId = orderId || hoveredOrderId;
+
+      if (!targetOrderId) {
+        setNotification({
+          message: "Order context is required to unmark as shaved",
+          severity: "error",
+        });
+        return;
+      }
+
       if (!window.confirm(`Are you sure you want to unmark ${lead.firstName} ${lead.lastName} as shaved?`)) {
         return;
       }
 
       try {
-        await api.put(`/leads/${lead._id}/unmark-shaved`);
+        await api.put(`/leads/${lead._id}/unmark-shaved`, {
+          orderId: targetOrderId,
+        });
 
         // Update local state instantly
         const updatedLeadData = {
@@ -4168,12 +4369,48 @@ const OrdersPage = () => {
           ),
         }));
 
-        setLeadsPreviewModal((prev) => ({
-          ...prev,
-          leads: prev.leads.map((l) =>
-            l._id === lead._id ? { ...l, ...updatedLeadData } : l
-          ),
-        }));
+        setLeadsPreviewModal((prev) => {
+          let updatedOrder = prev.order;
+          if (updatedOrder && updatedOrder.leadsMetadata) {
+            updatedOrder = {
+              ...updatedOrder,
+              leadsMetadata: updatedOrder.leadsMetadata.map((meta) =>
+                meta.leadId === lead._id || meta.leadId?._id === lead._id
+                  ? { ...meta, ...updatedLeadData }
+                  : meta
+              ),
+            };
+          }
+          return {
+            ...prev,
+            leads: prev.leads.map((l) =>
+              l._id === lead._id ? { ...l, ...updatedLeadData } : l
+            ),
+            order: updatedOrder,
+          };
+        });
+
+        // Update expandedRowData if order is expanded
+        if (targetOrderId && expandedRowData[targetOrderId]) {
+          setExpandedRowData((prev) => {
+            const orderData = prev[targetOrderId];
+            if (!orderData) return prev;
+            return {
+              ...prev,
+              [targetOrderId]: {
+                ...orderData,
+                leads: orderData.leads?.map((l) =>
+                  l._id === lead._id ? { ...l, ...updatedLeadData } : l
+                ),
+                leadsMetadata: orderData.leadsMetadata?.map((meta) =>
+                  meta.leadId === lead._id || meta.leadId?._id === lead._id
+                    ? { ...meta, ...updatedLeadData }
+                    : meta
+                ),
+              },
+            };
+          });
+        }
 
         setNotification({
           message: "Lead unmarked as shaved successfully",
@@ -4190,12 +4427,12 @@ const OrdersPage = () => {
         });
       }
     },
-    [fetchOrders]
+    [fetchOrders, hoveredOrderId, expandedRowData]
   );
 
   // Close Mark Shaved Dialog
   const handleCloseMarkShavedDialog = useCallback(() => {
-    setMarkShavedDialog({ open: false, lead: null, loading: false });
+    setMarkShavedDialog({ open: false, lead: null, orderId: null, loading: false });
   }, []);
 
   const handleCloseCopyNotification = useCallback(() => {
@@ -9049,26 +9286,36 @@ const OrdersPage = () => {
           {hoveredLead && (
             <>
               {console.log("Rendering popover for:", hoveredLead.firstName)}
-              <LeadQuickView
-                lead={hoveredLead}
-                onLeadUpdate={
-                  user?.role !== "lead_manager" ? handleLeadUpdate : undefined
-                }
-                readOnly={user?.role === "lead_manager"}
-                onConfirmDeposit={
-                  user?.role !== "lead_manager" ? handleConfirmDeposit : undefined
-                }
-                onUnconfirmDeposit={
-                  user?.role === "admin" ? handleUnconfirmDeposit : undefined
-                }
-                onMarkAsShaved={
-                  user?.role !== "lead_manager" ? handleMarkAsShaved : undefined
-                }
-                onUnmarkAsShaved={
-                  user?.role === "admin" ? handleUnmarkAsShaved : undefined
-                }
-                userRole={user?.role}
-              />
+              {(() => {
+                // Get order data to merge metadata into lead
+                const orderData = hoveredOrderId && expandedRowData[hoveredOrderId];
+                const leadWithMetadata = orderData
+                  ? getLeadWithOrderMetadata(hoveredLead, orderData)
+                  : hoveredLead;
+
+                return (
+                  <LeadQuickView
+                    lead={leadWithMetadata}
+                    onLeadUpdate={
+                      user?.role !== "lead_manager" ? handleLeadUpdate : undefined
+                    }
+                    readOnly={user?.role === "lead_manager"}
+                    onConfirmDeposit={
+                      user?.role !== "lead_manager" ? handleConfirmDeposit : undefined
+                    }
+                    onUnconfirmDeposit={
+                      user?.role === "admin" ? handleUnconfirmDeposit : undefined
+                    }
+                    onMarkAsShaved={
+                      user?.role !== "lead_manager" ? handleMarkAsShaved : undefined
+                    }
+                    onUnmarkAsShaved={
+                      user?.role === "admin" ? handleUnmarkAsShaved : undefined
+                    }
+                    userRole={user?.role}
+                  />
+                );
+              })()}
             </>
           )}
         </Paper>
@@ -9114,21 +9361,30 @@ const OrdersPage = () => {
             </IconButton>
 
             {filteredLeads.length > 0 ? (
-              filteredLeads[assignedLeadsModal.currentIndex] && (
+              filteredLeads[assignedLeadsModal.currentIndex] && (() => {
+                // Get order data to merge metadata into lead
+                const orderId = assignedLeadsModal.orderId;
+                const orderData = orderId && expandedRowData[orderId];
+                const currentLead = filteredLeads[assignedLeadsModal.currentIndex];
+                const leadWithMetadata = orderData
+                  ? getLeadWithOrderMetadata(currentLead, orderData)
+                  : currentLead;
+
+                return (
                 <LeadQuickView
-                  lead={filteredLeads[assignedLeadsModal.currentIndex]}
+                  lead={leadWithMetadata}
                   onLeadUpdate={
                     user?.role !== "lead_manager" ? handleLeadUpdate : undefined
                   }
                   readOnly={user?.role === "lead_manager"}
                   onMarkAsShaved={
                     user?.role !== "lead_manager"
-                      ? handleMarkAsShaved
+                      ? (lead) => handleMarkAsShaved(lead, orderId)
                       : undefined
                   }
                   onUnmarkAsShaved={
                     user?.role === "admin"
-                      ? handleUnmarkAsShaved
+                      ? (lead) => handleUnmarkAsShaved(lead, orderId)
                       : undefined
                   }
                   userRole={user?.role}
@@ -9233,7 +9489,8 @@ const OrdersPage = () => {
                     </Box>
                   }
                 />
-              )
+                );
+              })()
             ) : (
               <Paper
                 elevation={8}
@@ -9654,7 +9911,9 @@ const OrdersPage = () => {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  leadsPreviewModal.leads.map((lead, index) => {
+                  leadsPreviewModal.leads.map((originalLead, index) => {
+                    // Merge order metadata into lead for correct deposit/shaved status
+                    const lead = getLeadWithOrderMetadata(originalLead, leadsPreviewModal.order);
                     const leadType = getDisplayLeadType(lead);
                     // Extract document URLs from documents array
                     const documents = lead.documents || [];
@@ -10383,7 +10642,7 @@ const OrdersPage = () => {
                     user.role === "admin" ? (
                       <MenuItem
                         onClick={() => {
-                          handleUnconfirmDeposit(lead);
+                          handleUnconfirmDeposit(lead, leadsPreviewModal.orderId);
                           handleClosePreviewActionsMenu();
                         }}
                       >
@@ -10403,7 +10662,7 @@ const OrdersPage = () => {
                   ) : (
                     <MenuItem
                       onClick={() => {
-                        handleConfirmDeposit(lead);
+                        handleConfirmDeposit(lead, leadsPreviewModal.orderId);
                         handleClosePreviewActionsMenu();
                       }}
                       disabled={!lead.assignedAgent}
@@ -10422,7 +10681,7 @@ const OrdersPage = () => {
                     user.role === "admin" && (
                       <MenuItem
                         onClick={() => {
-                          handleUnmarkAsShaved(lead);
+                          handleUnmarkAsShaved(lead, leadsPreviewModal.orderId);
                           handleClosePreviewActionsMenu();
                         }}
                       >
@@ -10436,7 +10695,7 @@ const OrdersPage = () => {
                     user.role !== "lead_manager" && (
                       <MenuItem
                         onClick={() => {
-                          handleMarkAsShaved(lead);
+                          handleMarkAsShaved(lead, leadsPreviewModal.orderId);
                           handleClosePreviewActionsMenu();
                         }}
                       >

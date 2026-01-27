@@ -13,6 +13,7 @@ const {
   deleteDeclaration,
   getCallTypes,
   previewBonus,
+  getAffiliateManagers,
 } = require("../controllers/agentCallDeclarations");
 
 // All routes require authentication
@@ -20,6 +21,9 @@ router.use(protect);
 
 // Get call types with bonus info (available to all authenticated users)
 router.get("/call-types", getCallTypes);
+
+// Get affiliate managers for declaration assignment (available to all authenticated users)
+router.get("/affiliate-managers", getAffiliateManagers);
 
 // Calculate bonus preview
 router.post("/preview-bonus", previewBonus);

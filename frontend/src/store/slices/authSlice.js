@@ -14,6 +14,7 @@ const initialState = {
   twoFactorUserId: null,
   twoFactorToken: null,
   useQRAuth: false,
+  twoFactorMode: null, // 'login' or 'switch'
   // Session management state
   sessions: {
     activeSessions: [],
@@ -61,7 +62,28 @@ export const verify2FAAndLogin = createAsyncThunk(
         token,
         useBackupCode
       });
-      
+
+      if (response.data.data.token) {
+        localStorage.setItem("token", response.data.data.token);
+      }
+      return response.data.data;
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.message || "2FA verification failed");
+    }
+  }
+);
+
+// Verify 2FA and complete account switch
+export const verify2FAAndSwitch = createAsyncThunk(
+  "auth/verify2FAAndSwitch",
+  async ({ tempToken, token, useBackupCode = false }, { rejectWithValue }) => {
+    try {
+      const response = await api.post("/auth/verify-2fa-switch", {
+        tempToken,
+        token,
+        useBackupCode
+      });
+
       if (response.data.data.token) {
         localStorage.setItem("token", response.data.data.token);
       }
@@ -350,6 +372,7 @@ const authSlice = createSlice({
       state.twoFactorUserId = null;
       state.twoFactorToken = null;
       state.useQRAuth = false;
+      state.twoFactorMode = null;
     },
     setCredentials: (state, action) => {
       const { user, token } = action.payload;
@@ -370,17 +393,18 @@ const authSlice = createSlice({
       })
       .addCase(login.fulfilled, (state, action) => {
         state.isLoading = false;
-        
+
         // Check if 2FA is required
         if (action.payload.requires2FA) {
           state.requires2FA = true;
           state.useQRAuth = action.payload.useQRAuth || false;
           state.twoFactorUserId = action.payload.userId;
           state.twoFactorToken = action.payload.tempToken;
+          state.twoFactorMode = 'login';
           state.error = null;
           return;
         }
-        
+
         // Normal login
         state.user = action.payload.user;
         state.token = action.payload.token;
@@ -389,6 +413,7 @@ const authSlice = createSlice({
         state.requires2FA = false;
         state.twoFactorUserId = null;
         state.twoFactorToken = null;
+        state.twoFactorMode = null;
         if (action.payload.agentPerformanceData) {
           state.agentPerformanceData = action.payload.agentPerformanceData;
         }
@@ -499,13 +524,14 @@ const authSlice = createSlice({
       })
       .addCase(switchUserAccount.fulfilled, (state, action) => {
         state.switchingAccount = false;
-        
+
         // Check if 2FA is required
         if (action.payload.requires2FA) {
           state.requires2FA = true;
           state.useQRAuth = action.payload.useQRAuth || false;
           state.twoFactorUserId = action.payload.userId;
           state.twoFactorToken = action.payload.tempToken;
+          state.twoFactorMode = 'switch';
           state.error = null;
           return;
         }
@@ -514,6 +540,7 @@ const authSlice = createSlice({
         state.token = action.payload.token;
         state.isAuthenticated = true;
         state.error = null;
+        state.twoFactorMode = null;
         if (action.payload.agentPerformanceData) {
           state.agentPerformanceData = action.payload.agentPerformanceData;
         }
@@ -538,11 +565,37 @@ const authSlice = createSlice({
         state.requires2FA = false;
         state.twoFactorUserId = null;
         state.twoFactorToken = null;
+        state.twoFactorMode = null;
         if (action.payload.agentPerformanceData) {
           state.agentPerformanceData = action.payload.agentPerformanceData;
         }
       })
       .addCase(verify2FAAndLogin.rejected, (state, action) => {
+        state.isLoading = false;
+        state.error = action.payload;
+      })
+      // 2FA verification for account switch
+      .addCase(verify2FAAndSwitch.pending, (state) => {
+        state.isLoading = true;
+        state.error = null;
+      })
+      .addCase(verify2FAAndSwitch.fulfilled, (state, action) => {
+        state.isLoading = false;
+        state.user = action.payload.user;
+        state.token = action.payload.token;
+        state.isAuthenticated = true;
+        state.error = null;
+        state.requires2FA = false;
+        state.twoFactorUserId = null;
+        state.twoFactorToken = null;
+        state.twoFactorMode = null;
+        if (action.payload.agentPerformanceData) {
+          state.agentPerformanceData = action.payload.agentPerformanceData;
+        }
+        // Clear related accounts to force refresh
+        state.relatedAccounts = [];
+      })
+      .addCase(verify2FAAndSwitch.rejected, (state, action) => {
         state.isLoading = false;
         state.error = action.payload;
       })
@@ -556,6 +609,7 @@ const authSlice = createSlice({
         state.requires2FA = false;
         state.twoFactorUserId = null;
         state.twoFactorToken = null;
+        state.twoFactorMode = null;
       })
       // Session management
       .addCase(fetchMySessions.pending, (state) => {

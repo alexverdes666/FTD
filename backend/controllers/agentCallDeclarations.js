@@ -1,6 +1,36 @@
 const AgentCallDeclaration = require("../models/AgentCallDeclaration");
 const User = require("../models/User");
+const Lead = require("../models/Lead");
 const cdrService = require("../services/cdrService");
+
+/**
+ * Get affiliate managers for declaration assignment
+ * GET /call-declarations/affiliate-managers
+ * Available to all authenticated users (agents need this to create declarations)
+ */
+const getAffiliateManagers = async (req, res) => {
+  try {
+    const affiliateManagers = await User.find({
+      role: "affiliate_manager",
+      status: "approved",
+      isActive: true,
+    })
+      .select("_id fullName email")
+      .sort({ fullName: 1 });
+
+    res.json({
+      success: true,
+      data: affiliateManagers,
+    });
+  } catch (error) {
+    console.error("Error fetching affiliate managers:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch affiliate managers",
+      error: error.message,
+    });
+  }
+};
 
 /**
  * Fetch CDR calls for the current agent that haven't been declared yet
@@ -76,13 +106,29 @@ const fetchCDRCalls = async (req, res) => {
 const createDeclaration = async (req, res) => {
   try {
     const userId = req.user.id;
-    const { cdrCallId, callDate, callDuration, sourceNumber, destinationNumber, callType, description } = req.body;
+    const { cdrCallId, callDate, callDuration, sourceNumber, destinationNumber, callType, description, affiliateManagerId, leadId } = req.body;
 
     // Validate required fields
     if (!cdrCallId || !callDate || !callDuration || !sourceNumber || !destinationNumber || !callType) {
       return res.status(400).json({
         success: false,
         message: "Missing required fields",
+      });
+    }
+
+    // Validate affiliate manager is provided
+    if (!affiliateManagerId) {
+      return res.status(400).json({
+        success: false,
+        message: "Affiliate manager is required",
+      });
+    }
+
+    // Validate lead is provided
+    if (!leadId) {
+      return res.status(400).json({
+        success: false,
+        message: "Lead is required",
       });
     }
 
@@ -100,6 +146,36 @@ const createDeclaration = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: "Invalid call type",
+      });
+    }
+
+    // Validate assignee exists and is an affiliate manager
+    const assignee = await User.findById(affiliateManagerId);
+    if (!assignee) {
+      return res.status(400).json({
+        success: false,
+        message: "Affiliate manager not found",
+      });
+    }
+    if (assignee.role !== "affiliate_manager") {
+      return res.status(400).json({
+        success: false,
+        message: "Selected user must be an affiliate manager",
+      });
+    }
+
+    // Validate lead exists and is assigned to this agent
+    const lead = await Lead.findById(leadId);
+    if (!lead) {
+      return res.status(400).json({
+        success: false,
+        message: "Lead not found",
+      });
+    }
+    if (!lead.assignedAgent || lead.assignedAgent.toString() !== userId) {
+      return res.status(400).json({
+        success: false,
+        message: "This lead is not assigned to you",
       });
     }
 
@@ -140,10 +216,14 @@ const createDeclaration = async (req, res) => {
       status: "pending",
       declarationMonth,
       declarationYear,
+      affiliateManager: affiliateManagerId,
+      lead: leadId,
     });
 
     // Populate for response
     await declaration.populate("agent", "fullName email fourDigitCode");
+    await declaration.populate("affiliateManager", "fullName email");
+    await declaration.populate("lead", "firstName lastName newEmail newPhone");
 
     res.status(201).json({
       success: true,
@@ -184,8 +264,14 @@ const getDeclarations = async (req, res) => {
     // If agent, only show their own declarations
     if (userRole === "agent") {
       query.agent = userId;
+    } else if (userRole === "affiliate_manager") {
+      // Affiliate managers only see declarations assigned to them
+      query.affiliateManager = userId;
+      if (agentId) {
+        query.agent = agentId;
+      }
     } else if (agentId) {
-      // Managers can filter by agent
+      // Admins can filter by agent
       query.agent = agentId;
     }
 
@@ -204,6 +290,8 @@ const getDeclarations = async (req, res) => {
     const declarations = await AgentCallDeclaration.find(query)
       .populate("agent", "fullName email fourDigitCode")
       .populate("reviewedBy", "fullName email")
+      .populate("affiliateManager", "fullName email")
+      .populate("lead", "firstName lastName newEmail newPhone")
       .sort({ createdAt: -1 });
 
     res.json({
@@ -221,12 +309,19 @@ const getDeclarations = async (req, res) => {
 };
 
 /**
- * Get pending declarations for manager approval
+ * Get pending declarations for approval
  * GET /call-declarations/pending
+ * For affiliate_manager or agent: returns only declarations assigned to them
+ * For admin: returns all pending declarations
  */
 const getPendingDeclarations = async (req, res) => {
   try {
-    const declarations = await AgentCallDeclaration.getPendingDeclarations();
+    const userId = req.user.id;
+    const userRole = req.user.role;
+
+    // If affiliate manager or agent, only show declarations assigned to them
+    const assigneeId = (userRole === "affiliate_manager" || userRole === "agent") ? userId : null;
+    const declarations = await AgentCallDeclaration.getPendingDeclarations(assigneeId);
 
     res.json({
       success: true,
@@ -336,6 +431,7 @@ const approveDeclaration = async (req, res) => {
     const { id } = req.params;
     const { notes } = req.body;
     const reviewerId = req.user.id;
+    const userRole = req.user.role;
 
     const declaration = await AgentCallDeclaration.findById(id);
 
@@ -353,6 +449,14 @@ const approveDeclaration = async (req, res) => {
       });
     }
 
+    // Affiliate managers can only approve declarations assigned to them
+    if (userRole === "affiliate_manager" && declaration.affiliateManager.toString() !== reviewerId) {
+      return res.status(403).json({
+        success: false,
+        message: "You can only approve declarations assigned to you",
+      });
+    }
+
     if (declaration.status !== "pending") {
       return res.status(400).json({
         success: false,
@@ -365,6 +469,8 @@ const approveDeclaration = async (req, res) => {
     // Populate for response
     await declaration.populate("agent", "fullName email fourDigitCode");
     await declaration.populate("reviewedBy", "fullName email");
+    await declaration.populate("affiliateManager", "fullName email");
+    await declaration.populate("lead", "firstName lastName newEmail newPhone");
 
     res.json({
       success: true,
@@ -390,6 +496,7 @@ const rejectDeclaration = async (req, res) => {
     const { id } = req.params;
     const { notes } = req.body;
     const reviewerId = req.user.id;
+    const userRole = req.user.role;
 
     if (!notes || notes.trim() === "") {
       return res.status(400).json({
@@ -414,6 +521,14 @@ const rejectDeclaration = async (req, res) => {
       });
     }
 
+    // Affiliate managers can only reject declarations assigned to them
+    if (userRole === "affiliate_manager" && declaration.affiliateManager.toString() !== reviewerId) {
+      return res.status(403).json({
+        success: false,
+        message: "You can only reject declarations assigned to you",
+      });
+    }
+
     if (declaration.status !== "pending") {
       return res.status(400).json({
         success: false,
@@ -426,6 +541,8 @@ const rejectDeclaration = async (req, res) => {
     // Populate for response
     await declaration.populate("agent", "fullName email fourDigitCode");
     await declaration.populate("reviewedBy", "fullName email");
+    await declaration.populate("affiliateManager", "fullName email");
+    await declaration.populate("lead", "firstName lastName newEmail newPhone");
 
     res.json({
       success: true,
@@ -563,4 +680,5 @@ module.exports = {
   deleteDeclaration,
   getCallTypes,
   previewBonus,
+  getAffiliateManagers,
 };

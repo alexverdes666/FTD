@@ -256,10 +256,13 @@ exports.changePassword = async (req, res, next) => {
 // Get related accounts for the same person (for account switching)
 exports.getRelatedAccounts = async (req, res, next) => {
   try {
-    // Determine the original authenticated user (if currently impersonating)
+    // The root user is the original authenticated user (admin who started the session)
     const rootUserId = req.user.originalUserId || req.user.id;
-    
-    const currentUser = await User.findById(rootUserId).populate({
+    // The current user is who we're currently acting as
+    const currentUserId = req.user.id;
+
+    // Fetch the current user's linked accounts (not the root user's)
+    const currentUser = await User.findById(currentUserId).populate({
       path: "linkedAccounts",
       select: "fullName email role permissions isActive status",
       match: { isActive: true, status: "approved" },
@@ -272,64 +275,62 @@ exports.getRelatedAccounts = async (req, res, next) => {
       });
     }
 
+    // If we're impersonating (acting as a different user), also fetch the root user
+    let rootUser = null;
+    if (rootUserId.toString() !== currentUserId.toString()) {
+      rootUser = await User.findById(rootUserId).select("fullName email role permissions isActive status");
+    }
+
     console.log(
       "Current user linked accounts:",
       currentUser.linkedAccounts?.length || 0
     );
 
-    // If no linked accounts are configured, return only current user
-    if (
-      !currentUser.linkedAccounts ||
-      currentUser.linkedAccounts.length === 0
-    ) {
-      return res.status(200).json({
-        success: true,
-        data: [
-          {
-            id: currentUser._id,
-            fullName: currentUser.fullName,
-            email: currentUser.email,
-            role: currentUser.role,
-            permissions: currentUser.permissions,
-            isCurrentAccount: true,
-          },
-        ],
-        message: "No linked accounts configured",
+    const allAccounts = [];
+
+    // Always add current user first
+    allAccounts.push({
+      id: currentUser._id,
+      fullName: currentUser.fullName,
+      email: currentUser.email,
+      role: currentUser.role,
+      permissions: currentUser.permissions,
+      isCurrentAccount: true,
+    });
+
+    // Add the root user if we're impersonating (so user can switch back)
+    if (rootUser && rootUser.isActive) {
+      allAccounts.push({
+        id: rootUser._id,
+        fullName: rootUser.fullName,
+        email: rootUser.email,
+        role: rootUser.role,
+        permissions: rootUser.permissions,
+        isCurrentAccount: false,
       });
     }
 
-    // Map all linked accounts (which includes the current user due to our linking logic)
-    const allAccounts = currentUser.linkedAccounts
-      .filter((account) => account) // Remove any null/undefined accounts
-      .map((user) => ({
-        id: user._id,
-        fullName: user.fullName,
-        email: user.email,
-        role: user.role,
-        permissions: user.permissions,
-        isCurrentAccount: user._id.toString() === req.user.id.toString(), // Check against actual current user (impersonated or real)
-      }));
-
-    // Ensure root user is in the list if not already there
-    // If I am impersonating B, and A is the root, A should be in the list.
-    // If I am A (root), A should be in the list.
-    const rootUserInList = allAccounts.find((acc) => acc.id.toString() === rootUserId.toString());
-    if (!rootUserInList) {
-      allAccounts.unshift({
-        id: currentUser._id,
-        fullName: currentUser.fullName,
-        email: currentUser.email,
-        role: currentUser.role,
-        permissions: currentUser.permissions,
-        isCurrentAccount: currentUser._id.toString() === req.user.id.toString(),
-      });
-    } else {
-       // If root user IS in the list (because of bidirectional linking), make sure isCurrentAccount is correct
-       // It might be false if I am impersonating B.
-       // The map above handles isCurrentAccount based on req.user.id, so we are good.
+    // Add the current user's linked accounts (if any)
+    if (currentUser.linkedAccounts && currentUser.linkedAccounts.length > 0) {
+      currentUser.linkedAccounts
+        .filter((account) => account) // Remove any null/undefined accounts
+        .forEach((user) => {
+          // Don't add duplicates (current user or root user already in list)
+          const alreadyInList = allAccounts.some(
+            (acc) => acc.id.toString() === user._id.toString()
+          );
+          if (!alreadyInList) {
+            allAccounts.push({
+              id: user._id,
+              fullName: user.fullName,
+              email: user.email,
+              role: user.role,
+              permissions: user.permissions,
+              isCurrentAccount: false,
+            });
+          }
+        });
     }
-
-    console.log("Returning accounts:", allAccounts.length);
 
     console.log("Returning accounts:", allAccounts.length);
 
@@ -516,6 +517,164 @@ exports.verify2FAAndLogin = async (req, res, next) => {
   }
 };
 
+// Verify 2FA and complete account switch
+exports.verify2FAAndSwitch = async (req, res, next) => {
+  try {
+    const { tempToken, token, useBackupCode } = req.body;
+
+    if (!tempToken || !token) {
+      return res.status(400).json({
+        success: false,
+        message: "Temp token and verification code are required",
+      });
+    }
+
+    // Verify and decode the temp token
+    let decoded;
+    try {
+      decoded = jwt.verify(tempToken, process.env.JWT_SECRET);
+    } catch (err) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid or expired verification session. Please try again.",
+      });
+    }
+
+    if (!decoded.temp2FA) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid verification token",
+      });
+    }
+
+    const targetUserId = decoded.id;
+    const originalUserId = decoded.originalUserId;
+    const twoFactorUserId = decoded.twoFactorUserId || targetUserId;
+
+    // Get the user whose 2FA we need to verify
+    const speakeasy = require("speakeasy");
+    const { decrypt } = require("../utils/encryption");
+
+    const twoFactorUser = await User.findById(twoFactorUserId).select(
+      "+twoFactorSecret +twoFactorBackupCodes"
+    );
+
+    if (!twoFactorUser) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    if (!twoFactorUser.twoFactorEnabled) {
+      return res.status(400).json({
+        success: false,
+        message: "2FA is not enabled for this account",
+      });
+    }
+
+    let verified = false;
+
+    if (useBackupCode) {
+      const bcrypt = require("bcryptjs");
+      let matchedCode = null;
+
+      for (const hashedCode of twoFactorUser.twoFactorBackupCodes) {
+        const isMatch = await bcrypt.compare(token, hashedCode);
+        if (isMatch) {
+          matchedCode = hashedCode;
+          verified = true;
+          break;
+        }
+      }
+
+      if (matchedCode) {
+        const updatedCodes = twoFactorUser.twoFactorBackupCodes.filter(
+          (code) => code !== matchedCode
+        );
+        await User.findByIdAndUpdate(
+          twoFactorUserId,
+          { twoFactorBackupCodes: updatedCodes },
+          { new: true }
+        );
+      }
+    } else {
+      try {
+        const decryptedSecret = decrypt(twoFactorUser.twoFactorSecret);
+        verified = speakeasy.totp.verify({
+          secret: decryptedSecret,
+          encoding: "base32",
+          token: token,
+          window: 2,
+        });
+      } catch (decryptError) {
+        console.error("Error decrypting 2FA secret:", decryptError.message);
+        return res.status(500).json({
+          success: false,
+          message: "System error during 2FA verification. Please contact support.",
+        });
+      }
+    }
+
+    if (!verified) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid verification code",
+      });
+    }
+
+    // 2FA verified - now complete the account switch
+    const targetUser = await User.findById(targetUserId);
+    if (!targetUser) {
+      return res.status(404).json({
+        success: false,
+        message: "Target account not found",
+      });
+    }
+
+    // Generate token for target user, preserving originalUserId
+    const isSwitchingToRoot = targetUserId.toString() === originalUserId?.toString();
+    const newOriginalUserId = isSwitchingToRoot ? null : originalUserId;
+    const { token: accessToken, iat } = generateToken(targetUser._id, newOriginalUserId);
+
+    // Create login session
+    try {
+      await LoginSession.createSession(targetUser._id, iat, req);
+    } catch (sessionError) {
+      console.error("Failed to create login session:", sessionError);
+    }
+
+    let agentPerformanceData = null;
+    if (targetUser.role === "agent" && targetUser.fullName) {
+      try {
+        const agentResponse = await axios.get(
+          `https://agent-report-1.onrender.com/api/mongodb/agents/${encodeURIComponent(
+            targetUser.fullName
+          )}`
+        );
+        if (agentResponse.data.success && agentResponse.data.data.length > 0) {
+          agentPerformanceData = agentResponse.data.data[0];
+        }
+      } catch (agentError) {
+        console.log("Could not fetch agent performance data:", agentError.message);
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Account switched successfully",
+      data: {
+        token: accessToken,
+        user: targetUser.toJSON(),
+        agentPerformanceData: agentPerformanceData,
+      },
+    });
+  } catch (error) {
+    console.error("Error in verify2FAAndSwitch:", error);
+    next(error);
+  }
+};
+
 // Get current user's login sessions (active and history)
 exports.getMySessions = async (req, res, next) => {
   try {
@@ -675,11 +834,13 @@ exports.terminateAllSessions = async (req, res, next) => {
 exports.switchAccount = async (req, res, next) => {
   try {
     const { accountId } = req.body;
-    
-    // Identify the original authenticated user (source of truth for permissions)
+
+    // Identify the original authenticated user (root user who started the session)
     const rootUserId = req.user.originalUserId || req.user.id;
-    
-    const currentUser = await User.findById(rootUserId);
+    // The current user is who we're currently acting as
+    const currentUserId = req.user.id;
+
+    const currentUser = await User.findById(currentUserId);
 
     if (!currentUser) {
       return res.status(404).json({
@@ -696,23 +857,22 @@ exports.switchAccount = async (req, res, next) => {
       });
     }
 
-    // Verify that the target account is in the ROOT user's linked accounts
-    // We check against rootUserId, not the potentially impersonated req.user.id
-    const currentUserWithLinked = await User.findById(rootUserId);
-    const isLinkedAccount =
-      currentUserWithLinked.linkedAccounts &&
-      currentUserWithLinked.linkedAccounts.some(
+    // Check if switching back to the root user
+    const isSwitchingToRoot = accountId === rootUserId.toString();
+
+    // Verify that the target account is in the CURRENT user's linked accounts
+    // (not the root user's linked accounts)
+    const isLinkedToCurrentUser =
+      currentUser.linkedAccounts &&
+      currentUser.linkedAccounts.some(
         (linkedId) => linkedId.toString() === accountId
       );
 
-    // Also allow switching back to the root user itself
-    const isSwitchingToRoot = accountId === rootUserId.toString();
-
-    if (!isLinkedAccount && !isSwitchingToRoot) {
+    if (!isLinkedToCurrentUser && !isSwitchingToRoot) {
       return res.status(403).json({
         success: false,
         message:
-          "You can only switch to linked accounts configured by an administrator",
+          "You can only switch to linked accounts or back to your original account",
       });
     }
 
@@ -736,32 +896,51 @@ exports.switchAccount = async (req, res, next) => {
         });
       }
 
-      // Check if 2FA or QR Auth is enabled for the target admin account
-      if (targetUser.twoFactorEnabled || targetUser.qrAuthEnabled) {
-        // Generate a temporary token that's only valid for 2FA verification
-        // We preserve the originalUserId so we can maintain the link context if needed,
-        // although switching to admin usually implies becoming the root user.
-        const tempToken = jwt.sign(
-          { 
-            id: targetUser._id, 
-            temp2FA: true, 
-            originalUserId: rootUserId 
-          },
-          process.env.JWT_SECRET,
-          { expiresIn: "10m" }
-        );
+      // Always require 2FA when switching to an admin account
+      // Use target admin's 2FA if available, otherwise fall back to root user's 2FA
+      const rootUser = await User.findById(rootUserId);
 
-        return res.status(200).json({
-          success: true,
-          message: targetUser.qrAuthEnabled ? "QR authentication required" : "2FA verification required",
-          data: {
-            requires2FA: true,
-            useQRAuth: targetUser.qrAuthEnabled || false,
-            tempToken: tempToken,
-            userId: targetUser._id,
-          },
+      // Determine which user's 2FA to use
+      let twoFactorUser = null;
+      if (targetUser.twoFactorEnabled || targetUser.qrAuthEnabled) {
+        twoFactorUser = targetUser;
+      } else if (rootUser && (rootUser.twoFactorEnabled || rootUser.qrAuthEnabled)) {
+        twoFactorUser = rootUser;
+      }
+
+      if (!twoFactorUser) {
+        // Neither target admin nor root user has 2FA enabled
+        return res.status(403).json({
+          success: false,
+          message: "Cannot switch to admin account. Either the target admin or your original account must have 2FA enabled.",
         });
       }
+
+      // Generate a temporary token that's only valid for 2FA verification
+      // We preserve the originalUserId so we can maintain the link context if needed,
+      // although switching to admin usually implies becoming the root user.
+      const tempToken = jwt.sign(
+        {
+          id: targetUser._id,
+          temp2FA: true,
+          originalUserId: rootUserId,
+          twoFactorUserId: twoFactorUser._id // Track which user's 2FA is being used
+        },
+        process.env.JWT_SECRET,
+        { expiresIn: "10m" }
+      );
+
+      return res.status(200).json({
+        success: true,
+        message: twoFactorUser.qrAuthEnabled ? "QR authentication required" : "2FA verification required",
+        data: {
+          requires2FA: true,
+          useQRAuth: twoFactorUser.qrAuthEnabled || false,
+          tempToken: tempToken,
+          userId: targetUser._id,
+          twoFactorUserId: twoFactorUser._id, // Tell frontend which user's 2FA to verify
+        },
+      });
     }
 
     // Generate new token for the target account, preserving the original user ID

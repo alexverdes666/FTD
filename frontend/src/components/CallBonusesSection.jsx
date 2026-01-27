@@ -36,7 +36,7 @@ import {
   getMonthlyTotals,
 } from '../services/callDeclarations';
 
-const CallBonusesSection = () => {
+const CallBonusesSection = ({ leads: passedLeads = [] }) => {
   const user = useSelector(selectUser);
   const isAgent = user?.role === 'agent';
   const isManager = ['admin', 'affiliate_manager'].includes(user?.role);
@@ -486,6 +486,7 @@ const CallBonusesSection = () => {
         onClose={() => setSelectedCallForDeclaration(null)}
         call={selectedCallForDeclaration}
         onDeclarationCreated={handleDeclarationCreated}
+        leads={passedLeads}
       />
 
       {/* Approval Dialog */}

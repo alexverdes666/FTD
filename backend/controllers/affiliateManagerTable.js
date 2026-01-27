@@ -761,6 +761,14 @@ exports.getAffiliateManagerSummary = async (req, res, next) => {
       });
     }
 
+    // Import BlockchainScraperService to get network totals
+    let BlockchainScraperService;
+    try {
+      BlockchainScraperService = require('../services/blockchainScraperService');
+    } catch (error) {
+      console.warn('BlockchainScraperService not available:', error.message);
+    }
+
     const summaryData = [];
 
     for (const manager of affiliateManagers) {
@@ -800,6 +808,21 @@ exports.getAffiliateManagerSummary = async (req, res, next) => {
         });
       }
 
+      // Get total money in from the network assigned to this affiliate manager
+      let totalMoneyIn = 0;
+      if (BlockchainScraperService) {
+        try {
+          const service = new BlockchainScraperService();
+          const cryptoValues = await service.getAffiliateManagerTotalValue(manager._id, {
+            month: targetMonth,
+            year: targetYear,
+          });
+          totalMoneyIn = cryptoValues.totalUsdValue || 0;
+        } catch (error) {
+          console.warn(`Failed to get crypto values for manager ${manager.fullName}:`, error.message);
+        }
+      }
+
       summaryData.push({
         managerId: manager._id,
         managerName: manager.fullName,
@@ -808,8 +831,7 @@ exports.getAffiliateManagerSummary = async (req, res, next) => {
         shavedFTDs,
         totalFillers,
         totalVerifiedFTDs: totalFTDs - shavedFTDs,
-        // Placeholder values for metrics not yet implemented
-        totalMoneyIn: 0,
+        totalMoneyIn,
         totalMoneyExpenses: 0,
         totalCommissionsAM: 0,
         firstCalls: 0,

@@ -91,6 +91,18 @@ const agentCallDeclarationSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    // The affiliate manager this call declaration is assigned to
+    affiliateManager: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+    // The lead this call was associated with
+    lead: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Lead",
+      required: true,
+    },
   },
   {
     timestamps: true,
@@ -107,6 +119,9 @@ agentCallDeclarationSchema.index({ agent: 1, status: 1 });
 agentCallDeclarationSchema.index({ agent: 1, declarationYear: 1, declarationMonth: 1 });
 agentCallDeclarationSchema.index({ declarationYear: 1, declarationMonth: 1 });
 agentCallDeclarationSchema.index({ cdrCallId: 1 }, { unique: true });
+agentCallDeclarationSchema.index({ affiliateManager: 1 });
+agentCallDeclarationSchema.index({ lead: 1 });
+agentCallDeclarationSchema.index({ affiliateManager: 1, status: 1 });
 
 // Virtual for formatted call duration
 agentCallDeclarationSchema.virtual("formattedDuration").get(function () {
@@ -154,16 +169,22 @@ agentCallDeclarationSchema.statics.getAgentDeclarations = function (
   return this.find(query)
     .populate("agent", "fullName email fourDigitCode")
     .populate("reviewedBy", "fullName email")
+    .populate("affiliateManager", "fullName email")
+    .populate("lead", "firstName lastName newEmail newPhone")
     .sort({ callDate: -1 });
 };
 
 // Static method to get all pending declarations (for manager approval)
-agentCallDeclarationSchema.statics.getPendingDeclarations = function () {
-  return this.find({
-    status: "pending",
-    isActive: true,
-  })
+// If affiliateManagerId is provided, only return declarations assigned to that manager
+agentCallDeclarationSchema.statics.getPendingDeclarations = function (affiliateManagerId = null) {
+  const query = { status: "pending", isActive: true };
+  if (affiliateManagerId) {
+    query.affiliateManager = affiliateManagerId;
+  }
+  return this.find(query)
     .populate("agent", "fullName email fourDigitCode")
+    .populate("affiliateManager", "fullName email")
+    .populate("lead", "firstName lastName newEmail newPhone")
     .sort({ createdAt: -1 });
 };
 
@@ -203,6 +224,8 @@ agentCallDeclarationSchema.statics.getApprovedMonthlyDeclarations = function (ag
   })
     .populate("agent", "fullName email fourDigitCode")
     .populate("reviewedBy", "fullName email")
+    .populate("affiliateManager", "fullName email")
+    .populate("lead", "firstName lastName newEmail newPhone")
     .sort({ callDate: -1 });
 };
 

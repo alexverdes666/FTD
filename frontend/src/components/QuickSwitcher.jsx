@@ -22,12 +22,14 @@ import {
   KeyboardArrowUp
 } from '@mui/icons-material';
 import { useDispatch, useSelector } from 'react-redux';
+import { useNavigate } from 'react-router-dom';
 import { selectUser, switchUserAccount, fetchRelatedAccounts } from '../store/slices/authSlice';
 import { addRecentAccount, getRecentAccounts } from '../utils/accountHistory';
 import toast from 'react-hot-toast';
 
 const QuickSwitcher = ({ open, onClose }) => {
   const dispatch = useDispatch();
+  const navigate = useNavigate();
   const user = useSelector(selectUser);
   const [accounts, setAccounts] = useState([]);
   const [filteredAccounts, setFilteredAccounts] = useState([]);
@@ -129,12 +131,9 @@ const QuickSwitcher = ({ open, onClose }) => {
     setSwitching(true);
     try {
       const result = await dispatch(switchUserAccount(accountId)).unwrap();
-      
+
       if (result.requires2FA) {
-        toast('Please complete authentication to switch account', {
-          icon: '🔒',
-          duration: 4000
-        });
+        // Close the quick switcher - MainLayout will show the 2FA dialog
         onClose();
         return;
       }
@@ -143,12 +142,14 @@ const QuickSwitcher = ({ open, onClose }) => {
       if (result.user) {
         addRecentAccount(result.user);
       }
-      
+
       toast.success('Switched successfully!', {
         duration: 1500,
         icon: '⚡'
       });
       onClose();
+      // Redirect to dashboard after switching accounts
+      navigate('/');
     } catch (error) {
       console.error('Failed to switch account:', error);
       toast.error(error?.message || 'Failed to switch account');

@@ -61,6 +61,7 @@ import {
   selectUser,
   selectAuth,
   verify2FAAndLogin,
+  verify2FAAndSwitch,
   completeQRLogin,
   clear2FAState
 } from "../store/slices/authSlice";
@@ -94,7 +95,7 @@ const MainLayout = () => {
   const location = useLocation();
   const dispatch = useDispatch();
   const user = useSelector(selectUser);
-  const { requires2FA, twoFactorUserId, useQRAuth, isLoading } = useSelector(selectAuth);
+  const { requires2FA, twoFactorUserId, twoFactorToken, twoFactorMode, useQRAuth, isLoading } = useSelector(selectAuth);
   const [show2FADialog, setShow2FADialog] = useState(false);
   const [showQRDialog, setShowQRDialog] = useState(false);
   const [twoFactorError, setTwoFactorError] = useState('');
@@ -129,14 +130,29 @@ const MainLayout = () => {
   const handle2FAVerification = async (code, useBackupCode) => {
     setTwoFactorError('');
     try {
-      const result = await dispatch(verify2FAAndLogin({
-        userId: twoFactorUserId,
-        token: code,
-        useBackupCode
-      })).unwrap();
-      
+      let result;
+      if (twoFactorMode === 'switch') {
+        // Account switch 2FA verification
+        result = await dispatch(verify2FAAndSwitch({
+          tempToken: twoFactorToken,
+          token: code,
+          useBackupCode
+        })).unwrap();
+      } else {
+        // Login 2FA verification
+        result = await dispatch(verify2FAAndLogin({
+          userId: twoFactorUserId,
+          token: code,
+          useBackupCode
+        })).unwrap();
+      }
+
       if (result.token) {
         setShow2FADialog(false);
+        // Redirect to dashboard after successful account switch via 2FA
+        if (twoFactorMode === 'switch') {
+          navigate('/');
+        }
       }
     } catch (error) {
        setTwoFactorError(error || '2FA verification failed');
