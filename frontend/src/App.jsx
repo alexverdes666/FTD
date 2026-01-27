@@ -76,7 +76,7 @@ import AnnouncementsPage from "./pages/AnnouncementsPage.jsx";
 import AMTargetsPage from "./pages/AMTargetsPage.jsx";
 import DepositCallsPage from "./pages/DepositCallsPage.jsx";
 import NotesPage from "./pages/NotesPage.jsx";
-import PerformancePage from "./pages/PerformancePage.jsx";
+import ActivityPage from "./pages/ActivityPage.jsx";
 import MobileApprovalPage from "./pages/MobileApprovalPage.jsx";
 import MobileActionApprovalPage from "./pages/MobileActionApprovalPage.jsx";
 import QRSetupPage from "./pages/QRSetupPage.jsx";
@@ -563,10 +563,10 @@ function AppContent() {
             />
             <Route path="notes" element={<NotesPage />} />
             <Route
-              path="performance"
+              path="activity"
               element={
                 <ProtectedRoute allowedRoles={["admin"]}>
-                  <PerformancePage />
+                  <ActivityPage />
                 </ProtectedRoute>
               }
             />

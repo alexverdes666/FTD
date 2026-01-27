@@ -58,6 +58,7 @@ const videoRoutes = require("./routes/video");
 const announcementRoutes = require("./routes/announcements");
 const amTargetRoutes = require("./routes/amTargets");
 const depositCallsRoutes = require("./routes/depositCalls");
+const agentCallDeclarationRoutes = require("./routes/agentCallDeclarations");
 const securityAuditRoutes = require("./routes/securityAudit");
 const activityLogRoutes = require("./routes/activityLogs");
 const deviceDetectionRoutes = require("./routes/deviceDetection");
@@ -600,6 +601,7 @@ app.use("/api/video", videoRoutes);
 app.use("/api/announcements", announcementRoutes);
 app.use("/api/am-targets", amTargetRoutes);
 app.use("/api/deposit-calls", depositCallsRoutes);
+app.use("/api/call-declarations", agentCallDeclarationRoutes);
 app.use("/api/sticky-notes", require("./routes/stickyNotes"));
 app.use("/api/sheets", require("./routes/sheets"));
 

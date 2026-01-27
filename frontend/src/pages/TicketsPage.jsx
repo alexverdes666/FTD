@@ -848,7 +848,7 @@ const TicketsPage = () => {
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                               <AccessTimeIcon sx={{ fontSize: 14, color: 'text.disabled' }} />
                               <Typography variant="caption" color="text.disabled">
-                                {ticketsService.formatTimeAgo(ticket.createdAt)}
+                                {ticketsService.formatSmartDateTime(ticket.createdAt)}
                               </Typography>
                             </Box>
                             {ticket.comments && ticket.comments.length > 0 && (

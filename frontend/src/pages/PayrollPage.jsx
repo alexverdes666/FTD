@@ -99,6 +99,7 @@ import {
 } from "../services/agentCallCounts";
 import { getAllAgentFines, getFinesSummary, getAgentFines, getPendingApprovalFines, respondToFine } from "../services/agentFines";
 import FineDetailDialog from "../components/FineDetailDialog";
+import CallBonusesSection from "../components/CallBonusesSection";
 import api from "../services/api";
 
 const PayrollPage = () => {
@@ -1557,6 +1558,9 @@ const PayrollPage = () => {
                 <Tab icon={<PhoneIcon />} label="Agent Calls" />
               )}
               {(user.role === "admin" || user.role === "affiliate_manager") && (
+                <Tab icon={<PhoneIcon />} label="Call Bonuses" />
+              )}
+              {(user.role === "admin" || user.role === "affiliate_manager") && (
                 <Tab icon={<SettingsIcon />} label="Bonus Management" />
               )}
             </Tabs>
@@ -2959,6 +2963,15 @@ const PayrollPage = () => {
                 </Card>
               </Grid>
 
+              {/* Call Bonuses Section - For Agents */}
+              <Grid item xs={12}>
+                <Card>
+                  <CardContent>
+                    <CallBonusesSection />
+                  </CardContent>
+                </Card>
+              </Grid>
+
               {/* Pending Approval Fines Section - For Agents */}
               {pendingApprovalFines.length > 0 && (
                 <Grid item xs={12}>
@@ -3680,8 +3693,23 @@ const PayrollPage = () => {
           </motion.div>
         )}
 
-        {/* Bonus Management Tab (Admin and Affiliate Manager) */}
+        {/* Call Bonuses Tab (Admin and Affiliate Manager) - For approving call declarations */}
         {((tabValue === 1 && user?.role === "admin") || (tabValue === 0 && user?.role === "affiliate_manager")) && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.3 }}
+          >
+            <Card>
+              <CardContent>
+                <CallBonusesSection />
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
+
+        {/* Bonus Management Tab (Admin and Affiliate Manager) */}
+        {((tabValue === 2 && user?.role === "admin") || (tabValue === 1 && user?.role === "affiliate_manager")) && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}

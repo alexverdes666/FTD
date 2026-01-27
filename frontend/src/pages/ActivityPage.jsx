@@ -1,6 +1,6 @@
 /**
- * Performance Page - Admin Real-Time User Activity Dashboard
- * 
+ * Activity Page - Admin Real-Time User Activity Dashboard
+ *
  * Shows live user activity, engagement metrics, and performance analytics.
  * Only accessible to admins.
  */
@@ -264,7 +264,7 @@ const LiveUserCard = ({ user, expanded, onToggle }) => {
 };
 
 // Main Performance Page Component
-const PerformancePage = () => {
+const ActivityPage = () => {
   const theme = useTheme();
   const user = useSelector(selectUser);
   const [tab, setTab] = useState(0);
@@ -708,5 +708,5 @@ const PerformancePage = () => {
   );
 };
 
-export default PerformancePage;
+export default ActivityPage;
 

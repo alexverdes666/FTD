@@ -240,6 +240,11 @@ const MainLayout = () => {
               icon: <AdminIcon />,
               path: "/account-management",
             },
+            {
+              text: "Activity",
+              icon: <PerformanceIcon />,
+              path: "/activity",
+            },
           ],
         },
         {
@@ -361,7 +366,6 @@ const MainLayout = () => {
           ],
         },
         { text: "Support Tickets", icon: <TicketIcon />, path: "/tickets" },
-        { text: "Performance", icon: <PerformanceIcon />, path: "/performance" },
         { text: "Sheets", icon: <SheetsIcon />, path: "/sheets" },
       ];
     } else if (user?.role === "affiliate_manager") {

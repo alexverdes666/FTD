@@ -231,6 +231,28 @@ export const formatExactDateTime = (date) => {
   return `${day}/${month}/${year} ${hours}:${minutes}`;
 };
 
+export const formatSmartDateTime = (date) => {
+  const d = new Date(date);
+  const now = new Date();
+  const hours = d.getHours().toString().padStart(2, '0');
+  const minutes = d.getMinutes().toString().padStart(2, '0');
+
+  // Check if date is today
+  const isToday = d.getDate() === now.getDate() &&
+                  d.getMonth() === now.getMonth() &&
+                  d.getFullYear() === now.getFullYear();
+
+  if (isToday) {
+    return `${hours}:${minutes}`;
+  }
+
+  const day = d.getDate().toString().padStart(2, '0');
+  const month = (d.getMonth() + 1).toString().padStart(2, '0');
+  const year = d.getFullYear();
+
+  return `${day}/${month}/${year} ${hours}:${minutes}`;
+};
+
 export const isTicketOverdue = (ticket) => {
   if (!ticket.dueDate || ticket.status === 'resolved' || ticket.status === 'closed' || ticket.status === 'deleted') {
     return false;
@@ -299,6 +321,7 @@ export default {
   buildTicketFilters,
   formatTimeAgo,
   formatExactDateTime,
+  formatSmartDateTime,
   isTicketOverdue,
   calculateTicketMetrics
 };
