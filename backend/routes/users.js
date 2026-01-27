@@ -182,7 +182,8 @@ router.put(
       const validFields = [
         "leadType", "fullName", "newEmail", "newPhone", "country",
         "address", "assignedAgent", "ourNetwork", "campaign",
-        "clientNetwork", "clientBrokers", "requester", "createdAt", "plannedDate"
+        "clientNetwork", "clientBrokers", "requester", "createdAt", "plannedDate",
+        "dob", "documents"
       ];
       
       const invalidFields = fields.filter(f => !validFields.includes(f));

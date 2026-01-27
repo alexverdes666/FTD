@@ -63,6 +63,16 @@ const AVAILABLE_FIELDS = [
     label: "Planned Date",
     description: "Order planned date",
   },
+  {
+    id: "dob",
+    label: "Date of Birth",
+    description: "Lead's date of birth",
+  },
+  {
+    id: "documents",
+    label: "Documents",
+    description: "All document links",
+  },
 ];
 
 // Default configuration
@@ -620,6 +630,17 @@ export const copyLeadsWithPreferences = (
         case "plannedDate":
           // Order-level field
           return formatDate(orderData?.plannedDate);
+        case "dob":
+          return formatDate(lead.dob);
+        case "documents":
+          // Return all document URLs tab-separated (each link in separate cell)
+          if (Array.isArray(lead.documents) && lead.documents.length > 0) {
+            return lead.documents
+              .filter((doc) => doc?.url)
+              .map((doc) => doc.url)
+              .join("\t");
+          }
+          return "";
         default:
           return "";
       }
