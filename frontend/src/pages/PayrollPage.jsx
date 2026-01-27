@@ -2044,11 +2044,6 @@ const PayrollPage = () => {
                                   monthData.year,
                                   monthData.month
                                 )}
-                                <Chip
-                                  label={`${monthData.report_count} reports`}
-                                  size="small"
-                                  sx={{ ml: 1 }}
-                                />
                               </MenuItem>
                             ))}
                           </Select>
@@ -3143,11 +3138,6 @@ const PayrollPage = () => {
                               value={`${monthData.year}-${monthData.month}`}
                             >
                               {formatMonthYear(monthData.year, monthData.month)}
-                              <Chip
-                                label={`${monthData.report_count} reports`}
-                                size="small"
-                                sx={{ ml: 1 }}
-                              />
                             </MenuItem>
                           ))}
                         </Select>
