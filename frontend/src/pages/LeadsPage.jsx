@@ -1197,7 +1197,7 @@ const LeadsPage = () => {
   const [ipqsValidationSuccess, setIpqsValidationSuccess] = useState([]);
 
   // Call Bonuses section expansion state (for agents)
-  const [callBonusesExpanded, setCallBonusesExpanded] = useState(true);
+  const [callBonusesExpanded, setCallBonusesExpanded] = useState(false);
 
   // Local search input state for instant UI updates (initialized from URL params)
   const [searchInput, setSearchInput] = useState(

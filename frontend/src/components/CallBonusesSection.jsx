@@ -8,7 +8,6 @@ import {
   Tabs,
   Tab,
   Paper,
-  Button,
   FormControl,
   InputLabel,
   Select,
@@ -19,8 +18,6 @@ import {
 import {
   Phone as PhoneIcon,
   AttachMoney as MoneyIcon,
-  Refresh as RefreshIcon,
-  CheckCircle as CheckCircleIcon,
   Pending as PendingIcon,
 } from '@mui/icons-material';
 import { useSelector } from 'react-redux';
@@ -42,7 +39,6 @@ const CallBonusesSection = ({ leads: passedLeads = [] }) => {
   const isManager = ['admin', 'affiliate_manager'].includes(user?.role);
 
   const [tabValue, setTabValue] = useState(0);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [successMessage, setSuccessMessage] = useState(null);
 
@@ -148,18 +144,26 @@ const CallBonusesSection = ({ leads: passedLeads = [] }) => {
     }
   }, [isAgent, selectedMonth, user]);
 
-  // Initial load
+  // Initial load and auto-refresh
   useEffect(() => {
-    if (isAgent) {
-      loadCDRCalls();
-    }
-    loadDeclarations();
-    if (isManager) {
-      loadPendingDeclarations();
-    }
-    if (isAgent) {
-      loadMonthlyTotals();
-    }
+    const loadData = () => {
+      if (isAgent) {
+        loadCDRCalls();
+        loadMonthlyTotals();
+      }
+      loadDeclarations();
+      if (isManager) {
+        loadPendingDeclarations();
+      }
+    };
+
+    // Initial load
+    loadData();
+
+    // Auto-refresh every 30 seconds
+    const intervalId = setInterval(loadData, 30000);
+
+    return () => clearInterval(intervalId);
   }, [isAgent, isManager, loadCDRCalls, loadDeclarations, loadPendingDeclarations, loadMonthlyTotals]);
 
   // Handle declaration created
@@ -183,18 +187,6 @@ const CallBonusesSection = ({ leads: passedLeads = [] }) => {
     setTimeout(() => setSuccessMessage(null), 5000);
   };
 
-  // Handle refresh
-  const handleRefresh = () => {
-    if (isAgent) {
-      loadCDRCalls();
-      loadMonthlyTotals();
-    }
-    loadDeclarations();
-    if (isManager) {
-      loadPendingDeclarations();
-    }
-  };
-
   // Format currency
   const formatCurrency = (value) => `$${Number(value || 0).toFixed(2)}`;
 
@@ -210,23 +202,6 @@ const CallBonusesSection = ({ leads: passedLeads = [] }) => {
 
   return (
     <Box>
-      {/* Header */}
-      <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-        <Box display="flex" alignItems="center" gap={1}>
-          <PhoneIcon color="primary" />
-          <Typography variant="h6">Call Bonuses</Typography>
-        </Box>
-        <Button
-          variant="outlined"
-          size="small"
-          startIcon={<RefreshIcon />}
-          onClick={handleRefresh}
-          disabled={loading || cdrLoading || declarationsLoading}
-        >
-          Refresh
-        </Button>
-      </Box>
-
       {/* Alerts */}
       {error && (
         <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
