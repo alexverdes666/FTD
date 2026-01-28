@@ -74,7 +74,7 @@ router.get("/orders", async (req, res) => {
 
     // Fetch orders with populated references
     const orders = await Order.find(filter)
-      .populate("requester", "firstName lastName email")
+      .populate("requester", "email")
       .populate("selectedCampaign", "name")
       .populate("selectedOurNetwork", "name")
       .populate({
@@ -82,7 +82,7 @@ router.get("/orders", async (req, res) => {
         select: "firstName lastName newPhone newEmail country",
       })
       .select(
-        "_id requester selectedCampaign selectedOurNetwork countryFilter plannedDate leads createdAt"
+        "_id requester selectedCampaign selectedOurNetwork countryFilter plannedDate leads leadsMetadata createdAt"
       )
       .sort({ plannedDate: -1 })
       .skip(skip)
@@ -90,23 +90,31 @@ router.get("/orders", async (req, res) => {
       .lean();
 
     // Transform orders to the desired format
-    const exportData = orders.map((order) => ({
-      orderId: order._id,
-      requester: order.requester
-        ? `${order.requester.firstName || ""} ${order.requester.lastName || ""}`.trim()
-        : null,
-      requesterEmail: order.requester?.email || null,
-      campaignName: order.selectedCampaign?.name || null,
-      ourNetworkName: order.selectedOurNetwork?.name || null,
-      country: order.countryFilter || null,
-      plannedDate: order.plannedDate,
-      createdAt: order.createdAt,
-      leads: (order.leads || []).map((lead) => ({
-        fullName: `${lead.firstName || ""} ${lead.lastName || ""}`.trim(),
-        phone: lead.newPhone || null,
-        email: lead.newEmail || null,
-      })),
-    }));
+    const exportData = orders.map((order) => {
+      // Build a map of leadId -> orderedAs from leadsMetadata
+      const leadTypeMap = new Map();
+      (order.leadsMetadata || []).forEach((meta) => {
+        if (meta.leadId) {
+          leadTypeMap.set(meta.leadId.toString(), meta.orderedAs || null);
+        }
+      });
+
+      return {
+        orderId: order._id,
+        requesterEmail: order.requester?.email || null,
+        campaignName: order.selectedCampaign?.name || null,
+        ourNetworkName: order.selectedOurNetwork?.name || null,
+        country: order.countryFilter || null,
+        plannedDate: order.plannedDate,
+        createdAt: order.createdAt,
+        leads: (order.leads || []).map((lead) => ({
+          fullName: `${lead.firstName || ""} ${lead.lastName || ""}`.trim(),
+          phone: lead.newPhone || null,
+          email: lead.newEmail || null,
+          leadType: leadTypeMap.get(lead._id.toString()) || null,
+        })),
+      };
+    });
 
     res.status(200).json({
       success: true,
@@ -140,7 +148,7 @@ router.get("/orders/:orderId", async (req, res) => {
     const { orderId } = req.params;
 
     const order = await Order.findById(orderId)
-      .populate("requester", "firstName lastName email")
+      .populate("requester", "email")
       .populate("selectedCampaign", "name")
       .populate("selectedOurNetwork", "name")
       .populate({
@@ -148,7 +156,7 @@ router.get("/orders/:orderId", async (req, res) => {
         select: "firstName lastName newPhone newEmail country",
       })
       .select(
-        "_id requester selectedCampaign selectedOurNetwork countryFilter plannedDate leads createdAt"
+        "_id requester selectedCampaign selectedOurNetwork countryFilter plannedDate leads leadsMetadata createdAt"
       )
       .lean();
 
@@ -159,11 +167,16 @@ router.get("/orders/:orderId", async (req, res) => {
       });
     }
 
+    // Build a map of leadId -> orderedAs from leadsMetadata
+    const leadTypeMap = new Map();
+    (order.leadsMetadata || []).forEach((meta) => {
+      if (meta.leadId) {
+        leadTypeMap.set(meta.leadId.toString(), meta.orderedAs || null);
+      }
+    });
+
     const exportData = {
       orderId: order._id,
-      requester: order.requester
-        ? `${order.requester.firstName || ""} ${order.requester.lastName || ""}`.trim()
-        : null,
       requesterEmail: order.requester?.email || null,
       campaignName: order.selectedCampaign?.name || null,
       ourNetworkName: order.selectedOurNetwork?.name || null,
@@ -174,6 +187,7 @@ router.get("/orders/:orderId", async (req, res) => {
         fullName: `${lead.firstName || ""} ${lead.lastName || ""}`.trim(),
         phone: lead.newPhone || null,
         email: lead.newEmail || null,
+        leadType: leadTypeMap.get(lead._id.toString()) || null,
       })),
     };
 
