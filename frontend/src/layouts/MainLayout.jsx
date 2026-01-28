@@ -55,6 +55,8 @@ import {
   GridOn as SheetsIcon,
   Sms as SmsIcon,
   Workspaces as WorkspaceIcon,
+  Payment as PSPIcon,
+  CreditCard as CardIssuerIcon,
 } from "@mui/icons-material";
 import {
   logout,
@@ -283,6 +285,16 @@ const MainLayout = () => {
               text: "Client Brokers",
               icon: <BusinessIcon />,
               path: "/client-brokers",
+            },
+            {
+              text: "Client PSPs",
+              icon: <PSPIcon />,
+              path: "/client-psps",
+            },
+            {
+              text: "Card Issuers",
+              icon: <CardIssuerIcon />,
+              path: "/card-issuers",
             },
             {
               text: "Campaigns",

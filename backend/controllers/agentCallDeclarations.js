@@ -2,6 +2,16 @@ const AgentCallDeclaration = require("../models/AgentCallDeclaration");
 const User = require("../models/User");
 const Lead = require("../models/Lead");
 const cdrService = require("../services/cdrService");
+const AffiliateManagerTable = require("../models/AffiliateManagerTable");
+
+// Map call types to affiliate manager table row IDs
+const CALL_TYPE_TO_TABLE_ROW = {
+  deposit: "deposit_calls",
+  first_call: "first_am_call",
+  second_call: "second_am_call",
+  third_call: "third_am_call",
+  fourth_call: "fourth_am_call",
+};
 
 /**
  * Get affiliate managers for declaration assignment
@@ -466,6 +476,14 @@ const approveDeclaration = async (req, res) => {
 
     await declaration.approve(reviewerId, notes);
 
+    // Add expense to affiliate manager's table
+    try {
+      await addCallExpenseToAffiliateManager(declaration);
+    } catch (expenseError) {
+      console.error("Error adding expense to affiliate manager table:", expenseError);
+      // Don't fail the approval if expense tracking fails, just log it
+    }
+
     // Populate for response
     await declaration.populate("agent", "fullName email fourDigitCode");
     await declaration.populate("reviewedBy", "fullName email");
@@ -485,6 +503,51 @@ const approveDeclaration = async (req, res) => {
       error: error.message,
     });
   }
+};
+
+/**
+ * Add call bonus as expense to affiliate manager's table
+ * This is called when a call declaration is approved
+ */
+const addCallExpenseToAffiliateManager = async (declaration) => {
+  const { affiliateManager, callType, totalBonus, declarationMonth, declarationYear } = declaration;
+
+  // Get the row ID for this call type
+  const rowId = CALL_TYPE_TO_TABLE_ROW[callType];
+  if (!rowId) {
+    console.warn(`Unknown call type for expense tracking: ${callType}`);
+    return;
+  }
+
+  // Create date for the declaration month/year
+  const tableDate = new Date(declarationYear, declarationMonth - 1, 1);
+
+  // Get or create the affiliate manager's table for this period
+  const table = await AffiliateManagerTable.getOrCreateTable(
+    affiliateManager,
+    "monthly",
+    tableDate,
+    { month: declarationMonth, year: declarationYear }
+  );
+
+  // Find the row for this call type
+  const rowIndex = table.tableData.findIndex((row) => row.id === rowId);
+  if (rowIndex === -1) {
+    console.warn(`Row ${rowId} not found in affiliate manager table`);
+    return;
+  }
+
+  // Update the row: add the bonus to the value
+  // The value represents the cumulative total bonus for this call type
+  // We keep quantity at 1 so that totalExpense = value * 1 = value (the accumulated bonus)
+  table.tableData[rowIndex].value = (table.tableData[rowIndex].value || 0) + totalBonus;
+
+  // Save the updated table
+  await table.save();
+
+  console.log(
+    `Added expense for ${callType} ($${totalBonus}) to affiliate manager ${affiliateManager} for ${declarationMonth}/${declarationYear}`
+  );
 };
 
 /**

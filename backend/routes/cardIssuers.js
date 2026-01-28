@@ -8,10 +8,18 @@ const {
   updateCardIssuer,
   deleteCardIssuer,
   getCardIssuerAuditLogs,
+  uploadLogo,
 } = require("../controllers/cardIssuers");
 const { protect, isAdmin, authorize } = require("../middleware/auth");
 
 const router = express.Router();
+
+// Upload logo for Card Issuer (admin and affiliate_manager)
+router.post(
+  "/upload-logo",
+  [protect, authorize("admin", "affiliate_manager")],
+  uploadLogo
+);
 
 // Get all Card Issuers (any authenticated user)
 router.get("/", protect, getCardIssuers);

@@ -68,6 +68,8 @@ import AccountManagementPage from "./pages/AccountManagementPage.jsx";
 import ClientNetworkProfilePage from "./pages/ClientNetworkProfilePage.jsx";
 import ClientBrokerProfilePage from "./pages/ClientBrokerProfilePage.jsx";
 import PSPProfilePage from "./pages/PSPProfilePage.jsx";
+import ClientPSPsPage from "./pages/ClientPSPsPage.jsx";
+import CardIssuersPage from "./pages/CardIssuersPage.jsx";
 import GatewayManagementPage from "./pages/GatewayManagementPage.jsx";
 import AgentSchedulePage from "./pages/AgentSchedulePage.jsx";
 import AgentCallsCalendarPage from "./pages/AgentCallsCalendarPage.jsx";
@@ -395,6 +397,22 @@ function AppContent() {
             <Route path="client-networks" element={<ClientNetworksPage />} />
             <Route path="our-networks" element={<OurNetworksPage />} />
             <Route path="client-brokers" element={<ClientBrokersPage />} />
+            <Route
+              path="client-psps"
+              element={
+                <ProtectedRoute allowedRoles={["admin", "affiliate_manager"]}>
+                  <ClientPSPsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="card-issuers"
+              element={
+                <ProtectedRoute allowedRoles={["admin", "affiliate_manager"]}>
+                  <CardIssuersPage />
+                </ProtectedRoute>
+              }
+            />
             <Route path="campaigns" element={<CampaignsPage />} />
             <Route path="payroll" element={<PayrollPage />} />
             <Route path="withdrawals" element={<WithdrawalsPage />} />

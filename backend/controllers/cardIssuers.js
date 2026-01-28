@@ -2,6 +2,10 @@ const { validationResult } = require("express-validator");
 const CardIssuer = require("../models/CardIssuer");
 const PSP = require("../models/PSP");
 const CardIssuerAuditService = require("../services/cardIssuerAuditService");
+const sharp = require("sharp");
+const crypto = require("crypto");
+const path = require("path");
+const fs = require("fs").promises;
 
 /**
  * Get all Card Issuers with pagination and filtering
@@ -252,6 +256,96 @@ exports.deleteCardIssuer = async (req, res, next) => {
       message: "Card Issuer deleted successfully",
     });
   } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Upload logo for Card Issuer
+ * Allowed: admin and affiliate_manager
+ */
+exports.uploadLogo = async (req, res, next) => {
+  try {
+    // Check if file was uploaded
+    if (!req.files || !req.files.image) {
+      return res.status(400).json({
+        success: false,
+        message: "No image file uploaded",
+      });
+    }
+
+    const imageFile = req.files.image;
+
+    // Validate file type
+    const allowedFormats = [
+      "image/jpeg",
+      "image/png",
+      "image/gif",
+      "image/webp",
+      "image/svg+xml",
+    ];
+    if (!allowedFormats.includes(imageFile.mimetype)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid image format. Supported formats: JPEG, PNG, GIF, WebP, SVG",
+      });
+    }
+
+    // Validate file size (max 5MB)
+    const maxSize = 5 * 1024 * 1024;
+    if (imageFile.size > maxSize) {
+      return res.status(400).json({
+        success: false,
+        message: "Image size exceeds 5MB limit",
+      });
+    }
+
+    // Generate unique filename
+    const hash = crypto.createHash("sha256").update(imageFile.data).digest("hex").substring(0, 16);
+    const ext = imageFile.mimetype === "image/svg+xml" ? ".svg" : path.extname(imageFile.name) || ".png";
+    const filename = `card-issuer-${hash}${ext}`;
+
+    // Ensure uploads directory exists
+    const uploadsDir = path.join(__dirname, "..", "uploads", "card-issuers");
+    await fs.mkdir(uploadsDir, { recursive: true });
+
+    const filePath = path.join(uploadsDir, filename);
+
+    // Process image (skip for SVG)
+    let processedBuffer = imageFile.data;
+    if (imageFile.mimetype !== "image/svg+xml") {
+      try {
+        // Resize if larger than 256x256 for logos
+        processedBuffer = await sharp(imageFile.data)
+          .resize(256, 256, {
+            fit: "inside",
+            withoutEnlargement: true,
+          })
+          .toBuffer();
+      } catch (sharpError) {
+        console.error("Sharp processing error:", sharpError);
+        // Fall back to original if sharp fails
+        processedBuffer = imageFile.data;
+      }
+    }
+
+    // Save file
+    await fs.writeFile(filePath, processedBuffer);
+
+    // Generate URL
+    const baseUrl = process.env.BASE_URL || `http://localhost:${process.env.PORT || 5000}`;
+    const logoUrl = `${baseUrl}/uploads/card-issuers/${filename}`;
+
+    res.status(200).json({
+      success: true,
+      message: "Logo uploaded successfully",
+      data: {
+        url: logoUrl,
+        filename,
+      },
+    });
+  } catch (error) {
+    console.error("Error uploading logo:", error);
     next(error);
   }
 };

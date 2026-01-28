@@ -192,6 +192,11 @@ app.use(
     debug: false,
   })
 );
+
+// Serve uploaded files statically
+const path = require("path");
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+
 if (process.env.NODE_ENV === "development") {
   app.use(morgan("dev"));
 }
