@@ -618,6 +618,8 @@ app.use("/api/activity-logs", activityLogRoutes);
 app.use("/api/device-detection", deviceDetectionRoutes);
 app.use("/api/user-activity", userActivityRoutes);
 app.use("/api/global-search", globalSearchRoutes);
+const exportRoutes = require("./routes/export");
+app.use("/api/export", exportRoutes);
 const healthRoutes = require("./routes/health");
 app.use("/api/health", healthRoutes);
 app.use(errorHandler);
