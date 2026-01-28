@@ -1255,6 +1255,7 @@ class BlockchainScraperService {
 
   /**
    * Get total USD value for all networks assigned to an affiliate manager
+   * Uses getNetworkSummary for each network to ensure consistency with OurNetworksPage's "Total Value"
    */
   async getAffiliateManagerTotalValue(affiliateManagerId, options = {}) {
     try {
@@ -1277,91 +1278,91 @@ class BlockchainScraperService {
         };
       }
 
-      const networkIds = networks.map(network => network._id);
-      let query = { 
-        network: { $in: networkIds },
-        transferType: 'incoming'
-      };
-      
-      // Apply date filter based on month/year or date range
-      if (options.month && options.year) {
-        // Filter for specific month/year
-        const startDate = new Date(parseInt(options.year), parseInt(options.month) - 1, 1);
-        const endDate = new Date(parseInt(options.year), parseInt(options.month), 0, 23, 59, 59, 999);
-        query.timestamp = { $gte: startDate, $lte: endDate };
-      } else if (options.startDate && options.endDate) {
-        // Filter for specific date range
-        query.timestamp = { $gte: new Date(options.startDate), $lte: new Date(options.endDate) };
-      }
+      // Parse month/year from options (or use null for all-time)
+      const month = options.month ? parseInt(options.month) : null;
+      const year = options.year ? parseInt(options.year) : null;
 
-      const transactions = await BlockchainTransaction.find(query).sort({ timestamp: -1 });
-
-      const totalUsdValue = transactions.reduce((sum, tx) => sum + (parseFloat(tx.usdValue) || 0), 0);
-
-      // Calculate breakdown by blockchain
+      // Get summary for each network using getNetworkSummary (same calculation as OurNetworksPage)
+      const networkDetails = [];
+      let totalUsdValue = 0;
+      let totalTransactions = 0;
       const breakdown = {
-        bitcoin: {
-          count: transactions.filter(tx => tx.blockchain === 'bitcoin').length,
-          totalUsdValue: transactions
-            .filter(tx => tx.blockchain === 'bitcoin')
-            .reduce((sum, tx) => sum + (parseFloat(tx.usdValue) || 0), 0)
-        },
-        ethereum: {
-          count: transactions.filter(tx => tx.blockchain === 'ethereum').length,
-          totalUsdValue: transactions
-            .filter(tx => tx.blockchain === 'ethereum')
-            .reduce((sum, tx) => sum + (parseFloat(tx.usdValue) || 0), 0)
-        },
-        tron: {
-          count: transactions.filter(tx => tx.blockchain === 'tron').length,
-          totalUsdValue: transactions
-            .filter(tx => tx.blockchain === 'tron')
-            .reduce((sum, tx) => sum + (parseFloat(tx.usdValue) || 0), 0)
-        }
+        bitcoin: { count: 0, totalUsdValue: 0 },
+        ethereum: { count: 0, totalUsdValue: 0 },
+        tron: { count: 0, totalUsdValue: 0 }
       };
 
-      // Calculate per-network details
-      const networkDetails = networks.map(network => {
-        const networkTransactions = transactions.filter(tx => tx.network.toString() === network._id.toString());
-        const networkValue = networkTransactions.reduce((sum, tx) => sum + (parseFloat(tx.usdValue) || 0), 0);
-        
-        return {
-          networkId: network._id,
-          networkName: network.name,
-          totalUsdValue: networkValue,
-          transactionCount: networkTransactions.length,
-          breakdown: {
-            bitcoin: {
-              count: networkTransactions.filter(tx => tx.blockchain === 'bitcoin').length,
-              totalUsdValue: networkTransactions
-                .filter(tx => tx.blockchain === 'bitcoin')
-                .reduce((sum, tx) => sum + (parseFloat(tx.usdValue) || 0), 0),
-              walletAddress: network.cryptoWallets?.bitcoin || null
-            },
-            ethereum: {
-              count: networkTransactions.filter(tx => tx.blockchain === 'ethereum').length,
-              totalUsdValue: networkTransactions
-                .filter(tx => tx.blockchain === 'ethereum')
-                .reduce((sum, tx) => sum + (parseFloat(tx.usdValue) || 0), 0),
-              walletAddress: network.cryptoWallets?.ethereum || null
-            },
-            tron: {
-              count: networkTransactions.filter(tx => tx.blockchain === 'tron').length,
-              totalUsdValue: networkTransactions
-                .filter(tx => tx.blockchain === 'tron')
-                .reduce((sum, tx) => sum + (parseFloat(tx.usdValue) || 0), 0),
-              walletAddress: network.cryptoWallets?.tron || null
-            }
+      for (const network of networks) {
+        try {
+          // Use getNetworkSummary with month/year filter (same as OurNetworksPage uses)
+          const networkSummary = await this.getNetworkSummary(
+            network._id,
+            0, // days = 0 means no days filter (use month/year instead)
+            month,
+            year
+          );
+
+          // Sum up the values
+          totalUsdValue += networkSummary.totalUsdValue || 0;
+          totalTransactions += networkSummary.totalTransactions || 0;
+
+          // Sum up blockchain breakdown
+          if (networkSummary.breakdown) {
+            breakdown.bitcoin.count += networkSummary.breakdown.bitcoin?.total?.count || 0;
+            breakdown.bitcoin.totalUsdValue += networkSummary.breakdown.bitcoin?.total?.totalUsdValue || 0;
+            breakdown.ethereum.count += networkSummary.breakdown.ethereum?.total?.count || 0;
+            breakdown.ethereum.totalUsdValue += networkSummary.breakdown.ethereum?.total?.totalUsdValue || 0;
+            breakdown.tron.count += networkSummary.breakdown.tron?.total?.count || 0;
+            breakdown.tron.totalUsdValue += networkSummary.breakdown.tron?.total?.totalUsdValue || 0;
           }
-        };
-      });
+
+          // Store network details
+          networkDetails.push({
+            networkId: network._id,
+            networkName: network.name,
+            totalUsdValue: networkSummary.totalUsdValue || 0,
+            transactionCount: networkSummary.totalTransactions || 0,
+            breakdown: {
+              bitcoin: {
+                count: networkSummary.breakdown?.bitcoin?.total?.count || 0,
+                totalUsdValue: networkSummary.breakdown?.bitcoin?.total?.totalUsdValue || 0,
+                walletAddress: network.cryptoWallets?.bitcoin || null
+              },
+              ethereum: {
+                count: networkSummary.breakdown?.ethereum?.total?.count || 0,
+                totalUsdValue: networkSummary.breakdown?.ethereum?.total?.totalUsdValue || 0,
+                walletAddress: network.cryptoWallets?.ethereum || null
+              },
+              tron: {
+                count: networkSummary.breakdown?.tron?.total?.count || 0,
+                totalUsdValue: networkSummary.breakdown?.tron?.total?.totalUsdValue || 0,
+                walletAddress: network.cryptoWallets?.tron || null
+              }
+            }
+          });
+        } catch (networkError) {
+          console.warn(`Failed to get summary for network ${network.name}:`, networkError.message);
+          // Add network with zero values on error
+          networkDetails.push({
+            networkId: network._id,
+            networkName: network.name,
+            totalUsdValue: 0,
+            transactionCount: 0,
+            breakdown: {
+              bitcoin: { count: 0, totalUsdValue: 0, walletAddress: network.cryptoWallets?.bitcoin || null },
+              ethereum: { count: 0, totalUsdValue: 0, walletAddress: network.cryptoWallets?.ethereum || null },
+              tron: { count: 0, totalUsdValue: 0, walletAddress: network.cryptoWallets?.tron || null }
+            }
+          });
+        }
+      }
 
       return {
         totalUsdValue,
         networksCount: networks.length,
         breakdown,
         networkDetails,
-        totalTransactions: transactions.length
+        totalTransactions
       };
     } catch (error) {
       console.error('Error calculating affiliate manager total value:', error);
