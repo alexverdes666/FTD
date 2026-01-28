@@ -147,11 +147,17 @@ const ClientPSPsPage = () => {
 
   const onSubmit = async (data) => {
     try {
+      // Clean up the data - convert empty cardIssuer to null
+      const submitData = {
+        ...data,
+        cardIssuer: data.cardIssuer || null,
+      };
+
       if (editingPSP) {
-        await api.put(`/psps/${editingPSP._id}`, data);
+        await api.put(`/psps/${editingPSP._id}`, submitData);
         toast.success("PSP updated successfully");
       } else {
-        await api.post("/psps", data);
+        await api.post("/psps", submitData);
         toast.success("PSP created successfully");
       }
       handleCloseDialog();

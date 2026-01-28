@@ -41,8 +41,11 @@ router.post(
       .isLength({ max: 500 })
       .withMessage("Description must be less than 500 characters"),
     body("cardIssuer")
-      .optional()
-      .isMongoId()
+      .optional({ nullable: true })
+      .custom((value) => {
+        if (value === null || value === "" || value === undefined) return true;
+        return /^[0-9a-fA-F]{24}$/.test(value);
+      })
       .withMessage("Invalid Card Issuer ID"),
   ],
   createPSP
