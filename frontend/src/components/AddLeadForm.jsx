@@ -53,7 +53,15 @@ const addLeadSchema = yup.object({
     'socialMedia.whatsapp': yup.string().nullable(),
     documents: yup.array().of(
         yup.object().shape({
-            url: yup.string().required('Document URL is required').url('Invalid document URL'),
+            url: yup.string().nullable().test('url-validation', 'Invalid document URL', function(value) {
+                if (!value || value.trim() === '') return true;
+                try {
+                    new URL(value);
+                    return true;
+                } catch {
+                    return false;
+                }
+            }),
             description: yup.string().nullable()
         })
     ).nullable().default([]),
@@ -207,11 +215,13 @@ const AddLeadForm = ({ onLeadAdded }) => {
                 } else if (Array.isArray(submitData.ourNetwork) && submitData.ourNetwork.length > 0) {
                     // Keep the array as is
                 }
-            if (data.leadType === 'ftd') {
-                submitData.documents = data.documents.filter(doc => doc.url.trim() !== '');
-                if (submitData.documents.length === 0) {
-                    submitData.documents = [];
-                }
+            // Handle documents based on lead type
+            if (data.leadType === 'cold') {
+                // Cold leads don't have documents
+                delete submitData.documents;
+            } else {
+                // For FTD and Filler leads, filter out empty documents
+                submitData.documents = data.documents.filter(doc => doc.url && doc.url.trim() !== '');
             }
             if (submitData.address) {
                 if (typeof submitData.address === 'object') {
@@ -667,77 +677,81 @@ const AddLeadForm = ({ onLeadAdded }) => {
                             )}
                         />
                     </Grid>
-                    {}
-                    <Grid item xs={12}>
-                        <Typography variant="subtitle1" gutterBottom>
-                            Documents
-                        </Typography>
-                    </Grid>
-                    <Grid item xs={12}>
-                        <Controller
-                            name="documents"
-                            control={control}
-                            render={({ field }) => (
-                                <Box>
-                                    {field.value.map((doc, index) => (
-                                        <Grid container spacing={2} key={index} sx={{ mb: 2 }}>
-                                            <Grid item xs={12} sm={5}>
-                                                <TextField
-                                                    fullWidth
-                                                    label="Document URL"
-                                                    value={doc.url}
-                                                    onChange={(e) => {
-                                                        const newDocs = [...field.value];
-                                                        newDocs[index] = { ...doc, url: e.target.value };
-                                                        field.onChange(newDocs);
-                                                    }}
-                                                    error={!!errors.documents?.[index]?.url}
-                                                    helperText={errors.documents?.[index]?.url?.message}
-                                                />
-                                            </Grid>
-                                            <Grid item xs={12} sm={5}>
-                                                <TextField
-                                                    fullWidth
-                                                    label="Description"
-                                                    value={doc.description}
-                                                    onChange={(e) => {
-                                                        const newDocs = [...field.value];
-                                                        newDocs[index] = { ...doc, description: e.target.value };
-                                                        field.onChange(newDocs);
-                                                    }}
-                                                />
-                                            </Grid>
-                                            <Grid item xs={12} sm={2}>
-                                                <Box sx={{ display: 'flex', gap: 1 }}>
-                                                    {index === field.value.length - 1 && (
-                                                        <IconButton
-                                                            color="primary"
-                                                            onClick={() => {
-                                                                field.onChange([...field.value, { url: '', description: '' }]);
-                                                            }}
-                                                        >
-                                                            <AddIcon />
-                                                        </IconButton>
-                                                    )}
-                                                    {field.value.length > 1 && (
-                                                        <IconButton
-                                                            color="error"
-                                                            onClick={() => {
-                                                                const newDocs = field.value.filter((_, i) => i !== index);
+                    {/* Documents - only for FTD and Filler leads, not for Cold leads */}
+                    {leadType !== 'cold' && (
+                        <>
+                            <Grid item xs={12}>
+                                <Typography variant="subtitle1" gutterBottom>
+                                    Documents
+                                </Typography>
+                            </Grid>
+                            <Grid item xs={12}>
+                                <Controller
+                                    name="documents"
+                                    control={control}
+                                    render={({ field }) => (
+                                        <Box>
+                                            {field.value.map((doc, index) => (
+                                                <Grid container spacing={2} key={index} sx={{ mb: 2 }}>
+                                                    <Grid item xs={12} sm={5}>
+                                                        <TextField
+                                                            fullWidth
+                                                            label="Document URL"
+                                                            value={doc.url}
+                                                            onChange={(e) => {
+                                                                const newDocs = [...field.value];
+                                                                newDocs[index] = { ...doc, url: e.target.value };
                                                                 field.onChange(newDocs);
                                                             }}
-                                                        >
-                                                            <DeleteIcon />
-                                                        </IconButton>
-                                                    )}
-                                                </Box>
-                                            </Grid>
-                                        </Grid>
-                                    ))}
-                                </Box>
-                            )}
-                        />
-                    </Grid>
+                                                            error={!!errors.documents?.[index]?.url}
+                                                            helperText={errors.documents?.[index]?.url?.message}
+                                                        />
+                                                    </Grid>
+                                                    <Grid item xs={12} sm={5}>
+                                                        <TextField
+                                                            fullWidth
+                                                            label="Description"
+                                                            value={doc.description}
+                                                            onChange={(e) => {
+                                                                const newDocs = [...field.value];
+                                                                newDocs[index] = { ...doc, description: e.target.value };
+                                                                field.onChange(newDocs);
+                                                            }}
+                                                        />
+                                                    </Grid>
+                                                    <Grid item xs={12} sm={2}>
+                                                        <Box sx={{ display: 'flex', gap: 1 }}>
+                                                            {index === field.value.length - 1 && (
+                                                                <IconButton
+                                                                    color="primary"
+                                                                    onClick={() => {
+                                                                        field.onChange([...field.value, { url: '', description: '' }]);
+                                                                    }}
+                                                                >
+                                                                    <AddIcon />
+                                                                </IconButton>
+                                                            )}
+                                                            {field.value.length > 1 && (
+                                                                <IconButton
+                                                                    color="error"
+                                                                    onClick={() => {
+                                                                        const newDocs = field.value.filter((_, i) => i !== index);
+                                                                        field.onChange(newDocs);
+                                                                    }}
+                                                                >
+                                                                    <DeleteIcon />
+                                                                </IconButton>
+                                                            )}
+                                                        </Box>
+                                                    </Grid>
+                                                </Grid>
+                                            ))}
+                                        </Box>
+                                    )}
+                                />
+                            </Grid>
+                        </>
+                    )}
                     {}
                     <Grid item xs={12}>
                         <Button
