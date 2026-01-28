@@ -17,18 +17,11 @@ const pspSchema = new mongoose.Schema(
       required: [true, "Website URL is required"],
       trim: true,
     },
-    // Card preview fields
-    cardNumber: {
-      type: String,
-      trim: true,
-    },
-    cardExpiry: {
-      type: String,
-      trim: true,
-    },
-    cardCVC: {
-      type: String,
-      trim: true,
+    // Reference to Card Issuer (e.g., Visa, Mastercard, Zen)
+    cardIssuer: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "CardIssuer",
+      default: null,
     },
     isActive: {
       type: Boolean,
@@ -51,6 +44,7 @@ const pspSchema = new mongoose.Schema(
 pspSchema.index({ name: 1 });
 pspSchema.index({ createdBy: 1 });
 pspSchema.index({ isActive: 1 });
+pspSchema.index({ cardIssuer: 1 });
 
 // Text index for global search
 pspSchema.index(

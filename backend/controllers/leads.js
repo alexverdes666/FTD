@@ -4464,7 +4464,7 @@ exports.confirmDeposit = async (req, res, next) => {
     const leadId = req.params.id;
     const userId = req.user._id;
     const userRole = req.user.role;
-    const { pspId, orderId } = req.body;
+    const { pspId, orderId, cardIssuerId } = req.body;
 
     // Only admin and affiliate_manager can confirm deposits
     if (userRole !== "admin" && userRole !== "affiliate_manager") {
@@ -4504,6 +4504,25 @@ exports.confirmDeposit = async (req, res, next) => {
         success: false,
         message: "Selected PSP is not active",
       });
+    }
+
+    // Validate Card Issuer if provided
+    let cardIssuer = null;
+    if (cardIssuerId) {
+      const CardIssuer = require("../models/CardIssuer");
+      cardIssuer = await CardIssuer.findById(cardIssuerId);
+      if (!cardIssuer) {
+        return res.status(404).json({
+          success: false,
+          message: "Selected Card Issuer not found",
+        });
+      }
+      if (!cardIssuer.isActive) {
+        return res.status(400).json({
+          success: false,
+          message: "Selected Card Issuer is not active",
+        });
+      }
     }
 
     const lead = await Lead.findById(leadId);
@@ -4560,6 +4579,7 @@ exports.confirmDeposit = async (req, res, next) => {
     order.leadsMetadata[leadMetadataIndex].depositConfirmedBy = userId;
     order.leadsMetadata[leadMetadataIndex].depositConfirmedAt = new Date();
     order.leadsMetadata[leadMetadataIndex].depositPSP = pspId;
+    order.leadsMetadata[leadMetadataIndex].depositCardIssuer = cardIssuerId || null;
 
     // Add audit log to order
     const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
@@ -4577,14 +4597,15 @@ exports.confirmDeposit = async (req, res, next) => {
       performedBy: userId,
       performedAt: new Date(),
       ipAddress: clientIp,
-      details: `Deposit confirmed for lead ${lead.firstName} ${lead.lastName} (${lead.newEmail}) using PSP "${psp.name}" by ${req.user.fullName || req.user.email}`,
+      details: `Deposit confirmed for lead ${lead.firstName} ${lead.lastName} (${lead.newEmail}) using PSP "${psp.name}"${cardIssuer ? ` (Card Issuer: ${cardIssuer.name})` : ""} by ${req.user.fullName || req.user.email}`,
     });
 
     await order.save();
 
     // Populate order metadata for response
     await order.populate("leadsMetadata.depositConfirmedBy", "fullName email");
-    await order.populate("leadsMetadata.depositPSP", "name website cardNumber cardExpiry cardCVC");
+    await order.populate("leadsMetadata.depositPSP", "name website");
+    await order.populate("leadsMetadata.depositCardIssuer", "name description logo");
 
     // Also populate lead for response
     await lead.populate("assignedAgent", "fullName email fourDigitCode");
@@ -4675,6 +4696,7 @@ exports.unconfirmDeposit = async (req, res, next) => {
     order.leadsMetadata[leadMetadataIndex].depositConfirmedBy = null;
     order.leadsMetadata[leadMetadataIndex].depositConfirmedAt = null;
     order.leadsMetadata[leadMetadataIndex].depositPSP = null;
+    order.leadsMetadata[leadMetadataIndex].depositCardIssuer = null;
 
     // Add audit log to order
     const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||

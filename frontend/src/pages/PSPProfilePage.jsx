@@ -32,122 +32,12 @@ import {
   Payment as PSPIcon,
   Business as BrokerIcon,
   Language as WebIcon,
-  CreditCard as CreditCardIcon,
 } from "@mui/icons-material";
 import { useSelector } from "react-redux";
 import { selectUser } from "../store/slices/authSlice";
 import api from "../services/api";
 import toast from "react-hot-toast";
 import CommentButton from "../components/CommentButton";
-
-// Card Preview Component
-const CardPreview = ({ cardNumber, cardExpiry, cardCVC, compact = false }) => {
-  const formatCardNumber = (num) => {
-    if (!num) return "•••• •••• •••• ••••";
-    const cleaned = num.replace(/\D/g, "");
-    const groups = cleaned.match(/.{1,4}/g) || [];
-    const formatted = groups.join(" ");
-    if (formatted.length < 19) {
-      return formatted + " " + "•••• •••• •••• ••••".slice(formatted.length + 1);
-    }
-    return formatted;
-  };
-
-  return (
-    <Box
-      sx={{
-        width: "100%",
-        maxWidth: compact ? 300 : 380,
-        height: compact ? 175 : 220,
-        borderRadius: 3,
-        background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-        p: compact ? 2 : 3,
-        color: "white",
-        position: "relative",
-        boxShadow: "0 10px 30px rgba(102, 126, 234, 0.4)",
-        overflow: "hidden",
-        mx: compact ? 0 : "auto",
-        "&::before": {
-          content: '""',
-          position: "absolute",
-          top: -50,
-          right: -50,
-          width: 150,
-          height: 150,
-          borderRadius: "50%",
-          background: "rgba(255,255,255,0.1)",
-        },
-        "&::after": {
-          content: '""',
-          position: "absolute",
-          bottom: -80,
-          left: -80,
-          width: 200,
-          height: 200,
-          borderRadius: "50%",
-          background: "rgba(255,255,255,0.05)",
-        },
-      }}
-    >
-      {/* Card Chip */}
-      <Box
-        sx={{
-          width: compact ? 40 : 50,
-          height: compact ? 28 : 35,
-          borderRadius: 1,
-          background: "linear-gradient(135deg, #ffd700 0%, #ffb700 100%)",
-          mb: compact ? 2 : 3,
-        }}
-      />
-
-      {/* Card Number */}
-      <Typography
-        sx={{
-          fontSize: compact ? "1.1rem" : "1.4rem",
-          fontFamily: "'Courier New', monospace",
-          letterSpacing: "0.15em",
-          mb: compact ? 2 : 3,
-          textShadow: "0 2px 4px rgba(0,0,0,0.2)",
-        }}
-      >
-        {formatCardNumber(cardNumber)}
-      </Typography>
-
-      {/* Card Details Row */}
-      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
-        <Box>
-          <Typography sx={{ fontSize: compact ? "0.55rem" : "0.65rem", opacity: 0.7, mb: 0.5 }}>
-            VALID THRU
-          </Typography>
-          <Typography
-            sx={{
-              fontSize: compact ? "0.85rem" : "1rem",
-              fontFamily: "'Courier New', monospace",
-              letterSpacing: "0.1em",
-            }}
-          >
-            {cardExpiry || "MM/YY"}
-          </Typography>
-        </Box>
-        <Box>
-          <Typography sx={{ fontSize: compact ? "0.55rem" : "0.65rem", opacity: 0.7, mb: 0.5 }}>
-            CVC
-          </Typography>
-          <Typography
-            sx={{
-              fontSize: compact ? "0.85rem" : "1rem",
-              fontFamily: "'Courier New', monospace",
-              letterSpacing: "0.1em",
-            }}
-          >
-            {cardCVC || "•••"}
-          </Typography>
-        </Box>
-        <CreditCardIcon sx={{ fontSize: compact ? 30 : 40, opacity: 0.8 }} />
-      </Box>
-    </Box>
-  );
-};
 
 const PSPProfilePage = () => {
   const { id } = useParams();
@@ -162,18 +52,11 @@ const PSPProfilePage = () => {
   const [editData, setEditData] = useState({
     website: "",
     description: "",
-    cardNumber: "",
-    cardExpiry: "",
-    cardCVC: "",
   });
   const [editLoading, setEditLoading] = useState(false);
 
-  // Refs for auto-focus flow
+  // Refs for auto-focus
   const websiteRef = useRef(null);
-  const cardNumberRef = useRef(null);
-  const cardExpiryRef = useRef(null);
-  const cardCVCRef = useRef(null);
-  const submitButtonRef = useRef(null);
 
   const isAdmin = user?.role === "admin";
 
@@ -185,9 +68,6 @@ const PSPProfilePage = () => {
       setEditData({
         website: response.data.data.website || "",
         description: response.data.data.description || "",
-        cardNumber: response.data.data.cardNumber || "",
-        cardExpiry: response.data.data.cardExpiry || "",
-        cardCVC: response.data.data.cardCVC || "",
       });
     } catch (error) {
       toast.error(error.response?.data?.message || "Failed to load profile");
@@ -200,7 +80,7 @@ const PSPProfilePage = () => {
     fetchProfile();
   }, [fetchProfile]);
 
-  // Edit PSP handlers
+  // Edit PSP handler
   const handleEditPSP = async () => {
     try {
       setEditLoading(true);
@@ -212,61 +92,6 @@ const PSPProfilePage = () => {
       toast.error(error.response?.data?.message || "Failed to update PSP");
     } finally {
       setEditLoading(false);
-    }
-  };
-
-  // Format card number for display (with spaces)
-  const formatCardNumberDisplay = (value) => {
-    if (!value) return "";
-    const cleaned = value.replace(/\D/g, "");
-    const groups = cleaned.match(/.{1,4}/g) || [];
-    return groups.join(" ");
-  };
-
-  // Format card number input
-  const handleCardNumberChange = (e) => {
-    let value = e.target.value.replace(/\D/g, "");
-    if (value.length > 16) value = value.slice(0, 16);
-    setEditData({ ...editData, cardNumber: value });
-
-    // Auto-move to expiry when 16 digits entered
-    if (value.length === 16) {
-      setTimeout(() => cardExpiryRef.current?.focus(), 50);
-    }
-  };
-
-  // Format expiry input
-  const handleExpiryChange = (e) => {
-    let value = e.target.value.replace(/\D/g, "");
-    if (value.length > 4) value = value.slice(0, 4);
-    if (value.length >= 2) {
-      value = value.slice(0, 2) + "/" + value.slice(2);
-    }
-    setEditData({ ...editData, cardExpiry: value });
-
-    // Auto-move to CVC when expiry is complete
-    if (value.length === 5) {
-      setTimeout(() => cardCVCRef.current?.focus(), 50);
-    }
-  };
-
-  // Format CVC input
-  const handleCVCChange = (e) => {
-    let value = e.target.value.replace(/\D/g, "");
-    if (value.length > 4) value = value.slice(0, 4);
-    setEditData({ ...editData, cardCVC: value });
-
-    // Auto-move to submit button when CVC is complete
-    if (value.length >= 3) {
-      setTimeout(() => submitButtonRef.current?.focus(), 50);
-    }
-  };
-
-  // Handle website field - move to card number on Enter
-  const handleWebsiteKeyDown = (e) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      cardNumberRef.current?.focus();
     }
   };
 
@@ -342,65 +167,44 @@ const PSPProfilePage = () => {
           />
         </Box>
 
-        {/* Summary Stats and Card Preview */}
+        {/* Summary Stats */}
         <Grid container spacing={2}>
-          <Grid item xs={12} md={profile.cardNumber ? 8 : 12}>
-            <Grid container spacing={2}>
-              <Grid item xs={6} sm={4}>
-                <Card variant="outlined">
-                  <CardContent sx={{ textAlign: "center", py: 1 }}>
-                    <Typography variant="h4" color="primary.main">
-                      {profile.linkedBrokersCount || 0}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Linked Brokers
-                    </Typography>
-                  </CardContent>
-                </Card>
-              </Grid>
-              <Grid item xs={6} sm={4}>
-                <Card variant="outlined">
-                  <CardContent sx={{ textAlign: "center", py: 1 }}>
-                    <Typography variant="h4" color="primary.main">
-                      {profile.createdBy?.fullName || "-"}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Created By
-                    </Typography>
-                  </CardContent>
-                </Card>
-              </Grid>
-              <Grid item xs={12} sm={4}>
-                <Card variant="outlined">
-                  <CardContent sx={{ textAlign: "center", py: 1 }}>
-                    <Typography variant="h6" color="text.primary">
-                      {new Date(profile.createdAt).toLocaleDateString()}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Created At
-                    </Typography>
-                  </CardContent>
-                </Card>
-              </Grid>
-            </Grid>
-          </Grid>
-
-          {/* Card Preview */}
-          {profile.cardNumber && (
-            <Grid item xs={12} md={4}>
-              <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-                <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                  Card Preview
+          <Grid item xs={6} sm={4}>
+            <Card variant="outlined">
+              <CardContent sx={{ textAlign: "center", py: 1 }}>
+                <Typography variant="h4" color="primary.main">
+                  {profile.linkedBrokersCount || 0}
                 </Typography>
-                <CardPreview
-                  cardNumber={profile.cardNumber}
-                  cardExpiry={profile.cardExpiry}
-                  cardCVC={profile.cardCVC}
-                  compact
-                />
-              </Box>
-            </Grid>
-          )}
+                <Typography variant="body2" color="text.secondary">
+                  Linked Brokers
+                </Typography>
+              </CardContent>
+            </Card>
+          </Grid>
+          <Grid item xs={6} sm={4}>
+            <Card variant="outlined">
+              <CardContent sx={{ textAlign: "center", py: 1 }}>
+                <Typography variant="h4" color="primary.main">
+                  {profile.createdBy?.fullName || "-"}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Created By
+                </Typography>
+              </CardContent>
+            </Card>
+          </Grid>
+          <Grid item xs={12} sm={4}>
+            <Card variant="outlined">
+              <CardContent sx={{ textAlign: "center", py: 1 }}>
+                <Typography variant="h6" color="text.primary">
+                  {new Date(profile.createdAt).toLocaleDateString()}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Created At
+                </Typography>
+              </CardContent>
+            </Card>
+          </Grid>
         </Grid>
       </Paper>
 
@@ -516,7 +320,6 @@ const PSPProfilePage = () => {
               placeholder="e.g., stripe.com"
               value={editData.website}
               onChange={(e) => setEditData({ ...editData, website: e.target.value })}
-              onKeyDown={handleWebsiteKeyDown}
               fullWidth
               required
               helperText="The PSP name will be updated automatically when you change the URL"
@@ -536,65 +339,11 @@ const PSPProfilePage = () => {
               multiline
               rows={2}
             />
-
-            {/* Card Preview Section */}
-            <Box sx={{ mt: 2 }}>
-              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                Card Preview (Optional)
-              </Typography>
-
-              {/* Live Card Preview */}
-              <Box sx={{ mb: 3 }}>
-                <CardPreview
-                  cardNumber={editData.cardNumber}
-                  cardExpiry={editData.cardExpiry}
-                  cardCVC={editData.cardCVC}
-                />
-              </Box>
-
-              {/* Card Input Fields */}
-              <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                <TextField
-                  inputRef={cardNumberRef}
-                  label="Card Number"
-                  placeholder="1234 5678 9012 3456"
-                  value={formatCardNumberDisplay(editData.cardNumber)}
-                  onChange={handleCardNumberChange}
-                  fullWidth
-                  InputProps={{
-                    startAdornment: (
-                      <InputAdornment position="start">
-                        <CreditCardIcon color="action" />
-                      </InputAdornment>
-                    ),
-                  }}
-                />
-                <Box sx={{ display: "flex", gap: 2 }}>
-                  <TextField
-                    inputRef={cardExpiryRef}
-                    label="Expiry Date"
-                    placeholder="MM/YY"
-                    value={editData.cardExpiry}
-                    onChange={handleExpiryChange}
-                    fullWidth
-                  />
-                  <TextField
-                    inputRef={cardCVCRef}
-                    label="CVC"
-                    placeholder="123"
-                    value={editData.cardCVC}
-                    onChange={handleCVCChange}
-                    fullWidth
-                  />
-                </Box>
-              </Box>
-            </Box>
           </Box>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setEditDialogOpen(false)}>Cancel</Button>
           <Button
-            ref={submitButtonRef}
             onClick={handleEditPSP}
             variant="contained"
             disabled={editLoading}

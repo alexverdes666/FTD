@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { useNavigate } from "react-router-dom";
 import {
   Box,
   Paper,
@@ -16,17 +15,12 @@ import {
   FormControlLabel,
   Tooltip,
   CircularProgress,
-  Link,
-  InputAdornment,
-  Autocomplete,
 } from "@mui/material";
 import {
   Add as AddIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
-  Visibility as ViewIcon,
   Search as SearchIcon,
-  Language as WebIcon,
   CreditCard as CreditCardIcon,
 } from "@mui/icons-material";
 import { DataGrid } from "@mui/x-data-grid";
@@ -39,36 +33,34 @@ import { selectUser } from "../../store/slices/authSlice";
 import toast from "react-hot-toast";
 import CommentButton from "../CommentButton";
 
-const pspSchema = yup.object({
-  website: yup
+const cardIssuerSchema = yup.object({
+  name: yup
     .string()
-    .required("Website URL is required")
-    .max(200, "Website must be less than 200 characters"),
+    .required("Card Issuer name is required")
+    .max(100, "Name must be less than 100 characters"),
   description: yup
     .string()
     .max(500, "Description must be less than 500 characters"),
-  cardIssuer: yup
+  logo: yup
     .string()
-    .nullable(),
+    .max(500, "Logo URL must be less than 500 characters"),
 });
 
-const PSPsTab = () => {
-  const navigate = useNavigate();
+const CardIssuersTab = () => {
   const user = useSelector(selectUser);
   const isAdmin = user?.role === "admin";
+  const canCreate = isAdmin || user?.role === "affiliate_manager";
 
-  const [psps, setPsps] = useState([]);
+  const [cardIssuers, setCardIssuers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [pagination, setPagination] = useState({ page: 0, pageSize: 25 });
   const [totalRows, setTotalRows] = useState(0);
   const [searchTerm, setSearchTerm] = useState("");
   const [showActiveOnly, setShowActiveOnly] = useState(true);
   const [openDialog, setOpenDialog] = useState(false);
-  const [editingPSP, setEditingPSP] = useState(null);
-  const [cardIssuers, setCardIssuers] = useState([]);
-  const [selectedCardIssuer, setSelectedCardIssuer] = useState(null);
+  const [editingIssuer, setEditingIssuer] = useState(null);
 
-  const websiteRef = useRef(null);
+  const nameRef = useRef(null);
 
   const {
     control,
@@ -76,15 +68,15 @@ const PSPsTab = () => {
     reset,
     formState: { errors, isSubmitting },
   } = useForm({
-    resolver: yupResolver(pspSchema),
+    resolver: yupResolver(cardIssuerSchema),
     defaultValues: {
-      website: "",
+      name: "",
       description: "",
-      cardIssuer: null,
+      logo: "",
     },
   });
 
-  const fetchPSPs = useCallback(async () => {
+  const fetchCardIssuers = useCallback(async () => {
     try {
       setLoading(true);
       const params = new URLSearchParams({
@@ -94,93 +86,80 @@ const PSPsTab = () => {
         ...(showActiveOnly && { isActive: "true" }),
       });
 
-      const response = await api.get(`/psps?${params}`);
-      const pspList = response.data.data.map((p) => ({ ...p, id: p._id }));
-      setPsps(pspList);
+      const response = await api.get(`/card-issuers?${params}`);
+      const list = response.data.data.map((item) => ({ ...item, id: item._id }));
+      setCardIssuers(list);
       setTotalRows(response.data.pagination.total);
     } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to fetch PSPs");
+      toast.error(error.response?.data?.message || "Failed to fetch Card Issuers");
     } finally {
       setLoading(false);
     }
   }, [pagination, searchTerm, showActiveOnly]);
 
   useEffect(() => {
-    fetchPSPs();
-  }, [fetchPSPs]);
+    fetchCardIssuers();
+  }, [fetchCardIssuers]);
 
-  const handleOpenDialog = async (psp = null) => {
-    setEditingPSP(psp);
-
-    // Fetch card issuers
-    try {
-      const response = await api.get("/card-issuers", { params: { isActive: true, limit: 100 } });
-      setCardIssuers(response.data.data || []);
-    } catch (error) {
-      console.error("Error fetching card issuers:", error);
-      setCardIssuers([]);
-    }
-
-    if (psp) {
+  const handleOpenDialog = (issuer = null) => {
+    setEditingIssuer(issuer);
+    if (issuer) {
       reset({
-        website: psp.website || "",
-        description: psp.description || "",
-        cardIssuer: psp.cardIssuer?._id || null,
+        name: issuer.name || "",
+        description: issuer.description || "",
+        logo: issuer.logo || "",
       });
-      setSelectedCardIssuer(psp.cardIssuer || null);
     } else {
-      reset({ website: "", description: "", cardIssuer: null });
-      setSelectedCardIssuer(null);
+      reset({ name: "", description: "", logo: "" });
     }
     setOpenDialog(true);
     setTimeout(() => {
-      websiteRef.current?.focus();
+      nameRef.current?.focus();
     }, 100);
   };
 
   const handleCloseDialog = () => {
     setOpenDialog(false);
-    setEditingPSP(null);
-    setSelectedCardIssuer(null);
+    setEditingIssuer(null);
     reset();
   };
 
   const onSubmit = async (data) => {
     try {
-      if (editingPSP) {
-        await api.put(`/psps/${editingPSP._id}`, data);
-        toast.success("PSP updated successfully");
+      if (editingIssuer) {
+        await api.put(`/card-issuers/${editingIssuer._id}`, data);
+        toast.success("Card Issuer updated successfully");
       } else {
-        await api.post("/psps", data);
-        toast.success("PSP created successfully");
+        await api.post("/card-issuers", data);
+        toast.success("Card Issuer created successfully");
       }
       handleCloseDialog();
-      fetchPSPs();
+      fetchCardIssuers();
     } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to save PSP");
+      toast.error(error.response?.data?.message || "Failed to save Card Issuer");
     }
   };
 
-  const handleDelete = async (pspId) => {
-    const psp = psps.find((p) => p._id === pspId);
-    if (!window.confirm(`Delete "${psp?.name}"?`)) return;
+  const handleDelete = async (id) => {
+    const issuer = cardIssuers.find((i) => i._id === id);
+    if (!window.confirm(`Delete "${issuer?.name}"?`)) return;
 
     try {
-      await api.delete(`/psps/${pspId}`);
-      toast.success("PSP deleted successfully");
-      fetchPSPs();
+      await api.delete(`/card-issuers/${id}`);
+      toast.success("Card Issuer deleted successfully");
+      fetchCardIssuers();
     } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to delete PSP");
+      toast.error(error.response?.data?.message || "Failed to delete Card Issuer");
     }
   };
 
-  const handleToggleActive = async (psp) => {
+  const handleToggleActive = async (issuer) => {
     try {
-      await api.put(`/psps/${psp._id}`, {
-        isActive: !psp.isActive,
+      await api.put(`/card-issuers/${issuer._id}`, {
+        isActive: !issuer.isActive,
       });
-      toast.success(`PSP ${!psp.isActive ? "activated" : "deactivated"}`);
-      fetchPSPs();
+      toast.success(`Card Issuer ${!issuer.isActive ? "activated" : "deactivated"}`);
+      fetchCardIssuers();
     } catch (error) {
       toast.error(error.response?.data?.message || "Failed to update status");
     }
@@ -193,9 +172,33 @@ const PSPsTab = () => {
       flex: 1.5,
       minWidth: 150,
       renderCell: (params) => (
-        <Typography variant="body2" fontWeight="bold">
-          {params.value}
-        </Typography>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+          {params.row.logo ? (
+            <Box
+              component="img"
+              src={params.row.logo}
+              alt={params.value}
+              sx={{
+                width: 24,
+                height: 24,
+                objectFit: "contain",
+                borderRadius: 0.5,
+              }}
+              onError={(e) => {
+                e.target.style.display = "none";
+                e.target.nextSibling.style.display = "inline-flex";
+              }}
+            />
+          ) : null}
+          <CreditCardIcon
+            fontSize="small"
+            color="primary"
+            sx={{ display: params.row.logo ? "none" : "inline-flex" }}
+          />
+          <Typography variant="body2" fontWeight="bold">
+            {params.value}
+          </Typography>
+        </Box>
       ),
     },
     {
@@ -207,38 +210,6 @@ const PSPsTab = () => {
         <Typography variant="body2" color="text.secondary" noWrap>
           {params.value || "No description"}
         </Typography>
-      ),
-    },
-    {
-      field: "website",
-      headerName: "Website",
-      flex: 1,
-      minWidth: 120,
-      renderCell: (params) =>
-        params.value ? (
-          <Link
-            href={params.value.startsWith("http") ? params.value : `https://${params.value}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            sx={{ display: "flex", alignItems: "center", gap: 0.5 }}
-          >
-            <WebIcon fontSize="small" />
-            Visit
-          </Link>
-        ) : (
-          <Typography variant="body2" color="text.secondary">-</Typography>
-        ),
-    },
-    {
-      field: "cardIssuer",
-      headerName: "Card Issuer",
-      width: 130,
-      renderCell: (params) => (
-        params.value ? (
-          <Chip label={params.value.name} size="small" variant="outlined" color="primary" />
-        ) : (
-          <Typography variant="body2" color="text.secondary">-</Typography>
-        )
       ),
     },
     {
@@ -266,20 +237,12 @@ const PSPsTab = () => {
     {
       field: "actions",
       headerName: "Actions",
-      width: 200,
+      width: 180,
       align: "right",
       headerAlign: "right",
       sortable: false,
       renderCell: (params) => (
         <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-          <Tooltip title="View Profile">
-            <IconButton
-              size="small"
-              onClick={() => navigate(`/psp/${params.row._id}`)}
-            >
-              <ViewIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
           {isAdmin && (
             <>
               <Tooltip title="Edit">
@@ -311,7 +274,7 @@ const PSPsTab = () => {
             </>
           )}
           <CommentButton
-            targetType="psp"
+            targetType="cardIssuer"
             targetId={params.row._id}
             targetName={params.row.name}
           />
@@ -326,7 +289,7 @@ const PSPsTab = () => {
       <Paper sx={{ p: 2, mb: 2 }}>
         <Box display="flex" gap={2} flexWrap="wrap" alignItems="center">
           <TextField
-            label="Search PSPs..."
+            label="Search Card Issuers..."
             variant="outlined"
             size="small"
             value={searchTerm}
@@ -343,14 +306,14 @@ const PSPsTab = () => {
             }
             label="Active only"
           />
-          {isAdmin && (
+          {canCreate && (
             <Box sx={{ ml: "auto" }}>
               <Button
                 variant="contained"
                 startIcon={<AddIcon />}
                 onClick={() => handleOpenDialog()}
               >
-                Add PSP
+                Add Card Issuer
               </Button>
             </Box>
           )}
@@ -360,7 +323,7 @@ const PSPsTab = () => {
       {/* DataGrid */}
       <Paper sx={{ width: "100%" }}>
         <DataGrid
-          rows={psps}
+          rows={cardIssuers}
           columns={columns}
           loading={loading}
           pagination
@@ -382,30 +345,23 @@ const PSPsTab = () => {
       <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
         <form onSubmit={handleSubmit(onSubmit)}>
           <DialogTitle>
-            {editingPSP ? "Edit PSP" : "Add PSP"}
+            {editingIssuer ? "Edit Card Issuer" : "Add Card Issuer"}
           </DialogTitle>
           <DialogContent>
             <Box sx={{ display: "flex", flexDirection: "column", gap: 2, pt: 1 }}>
               <Controller
-                name="website"
+                name="name"
                 control={control}
                 render={({ field }) => (
                   <TextField
                     {...field}
-                    inputRef={websiteRef}
-                    label="Website URL"
-                    placeholder="e.g., stripe.com"
+                    inputRef={nameRef}
+                    label="Name"
+                    placeholder="e.g., Visa, Mastercard, Zen"
                     fullWidth
                     required
-                    error={!!errors.website}
-                    helperText={errors.website?.message || "The PSP name will be extracted from this URL"}
-                    InputProps={{
-                      startAdornment: (
-                        <InputAdornment position="start">
-                          <WebIcon color="action" />
-                        </InputAdornment>
-                      ),
-                    }}
+                    error={!!errors.name}
+                    helperText={errors.name?.message}
                   />
                 )}
               />
@@ -425,33 +381,15 @@ const PSPsTab = () => {
                 )}
               />
               <Controller
-                name="cardIssuer"
+                name="logo"
                 control={control}
-                render={({ field: { onChange, value, ...field } }) => (
-                  <Autocomplete
+                render={({ field }) => (
+                  <TextField
                     {...field}
-                    options={cardIssuers}
-                    getOptionLabel={(option) => option?.name || ""}
-                    value={selectedCardIssuer}
-                    onChange={(_, newValue) => {
-                      setSelectedCardIssuer(newValue);
-                      onChange(newValue?._id || null);
-                    }}
-                    renderOption={(props, option) => (
-                      <li {...props}>
-                        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                          <CreditCardIcon fontSize="small" color="primary" />
-                          <span>{option.name}</span>
-                        </Box>
-                      </li>
-                    )}
-                    renderInput={(params) => (
-                      <TextField
-                        {...params}
-                        label="Card Issuer (Optional)"
-                        placeholder="Select Card Issuer..."
-                      />
-                    )}
+                    label="Logo URL (optional)"
+                    fullWidth
+                    error={!!errors.logo}
+                    helperText={errors.logo?.message}
                   />
                 )}
               />
@@ -459,12 +397,8 @@ const PSPsTab = () => {
           </DialogContent>
           <DialogActions>
             <Button onClick={handleCloseDialog}>Cancel</Button>
-            <Button
-              type="submit"
-              variant="contained"
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? <CircularProgress size={20} /> : editingPSP ? "Update" : "Create"}
+            <Button type="submit" variant="contained" disabled={isSubmitting}>
+              {isSubmitting ? <CircularProgress size={20} /> : editingIssuer ? "Update" : "Create"}
             </Button>
           </DialogActions>
         </form>
@@ -473,4 +407,4 @@ const PSPsTab = () => {
   );
 };
 
-export default PSPsTab;
+export default CardIssuersTab;

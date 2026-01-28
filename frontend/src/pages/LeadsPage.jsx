@@ -86,6 +86,7 @@ import {
   ContentCopy as CopyIcon,
   PersonRemove as PersonRemoveIcon,
   History as HistoryIcon,
+  Gavel as GavelIcon,
 } from "@mui/icons-material";
 import AddLeadForm from "../components/AddLeadForm";
 import DocumentPreview from "../components/DocumentPreview";
@@ -94,6 +95,8 @@ import LeadAuditHistoryModal from "../components/LeadAuditHistoryModal";
 import LeadGlobalAuditDialog from "../components/LeadGlobalAuditDialog";
 import LeadCommentsDialog from "../components/LeadCommentsDialog";
 import CallBonusesSection from "../components/CallBonusesSection";
+import FineDetailDialog from "../components/FineDetailDialog";
+import { getAgentFines } from "../services/agentFines";
 
 import api from "../services/api";
 import { selectUser } from "../store/slices/authSlice";
@@ -1199,6 +1202,13 @@ const LeadsPage = () => {
   // Call Bonuses section expansion state (for agents)
   const [callBonusesExpanded, setCallBonusesExpanded] = useState(false);
 
+  // Fines state for agent view
+  const [leadFines, setLeadFines] = useState(new Map()); // Map<leadId, fine[]>
+  const [fineDetailDialog, setFineDetailDialog] = useState({
+    open: false,
+    fine: null,
+  });
+
   // Local search input state for instant UI updates (initialized from URL params)
   const [searchInput, setSearchInput] = useState(
     () => searchParams.get("search") || ""
@@ -1874,6 +1884,32 @@ const LeadsPage = () => {
       fetchOrders();
     }
   }, [isAdminOrManager, fetchAgents, fetchOrders]);
+
+  // Fetch fines for agent view - map by lead ID
+  useEffect(() => {
+    const fetchAgentFinesData = async () => {
+      if (!isAgent || !user?.id) return;
+      try {
+        const fines = await getAgentFines(user.id, false);
+        // Group fines by lead ID
+        const finesByLead = new Map();
+        fines.forEach((fine) => {
+          if (fine.lead?._id) {
+            const leadId = fine.lead._id.toString();
+            if (!finesByLead.has(leadId)) {
+              finesByLead.set(leadId, []);
+            }
+            finesByLead.get(leadId).push(fine);
+          }
+        });
+        setLeadFines(finesByLead);
+      } catch (err) {
+        console.error("Error fetching agent fines:", err);
+      }
+    };
+    fetchAgentFinesData();
+  }, [isAgent, user?.id]);
+
   useEffect(() => {
     if (success) {
       const timer = setTimeout(() => setSuccess(null), 4000);
@@ -1886,6 +1922,41 @@ const LeadsPage = () => {
     },
     [fetchLeads]
   );
+
+  // Fine dialog handlers
+  const handleOpenFineDialog = useCallback((fine) => {
+    setFineDetailDialog({
+      open: true,
+      fine: fine,
+    });
+  }, []);
+
+  const handleCloseFineDialog = useCallback(() => {
+    setFineDetailDialog({
+      open: false,
+      fine: null,
+    });
+  }, []);
+
+  const handleFineUpdated = useCallback(
+    (updatedFine) => {
+      // Update the fines map with the updated fine
+      setLeadFines((prev) => {
+        const newMap = new Map(prev);
+        if (updatedFine.lead?._id) {
+          const leadId = updatedFine.lead._id.toString();
+          const fines = newMap.get(leadId) || [];
+          const updatedFines = fines.map((f) =>
+            f._id === updatedFine._id ? updatedFine : f
+          );
+          newMap.set(leadId, updatedFines);
+        }
+        return newMap;
+      });
+    },
+    []
+  );
+
   const handleChangePage = useCallback((_, newPage) => {
     setPage(newPage);
   }, []);
@@ -2634,6 +2705,8 @@ const LeadsPage = () => {
                       updateVerification={updateVerification}
                       getAvailableCallOptions={getAvailableCallOptions}
                       pendingRequests={pendingRequests}
+                      leadFines={leadFines}
+                      onOpenFineDialog={handleOpenFineDialog}
                     />
                   ))
                 ) : (
@@ -2730,7 +2803,7 @@ const LeadsPage = () => {
                         {leadInfo?.newEmail || "No email"}
                       </Typography>
                     </Box>
-                    <Stack direction="row" spacing={1} flexWrap="wrap">
+                    <Stack direction="row" spacing={1} flexWrap="wrap" alignItems="center">
                       <Chip
                         label={leadInfo?.leadType?.toUpperCase() || "UNKNOWN"}
                         size="small"
@@ -2759,6 +2832,49 @@ const LeadsPage = () => {
                         size="small"
                         color="primary"
                       />
+                      {/* Fine icon for mobile view */}
+                      {(() => {
+                        const finesForLead = leadFines?.get(leadId?.toString()) || [];
+                        return finesForLead.length > 0 ? (
+                          <Tooltip
+                            title={`${finesForLead.length} Fine${finesForLead.length > 1 ? "s" : ""} - Click to view`}
+                          >
+                            <IconButton
+                              size="small"
+                              onClick={() => handleOpenFineDialog(finesForLead[0])}
+                              sx={{
+                                color: "warning.main",
+                                "&:hover": {
+                                  backgroundColor: "rgba(237, 108, 2, 0.1)",
+                                },
+                              }}
+                            >
+                              <GavelIcon fontSize="small" />
+                              {finesForLead.length > 1 && (
+                                <Typography
+                                  component="span"
+                                  sx={{
+                                    position: "absolute",
+                                    top: -2,
+                                    right: -2,
+                                    fontSize: "0.6rem",
+                                    bgcolor: "warning.main",
+                                    color: "white",
+                                    borderRadius: "50%",
+                                    width: 14,
+                                    height: 14,
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                  }}
+                                >
+                                  {finesForLead.length}
+                                </Typography>
+                              )}
+                            </IconButton>
+                          </Tooltip>
+                        ) : null;
+                      })()}
                     </Stack>
                     {orders.length > 0 && (
                       <Box>
@@ -3496,6 +3612,14 @@ const LeadsPage = () => {
         open={globalAuditDialogOpen}
         onClose={() => setGlobalAuditDialogOpen(false)}
       />
+
+      {/* Fine Detail Dialog - For agents to view their fines */}
+      <FineDetailDialog
+        open={fineDetailDialog.open}
+        onClose={handleCloseFineDialog}
+        fine={fineDetailDialog.fine}
+        onFineUpdated={handleFineUpdated}
+      />
     </Box>
   );
 };
@@ -3513,8 +3637,13 @@ const GroupedLeadRow = React.memo(
     updateVerification,
     getAvailableCallOptions,
     pendingRequests,
+    leadFines,
+    onOpenFineDialog,
   }) => {
     const { leadId, leadInfo = {}, orders = [] } = groupedLead || {};
+
+    // Get fines for this lead
+    const finesForLead = leadFines?.get(leadId?.toString()) || [];
 
     // Safety check: if no leadId, don't render
     if (!leadId) return null;
@@ -3627,7 +3756,38 @@ const GroupedLeadRow = React.memo(
             </Typography>
           </TableCell>
           <TableCell>
-            {/* Comments now handled per order in expanded view */}
+            {/* Fine icon - shown when lead has fines */}
+            {finesForLead.length > 0 && (
+              <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                <Tooltip
+                  title={`${finesForLead.length} Fine${finesForLead.length > 1 ? "s" : ""} - Click to view`}
+                >
+                  <IconButton
+                    size="small"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onOpenFineDialog(finesForLead[0]);
+                    }}
+                    sx={{
+                      color: "warning.main",
+                      "&:hover": {
+                        backgroundColor: "rgba(237, 108, 2, 0.1)",
+                      },
+                    }}
+                  >
+                    <GavelIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+                {finesForLead.length > 1 && (
+                  <Chip
+                    label={finesForLead.length}
+                    size="small"
+                    color="warning"
+                    sx={{ height: 18, "& .MuiChip-label": { px: 0.5, fontSize: "0.65rem" } }}
+                  />
+                )}
+              </Box>
+            )}
           </TableCell>
         </TableRow>
         <TableRow

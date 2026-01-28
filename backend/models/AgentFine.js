@@ -111,6 +111,11 @@ const agentFineSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Lead",
     },
+    // Reference to related order (when fine is applied from an order context)
+    orderId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Order",
+    },
     isActive: {
       type: Boolean,
       default: true,
@@ -168,7 +173,8 @@ agentFineSchema.statics.getAgentFines = function (
     .populate("images")
     .populate("agentResponse.images")
     .populate("adminDecision.decidedBy", "fullName email")
-        .populate("lead", "firstName lastName email phone")
+    .populate("lead", "firstName lastName email phone")
+    .populate("orderId", "_id createdAt")
     .sort({ imposedDate: -1 });
 };
 
@@ -181,7 +187,8 @@ agentFineSchema.statics.getAllActiveFines = function () {
     .populate("images")
     .populate("agentResponse.images")
     .populate("adminDecision.decidedBy", "fullName email")
-        .populate("lead", "firstName lastName email phone")
+    .populate("lead", "firstName lastName email phone")
+    .populate("orderId", "_id createdAt")
     .sort({ imposedDate: -1 });
 };
 
@@ -260,7 +267,8 @@ agentFineSchema.statics.getMonthlyFines = function (agentId, year, month) {
     .populate("resolvedBy", "fullName email")
     .populate("images")
     .populate("agentResponse.images")
-        .populate("lead", "firstName lastName email phone")
+    .populate("lead", "firstName lastName email phone")
+    .populate("orderId", "_id createdAt")
     .sort({ imposedDate: -1 });
 };
 
@@ -295,7 +303,8 @@ agentFineSchema.statics.getPendingApprovalFines = function (agentId = null) {
     .populate("imposedBy", "fullName email")
     .populate("images")
     .populate("agentResponse.images")
-        .populate("lead", "firstName lastName email phone")
+    .populate("lead", "firstName lastName email phone")
+    .populate("orderId", "_id createdAt")
     .sort({ imposedDate: -1 });
 };
 
@@ -309,7 +318,24 @@ agentFineSchema.statics.getDisputedFines = function () {
     .populate("imposedBy", "fullName email")
     .populate("images")
     .populate("agentResponse.images")
-        .populate("lead", "firstName lastName email phone")
+    .populate("lead", "firstName lastName email phone")
+    .populate("orderId", "_id createdAt")
+    .sort({ imposedDate: -1 });
+};
+
+// Static method to get fines by lead ID
+agentFineSchema.statics.getFinesByLeadId = function (leadId) {
+  return this.find({
+    lead: leadId,
+    isActive: true,
+  })
+    .populate("agent", "fullName email")
+    .populate("imposedBy", "fullName email")
+    .populate("images")
+    .populate("agentResponse.images")
+    .populate("adminDecision.decidedBy", "fullName email")
+    .populate("lead", "firstName lastName email phone")
+    .populate("orderId", "_id createdAt")
     .sort({ imposedDate: -1 });
 };
 

@@ -739,13 +739,20 @@ exports.getAffiliateManagerSummary = async (req, res, next) => {
   try {
     const { month, year } = req.query;
 
-    // Parse month and year, default to current month/year
-    const targetMonth = month ? parseInt(month) : new Date().getMonth() + 1;
-    const targetYear = year ? parseInt(year) : new Date().getFullYear();
+    // Check if we're fetching all-time data (no month/year provided)
+    const isAllTime = !month && !year;
 
-    // Calculate date range for the selected month
-    const startDate = new Date(targetYear, targetMonth - 1, 1);
-    const endDate = new Date(targetYear, targetMonth, 0, 23, 59, 59, 999);
+    // Parse month and year if provided
+    const targetMonth = month ? parseInt(month) : null;
+    const targetYear = year ? parseInt(year) : null;
+
+    // Calculate date range for the selected month (only if not all-time)
+    let startDate = null;
+    let endDate = null;
+    if (!isAllTime && targetMonth && targetYear) {
+      startDate = new Date(targetYear, targetMonth - 1, 1);
+      endDate = new Date(targetYear, targetMonth, 0, 23, 59, 59, 999);
+    }
 
     // Get all active affiliate managers
     const affiliateManagers = await User.find({
@@ -772,24 +779,27 @@ exports.getAffiliateManagerSummary = async (req, res, next) => {
     const summaryData = [];
 
     for (const manager of affiliateManagers) {
-      // Get all orders created by this affiliate manager within the date range
-      const orders = await Order.find({
-        requester: manager._id,
-        createdAt: { $gte: startDate, $lte: endDate },
-      }).select("leads leadsMetadata");
+      // Get all orders created by this affiliate manager (with date filter if not all-time)
+      const orderQuery = { requester: manager._id };
+      if (!isAllTime && startDate && endDate) {
+        orderQuery.createdAt = { $gte: startDate, $lte: endDate };
+      }
+      const orders = await Order.find(orderQuery).select("leads leadsMetadata");
 
-      // Count FTDs and Fillers from orders
+      // Count FTDs, Fillers, and Shaved FTDs from orders
+      // Shaved status is tracked per-order in leadsMetadata, not on the Lead model
       let totalFTDs = 0;
       let totalFillers = 0;
-      const leadIdsInOrders = new Set();
+      let shavedFTDs = 0;
 
       for (const order of orders) {
         if (order.leadsMetadata && order.leadsMetadata.length > 0) {
           for (const metadata of order.leadsMetadata) {
             if (metadata.orderedAs === "ftd") {
               totalFTDs++;
-              if (metadata.leadId) {
-                leadIdsInOrders.add(metadata.leadId.toString());
+              // Check if this FTD is marked as shaved in this order
+              if (metadata.shaved === true) {
+                shavedFTDs++;
               }
             } else if (metadata.orderedAs === "filler") {
               totalFillers++;
@@ -798,25 +808,14 @@ exports.getAffiliateManagerSummary = async (req, res, next) => {
         }
       }
 
-      // Count shaved FTDs - leads that are in orders by this manager and marked as shaved
-      let shavedFTDs = 0;
-      if (leadIdsInOrders.size > 0) {
-        const leadIdsArray = Array.from(leadIdsInOrders);
-        shavedFTDs = await Lead.countDocuments({
-          _id: { $in: leadIdsArray },
-          shaved: true,
-        });
-      }
-
       // Get total money in from the network assigned to this affiliate manager
       let totalMoneyIn = 0;
       if (BlockchainScraperService) {
         try {
           const service = new BlockchainScraperService();
-          const cryptoValues = await service.getAffiliateManagerTotalValue(manager._id, {
-            month: targetMonth,
-            year: targetYear,
-          });
+          // Pass month/year only if not fetching all-time data
+          const cryptoOptions = isAllTime ? {} : { month: targetMonth, year: targetYear };
+          const cryptoValues = await service.getAffiliateManagerTotalValue(manager._id, cryptoOptions);
           totalMoneyIn = cryptoValues.totalUsdValue || 0;
         } catch (error) {
           console.warn(`Failed to get crypto values for manager ${manager.fullName}:`, error.message);
@@ -849,6 +848,7 @@ exports.getAffiliateManagerSummary = async (req, res, next) => {
       success: true,
       data: summaryData,
       period: {
+        isAllTime,
         month: targetMonth,
         year: targetYear,
         startDate,

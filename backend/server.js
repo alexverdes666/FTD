@@ -22,6 +22,7 @@ const clientNetworkRoutes = require("./routes/clientNetworks");
 const ourNetworkRoutes = require("./routes/ourNetworks");
 const clientBrokerRoutes = require("./routes/clientBrokers");
 const pspRoutes = require("./routes/psps");
+const cardIssuerRoutes = require("./routes/cardIssuers");
 const campaignRoutes = require("./routes/campaigns");
 const testRoutes = require("./routes/test");
 
@@ -563,6 +564,7 @@ app.use("/api/client-networks", clientNetworkRoutes);
 app.use("/api/our-networks", ourNetworkRoutes);
 app.use("/api/client-brokers", clientBrokerRoutes);
 app.use("/api/psps", pspRoutes);
+app.use("/api/card-issuers", cardIssuerRoutes);
 app.use("/api/campaigns", campaignRoutes);
 app.use("/api/test", testRoutes);
 

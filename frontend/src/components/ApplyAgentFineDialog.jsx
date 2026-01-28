@@ -32,6 +32,7 @@ const ApplyAgentFineDialog = ({
   onSuccess,
   agent,
   lead,
+  orderId,
 }) => {
   const [formData, setFormData] = useState({
     amount: '',
@@ -81,6 +82,7 @@ const ApplyAgentFineDialog = ({
         fineYear: fineDate.year(),
         images: fineImages.map(img => img._id),
         leadId: lead?._id,
+        orderId: orderId,
       });
 
       if (onSuccess) {

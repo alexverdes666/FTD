@@ -302,22 +302,38 @@ const FineDetailDialog = ({ open, onClose, fine, onFineUpdated }) => {
               </Typography>
             </Grid>
 
-            {/* Lead Reference */}
-            {fine.lead && (
+            {/* Lead and Order Reference */}
+            {(fine.lead || fine.orderId) && (
               <>
                 <Grid item xs={12}>
                   <Divider sx={{ my: 1 }} />
                   <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
-                    Related Lead
+                    Reference
                   </Typography>
                 </Grid>
-                <Grid item xs={12}>
-                  <Typography variant="body1" gutterBottom>
-                    {fine.lead.firstName && fine.lead.lastName
-                      ? `${fine.lead.firstName} ${fine.lead.lastName}`
-                      : fine.lead.email || fine.lead.phone || 'N/A'}
-                  </Typography>
-                </Grid>
+                {fine.lead && (
+                  <Grid item xs={12} md={6}>
+                    <Typography variant="subtitle2" color="text.secondary">Related Lead</Typography>
+                    <Typography variant="body1" gutterBottom>
+                      {fine.lead.firstName && fine.lead.lastName
+                        ? `${fine.lead.firstName} ${fine.lead.lastName}`
+                        : fine.lead.email || fine.lead.phone || 'N/A'}
+                    </Typography>
+                  </Grid>
+                )}
+                {fine.orderId && (
+                  <Grid item xs={12} md={6}>
+                    <Typography variant="subtitle2" color="text.secondary">From Order</Typography>
+                    <Typography variant="body1" gutterBottom>
+                      ID: {fine.orderId._id}
+                      {fine.orderId.createdAt && (
+                        <Typography variant="caption" color="text.secondary" display="block">
+                          Created: {formatDate(fine.orderId.createdAt)}
+                        </Typography>
+                      )}
+                    </Typography>
+                  </Grid>
+                )}
               </>
             )}
 

@@ -13,12 +13,14 @@ import {
   Business as BrokerIcon,
   Payment as PSPIcon,
   Link as LinkIcon,
+  CreditCard as CardIssuerIcon,
 } from "@mui/icons-material";
 import { useSelector } from "react-redux";
 import { selectUser } from "../store/slices/authSlice";
 import ClientNetworksTab from "../components/accountManagement/ClientNetworksTab";
 import ClientBrokersTab from "../components/accountManagement/ClientBrokersTab";
 import PSPsTab from "../components/accountManagement/PSPsTab";
+import CardIssuersTab from "../components/accountManagement/CardIssuersTab";
 import LinkedAccountsTab from "../components/accountManagement/LinkedAccountsTab";
 
 function TabPanel({ children, value, index }) {
@@ -34,7 +36,7 @@ function TabPanel({ children, value, index }) {
   );
 }
 
-const TAB_NAMES = ["linked", "networks", "brokers", "psps"];
+const TAB_NAMES = ["linked", "networks", "brokers", "psps", "card-issuers"];
 
 const AccountManagementPage = () => {
   const user = useSelector(selectUser);
@@ -113,6 +115,11 @@ const AccountManagementPage = () => {
             iconPosition="start"
             label="PSPs"
           />
+          <Tab
+            icon={<CardIssuerIcon />}
+            iconPosition="start"
+            label="Card Issuers"
+          />
         </Tabs>
       </Paper>
 
@@ -127,6 +134,9 @@ const AccountManagementPage = () => {
       </TabPanel>
       <TabPanel value={tabValue} index={3}>
         <PSPsTab />
+      </TabPanel>
+      <TabPanel value={tabValue} index={4}>
+        <CardIssuersTab />
       </TabPanel>
     </Box>
   );

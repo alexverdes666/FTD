@@ -531,13 +531,19 @@ const OrdersPage = () => {
     open: false,
     agent: null,
     lead: null,
+    orderId: null,
   });
 
-  // PSP Selection Dialog State for Confirm Deposit
+  // PSP Selection Dialog State for Confirm Deposit (2-step: Card Issuer -> PSP)
   const [pspDepositDialog, setPspDepositDialog] = useState({
     open: false,
     lead: null,
     orderId: null,
+    step: 1, // 1 = select card issuer, 2 = select PSP
+    cardIssuers: [],
+    selectedCardIssuer: null,
+    newCardIssuerName: "",
+    creatingIssuer: false,
     psps: [],
     loading: false,
     selectedPsp: null,
@@ -3901,7 +3907,7 @@ const OrdersPage = () => {
   }, []);
 
   // Apply Fine Dialog Handlers
-  const handleOpenApplyFineDialog = useCallback((lead) => {
+  const handleOpenApplyFineDialog = useCallback((lead, orderId) => {
     if (!lead.assignedAgent) {
       setNotification({
         message: "Cannot apply fine - lead has no assigned agent",
@@ -3913,6 +3919,7 @@ const OrdersPage = () => {
       open: true,
       agent: lead.assignedAgent,
       lead: lead,
+      orderId: orderId,
     });
   }, []);
 
@@ -3921,6 +3928,7 @@ const OrdersPage = () => {
       open: false,
       agent: null,
       lead: null,
+      orderId: null,
     });
   }, []);
 
@@ -3931,42 +3939,52 @@ const OrdersPage = () => {
     });
   }, []);
 
-  // Open PSP selection dialog for confirm deposit
+  // Open PSP selection dialog for confirm deposit (Step 1: Card Issuer)
   const handleConfirmDeposit = useCallback(
     async (lead, orderId) => {
       // Use passed orderId or fall back to hoveredOrderId
       const targetOrderId = orderId || hoveredOrderId;
 
-      // Fetch active PSPs first
+      // Fetch active Card Issuers first
       try {
         setPspDepositDialog({
           open: true,
           lead: lead,
           orderId: targetOrderId,
+          step: 1,
+          cardIssuers: [],
+          selectedCardIssuer: null,
+          newCardIssuerName: "",
+          creatingIssuer: false,
           psps: [],
           loading: true,
           selectedPsp: null,
         });
 
-        const response = await api.get("/psps", {
+        const response = await api.get("/card-issuers", {
           params: { limit: 100, isActive: true },
         });
 
         setPspDepositDialog((prev) => ({
           ...prev,
-          psps: response.data.data || [],
+          cardIssuers: response.data.data || [],
           loading: false,
         }));
       } catch (err) {
-        console.error("Error fetching PSPs:", err);
+        console.error("Error fetching Card Issuers:", err);
         setNotification({
-          message: "Failed to load PSPs",
+          message: "Failed to load Card Issuers",
           severity: "error",
         });
         setPspDepositDialog({
           open: false,
           lead: null,
           orderId: null,
+          step: 1,
+          cardIssuers: [],
+          selectedCardIssuer: null,
+          newCardIssuerName: "",
+          creatingIssuer: false,
           psps: [],
           loading: false,
           selectedPsp: null,
@@ -3976,10 +3994,83 @@ const OrdersPage = () => {
     [hoveredOrderId]
   );
 
+  // Handle Card Issuer selection (move to Step 2: PSP selection)
+  const handleCardIssuerSelect = useCallback(async () => {
+    const { selectedCardIssuer, newCardIssuerName } = pspDepositDialog;
+
+    // If creating new issuer
+    if (newCardIssuerName && !selectedCardIssuer) {
+      try {
+        setPspDepositDialog((prev) => ({ ...prev, creatingIssuer: true }));
+        const response = await api.post("/card-issuers", { name: newCardIssuerName.trim() });
+        const newIssuer = response.data.data;
+
+        // Proceed to step 2 with new issuer
+        setPspDepositDialog((prev) => ({
+          ...prev,
+          selectedCardIssuer: newIssuer,
+          step: 2,
+          loading: true,
+          creatingIssuer: false,
+        }));
+
+        // Fetch all active PSPs (not filtered by issuer since PSPs may not have issuer set)
+        const pspsResponse = await api.get("/psps", {
+          params: { isActive: true, limit: 100 },
+        });
+
+        setPspDepositDialog((prev) => ({
+          ...prev,
+          psps: pspsResponse.data.data || [],
+          loading: false,
+        }));
+      } catch (err) {
+        console.error("Error creating Card Issuer:", err);
+        setNotification({
+          message: err.response?.data?.message || "Failed to create Card Issuer",
+          severity: "error",
+        });
+        setPspDepositDialog((prev) => ({ ...prev, creatingIssuer: false }));
+      }
+      return;
+    }
+
+    // Using existing issuer
+    if (!selectedCardIssuer) {
+      setNotification({
+        message: "Please select a Card Issuer or enter a new name",
+        severity: "error",
+      });
+      return;
+    }
+
+    try {
+      setPspDepositDialog((prev) => ({ ...prev, step: 2, loading: true }));
+
+      // Fetch all active PSPs
+      const response = await api.get("/psps", {
+        params: { isActive: true, limit: 100 },
+      });
+
+      setPspDepositDialog((prev) => ({
+        ...prev,
+        psps: response.data.data || [],
+        loading: false,
+      }));
+    } catch (err) {
+      console.error("Error fetching PSPs:", err);
+      setNotification({
+        message: "Failed to load PSPs",
+        severity: "error",
+      });
+      setPspDepositDialog((prev) => ({ ...prev, loading: false }));
+    }
+  }, [pspDepositDialog, setNotification]);
+
   // Handle PSP selection and confirm deposit
   const handlePspDepositConfirm = useCallback(
     async () => {
-      const { lead, selectedPsp, orderId } = pspDepositDialog;
+      const { lead, selectedPsp, selectedCardIssuer, orderId } = pspDepositDialog;
 
       if (!selectedPsp) {
         setNotification({
@@ -4003,6 +4094,7 @@ const OrdersPage = () => {
         const response = await api.put(`/leads/${lead._id}/confirm-deposit`, {
           pspId: selectedPsp._id,
           orderId: orderId,
+          cardIssuerId: selectedCardIssuer?._id || null,
         });
 
         // Get the order metadata from response
@@ -4103,6 +4195,11 @@ const OrdersPage = () => {
       open: false,
       lead: null,
       orderId: null,
+      step: 1,
+      cardIssuers: [],
+      selectedCardIssuer: null,
+      newCardIssuerName: "",
+      creatingIssuer: false,
       psps: [],
       loading: false,
       selectedPsp: null,
@@ -7627,20 +7724,23 @@ const OrdersPage = () => {
         onSuccess={handleApplyFineSuccess}
         agent={applyFineDialog.agent}
         lead={applyFineDialog.lead}
+        orderId={applyFineDialog.orderId}
       />
 
-      {/* PSP Deposit Confirmation Dialog */}
+      {/* PSP Deposit Confirmation Dialog - 2 Step (Card Issuer -> PSP) */}
       <Dialog
         open={pspDepositDialog.open}
         onClose={handleClosePspDepositDialog}
         maxWidth="sm"
         fullWidth
-        disableEscapeKeyDown={pspDepositDialog.loading}
+        disableEscapeKeyDown={pspDepositDialog.loading || pspDepositDialog.creatingIssuer}
       >
         <DialogTitle>
           <Box display="flex" alignItems="center" gap={1}>
             <CallIcon color="success" />
-            <Typography variant="h6">Confirm Deposit</Typography>
+            <Typography variant="h6">
+              Confirm Deposit - Step {pspDepositDialog.step} of 2
+            </Typography>
           </Box>
         </DialogTitle>
         <DialogContent>
@@ -7657,179 +7757,192 @@ const OrdersPage = () => {
               </Typography>
             </Box>
           )}
-          <Autocomplete
-            options={pspDepositDialog.psps}
-            getOptionLabel={(option) => option.name}
-            value={pspDepositDialog.selectedPsp}
-            onChange={(_, newValue) =>
-              setPspDepositDialog((prev) => ({ ...prev, selectedPsp: newValue }))
-            }
-            loading={pspDepositDialog.loading && pspDepositDialog.psps.length === 0}
-            disabled={pspDepositDialog.loading && pspDepositDialog.psps.length > 0}
-            renderOption={(props, option) => (
-              <li {...props}>
-                <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                  <CreditCardIcon fontSize="small" color="primary" />
-                  <span>{option.name}</span>
-                </Box>
-              </li>
-            )}
-            renderInput={(params) => (
-              <TextField
-                {...params}
-                label="Select PSP"
-                placeholder="Search PSPs..."
-                required
-                InputProps={{
-                  ...params.InputProps,
-                  endAdornment: (
-                    <>
-                      {pspDepositDialog.loading && pspDepositDialog.psps.length === 0 && (
-                        <CircularProgress size={20} />
-                      )}
-                      {params.InputProps.endAdornment}
-                    </>
-                  ),
+
+          {/* Step 1: Select Card Issuer */}
+          {pspDepositDialog.step === 1 && (
+            <Box>
+              <Typography variant="subtitle2" gutterBottom sx={{ mb: 1 }}>
+                Select Card Issuer or Create New
+              </Typography>
+              <Autocomplete
+                options={pspDepositDialog.cardIssuers}
+                getOptionLabel={(option) => option.name}
+                value={pspDepositDialog.selectedCardIssuer}
+                onChange={(_, newValue) => {
+                  setPspDepositDialog((prev) => ({
+                    ...prev,
+                    selectedCardIssuer: newValue,
+                    newCardIssuerName: "",
+                  }));
                 }}
+                loading={pspDepositDialog.loading && pspDepositDialog.cardIssuers.length === 0}
+                disabled={pspDepositDialog.newCardIssuerName.length > 0}
+                renderOption={(props, option) => (
+                  <li {...props}>
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                      <CreditCardIcon fontSize="small" color="primary" />
+                      <span>{option.name}</span>
+                    </Box>
+                  </li>
+                )}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Select Existing Card Issuer"
+                    placeholder="Search Card Issuers..."
+                    InputProps={{
+                      ...params.InputProps,
+                      endAdornment: (
+                        <>
+                          {pspDepositDialog.loading && pspDepositDialog.cardIssuers.length === 0 && (
+                            <CircularProgress size={20} />
+                          )}
+                          {params.InputProps.endAdornment}
+                        </>
+                      ),
+                    }}
+                  />
+                )}
               />
-            )}
-          />
-          {pspDepositDialog.selectedPsp && (
-            <Box sx={{ mt: 3 }}>
-              {/* PSP Name Header */}
-              <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 1, mb: 2 }}>
-                <Typography variant="h6" fontWeight="bold">
-                  {pspDepositDialog.selectedPsp.name}
-                </Typography>
-                <Chip
-                  label="Active"
-                  color="success"
-                  size="small"
-                />
-              </Box>
-
-              {/* Card Preview */}
-              <Box
-                sx={{
-                  width: "100%",
-                  maxWidth: 340,
-                  height: 200,
-                  borderRadius: 3,
-                  background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-                  p: 2.5,
-                  color: "white",
-                  position: "relative",
-                  boxShadow: "0 10px 30px rgba(102, 126, 234, 0.4)",
-                  overflow: "hidden",
-                  mx: "auto",
-                  "&::before": {
-                    content: '""',
-                    position: "absolute",
-                    top: -50,
-                    right: -50,
-                    width: 150,
-                    height: 150,
-                    borderRadius: "50%",
-                    background: "rgba(255,255,255,0.1)",
-                  },
-                  "&::after": {
-                    content: '""',
-                    position: "absolute",
-                    bottom: -80,
-                    left: -80,
-                    width: 200,
-                    height: 200,
-                    borderRadius: "50%",
-                    background: "rgba(255,255,255,0.05)",
-                  },
+              <Typography variant="body2" sx={{ my: 2, textAlign: "center", color: "text.secondary" }}>
+                - OR -
+              </Typography>
+              <TextField
+                fullWidth
+                label="Create New Card Issuer"
+                placeholder="e.g., Visa, Mastercard, Zen"
+                value={pspDepositDialog.newCardIssuerName}
+                onChange={(e) => {
+                  setPspDepositDialog((prev) => ({
+                    ...prev,
+                    newCardIssuerName: e.target.value,
+                    selectedCardIssuer: null,
+                  }));
                 }}
-              >
-                {/* Card Chip */}
-                <Box
-                  sx={{
-                    width: 45,
-                    height: 32,
-                    borderRadius: 1,
-                    background: "linear-gradient(135deg, #ffd700 0%, #ffb700 100%)",
-                    mb: 2.5,
-                  }}
-                />
+                disabled={pspDepositDialog.selectedCardIssuer !== null}
+              />
+            </Box>
+          )}
 
-                {/* Card Number */}
-                <Typography
-                  sx={{
-                    fontSize: "1.25rem",
-                    fontFamily: "'Courier New', monospace",
-                    letterSpacing: "0.12em",
-                    mb: 2.5,
-                    textShadow: "0 2px 4px rgba(0,0,0,0.2)",
-                  }}
-                >
-                  {(() => {
-                    const num = pspDepositDialog.selectedPsp.cardNumber;
-                    if (!num) return "•••• •••• •••• ••••";
-                    const cleaned = num.replace(/\D/g, "");
-                    const groups = cleaned.match(/.{1,4}/g) || [];
-                    const formatted = groups.join(" ");
-                    if (formatted.length < 19) {
-                      return formatted + " " + "•••• •••• •••• ••••".slice(formatted.length + 1);
-                    }
-                    return formatted;
-                  })()}
+          {/* Step 2: Select PSP */}
+          {pspDepositDialog.step === 2 && (
+            <Box>
+              <Box sx={{ mb: 2, p: 1.5, bgcolor: "grey.100", borderRadius: 1 }}>
+                <Typography variant="body2" color="text.secondary">
+                  Card Issuer:
                 </Typography>
-
-                {/* Card Details Row */}
-                <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
-                  <Box>
-                    <Typography sx={{ fontSize: "0.6rem", opacity: 0.7, mb: 0.5 }}>
-                      VALID THRU
-                    </Typography>
-                    <Typography
-                      sx={{
-                        fontSize: "0.95rem",
-                        fontFamily: "'Courier New', monospace",
-                        letterSpacing: "0.1em",
-                      }}
-                    >
-                      {pspDepositDialog.selectedPsp.cardExpiry || "MM/YY"}
-                    </Typography>
-                  </Box>
-                  <Box>
-                    <Typography sx={{ fontSize: "0.6rem", opacity: 0.7, mb: 0.5 }}>
-                      CVC
-                    </Typography>
-                    <Typography
-                      sx={{
-                        fontSize: "0.95rem",
-                        fontFamily: "'Courier New', monospace",
-                        letterSpacing: "0.1em",
-                      }}
-                    >
-                      {pspDepositDialog.selectedPsp.cardCVC || "•••"}
-                    </Typography>
-                  </Box>
-                  <CreditCardIcon sx={{ fontSize: 36, opacity: 0.8 }} />
-                </Box>
+                <Typography variant="subtitle1" fontWeight="bold">
+                  {pspDepositDialog.selectedCardIssuer?.name}
+                </Typography>
               </Box>
+              <Autocomplete
+                options={pspDepositDialog.psps}
+                getOptionLabel={(option) => option.name}
+                value={pspDepositDialog.selectedPsp}
+                onChange={(_, newValue) =>
+                  setPspDepositDialog((prev) => ({ ...prev, selectedPsp: newValue }))
+                }
+                loading={pspDepositDialog.loading}
+                renderOption={(props, option) => (
+                  <li {...props}>
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                      <CreditCardIcon fontSize="small" color="primary" />
+                      <span>{option.name}</span>
+                      {option.cardIssuer?.name && (
+                        <Chip label={option.cardIssuer.name} size="small" variant="outlined" sx={{ ml: 1 }} />
+                      )}
+                    </Box>
+                  </li>
+                )}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Select PSP"
+                    placeholder="Search PSPs..."
+                    required
+                    InputProps={{
+                      ...params.InputProps,
+                      endAdornment: (
+                        <>
+                          {pspDepositDialog.loading && (
+                            <CircularProgress size={20} />
+                          )}
+                          {params.InputProps.endAdornment}
+                        </>
+                      ),
+                    }}
+                  />
+                )}
+              />
+              {pspDepositDialog.selectedPsp && (
+                <Box sx={{ mt: 2, p: 2, bgcolor: "success.50", borderRadius: 1, border: "1px solid", borderColor: "success.200" }}>
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                    <CreditCardIcon color="success" />
+                    <Typography variant="subtitle1" fontWeight="bold" color="success.main">
+                      {pspDepositDialog.selectedPsp.name}
+                    </Typography>
+                    <Chip
+                      label="Active"
+                      color="success"
+                      size="small"
+                      sx={{ ml: "auto" }}
+                    />
+                  </Box>
+                  {pspDepositDialog.selectedPsp.website && (
+                    <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                      {pspDepositDialog.selectedPsp.website}
+                    </Typography>
+                  )}
+                </Box>
+              )}
             </Box>
           )}
         </DialogContent>
         <DialogActions>
+          {pspDepositDialog.step === 2 && (
+            <Button
+              onClick={() =>
+                setPspDepositDialog((prev) => ({
+                  ...prev,
+                  step: 1,
+                  selectedPsp: null,
+                }))
+              }
+              disabled={pspDepositDialog.loading}
+            >
+              Back
+            </Button>
+          )}
           <Button
             onClick={handleClosePspDepositDialog}
-            disabled={pspDepositDialog.loading && pspDepositDialog.psps.length > 0}
+            disabled={pspDepositDialog.loading || pspDepositDialog.creatingIssuer}
           >
             Cancel
           </Button>
-          <Button
-            onClick={handlePspDepositConfirm}
-            variant="contained"
-            color="success"
-            disabled={!pspDepositDialog.selectedPsp || pspDepositDialog.loading}
-            startIcon={pspDepositDialog.loading && pspDepositDialog.psps.length > 0 ? <CircularProgress size={16} /> : <CallIcon />}
-          >
-            {pspDepositDialog.loading && pspDepositDialog.psps.length > 0 ? "Confirming..." : "Confirm Deposit"}
-          </Button>
+          {pspDepositDialog.step === 1 ? (
+            <Button
+              onClick={handleCardIssuerSelect}
+              variant="contained"
+              disabled={
+                (!pspDepositDialog.selectedCardIssuer && !pspDepositDialog.newCardIssuerName.trim()) ||
+                pspDepositDialog.loading ||
+                pspDepositDialog.creatingIssuer
+              }
+              startIcon={pspDepositDialog.creatingIssuer ? <CircularProgress size={16} /> : null}
+            >
+              {pspDepositDialog.creatingIssuer ? "Creating..." : "Next"}
+            </Button>
+          ) : (
+            <Button
+              onClick={handlePspDepositConfirm}
+              variant="contained"
+              color="success"
+              disabled={!pspDepositDialog.selectedPsp || pspDepositDialog.loading}
+              startIcon={pspDepositDialog.loading ? <CircularProgress size={16} /> : <CallIcon />}
+            >
+              {pspDepositDialog.loading ? "Confirming..." : "Confirm Deposit"}
+            </Button>
+          )}
         </DialogActions>
       </Dialog>
 
@@ -10079,22 +10192,10 @@ const OrdersPage = () => {
                                       <Typography variant="caption" sx={{ fontWeight: 600, display: "block" }}>
                                         PSP: {lead.depositPSP.name || lead.depositPSP}
                                       </Typography>
-                                      {lead.depositPSP.cardNumber && (
-                                        <Box sx={{ mt: 0.5, fontFamily: "'Courier New', monospace", fontSize: "0.75rem" }}>
-                                          <Typography variant="caption" sx={{ display: "block" }}>
-                                            Card: {lead.depositPSP.cardNumber}
-                                          </Typography>
-                                          {lead.depositPSP.cardExpiry && (
-                                            <Typography variant="caption" sx={{ display: "block" }}>
-                                              Exp: {lead.depositPSP.cardExpiry}
-                                            </Typography>
-                                          )}
-                                          {lead.depositPSP.cardCVC && (
-                                            <Typography variant="caption" sx={{ display: "block" }}>
-                                              CVC: {lead.depositPSP.cardCVC}
-                                            </Typography>
-                                          )}
-                                        </Box>
+                                      {lead.depositPSP.website && (
+                                        <Typography variant="caption" sx={{ display: "block", color: "rgba(255,255,255,0.8)" }}>
+                                          {lead.depositPSP.website}
+                                        </Typography>
                                       )}
                                     </Box>
                                   ) : "Deposit Confirmed"
@@ -10617,7 +10718,7 @@ const OrdersPage = () => {
                 {lead.assignedAgent && (user?.role === "admin" || user?.role === "affiliate_manager") && (
                   <MenuItem
                     onClick={() => {
-                      handleOpenApplyFineDialog(lead);
+                      handleOpenApplyFineDialog(lead, leadsPreviewModal.orderId);
                       handleClosePreviewActionsMenu();
                     }}
                   >

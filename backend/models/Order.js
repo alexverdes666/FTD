@@ -110,6 +110,7 @@ const orderSchema = new Schema(
       depositConfirmedBy: { type: SchemaTypes.ObjectId, ref: "User" },
       depositConfirmedAt: { type: Date },
       depositPSP: { type: SchemaTypes.ObjectId, ref: "PSP" },
+      depositCardIssuer: { type: SchemaTypes.ObjectId, ref: "CardIssuer" },
       // Shaved tracking for this order (per-order, not per-lead)
       shaved: { type: Boolean, default: false },
       shavedBy: { type: SchemaTypes.ObjectId, ref: "User" },

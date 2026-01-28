@@ -1,6 +1,7 @@
 const { validationResult } = require("express-validator");
 const PSP = require("../models/PSP");
 const ClientBroker = require("../models/ClientBroker");
+const CardIssuer = require("../models/CardIssuer");
 const PSPAuditService = require("../services/pspAuditService");
 
 /**
@@ -26,6 +27,7 @@ exports.getPSPs = async (req, res, next) => {
     const [psps, total] = await Promise.all([
       PSP.find(filter)
         .populate("createdBy", "fullName email")
+        .populate("cardIssuer", "name description logo")
         .skip(skip)
         .limit(parseInt(limit))
         .sort({ createdAt: -1 }),
@@ -52,10 +54,9 @@ exports.getPSPs = async (req, res, next) => {
  */
 exports.getPSP = async (req, res, next) => {
   try {
-    const psp = await PSP.findById(req.params.id).populate(
-      "createdBy",
-      "fullName email"
-    );
+    const psp = await PSP.findById(req.params.id)
+      .populate("createdBy", "fullName email")
+      .populate("cardIssuer", "name description logo");
 
     if (!psp) {
       return res.status(404).json({
@@ -78,10 +79,9 @@ exports.getPSP = async (req, res, next) => {
  */
 exports.getPSPProfile = async (req, res, next) => {
   try {
-    const psp = await PSP.findById(req.params.id).populate(
-      "createdBy",
-      "fullName email"
-    );
+    const psp = await PSP.findById(req.params.id)
+      .populate("createdBy", "fullName email")
+      .populate("cardIssuer", "name description logo");
 
     if (!psp) {
       return res.status(404).json({
@@ -148,7 +148,18 @@ exports.createPSP = async (req, res, next) => {
       });
     }
 
-    const { description, website, cardNumber, cardExpiry, cardCVC } = req.body;
+    const { description, website, cardIssuer } = req.body;
+
+    // Validate cardIssuer if provided
+    if (cardIssuer) {
+      const issuer = await CardIssuer.findById(cardIssuer);
+      if (!issuer) {
+        return res.status(400).json({
+          success: false,
+          message: "Card Issuer not found",
+        });
+      }
+    }
 
     // Auto-extract name from website URL
     const name = extractDomainName(website);
@@ -157,14 +168,15 @@ exports.createPSP = async (req, res, next) => {
       name,
       description,
       website,
-      cardNumber,
-      cardExpiry,
-      cardCVC,
+      cardIssuer: cardIssuer || null,
       createdBy: req.user._id,
     });
 
     await psp.save();
-    await psp.populate([{ path: "createdBy", select: "fullName email" }]);
+    await psp.populate([
+      { path: "createdBy", select: "fullName email" },
+      { path: "cardIssuer", select: "name description logo" },
+    ]);
 
     // Log the creation
     await PSPAuditService.logPSPCreated(psp, req.user, req);
@@ -199,7 +211,7 @@ exports.updatePSP = async (req, res, next) => {
       });
     }
 
-    const { name, description, website, cardNumber, cardExpiry, cardCVC, isActive } = req.body;
+    const { name, description, website, cardIssuer, isActive } = req.body;
 
     const psp = await PSP.findById(req.params.id);
     if (!psp) {
@@ -209,14 +221,23 @@ exports.updatePSP = async (req, res, next) => {
       });
     }
 
+    // Validate cardIssuer if provided
+    if (cardIssuer !== undefined && cardIssuer !== null) {
+      const issuer = await CardIssuer.findById(cardIssuer);
+      if (!issuer) {
+        return res.status(400).json({
+          success: false,
+          message: "Card Issuer not found",
+        });
+      }
+    }
+
     // Store previous data for audit logging
     const previousData = {
       name: psp.name,
       description: psp.description,
       website: psp.website,
-      cardNumber: psp.cardNumber,
-      cardExpiry: psp.cardExpiry,
-      cardCVC: psp.cardCVC,
+      cardIssuer: psp.cardIssuer,
       isActive: psp.isActive,
     };
 
@@ -228,22 +249,21 @@ exports.updatePSP = async (req, res, next) => {
       psp.website = website;
       psp.name = extractDomainName(website);
     }
-    if (cardNumber !== undefined) psp.cardNumber = cardNumber;
-    if (cardExpiry !== undefined) psp.cardExpiry = cardExpiry;
-    if (cardCVC !== undefined) psp.cardCVC = cardCVC;
+    if (cardIssuer !== undefined) psp.cardIssuer = cardIssuer;
     if (isActive !== undefined) psp.isActive = isActive;
 
     await psp.save();
-    await psp.populate([{ path: "createdBy", select: "fullName email" }]);
+    await psp.populate([
+      { path: "createdBy", select: "fullName email" },
+      { path: "cardIssuer", select: "name description logo" },
+    ]);
 
     // Prepare new data for audit logging
     const newData = {
       name: name !== undefined ? name : (website !== undefined ? psp.name : undefined),
       description: description !== undefined ? description : undefined,
       website: website !== undefined ? website : undefined,
-      cardNumber: cardNumber !== undefined ? cardNumber : undefined,
-      cardExpiry: cardExpiry !== undefined ? cardExpiry : undefined,
-      cardCVC: cardCVC !== undefined ? cardCVC : undefined,
+      cardIssuer: cardIssuer !== undefined ? cardIssuer : undefined,
       isActive: isActive !== undefined ? isActive : undefined,
     };
 

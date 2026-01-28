@@ -184,3 +184,14 @@ export const getDisputedFines = async () => {
     throw error;
   }
 };
+
+// Get fines by lead ID
+export const getFinesByLeadId = async (leadId) => {
+  try {
+    const response = await api.get(`/agent-fines/lead/${leadId}`);
+    return response.data.data;
+  } catch (error) {
+    console.error("Error fetching fines by lead ID:", error);
+    throw error;
+  }
+};

@@ -92,7 +92,7 @@ const getAgentFines = async (req, res) => {
 const createAgentFine = async (req, res) => {
   try {
     const { agentId } = req.params;
-    const { amount, reason, description, notes, fineMonth, fineYear, images, leadId } = req.body;
+    const { amount, reason, description, notes, fineMonth, fineYear, images, leadId, orderId } = req.body;
     const managerId = req.user.id;
 
     // Validate that the agent exists
@@ -179,6 +179,11 @@ const createAgentFine = async (req, res) => {
       fineData.lead = leadId;
     }
 
+    // Add order reference if provided
+    if (orderId) {
+      fineData.orderId = orderId;
+    }
+
     const fine = await AgentFine.create(fineData);
 
     // Update images with fineId reference
@@ -195,6 +200,9 @@ const createAgentFine = async (req, res) => {
     await fine.populate("images");
     if (fine.lead) {
       await fine.populate("lead", "firstName lastName email phone");
+    }
+    if (fine.orderId) {
+      await fine.populate("orderId", "_id createdAt");
     }
 
     res.status(201).json({
@@ -661,6 +669,27 @@ const getAgentMonthlyFines = async (req, res) => {
   }
 };
 
+// Get fines by lead ID
+const getFinesByLeadId = async (req, res) => {
+  try {
+    const { leadId } = req.params;
+
+    const fines = await AgentFine.getFinesByLeadId(leadId);
+
+    res.json({
+      success: true,
+      data: fines,
+    });
+  } catch (error) {
+    console.error("Error fetching fines by lead ID:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch fines by lead ID",
+      error: error.message,
+    });
+  }
+};
+
 module.exports = {
   getAllAgentFines,
   getFinesSummary,
@@ -675,4 +704,5 @@ module.exports = {
   adminDecideFine,
   getPendingApprovalFines,
   getDisputedFines,
+  getFinesByLeadId,
 };

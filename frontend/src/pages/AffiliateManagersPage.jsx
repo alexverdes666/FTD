@@ -107,7 +107,7 @@ const AffiliateManagersPage = () => {
   const [commissionData, setCommissionData] = useState({});
   const [commissionLoading, setCommissionLoading] = useState(false);
   const [commissionPeriod, setCommissionPeriod] = useState("monthly");
-  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
+  const [selectedMonth, setSelectedMonth] = useState("all"); // "all" for all time, or 1-12 for specific month
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
 
   // Summary state (for Summary tab)
@@ -150,10 +150,11 @@ const AffiliateManagersPage = () => {
   const fetchSummaryData = async () => {
     setSummaryLoading(true);
     try {
-      const response = await getAffiliateManagerSummary({
-        month: selectedMonth,
-        year: selectedYear,
-      });
+      // If "all" is selected, don't pass month/year to get all-time data
+      const params = selectedMonth === "all"
+        ? {}
+        : { month: selectedMonth, year: selectedYear };
+      const response = await getAffiliateManagerSummary(params);
       if (response.success) {
         setSummaryData(response.data);
       } else {
@@ -247,22 +248,26 @@ const AffiliateManagersPage = () => {
 
       for (const manager of affiliateManagers) {
         try {
+          // Use current month if "all" is selected (commission tab requires specific month)
+          const effectiveMonth = selectedMonth === "all" ? new Date().getMonth() + 1 : selectedMonth;
+          const effectiveYear = selectedMonth === "all" ? new Date().getFullYear() : selectedYear;
+
           // Create date for selected month/year
-          const selectedDate = new Date(selectedYear, selectedMonth - 1, 1);
+          const selectedDate = new Date(effectiveYear, effectiveMonth - 1, 1);
 
           const tableResponse = await getAffiliateManagerTable(manager._id, {
             period: commissionPeriod,
             date: selectedDate.toISOString(),
-            month: selectedMonth,
-            year: selectedYear,
+            month: effectiveMonth,
+            year: effectiveYear,
           });
 
           // Force refresh crypto values to ensure we get monthly data
           try {
             await refreshTotalMoneyFromCrypto(manager._id, {
               period: commissionPeriod,
-              month: selectedMonth,
-              year: selectedYear,
+              month: effectiveMonth,
+              year: effectiveYear,
             });
           } catch (refreshError) {
             console.warn(`Failed to refresh crypto for manager ${manager.fullName}:`, refreshError);
@@ -272,8 +277,8 @@ const AffiliateManagersPage = () => {
           const updatedTableResponse = await getAffiliateManagerTable(manager._id, {
             period: commissionPeriod,
             date: selectedDate.toISOString(),
-            month: selectedMonth,
-            year: selectedYear,
+            month: effectiveMonth,
+            year: effectiveYear,
           });
 
           const tableData = updatedTableResponse.data;
@@ -287,8 +292,8 @@ const AffiliateManagersPage = () => {
             commission,
             totalMoney,
             period: commissionPeriod,
-            month: selectedMonth,
-            year: selectedYear,
+            month: effectiveMonth,
+            year: effectiveYear,
             tableData: tableData,
           };
         } catch (error) {
@@ -301,8 +306,8 @@ const AffiliateManagersPage = () => {
             commission: 0,
             totalMoney: 0,
             period: commissionPeriod,
-            month: selectedMonth,
-            year: selectedYear,
+            month: effectiveMonth,
+            year: effectiveYear,
             tableData: null,
           };
         }
@@ -657,12 +662,13 @@ const AffiliateManagersPage = () => {
                 </Select>
               </FormControl>
               <FormControl size="small" sx={{ minWidth: 120 }}>
-                <InputLabel>Month</InputLabel>
+                <InputLabel>Period</InputLabel>
                 <Select
                   value={selectedMonth}
                   onChange={(e) => setSelectedMonth(e.target.value)}
-                  label="Month"
+                  label="Period"
                 >
+                  <MenuItem value="all">All Time</MenuItem>
                   {Array.from({ length: 12 }, (_, i) => (
                     <MenuItem key={i + 1} value={i + 1}>
                       {new Date(2024, i).toLocaleDateString("en-US", {
@@ -672,23 +678,25 @@ const AffiliateManagersPage = () => {
                   ))}
                 </Select>
               </FormControl>
-              <FormControl size="small" sx={{ minWidth: 100 }}>
-                <InputLabel>Year</InputLabel>
-                <Select
-                  value={selectedYear}
-                  onChange={(e) => setSelectedYear(e.target.value)}
-                  label="Year"
-                >
-                  {Array.from({ length: 5 }, (_, i) => {
-                    const year = new Date().getFullYear() - 2 + i;
-                    return (
-                      <MenuItem key={year} value={year}>
-                        {year}
-                      </MenuItem>
-                    );
-                  })}
-                </Select>
-              </FormControl>
+              {selectedMonth !== "all" && (
+                <FormControl size="small" sx={{ minWidth: 100 }}>
+                  <InputLabel>Year</InputLabel>
+                  <Select
+                    value={selectedYear}
+                    onChange={(e) => setSelectedYear(e.target.value)}
+                    label="Year"
+                  >
+                    {Array.from({ length: 5 }, (_, i) => {
+                      const year = new Date().getFullYear() - 2 + i;
+                      return (
+                        <MenuItem key={year} value={year}>
+                          {year}
+                        </MenuItem>
+                      );
+                    })}
+                  </Select>
+                </FormControl>
+              )}
               <Button
                 variant="outlined"
                 startIcon={summaryLoading ? <CircularProgress size={20} /> : <RefreshIcon />}
@@ -716,7 +724,7 @@ const AffiliateManagersPage = () => {
                 <Box display="flex" alignItems="center" gap={1}>
                   <SummaryIcon />
                   <Typography variant="h6">
-                    Affiliate Managers Summary ({new Date(selectedYear, selectedMonth - 1).toLocaleDateString("en-US", { month: "long", year: "numeric" })})
+                    Affiliate Managers Summary ({selectedMonth === "all" ? "All Time" : new Date(selectedYear, selectedMonth - 1).toLocaleDateString("en-US", { month: "long", year: "numeric" })})
                   </Typography>
                 </Box>
               }
@@ -914,12 +922,13 @@ const AffiliateManagersPage = () => {
               Filter by Period:
             </Typography>
             <FormControl size="small" sx={{ minWidth: 120 }}>
-              <InputLabel>Month</InputLabel>
+              <InputLabel>Period</InputLabel>
               <Select
                 value={selectedMonth}
                 onChange={(e) => setSelectedMonth(e.target.value)}
-                label="Month"
+                label="Period"
               >
+                <MenuItem value="all">All Time (uses current)</MenuItem>
                 {Array.from({ length: 12 }, (_, i) => (
                   <MenuItem key={i + 1} value={i + 1}>
                     {new Date(2024, i).toLocaleDateString('en-US', { month: 'long' })}
@@ -927,23 +936,25 @@ const AffiliateManagersPage = () => {
                 ))}
               </Select>
             </FormControl>
-            <FormControl size="small" sx={{ minWidth: 100 }}>
-              <InputLabel>Year</InputLabel>
-              <Select
-                value={selectedYear}
-                onChange={(e) => setSelectedYear(e.target.value)}
-                label="Year"
-              >
-                {Array.from({ length: 5 }, (_, i) => {
-                  const year = new Date().getFullYear() - 2 + i;
-                  return (
-                    <MenuItem key={year} value={year}>
-                      {year}
-                    </MenuItem>
-                  );
-                })}
-              </Select>
-            </FormControl>
+            {selectedMonth !== "all" && (
+              <FormControl size="small" sx={{ minWidth: 100 }}>
+                <InputLabel>Year</InputLabel>
+                <Select
+                  value={selectedYear}
+                  onChange={(e) => setSelectedYear(e.target.value)}
+                  label="Year"
+                >
+                  {Array.from({ length: 5 }, (_, i) => {
+                    const year = new Date().getFullYear() - 2 + i;
+                    return (
+                      <MenuItem key={year} value={year}>
+                        {year}
+                      </MenuItem>
+                    );
+                  })}
+                </Select>
+              </FormControl>
+            )}
             <FormControl size="small" sx={{ minWidth: 140 }}>
               <InputLabel>Table Period</InputLabel>
               <Select
@@ -996,7 +1007,7 @@ const AffiliateManagersPage = () => {
                 )}
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Crypto Transactions ({new Date(selectedYear, selectedMonth - 1).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })})
+                Crypto Transactions ({selectedMonth === "all" ? "Current Month" : new Date(selectedYear, selectedMonth - 1).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })})
               </Typography>
             </Paper>
           </Grid>
@@ -1015,7 +1026,7 @@ const AffiliateManagersPage = () => {
                 )}
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Total Commission ({new Date(selectedYear, selectedMonth - 1).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })})
+                Total Commission ({selectedMonth === "all" ? "Current Month" : new Date(selectedYear, selectedMonth - 1).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })})
               </Typography>
             </Paper>
           </Grid>
@@ -1034,7 +1045,7 @@ const AffiliateManagersPage = () => {
                 )}
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Total Profit ({new Date(selectedYear, selectedMonth - 1).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })})
+                Total Profit ({selectedMonth === "all" ? "Current Month" : new Date(selectedYear, selectedMonth - 1).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })})
               </Typography>
             </Paper>
           </Grid>
@@ -1058,7 +1069,7 @@ const AffiliateManagersPage = () => {
                 )}
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Total Compensation ({new Date(selectedYear, selectedMonth - 1).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })})
+                Total Compensation ({selectedMonth === "all" ? "Current Month" : new Date(selectedYear, selectedMonth - 1).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })})
               </Typography>
             </Paper>
           </Grid>
@@ -1380,8 +1391,8 @@ const AffiliateManagersPage = () => {
               <AffiliateManagerTableEditor
                 affiliateManager={selectedManager}
                 onClose={handleCloseEditor}
-                selectedMonth={tabValue === 0 ? selectedDate.month() + 1 : selectedMonth}
-                selectedYear={tabValue === 0 ? selectedDate.year() : selectedYear}
+                selectedMonth={tabValue === 0 ? selectedDate.month() + 1 : (selectedMonth === "all" ? new Date().getMonth() + 1 : selectedMonth)}
+                selectedYear={tabValue === 0 ? selectedDate.year() : (selectedMonth === "all" ? new Date().getFullYear() : selectedYear)}
                 commissionPeriod={tabValue === 0 ? selectedPeriod : commissionPeriod}
               />
             )}

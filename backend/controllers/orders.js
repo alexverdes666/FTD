@@ -3254,7 +3254,7 @@ exports.getOrders = async (req, res, next) => {
           },
           {
             path: "depositPSP",
-            select: "name website cardNumber cardExpiry cardCVC",
+            select: "name website",
           },
           {
             path: "shavedBy",
@@ -3348,7 +3348,7 @@ exports.getOrderById = async (req, res, next) => {
           },
           {
             path: "depositPSP",
-            select: "name website cardNumber cardExpiry cardCVC",
+            select: "name website",
           },
           {
             path: "shavedBy",

@@ -15,6 +15,7 @@ const {
   adminDecideFine,
   getPendingApprovalFines,
   getDisputedFines,
+  getFinesByLeadId,
 } = require("../controllers/agentFines");
 
 // All routes require authentication
@@ -31,6 +32,9 @@ router.get("/pending-approval", getPendingApprovalFines);
 
 // Get disputed fines for admin review (admin only)
 router.get("/disputed", isAdmin, getDisputedFines);
+
+// Get fines by lead ID
+router.get("/lead/:leadId", getFinesByLeadId);
 
 // Get fines for a specific agent
 router.get("/agent/:agentId", getAgentFines);
