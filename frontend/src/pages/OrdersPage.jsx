@@ -547,6 +547,8 @@ const OrdersPage = () => {
     psps: [],
     loading: false,
     selectedPsp: null,
+    newPspWebsite: "",
+    creatingPsp: false,
   });
 
   const {
@@ -3959,6 +3961,8 @@ const OrdersPage = () => {
           psps: [],
           loading: true,
           selectedPsp: null,
+          newPspWebsite: "",
+          creatingPsp: false,
         });
 
         const response = await api.get("/card-issuers", {
@@ -3988,6 +3992,8 @@ const OrdersPage = () => {
           psps: [],
           loading: false,
           selectedPsp: null,
+          newPspWebsite: "",
+          creatingPsp: false,
         });
       }
     },
@@ -4070,15 +4076,7 @@ const OrdersPage = () => {
   // Handle PSP selection and confirm deposit
   const handlePspDepositConfirm = useCallback(
     async () => {
-      const { lead, selectedPsp, selectedCardIssuer, orderId } = pspDepositDialog;
-
-      if (!selectedPsp) {
-        setNotification({
-          message: "Please select a PSP",
-          severity: "error",
-        });
-        return;
-      }
+      const { lead, selectedPsp, selectedCardIssuer, orderId, newPspWebsite } = pspDepositDialog;
 
       if (!orderId) {
         setNotification({
@@ -4088,11 +4086,48 @@ const OrdersPage = () => {
         return;
       }
 
+      // Determine which PSP to use
+      let pspToUse = selectedPsp;
+
+      // If creating a new PSP
+      if (newPspWebsite.trim() && !selectedPsp) {
+        try {
+          setPspDepositDialog((prev) => ({ ...prev, creatingPsp: true }));
+          const pspResponse = await api.post("/psps", {
+            website: newPspWebsite.trim(),
+            cardIssuer: selectedCardIssuer?._id || null,
+          });
+          pspToUse = pspResponse.data.data;
+          setPspDepositDialog((prev) => ({
+            ...prev,
+            selectedPsp: pspToUse,
+            newPspWebsite: "",
+            creatingPsp: false,
+          }));
+        } catch (err) {
+          console.error("Error creating PSP:", err);
+          setNotification({
+            message: err.response?.data?.message || "Failed to create PSP",
+            severity: "error",
+          });
+          setPspDepositDialog((prev) => ({ ...prev, creatingPsp: false }));
+          return;
+        }
+      }
+
+      if (!pspToUse) {
+        setNotification({
+          message: "Please select a PSP or enter a website to create one",
+          severity: "error",
+        });
+        return;
+      }
+
       try {
         setPspDepositDialog((prev) => ({ ...prev, loading: true }));
 
         const response = await api.put(`/leads/${lead._id}/confirm-deposit`, {
-          pspId: selectedPsp._id,
+          pspId: pspToUse._id,
           orderId: orderId,
           cardIssuerId: selectedCardIssuer?._id || null,
         });
@@ -4105,7 +4140,7 @@ const OrdersPage = () => {
           depositConfirmed: orderMetadata.depositConfirmed || true,
           depositConfirmedBy: orderMetadata.depositConfirmedBy || user,
           depositConfirmedAt: orderMetadata.depositConfirmedAt || new Date().toISOString(),
-          depositPSP: orderMetadata.depositPSP || selectedPsp,
+          depositPSP: orderMetadata.depositPSP || pspToUse,
         };
 
         setAssignedLeadsModal((prev) => ({
@@ -4170,9 +4205,16 @@ const OrdersPage = () => {
           open: false,
           lead: null,
           orderId: null,
+          step: 1,
+          cardIssuers: [],
+          selectedCardIssuer: null,
+          newCardIssuerName: "",
+          creatingIssuer: false,
           psps: [],
           loading: false,
           selectedPsp: null,
+          newPspWebsite: "",
+          creatingPsp: false,
         });
 
         // Refresh the orders in background
@@ -4203,6 +4245,8 @@ const OrdersPage = () => {
       psps: [],
       loading: false,
       selectedPsp: null,
+      newPspWebsite: "",
+      creatingPsp: false,
     });
   }, []);
 
@@ -7733,7 +7777,7 @@ const OrdersPage = () => {
         onClose={handleClosePspDepositDialog}
         maxWidth="sm"
         fullWidth
-        disableEscapeKeyDown={pspDepositDialog.loading || pspDepositDialog.creatingIssuer}
+        disableEscapeKeyDown={pspDepositDialog.loading || pspDepositDialog.creatingIssuer || pspDepositDialog.creatingPsp}
       >
         <DialogTitle>
           <Box display="flex" alignItems="center" gap={1}>
@@ -7835,14 +7879,22 @@ const OrdersPage = () => {
                   {pspDepositDialog.selectedCardIssuer?.name}
                 </Typography>
               </Box>
+              <Typography variant="subtitle2" gutterBottom sx={{ mb: 1 }}>
+                Select PSP or Create New
+              </Typography>
               <Autocomplete
                 options={pspDepositDialog.psps}
                 getOptionLabel={(option) => option.name}
                 value={pspDepositDialog.selectedPsp}
                 onChange={(_, newValue) =>
-                  setPspDepositDialog((prev) => ({ ...prev, selectedPsp: newValue }))
+                  setPspDepositDialog((prev) => ({
+                    ...prev,
+                    selectedPsp: newValue,
+                    newPspWebsite: "",
+                  }))
                 }
                 loading={pspDepositDialog.loading}
+                disabled={pspDepositDialog.newPspWebsite.length > 0}
                 renderOption={(props, option) => (
                   <li {...props}>
                     <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
@@ -7857,9 +7909,8 @@ const OrdersPage = () => {
                 renderInput={(params) => (
                   <TextField
                     {...params}
-                    label="Select PSP"
+                    label="Select Existing PSP"
                     placeholder="Search PSPs..."
-                    required
                     InputProps={{
                       ...params.InputProps,
                       endAdornment: (
@@ -7873,6 +7924,23 @@ const OrdersPage = () => {
                     }}
                   />
                 )}
+              />
+              <Typography variant="body2" sx={{ my: 2, textAlign: "center", color: "text.secondary" }}>
+                - OR -
+              </Typography>
+              <TextField
+                fullWidth
+                label="Create New PSP"
+                placeholder="e.g., https://example.com"
+                value={pspDepositDialog.newPspWebsite}
+                onChange={(e) => {
+                  setPspDepositDialog((prev) => ({
+                    ...prev,
+                    newPspWebsite: e.target.value,
+                    selectedPsp: null,
+                  }));
+                }}
+                disabled={pspDepositDialog.selectedPsp !== null}
               />
               {pspDepositDialog.selectedPsp && (
                 <Box sx={{ mt: 2, p: 2, bgcolor: "success.50", borderRadius: 1, border: "1px solid", borderColor: "success.200" }}>
@@ -7906,16 +7974,17 @@ const OrdersPage = () => {
                   ...prev,
                   step: 1,
                   selectedPsp: null,
+                  newPspWebsite: "",
                 }))
               }
-              disabled={pspDepositDialog.loading}
+              disabled={pspDepositDialog.loading || pspDepositDialog.creatingPsp}
             >
               Back
             </Button>
           )}
           <Button
             onClick={handleClosePspDepositDialog}
-            disabled={pspDepositDialog.loading || pspDepositDialog.creatingIssuer}
+            disabled={pspDepositDialog.loading || pspDepositDialog.creatingIssuer || pspDepositDialog.creatingPsp}
           >
             Cancel
           </Button>
@@ -7937,10 +8006,22 @@ const OrdersPage = () => {
               onClick={handlePspDepositConfirm}
               variant="contained"
               color="success"
-              disabled={!pspDepositDialog.selectedPsp || pspDepositDialog.loading}
-              startIcon={pspDepositDialog.loading ? <CircularProgress size={16} /> : <CallIcon />}
+              disabled={
+                (!pspDepositDialog.selectedPsp && !pspDepositDialog.newPspWebsite.trim()) ||
+                pspDepositDialog.loading ||
+                pspDepositDialog.creatingPsp
+              }
+              startIcon={
+                pspDepositDialog.loading || pspDepositDialog.creatingPsp
+                  ? <CircularProgress size={16} />
+                  : <CallIcon />
+              }
             >
-              {pspDepositDialog.loading ? "Confirming..." : "Confirm Deposit"}
+              {pspDepositDialog.creatingPsp
+                ? "Creating PSP..."
+                : pspDepositDialog.loading
+                  ? "Confirming..."
+                  : "Confirm Deposit"}
             </Button>
           )}
         </DialogActions>

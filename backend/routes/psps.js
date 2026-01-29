@@ -25,12 +25,12 @@ router.get("/:id/profile", protect, getPSPProfile);
 // Get single PSP
 router.get("/:id", protect, getPSP);
 
-// Create PSP (admin only)
+// Create PSP (admin and affiliate_manager)
 router.post(
   "/",
   [
     protect,
-    isAdmin,
+    authorize("admin", "affiliate_manager"),
     body("website")
       .trim()
       .isLength({ min: 1, max: 200 })
