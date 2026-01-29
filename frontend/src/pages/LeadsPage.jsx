@@ -103,6 +103,7 @@ import { selectUser } from "../store/slices/authSlice";
 import { getSortedCountries } from "../constants/countries";
 import ImportLeadsDialog from "../components/ImportLeadsDialog";
 import EditLeadForm from "../components/EditLeadForm";
+import LeadProfileCredentials from "../components/LeadProfileCredentials";
 import { formatPhoneWithCountryCode } from "../utils/phoneUtils";
 const glassMorphismStyles = {
   bgcolor: "rgba(255, 255, 255, 0.1)",
@@ -1112,6 +1113,10 @@ const LeadDetails = React.memo(({ lead }) => (
           </Paper>
         </Grid>
       )}
+      {/* Profile Credentials */}
+      <Grid item xs={12}>
+        <LeadProfileCredentials leadId={lead._id} />
+      </Grid>
     </Grid>
   </Box>
 ));

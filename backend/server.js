@@ -14,6 +14,7 @@ const twoFactorRoutes = require("./routes/twoFactor");
 const qrAuthRoutes = require("./routes/qrAuth");
 const orderRoutes = require("./routes/orders");
 const leadRoutes = require("./routes/leads");
+const leadProfileRoutes = require("./routes/leadProfiles");
 const deletedLeadsRoutes = require("./routes/deletedLeads");
 const userRoutes = require("./routes/users");
 const landingRoutes = require("./routes/landing");
@@ -168,6 +169,7 @@ const corsOptions = {
     "X-QR-Verification-Token", // For QR auth sensitive action verification
     "X-Device-ID", // For device fingerprinting/audit trail
     "X-Device-Fingerprint", // For full device fingerprint data
+    "X-Unlock-Token", // For lead profile credential unlock verification
   ],
   credentials: true,
   optionsSuccessStatus: 200,
@@ -561,6 +563,7 @@ app.use("/api/two-factor", twoFactorRoutes);
 app.use("/api/qr-auth", qrAuthRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/leads", leadRoutes);
+app.use("/api/lead-profiles", leadProfileRoutes);
 app.use("/api/deleted-leads", deletedLeadsRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/landing", landingRoutes);
