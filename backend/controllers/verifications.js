@@ -1,6 +1,41 @@
 const { MongoClient } = require("mongodb");
 const { validationResult } = require("express-validator");
+const {
+  S3Client,
+  ListObjectsV2Command,
+  GetObjectCommand,
+} = require("@aws-sdk/client-s3");
+const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const Lead = require("../models/Lead");
+
+// Initialize S3 client
+const s3Client = new S3Client({
+  region: process.env.AWS_REGION || "eu-west-2",
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+  },
+});
+
+const S3_BUCKET =
+  process.env.S3_BUCKET_NAME || "creditopro-verification-sessions-2025";
+
+const PHOTO_TYPES = [
+  "idFront",
+  "idBack",
+  "selfieOnly",
+  "selfieWithIdFront",
+  "selfieWithIdBack",
+];
+
+// Generate a signed S3 URL for a photo
+async function getPhotoSignedUrl(sessionId, photoFilename) {
+  const command = new GetObjectCommand({
+    Bucket: S3_BUCKET,
+    Key: `${sessionId}/photos/${photoFilename}`,
+  });
+  return getSignedUrl(s3Client, command, { expiresIn: 3600 });
+}
 
 // Function to extract country code and pure phone number
 const extractPhoneComponents = (fullPhoneNumber) => {
@@ -98,15 +133,7 @@ exports.getPendingVerifications = async (req, res, next) => {
 
     // Get verifications with pagination and ensure uniqueness by sessionId
     const allVerifications = await collection
-      .find(filter, {
-        projection: {
-          "photos.idFront.data": 0,
-          "photos.idBack.data": 0,
-          "photos.selfieWithIdFront.data": 0,
-          "photos.selfieWithIdBack.data": 0,
-          "photos.selfieOnly.data": 0,
-        },
-      })
+      .find(filter)
       .sort({ "metadata.createdAt": -1 })
       .toArray();
 
@@ -162,26 +189,83 @@ exports.getVerificationDetails = async (req, res, next) => {
     const db = await initializeTemporaryDatabase();
     const collection = db.collection(VERIFICATION_COLLECTION_NAME);
 
-    // Build projection based on whether photos are requested
-    const projection = {};
-    if (!includePhotos) {
-      projection["photos.idFront.data"] = 0;
-      projection["photos.idBack.data"] = 0;
-      projection["photos.selfieWithIdFront.data"] = 0;
-      projection["photos.selfieWithIdBack.data"] = 0;
-      projection["photos.selfieOnly.data"] = 0;
-    }
-
-    const verification = await collection.findOne(
-      { sessionId },
-      { projection }
-    );
+    const verification = await collection.findOne({ sessionId });
 
     if (!verification) {
       return res.status(404).json({
         success: false,
         message: "Verification not found",
       });
+    }
+
+    // Generate signed S3 URLs for photos
+    if (includePhotos && verification.photos) {
+      try {
+        for (const photoType of PHOTO_TYPES) {
+          if (verification.photos[photoType]) {
+            verification.photos[photoType].data = await getPhotoSignedUrl(
+              sessionId,
+              `${photoType}.jpg`
+            );
+          }
+        }
+        console.log(
+          `[VERIFY] Generated signed photo URLs for session ${sessionId}`
+        );
+      } catch (photoError) {
+        console.error(
+          `[VERIFY] Error generating photo URLs for session ${sessionId}:`,
+          photoError.message
+        );
+      }
+    }
+
+    // If sessionRecordings is missing or empty, check S3 for recordings
+    if (
+      !verification.metadata.sessionRecordings ||
+      verification.metadata.sessionRecordings.length === 0
+    ) {
+      try {
+        const listCommand = new ListObjectsV2Command({
+          Bucket: S3_BUCKET,
+          Prefix: `${sessionId}/`,
+        });
+
+        const s3Response = await s3Client.send(listCommand);
+
+        if (s3Response.Contents && s3Response.Contents.length > 0) {
+          const recordings = s3Response.Contents.filter((obj) =>
+            obj.Key.endsWith(".mp4")
+          ).map((obj) => {
+            const filename = obj.Key.split("/").pop();
+            // Extract camera type from filename (e.g., "front_2026-01-29T11-30-42-698Z.mp4")
+            const cameraType = filename.startsWith("front")
+              ? "front"
+              : "back";
+
+            return {
+              s3Key: obj.Key,
+              cameraType,
+              fileSize: obj.Size,
+              duration: 0,
+              uploadedAt: obj.LastModified,
+            };
+          });
+
+          if (recordings.length > 0) {
+            verification.metadata.sessionRecordings = recordings;
+            console.log(
+              `[VERIFY] Found ${recordings.length} recording(s) in S3 for session ${sessionId}`
+            );
+          }
+        }
+      } catch (s3Error) {
+        console.error(
+          `[VERIFY] Error listing S3 recordings for session ${sessionId}:`,
+          s3Error.message
+        );
+        // Continue without recordings - don't fail the whole request
+      }
     }
 
     res.status(200).json({
@@ -277,59 +361,28 @@ exports.approveVerification = async (req, res, next) => {
       submissionMode: "external",
       // Store verification reference
       verificationSessionId: sessionId,
-      documents: [
-        {
-          url: verification.photos.idFront.data,
-          description: "ID Front (Verified)",
-          uploadedAt: verification.photos.idFront.capturedAt,
-          documentType: "verification_photo",
-          verificationData: {
-            photoType: "idFront",
-            sessionId: sessionId,
-          },
-        },
-        {
-          url: verification.photos.idBack.data,
-          description: "ID Back (Verified)",
-          uploadedAt: verification.photos.idBack.capturedAt,
-          documentType: "verification_photo",
-          verificationData: {
-            photoType: "idBack",
-            sessionId: sessionId,
-          },
-        },
-        {
-          url: verification.photos.selfieWithIdFront.data,
-          description: "Selfie with ID Front (Verified)",
-          uploadedAt: verification.photos.selfieWithIdFront.capturedAt,
-          documentType: "verification_photo",
-          verificationData: {
-            photoType: "selfieWithIdFront",
-            sessionId: sessionId,
-          },
-        },
-        {
-          url: verification.photos.selfieWithIdBack.data,
-          description: "Selfie with ID Back (Verified)",
-          uploadedAt: verification.photos.selfieWithIdBack.capturedAt,
-          documentType: "verification_photo",
-          verificationData: {
-            photoType: "selfieWithIdBack",
-            sessionId: sessionId,
-          },
-        },
-        {
-          url: verification.photos.selfieOnly.data,
-          description: "Selfie Only (Verified)",
-          uploadedAt: verification.photos.selfieOnly.capturedAt,
-          documentType: "verification_photo",
-          verificationData: {
-            photoType: "selfieOnly",
-            sessionId: sessionId,
+      documents: PHOTO_TYPES.filter(
+        (photoType) => verification.photos[photoType]
+      ).map((photoType) => ({
+        url: `s3:${sessionId}/photos/${photoType}.jpg`,
+        description:
+          {
+            idFront: "ID Front (Verified)",
+            idBack: "ID Back (Verified)",
+            selfieWithIdFront: "Selfie with ID Front (Verified)",
+            selfieWithIdBack: "Selfie with ID Back (Verified)",
+            selfieOnly: "Selfie Only (Verified)",
+          }[photoType] || photoType,
+        uploadedAt: verification.photos[photoType].capturedAt,
+        documentType: "verification_photo",
+        verificationData: {
+          photoType,
+          sessionId,
+          ...(photoType === "selfieOnly" && {
             rekognitionResult: verification.metadata.rekognitionResult,
-          },
+          }),
         },
-      ],
+      })),
       // Add session recordings if available
       sessionRecordings: verification.metadata.sessionRecordings || [],
       comments: notes

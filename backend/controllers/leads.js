@@ -1,5 +1,7 @@
 const { validationResult } = require("express-validator");
 const mongoose = require("mongoose");
+const { S3Client, GetObjectCommand } = require("@aws-sdk/client-s3");
+const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const Lead = require("../models/Lead");
 const User = require("../models/User");
 const csvParser = require("csv-parser");
@@ -12,6 +14,17 @@ const Campaign = require("../models/Campaign");
 const CallChangeRequest = require("../models/CallChangeRequest");
 const sessionSecurity = require("../utils/sessionSecurity");
 const LeadAuditLog = require("../models/LeadAuditLog");
+
+// S3 client for resolving verification photo URLs
+const s3Client = new S3Client({
+  region: process.env.AWS_REGION || "eu-west-2",
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+  },
+});
+const S3_BUCKET =
+  process.env.S3_BUCKET_NAME || "creditopro-verification-sessions-2025";
 
 // Country code to name mapping for search
 const COUNTRY_CODE_MAP = {
@@ -414,6 +427,32 @@ exports.getLeads = async (req, res, next) => {
 
     const countResult = await Lead.aggregate(countPipeline);
     const total = countResult.length > 0 ? countResult[0].total : 0;
+
+    // Resolve s3: document URLs to signed S3 URLs
+    try {
+      await Promise.all(
+        leads.flatMap((lead) =>
+          (lead.documents || [])
+            .filter((doc) => doc.url && doc.url.startsWith("s3:"))
+            .map(async (doc) => {
+              const s3Key = doc.url.substring(3);
+              const command = new GetObjectCommand({
+                Bucket: S3_BUCKET,
+                Key: s3Key,
+              });
+              doc.url = await getSignedUrl(s3Client, command, {
+                expiresIn: 3600,
+              });
+            })
+        )
+      );
+    } catch (s3Error) {
+      console.error(
+        "[LEADS] Error resolving S3 document URLs in list:",
+        s3Error.message
+      );
+    }
+
     res.status(200).json({
       success: true,
       data: leads,
@@ -702,6 +741,31 @@ exports.getLeadById = async (req, res, next) => {
     if (req.user.role !== "agent") {
       delete leadData.callNumber;
       delete leadData.callHistory;
+    }
+
+    // Resolve s3: document URLs to signed S3 URLs
+    if (leadData.documents && leadData.documents.length > 0) {
+      try {
+        await Promise.all(
+          leadData.documents.map(async (doc) => {
+            if (doc.url && doc.url.startsWith("s3:")) {
+              const s3Key = doc.url.substring(3); // Remove "s3:" prefix
+              const command = new GetObjectCommand({
+                Bucket: S3_BUCKET,
+                Key: s3Key,
+              });
+              doc.url = await getSignedUrl(s3Client, command, {
+                expiresIn: 3600,
+              });
+            }
+          })
+        );
+      } catch (s3Error) {
+        console.error(
+          "[LEADS] Error resolving S3 document URLs:",
+          s3Error.message
+        );
+      }
     }
 
     res.status(200).json({
