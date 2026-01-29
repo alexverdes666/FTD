@@ -18,7 +18,6 @@ import {
   CircularProgress,
   Link,
   InputAdornment,
-  Autocomplete,
 } from "@mui/material";
 import {
   Add as AddIcon,
@@ -27,7 +26,6 @@ import {
   Visibility as ViewIcon,
   Search as SearchIcon,
   Language as WebIcon,
-  CreditCard as CreditCardIcon,
 } from "@mui/icons-material";
 import { DataGrid } from "@mui/x-data-grid";
 import { useForm, Controller } from "react-hook-form";
@@ -47,9 +45,6 @@ const pspSchema = yup.object({
   description: yup
     .string()
     .max(500, "Description must be less than 500 characters"),
-  cardIssuer: yup
-    .string()
-    .nullable(),
 });
 
 const ClientPSPsPage = () => {
@@ -65,8 +60,6 @@ const ClientPSPsPage = () => {
   const [showActiveOnly, setShowActiveOnly] = useState(true);
   const [openDialog, setOpenDialog] = useState(false);
   const [editingPSP, setEditingPSP] = useState(null);
-  const [cardIssuers, setCardIssuers] = useState([]);
-  const [selectedCardIssuer, setSelectedCardIssuer] = useState(null);
 
   const websiteRef = useRef(null);
 
@@ -80,7 +73,6 @@ const ClientPSPsPage = () => {
     defaultValues: {
       website: "",
       description: "",
-      cardIssuer: null,
     },
   });
 
@@ -112,25 +104,13 @@ const ClientPSPsPage = () => {
   const handleOpenDialog = async (psp = null) => {
     setEditingPSP(psp);
 
-    // Fetch card issuers
-    try {
-      const response = await api.get("/card-issuers", { params: { isActive: true, limit: 100 } });
-      setCardIssuers(response.data.data || []);
-    } catch (error) {
-      console.error("Error fetching card issuers:", error);
-      setCardIssuers([]);
-    }
-
     if (psp) {
       reset({
         website: psp.website || "",
         description: psp.description || "",
-        cardIssuer: psp.cardIssuer?._id || null,
       });
-      setSelectedCardIssuer(psp.cardIssuer || null);
     } else {
-      reset({ website: "", description: "", cardIssuer: null });
-      setSelectedCardIssuer(null);
+      reset({ website: "", description: "" });
     }
     setOpenDialog(true);
     setTimeout(() => {
@@ -141,23 +121,16 @@ const ClientPSPsPage = () => {
   const handleCloseDialog = () => {
     setOpenDialog(false);
     setEditingPSP(null);
-    setSelectedCardIssuer(null);
     reset();
   };
 
   const onSubmit = async (data) => {
     try {
-      // Clean up the data - convert empty cardIssuer to null
-      const submitData = {
-        ...data,
-        cardIssuer: data.cardIssuer || null,
-      };
-
       if (editingPSP) {
-        await api.put(`/psps/${editingPSP._id}`, submitData);
+        await api.put(`/psps/${editingPSP._id}`, data);
         toast.success("PSP updated successfully");
       } else {
-        await api.post("/psps", submitData);
+        await api.post("/psps", data);
         toast.success("PSP created successfully");
       }
       handleCloseDialog();
@@ -431,37 +404,6 @@ const ClientPSPsPage = () => {
                     rows={2}
                     error={!!errors.description}
                     helperText={errors.description?.message}
-                  />
-                )}
-              />
-              <Controller
-                name="cardIssuer"
-                control={control}
-                render={({ field: { onChange, value, ...field } }) => (
-                  <Autocomplete
-                    {...field}
-                    options={cardIssuers}
-                    getOptionLabel={(option) => option?.name || ""}
-                    value={selectedCardIssuer}
-                    onChange={(_, newValue) => {
-                      setSelectedCardIssuer(newValue);
-                      onChange(newValue?._id || null);
-                    }}
-                    renderOption={(props, option) => (
-                      <li {...props}>
-                        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                          <CreditCardIcon fontSize="small" color="primary" />
-                          <span>{option.name}</span>
-                        </Box>
-                      </li>
-                    )}
-                    renderInput={(params) => (
-                      <TextField
-                        {...params}
-                        label="Card Issuer (Optional)"
-                        placeholder="Select Card Issuer..."
-                      />
-                    )}
                   />
                 )}
               />

@@ -26,6 +26,7 @@ import {
   CreditCard as CreditCardIcon,
   CloudUpload as UploadIcon,
   Link as LinkIcon,
+  AutoAwesome as AutoAwesomeIcon,
 } from "@mui/icons-material";
 import { DataGrid } from "@mui/x-data-grid";
 import { useForm, Controller } from "react-hook-form";
@@ -63,8 +64,10 @@ const CardIssuersPage = () => {
   const [showActiveOnly, setShowActiveOnly] = useState(true);
   const [openDialog, setOpenDialog] = useState(false);
   const [editingIssuer, setEditingIssuer] = useState(null);
-  const [logoInputMode, setLogoInputMode] = useState(0); // 0 = URL, 1 = Upload
+  const [logoInputMode, setLogoInputMode] = useState(0); // 0 = URL, 1 = Upload, 2 = AI Generate
   const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [generatingLogo, setGeneratingLogo] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState("");
   const [logoPreview, setLogoPreview] = useState(null);
   const fileInputRef = useRef(null);
 
@@ -117,6 +120,7 @@ const CardIssuersPage = () => {
     setEditingIssuer(issuer);
     setLogoInputMode(0);
     setLogoPreview(null);
+    setAiPrompt("");
     if (issuer) {
       reset({
         name: issuer.name || "",
@@ -140,6 +144,7 @@ const CardIssuersPage = () => {
     setEditingIssuer(null);
     setLogoPreview(null);
     setLogoInputMode(0);
+    setAiPrompt("");
     reset();
   };
 
@@ -189,6 +194,46 @@ const CardIssuersPage = () => {
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
+    }
+  };
+
+  const handleGenerateLogo = async () => {
+    if (!aiPrompt.trim()) {
+      toast.error("Please enter a prompt for image generation");
+      return;
+    }
+
+    try {
+      setGeneratingLogo(true);
+      const encodedPrompt = encodeURIComponent(aiPrompt.trim());
+      const pollinationsUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=640&height=640&nologo=true&seed=${Date.now()}`;
+
+      // Fetch the generated image as a blob
+      const imageResponse = await fetch(pollinationsUrl);
+      if (!imageResponse.ok) {
+        throw new Error("Failed to generate image");
+      }
+      const blob = await imageResponse.blob();
+
+      // Upload to our backend so the image is stored on our server
+      const formData = new FormData();
+      formData.append("image", blob, "ai-generated-logo.png");
+
+      const uploadResponse = await api.post("/card-issuers/upload-logo", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+
+      if (uploadResponse.data.success) {
+        const logoUrl = uploadResponse.data.data.url;
+        setValue("logo", logoUrl);
+        setLogoPreview(logoUrl);
+        toast.success("Logo generated and saved successfully");
+      }
+    } catch (error) {
+      console.error("Error generating logo:", error);
+      toast.error(error.response?.data?.message || "Failed to generate logo");
+    } finally {
+      setGeneratingLogo(false);
     }
   };
 
@@ -475,6 +520,12 @@ const CardIssuersPage = () => {
                     label="Upload"
                     sx={{ minHeight: 36, py: 0.5 }}
                   />
+                  <Tab
+                    icon={<AutoAwesomeIcon fontSize="small" />}
+                    iconPosition="start"
+                    label="AI Generate"
+                    sx={{ minHeight: 36, py: 0.5 }}
+                  />
                 </Tabs>
 
                 {logoInputMode === 0 ? (
@@ -496,7 +547,7 @@ const CardIssuersPage = () => {
                       />
                     )}
                   />
-                ) : (
+                ) : logoInputMode === 1 ? (
                   <Box>
                     <input
                       ref={fileInputRef}
@@ -516,6 +567,29 @@ const CardIssuersPage = () => {
                     </Button>
                     <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1 }}>
                       Supported formats: JPEG, PNG, GIF, WebP, SVG. Max size: 5MB.
+                    </Typography>
+                  </Box>
+                ) : (
+                  <Box>
+                    <TextField
+                      label="Image Prompt"
+                      placeholder="e.g., Generate a logo for Visa card issuer"
+                      fullWidth
+                      value={aiPrompt}
+                      onChange={(e) => setAiPrompt(e.target.value)}
+                      sx={{ mb: 1.5 }}
+                    />
+                    <Button
+                      variant="outlined"
+                      startIcon={generatingLogo ? <CircularProgress size={16} /> : <AutoAwesomeIcon />}
+                      onClick={handleGenerateLogo}
+                      disabled={generatingLogo || !aiPrompt.trim()}
+                      fullWidth
+                    >
+                      {generatingLogo ? "Generating..." : "Generate Image"}
+                    </Button>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1 }}>
+                      Uses AI to generate an image from your text prompt.
                     </Typography>
                   </Box>
                 )}
