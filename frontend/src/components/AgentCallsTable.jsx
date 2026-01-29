@@ -22,7 +22,7 @@ import {
   AttachMoney
 } from '@mui/icons-material';
 
-const AgentCallsTable = ({ agentCalls, loading = false, agentBonusesData = [], agentFinesData = [] }) => {
+const AgentCallsTable = ({ agentCalls, loading = false, agentBonusesData = [], agentFinesData = [], declarationTotals = [] }) => {
   const getSuccessRateColor = (rate) => {
     const numRate = parseFloat(rate);
     if (numRate >= 80) return 'success';
@@ -40,9 +40,14 @@ const AgentCallsTable = ({ agentCalls, loading = false, agentBonusesData = [], a
   };
 
   const getAgentBonus = (agentName) => {
+    // Use approved declaration totals if available
+    const declTotal = declarationTotals.find(d => d.agentName === agentName);
+    if (declTotal) return declTotal.totalBonus || 0;
+
+    // Fallback to manual call counts data
     const agentBonus = agentBonusesData.find(bonus => bonus.agent.fullName === agentName);
     if (!agentBonus) return 0;
-    
+
     const callCounts = agentBonus.callCounts || {};
     const bonusRates = agentBonus.bonusRates || {
       firstCall: 5.0,
@@ -52,7 +57,7 @@ const AgentCallsTable = ({ agentCalls, loading = false, agentBonusesData = [], a
       fifthCall: 25.0,
       verifiedAcc: 50.0,
     };
-    
+
     return (callCounts.firstCalls || 0) * bonusRates.firstCall +
            (callCounts.secondCalls || 0) * bonusRates.secondCall +
            (callCounts.thirdCalls || 0) * bonusRates.thirdCall +
@@ -117,7 +122,65 @@ const AgentCallsTable = ({ agentCalls, loading = false, agentBonusesData = [], a
     );
   }
 
-  if (!agentCalls || agentCalls.length === 0) {
+  // Build the display list: use external call data if available, otherwise
+  // fall back to agents from bonuses/fines so the table still renders
+  const displayAgents = React.useMemo(() => {
+    if (agentCalls && agentCalls.length > 0) return agentCalls;
+
+    // No external call data - build entries from bonus/fines data
+    const agentMap = new Map();
+
+    agentBonusesData.forEach((bonus) => {
+      const name = bonus.agent?.fullName;
+      if (name && !agentMap.has(name)) {
+        agentMap.set(name, {
+          agentName: name,
+          agentNumber: bonus.agent?.fourDigitCode || "",
+          totalCalls: 0,
+          incomingCalls: 0,
+          outgoingCalls: 0,
+          successRate: "0.0",
+          totalTalkTime: "00:00:00",
+        });
+      }
+    });
+
+    agentFinesData.forEach((fine) => {
+      const name = fine.agent?.fullName;
+      if (name && !agentMap.has(name)) {
+        agentMap.set(name, {
+          agentName: name,
+          agentNumber: "",
+          totalCalls: 0,
+          incomingCalls: 0,
+          outgoingCalls: 0,
+          successRate: "0.0",
+          totalTalkTime: "00:00:00",
+        });
+      }
+    });
+
+    declarationTotals.forEach((decl) => {
+      const name = decl.agentName;
+      if (name && !agentMap.has(name)) {
+        agentMap.set(name, {
+          agentName: name,
+          agentNumber: "",
+          totalCalls: 0,
+          incomingCalls: 0,
+          outgoingCalls: 0,
+          successRate: "0.0",
+          totalTalkTime: "00:00:00",
+        });
+      }
+    });
+
+    return Array.from(agentMap.values()).sort((a, b) =>
+      a.agentName.localeCompare(b.agentName)
+    );
+  }, [agentCalls, agentBonusesData, agentFinesData, declarationTotals]);
+
+  if (displayAgents.length === 0) {
     return (
       <Paper sx={{ p: 3, textAlign: 'center' }}>
         <Typography variant="h6" color="textSecondary">
@@ -145,14 +208,14 @@ const AgentCallsTable = ({ agentCalls, loading = false, agentBonusesData = [], a
           </TableRow>
         </TableHead>
         <TableBody>
-          {agentCalls.map((agent) => {
+          {displayAgents.map((agent) => {
             const agentBonus = getAgentBonus(agent.agentName);
             const agentFines = getAgentFines(agent.agentName);
             const talkTimePay = calculateTalkTimePay(agent.totalTalkTime);
             const totalPayable = calculateTotalPayable(agent);
-            
+
             return (
-              <TableRow key={agent.id} hover>
+              <TableRow key={agent.id || agent.agentName} hover>
                 <TableCell>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                     <Person fontSize="small" color="primary" />

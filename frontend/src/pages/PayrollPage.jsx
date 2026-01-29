@@ -100,6 +100,7 @@ import {
 import { getAllAgentFines, getFinesSummary, getAgentFines, getPendingApprovalFines, respondToFine } from "../services/agentFines";
 import FineDetailDialog from "../components/FineDetailDialog";
 import CallBonusesSection from "../components/CallBonusesSection";
+import { getAllAgentsMonthlyTotals, getMonthlyTotals } from "../services/callDeclarations";
 import api from "../services/api";
 
 const PayrollPage = () => {
@@ -148,6 +149,7 @@ const PayrollPage = () => {
   // Agent bonuses and fines data state
   const [agentBonusesData, setAgentBonusesData] = useState([]);
   const [agentFinesData, setAgentFinesData] = useState([]);
+  const [declarationTotals, setDeclarationTotals] = useState([]);
   const [bonusesLoading, setBonusesLoading] = useState(false);
   const [finesLoading, setFinesLoading] = useState(false);
   const [bonusesStats, setBonusesStats] = useState(null);
@@ -654,9 +656,21 @@ const PayrollPage = () => {
         setAgentBonusesData(response.data);
         calculateBonusesStats(response.data);
       }
+
+      // Also fetch declaration-based totals for all agents
+      try {
+        const declResponse = await getAllAgentsMonthlyTotals(year, month);
+        if (declResponse.success) {
+          setDeclarationTotals(declResponse.data);
+        }
+      } catch (declErr) {
+        console.error("Error loading declaration totals:", declErr);
+        setDeclarationTotals([]);
+      }
     } catch (err) {
       console.error("Error loading agent bonuses:", err);
       setAgentBonusesData([]);
+      setDeclarationTotals([]);
       setBonusesStats({
         totalAgents: 0,
         totalBonus: 0,
@@ -842,9 +856,20 @@ const PayrollPage = () => {
     const ratePerSecond = 0.00278; // $0.00278 per second
     const totalTalkTimePay = totalTalkTimeSeconds * ratePerSecond;
 
+    // Use declaration totals for bonus if available
+    let totalBonus = bonusesStats.totalBonus;
+    if (declarationTotals.length > 0) {
+      if (user?.role === "agent") {
+        const declTotal = declarationTotals.find(d => d.agentName === user.fullName);
+        if (declTotal) totalBonus = declTotal.totalBonus || 0;
+      } else {
+        totalBonus = declarationTotals.reduce((sum, d) => sum + (d.totalBonus || 0), 0);
+      }
+    }
+
     // Calculate total payable
     const totalPayable =
-      totalTalkTimePay + bonusesStats.totalBonus - finesStats.activeAmount;
+      totalTalkTimePay + totalBonus - finesStats.activeAmount;
     const avgPayablePerAgent =
       agentCallsStats.totalAgents > 0
         ? (totalPayable / agentCallsStats.totalAgents).toFixed(2)
@@ -895,6 +920,28 @@ const PayrollPage = () => {
         );
         setAgentBonusesData(agentBonuses);
         calculateBonusesStats(agentBonuses);
+      }
+
+      // Load declaration-based monthly totals for the agent
+      try {
+        const agentId = user._id || user.id;
+        const declData = await getMonthlyTotals(agentId, year, month);
+        if (declData && declData.totals) {
+          setDeclarationTotals([{
+            agentId,
+            agentName: user.fullName,
+            totalBonus: declData.totals.totalBonus || 0,
+            totalBaseBonus: declData.totals.totalBaseBonus || 0,
+            totalHourlyBonus: declData.totals.totalHourlyBonus || 0,
+            declarationCount: declData.totals.declarationCount || 0,
+            callTypeSummary: declData.callTypeSummary || [],
+          }]);
+        } else {
+          setDeclarationTotals([]);
+        }
+      } catch (declErr) {
+        console.error("Error loading agent declaration totals:", declErr);
+        setDeclarationTotals([]);
       }
 
       // Load agent fines data for the selected month
@@ -2331,9 +2378,13 @@ const PayrollPage = () => {
                               fontWeight="bold"
                               sx={{ fontSize: { xs: '1.25rem', sm: '1.75rem', md: '3rem' } }}
                             >
-                              {bonusesStats
-                                ? formatCurrency(bonusesStats.totalBonus)
-                                : "0.00"}
+                              {(() => {
+                                const declTotal = declarationTotals.find(d => d.agentName === user.fullName);
+                                if (declTotal) return formatCurrency(declTotal.totalBonus || 0);
+                                return bonusesStats
+                                  ? formatCurrency(bonusesStats.totalBonus)
+                                  : "0.00";
+                              })()}
                             </Typography>
                           </Box>
                           <Typography
@@ -2480,6 +2531,7 @@ const PayrollPage = () => {
                   loading={agentCallsLoading || bonusesLoading || finesLoading}
                   agentBonusesData={agentBonusesData}
                   agentFinesData={agentFinesData}
+                  declarationTotals={declarationTotals}
                 />
               </Grid>
 
@@ -2491,300 +2543,76 @@ const PayrollPage = () => {
                     action={
                       <Chip
                         label={
-                          historicalBonusConfig
-                            ? "Historical Data"
-                            : "Current Data"
+                          declarationTotals.length > 0
+                            ? "From Approved Declarations"
+                            : historicalBonusConfig
+                              ? "Historical Data"
+                              : "Current Data"
                         }
-                        color={historicalBonusConfig ? "secondary" : "primary"}
+                        color={declarationTotals.length > 0 ? "success" : historicalBonusConfig ? "secondary" : "primary"}
                         size="small"
                       />
                     }
                   />
                   <CardContent>
-                    <Grid container spacing={{ xs: 2, sm: 3 }}>
-                      <Grid item xs={6} sm={4}>
-                        <Box
-                          textAlign="center"
-                          p={3}
-                          sx={{
-                            border: "1px solid",
-                            borderColor: "divider",
-                            borderRadius: 2,
-                            "&:hover": {
-                              borderColor: "primary.main",
-                              backgroundColor: "action.hover",
-                            },
-                          }}
-                        >
-                          <Typography
-                            variant="body2"
-                            color="text.secondary"
-                            gutterBottom
-                          >
-                            1st Calls
-                          </Typography>
-                          <Typography
-                            variant="h3"
-                            color="text.primary"
-                            fontWeight="bold"
-                          >
-                            {(historicalBonusConfig || bonusConfig)?.callCounts
-                              ?.firstCalls || 0}
-                          </Typography>
-                          <Typography
-                            variant="body2"
-                            color="text.secondary"
-                            sx={{ mt: 1 }}
-                          >
-                            × $
-                            {(historicalBonusConfig || bonusConfig)?.bonusRates
-                              ?.firstCall || 5}{" "}
-                            = $
-                            {(
-                              ((historicalBonusConfig || bonusConfig)
-                                ?.callCounts?.firstCalls || 0) *
-                              ((historicalBonusConfig || bonusConfig)
-                                ?.bonusRates?.firstCall || 5)
-                            ).toFixed(2)}
-                          </Typography>
-                        </Box>
-                      </Grid>
-                      <Grid item xs={6} sm={4}>
-                        <Box
-                          textAlign="center"
-                          p={3}
-                          sx={{
-                            border: "1px solid",
-                            borderColor: "divider",
-                            borderRadius: 2,
-                            "&:hover": {
-                              borderColor: "primary.main",
-                              backgroundColor: "action.hover",
-                            },
-                          }}
-                        >
-                          <Typography
-                            variant="body2"
-                            color="text.secondary"
-                            gutterBottom
-                          >
-                            2nd Calls
-                          </Typography>
-                          <Typography
-                            variant="h3"
-                            color="text.primary"
-                            fontWeight="bold"
-                          >
-                            {(historicalBonusConfig || bonusConfig)?.callCounts
-                              ?.secondCalls || 0}
-                          </Typography>
-                          <Typography
-                            variant="body2"
-                            color="text.secondary"
-                            sx={{ mt: 1 }}
-                          >
-                            × $
-                            {(historicalBonusConfig || bonusConfig)?.bonusRates
-                              ?.secondCall || 10}{" "}
-                            = $
-                            {(
-                              ((historicalBonusConfig || bonusConfig)
-                                ?.callCounts?.secondCalls || 0) *
-                              ((historicalBonusConfig || bonusConfig)
-                                ?.bonusRates?.secondCall || 10)
-                            ).toFixed(2)}
-                          </Typography>
-                        </Box>
-                      </Grid>
-                      <Grid item xs={6} sm={4}>
-                        <Box
-                          textAlign="center"
-                          p={3}
-                          sx={{
-                            border: "1px solid",
-                            borderColor: "divider",
-                            borderRadius: 2,
-                            "&:hover": {
-                              borderColor: "primary.main",
-                              backgroundColor: "action.hover",
-                            },
-                          }}
-                        >
-                          <Typography
-                            variant="body2"
-                            color="text.secondary"
-                            gutterBottom
-                          >
-                            3rd Calls
-                          </Typography>
-                          <Typography
-                            variant="h3"
-                            color="text.primary"
-                            fontWeight="bold"
-                          >
-                            {(historicalBonusConfig || bonusConfig)?.callCounts
-                              ?.thirdCalls || 0}
-                          </Typography>
-                          <Typography
-                            variant="body2"
-                            color="text.secondary"
-                            sx={{ mt: 1 }}
-                          >
-                            × $
-                            {(historicalBonusConfig || bonusConfig)?.bonusRates
-                              ?.thirdCall || 15}{" "}
-                            = $
-                            {(
-                              ((historicalBonusConfig || bonusConfig)
-                                ?.callCounts?.thirdCalls || 0) *
-                              ((historicalBonusConfig || bonusConfig)
-                                ?.bonusRates?.thirdCall || 15)
-                            ).toFixed(2)}
-                          </Typography>
-                        </Box>
-                      </Grid>
-                      <Grid item xs={6} sm={4}>
-                        <Box
-                          textAlign="center"
-                          p={3}
-                          sx={{
-                            border: "1px solid",
-                            borderColor: "divider",
-                            borderRadius: 2,
-                            "&:hover": {
-                              borderColor: "primary.main",
-                              backgroundColor: "action.hover",
-                            },
-                          }}
-                        >
-                          <Typography
-                            variant="body2"
-                            color="text.secondary"
-                            gutterBottom
-                          >
-                            4th Calls
-                          </Typography>
-                          <Typography
-                            variant="h3"
-                            color="text.primary"
-                            fontWeight="bold"
-                          >
-                            {(historicalBonusConfig || bonusConfig)?.callCounts
-                              ?.fourthCalls || 0}
-                          </Typography>
-                          <Typography
-                            variant="body2"
-                            color="text.secondary"
-                            sx={{ mt: 1 }}
-                          >
-                            × $
-                            {(historicalBonusConfig || bonusConfig)?.bonusRates
-                              ?.fourthCall || 20}{" "}
-                            = $
-                            {(
-                              ((historicalBonusConfig || bonusConfig)
-                                ?.callCounts?.fourthCalls || 0) *
-                              ((historicalBonusConfig || bonusConfig)
-                                ?.bonusRates?.fourthCall || 20)
-                            ).toFixed(2)}
-                          </Typography>
-                        </Box>
-                      </Grid>
-                      <Grid item xs={6} sm={4}>
-                        <Box
-                          textAlign="center"
-                          p={3}
-                          sx={{
-                            border: "1px solid",
-                            borderColor: "divider",
-                            borderRadius: 2,
-                            "&:hover": {
-                              borderColor: "primary.main",
-                              backgroundColor: "action.hover",
-                            },
-                          }}
-                        >
-                          <Typography
-                            variant="body2"
-                            color="text.secondary"
-                            gutterBottom
-                          >
-                            5th Calls
-                          </Typography>
-                          <Typography
-                            variant="h3"
-                            color="text.primary"
-                            fontWeight="bold"
-                          >
-                            {(historicalBonusConfig || bonusConfig)?.callCounts
-                              ?.fifthCalls || 0}
-                          </Typography>
-                          <Typography
-                            variant="body2"
-                            color="text.secondary"
-                            sx={{ mt: 1 }}
-                          >
-                            × $
-                            {(historicalBonusConfig || bonusConfig)?.bonusRates
-                              ?.fifthCall || 25}{" "}
-                            = $
-                            {(
-                              ((historicalBonusConfig || bonusConfig)
-                                ?.callCounts?.fifthCalls || 0) *
-                              ((historicalBonusConfig || bonusConfig)
-                                ?.bonusRates?.fifthCall || 25)
-                            ).toFixed(2)}
-                          </Typography>
-                        </Box>
-                      </Grid>
-                      <Grid item xs={6} sm={4}>
-                        <Box
-                          textAlign="center"
-                          p={3}
-                          sx={{
-                            border: "1px solid",
-                            borderColor: "divider",
-                            borderRadius: 2,
-                            "&:hover": {
-                              borderColor: "primary.main",
-                              backgroundColor: "action.hover",
-                            },
-                          }}
-                        >
-                          <Typography
-                            variant="body2"
-                            color="text.secondary"
-                            gutterBottom
-                          >
-                            Verified Accounts
-                          </Typography>
-                          <Typography
-                            variant="h3"
-                            color="text.primary"
-                            fontWeight="bold"
-                          >
-                            {(historicalBonusConfig || bonusConfig)?.callCounts
-                              ?.verifiedAccounts || 0}
-                          </Typography>
-                          <Typography
-                            variant="body2"
-                            color="text.secondary"
-                            sx={{ mt: 1 }}
-                          >
-                            × $
-                            {(historicalBonusConfig || bonusConfig)?.bonusRates
-                              ?.verifiedAcc || 50}{" "}
-                            = $
-                            {(
-                              ((historicalBonusConfig || bonusConfig)
-                                ?.callCounts?.verifiedAccounts || 0) *
-                              ((historicalBonusConfig || bonusConfig)
-                                ?.bonusRates?.verifiedAcc || 50)
-                            ).toFixed(2)}
-                          </Typography>
-                        </Box>
-                      </Grid>
-                    </Grid>
+                    {(() => {
+                      // Build call type data from declarations if available
+                      const declTotal = declarationTotals.find(d => d.agentName === user.fullName);
+                      const declSummary = declTotal?.callTypeSummary || [];
+                      const getDeclData = (callType) => declSummary.find(s => s._id === callType);
+
+                      const fallbackConfig = historicalBonusConfig || bonusConfig;
+
+                      const callTypes = [
+                        { label: "1st Calls", declType: "first_call", countKey: "firstCalls", rateKey: "firstCall", defaultRate: 5 },
+                        { label: "2nd Calls", declType: "second_call", countKey: "secondCalls", rateKey: "secondCall", defaultRate: 10 },
+                        { label: "3rd Calls", declType: "third_call", countKey: "thirdCalls", rateKey: "thirdCall", defaultRate: 15 },
+                        { label: "4th Calls", declType: "fourth_call", countKey: "fourthCalls", rateKey: "fourthCall", defaultRate: 20 },
+                        { label: "Deposit Calls", declType: "deposit", countKey: "fifthCalls", rateKey: "fifthCall", defaultRate: 25 },
+                        { label: "Verified Accounts", declType: null, countKey: "verifiedAccounts", rateKey: "verifiedAcc", defaultRate: 50 },
+                      ];
+
+                      return (
+                        <Grid container spacing={{ xs: 2, sm: 3 }}>
+                          {callTypes.map((ct) => {
+                            const declData = ct.declType ? getDeclData(ct.declType) : null;
+                            const count = declData ? declData.count : (fallbackConfig?.callCounts?.[ct.countKey] || 0);
+                            const total = declData ? declData.totalBonus : (count * (fallbackConfig?.bonusRates?.[ct.rateKey] || ct.defaultRate));
+
+                            return (
+                              <Grid item xs={6} sm={4} key={ct.label}>
+                                <Box
+                                  textAlign="center"
+                                  p={3}
+                                  sx={{
+                                    border: "1px solid",
+                                    borderColor: "divider",
+                                    borderRadius: 2,
+                                    "&:hover": {
+                                      borderColor: "primary.main",
+                                      backgroundColor: "action.hover",
+                                    },
+                                  }}
+                                >
+                                  <Typography variant="body2" color="text.secondary" gutterBottom>
+                                    {ct.label}
+                                  </Typography>
+                                  <Typography variant="h3" color="text.primary" fontWeight="bold">
+                                    {count}
+                                  </Typography>
+                                  <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                                    {declData
+                                      ? `Total: $${total.toFixed(2)}`
+                                      : `× $${fallbackConfig?.bonusRates?.[ct.rateKey] || ct.defaultRate} = $${total.toFixed(2)}`
+                                    }
+                                  </Typography>
+                                </Box>
+                              </Grid>
+                            );
+                          })}
+                        </Grid>
+                      );
+                    })()}
                   </CardContent>
                 </Card>
               </Grid>
@@ -2832,14 +2660,20 @@ const PayrollPage = () => {
                           >
                             $
                             {(() => {
-                              // Use the correct bonus calculation from agent bonuses data
+                              // Use approved declaration totals if available
+                              if (declarationTotals.length > 0) {
+                                const declTotal = declarationTotals.find(d => d.agentName === user.fullName);
+                                if (declTotal) return (declTotal.totalBonus || 0).toFixed(2);
+                              }
+
+                              // Fallback to manual call counts data
                               if (
                                 !agentBonusesData ||
                                 agentBonusesData.length === 0
                               )
                                 return "0.00";
 
-                              const agentBonus = agentBonusesData[0]; // Agent bonus data for current user
+                              const agentBonus = agentBonusesData[0];
                               if (
                                 !agentBonus?.callCounts ||
                                 !agentBonus?.bonusRates
@@ -2867,7 +2701,7 @@ const PayrollPage = () => {
                             })()}
                           </Typography>
                           <Typography variant="body2" color="text.secondary">
-                            From call bonuses assigned by admin
+                            From approved call declarations
                           </Typography>
                         </Box>
                       </Grid>
@@ -3461,9 +3295,11 @@ const PayrollPage = () => {
                               fontWeight="bold"
                               sx={{ fontSize: { xs: '1.25rem', sm: '1.75rem', md: '3rem' } }}
                             >
-                              {bonusesStats
-                                ? formatCurrency(bonusesStats.totalBonus)
-                                : "0.00"}
+                              {declarationTotals.length > 0
+                                ? formatCurrency(declarationTotals.reduce((sum, d) => sum + (d.totalBonus || 0), 0))
+                                : bonusesStats
+                                  ? formatCurrency(bonusesStats.totalBonus)
+                                  : "0.00"}
                             </Typography>
                           </Box>
                           <Typography
@@ -3668,6 +3504,7 @@ const PayrollPage = () => {
                   loading={agentCallsLoading || bonusesLoading || finesLoading}
                   agentBonusesData={agentBonusesData}
                   agentFinesData={agentFinesData}
+                  declarationTotals={declarationTotals}
                 />
               </Grid>
             </Grid>

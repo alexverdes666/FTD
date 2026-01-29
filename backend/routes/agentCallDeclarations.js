@@ -8,6 +8,7 @@ const {
   getPendingDeclarations,
   getAgentDeclarations,
   getMonthlyTotals,
+  getAllAgentsMonthlyTotals,
   approveDeclaration,
   rejectDeclaration,
   deleteDeclaration,
@@ -30,6 +31,9 @@ router.post("/preview-bonus", previewBonus);
 
 // Agent fetches CDR calls (only their own based on fourDigitCode)
 router.get("/cdr", fetchCDRCalls);
+
+// Get monthly totals for all agents (admin/manager)
+router.get("/all-agents-monthly", isManager, getAllAgentsMonthlyTotals);
 
 // Get pending declarations for manager approval
 router.get("/pending", isManager, getPendingDeclarations);

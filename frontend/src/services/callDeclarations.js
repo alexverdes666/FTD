@@ -130,6 +130,27 @@ export const getMonthlyTotals = async (agentId, year = null, month = null) => {
 };
 
 /**
+ * Get monthly totals for ALL agents (admin/manager view)
+ * @param {number} year - Year
+ * @param {number} month - Month (1-12)
+ */
+export const getAllAgentsMonthlyTotals = async (year = null, month = null) => {
+  try {
+    const params = {};
+    if (year) params.year = year;
+    if (month) params.month = month;
+
+    const response = await api.get("/call-declarations/all-agents-monthly", {
+      params,
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching all agents monthly totals:", error);
+    throw error;
+  }
+};
+
+/**
  * Approve a declaration (managers only)
  * @param {string} declarationId - Declaration ID
  * @param {string} notes - Optional approval notes

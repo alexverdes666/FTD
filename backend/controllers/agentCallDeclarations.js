@@ -731,6 +731,98 @@ const previewBonus = async (req, res) => {
   }
 };
 
+/**
+ * Get monthly totals for ALL agents from approved declarations
+ * GET /call-declarations/all-agents-monthly?year=YYYY&month=MM
+ * Admin only
+ */
+const getAllAgentsMonthlyTotals = async (req, res) => {
+  try {
+    const year = parseInt(req.query.year) || new Date().getFullYear();
+    const month = parseInt(req.query.month) || new Date().getMonth() + 1;
+
+    if (month < 1 || month > 12) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid month (must be 1-12)",
+      });
+    }
+
+    const results = await AgentCallDeclaration.aggregate([
+      {
+        $match: {
+          declarationYear: year,
+          declarationMonth: month,
+          status: "approved",
+          isActive: true,
+        },
+      },
+      {
+        $group: {
+          _id: { agent: "$agent", callType: "$callType" },
+          count: { $sum: 1 },
+          totalBonus: { $sum: "$totalBonus" },
+          totalDuration: { $sum: "$callDuration" },
+          totalBaseBonus: { $sum: "$baseBonus" },
+          totalHourlyBonus: { $sum: "$hourlyBonus" },
+        },
+      },
+      {
+        $group: {
+          _id: "$_id.agent",
+          totalBaseBonus: { $sum: "$totalBaseBonus" },
+          totalHourlyBonus: { $sum: "$totalHourlyBonus" },
+          totalBonus: { $sum: "$totalBonus" },
+          declarationCount: { $sum: "$count" },
+          totalDuration: { $sum: "$totalDuration" },
+          callTypeSummary: {
+            $push: {
+              _id: "$_id.callType",
+              count: "$count",
+              totalBonus: "$totalBonus",
+              totalDuration: "$totalDuration",
+            },
+          },
+        },
+      },
+      {
+        $lookup: {
+          from: "users",
+          localField: "_id",
+          foreignField: "_id",
+          as: "agentInfo",
+        },
+      },
+      { $unwind: "$agentInfo" },
+      {
+        $project: {
+          agentId: "$_id",
+          agentName: "$agentInfo.fullName",
+          totalBaseBonus: 1,
+          totalHourlyBonus: 1,
+          totalBonus: 1,
+          declarationCount: 1,
+          totalDuration: 1,
+          callTypeSummary: 1,
+        },
+      },
+    ]);
+
+    res.json({
+      success: true,
+      data: results,
+      period: { year, month },
+    });
+  } catch (error) {
+    console.error("Error fetching all agents monthly totals:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch all agents monthly totals",
+      error: error.message,
+    });
+  }
+};
+
 module.exports = {
   fetchCDRCalls,
   createDeclaration,
@@ -738,6 +830,7 @@ module.exports = {
   getPendingDeclarations,
   getAgentDeclarations,
   getMonthlyTotals,
+  getAllAgentsMonthlyTotals,
   approveDeclaration,
   rejectDeclaration,
   deleteDeclaration,

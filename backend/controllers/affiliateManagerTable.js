@@ -1,5 +1,6 @@
 const { validationResult } = require("express-validator");
 const AffiliateManagerTable = require("../models/AffiliateManagerTable");
+const AgentCallDeclaration = require("../models/AgentCallDeclaration");
 const User = require("../models/User");
 const Order = require("../models/Order");
 const Lead = require("../models/Lead");
@@ -822,6 +823,80 @@ exports.getAffiliateManagerSummary = async (req, res, next) => {
         }
       }
 
+      // Get affiliate manager's performance table(s) for expenses
+      let totalMoneyExpenses = 0;
+      if (!isAllTime && targetMonth && targetYear) {
+        const tableStartDate = new Date(targetYear, targetMonth - 1, 1);
+        const tableEndDate = new Date(targetYear, targetMonth, 0, 23, 59, 59, 999);
+
+        const managerTable = await AffiliateManagerTable.findOne({
+          affiliateManager: manager._id,
+          period: 'monthly',
+          date: { $gte: tableStartDate, $lte: tableEndDate },
+          isActive: true
+        });
+
+        if (managerTable) {
+          totalMoneyExpenses = managerTable.tableData.reduce((sum, row) => {
+            if (!row.isCalculated) {
+              const value = parseFloat(row.value) || 0;
+              const quantity = parseFloat(row.quantity) || 1;
+              if (row.calculationType === 'percentage') {
+                return sum + (value * quantity) / 100;
+              }
+              return sum + value * quantity;
+            }
+            return sum;
+          }, 0);
+        }
+      } else {
+        const allTables = await AffiliateManagerTable.find({
+          affiliateManager: manager._id,
+          isActive: true
+        });
+
+        for (const table of allTables) {
+          totalMoneyExpenses += table.tableData.reduce((sum, row) => {
+            if (!row.isCalculated) {
+              const value = parseFloat(row.value) || 0;
+              const quantity = parseFloat(row.quantity) || 1;
+              if (row.calculationType === 'percentage') {
+                return sum + (value * quantity) / 100;
+              }
+              return sum + value * quantity;
+            }
+            return sum;
+          }, 0);
+        }
+      }
+
+      // Get call counts from approved declarations
+      const callCountQuery = {
+        affiliateManager: manager._id,
+        status: 'approved',
+        isActive: true
+      };
+
+      if (!isAllTime && targetMonth && targetYear) {
+        callCountQuery.declarationMonth = targetMonth;
+        callCountQuery.declarationYear = targetYear;
+      }
+
+      const callCounts = await AgentCallDeclaration.aggregate([
+        { $match: callCountQuery },
+        { $group: { _id: '$callType', count: { $sum: 1 } } }
+      ]);
+
+      let firstCalls = 0, secondCalls = 0, thirdCalls = 0, fourthCalls = 0;
+      for (const cc of callCounts) {
+        switch (cc._id) {
+          case 'first_call': firstCalls = cc.count; break;
+          case 'second_call': secondCalls = cc.count; break;
+          case 'third_call': thirdCalls = cc.count; break;
+          case 'fourth_call': fourthCalls = cc.count; break;
+        }
+      }
+
       summaryData.push({
         managerId: manager._id,
         managerName: manager.fullName,
@@ -831,12 +906,12 @@ exports.getAffiliateManagerSummary = async (req, res, next) => {
         totalFillers,
         totalVerifiedFTDs: totalFTDs - shavedFTDs,
         totalMoneyIn,
-        totalMoneyExpenses: 0,
+        totalMoneyExpenses,
         totalCommissionsAM: 0,
-        firstCalls: 0,
-        secondCalls: 0,
-        thirdCalls: 0,
-        fourthCalls: 0,
+        firstCalls,
+        secondCalls,
+        thirdCalls,
+        fourthCalls,
         fifthCalls: 0,
         totalSimCardUsed: 0,
         totalDataUsed: 0,
