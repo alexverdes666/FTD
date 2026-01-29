@@ -84,6 +84,7 @@ exports.getTickets = async (req, res) => {
       .populate('assignedTo', 'fullName email role')
       .populate('comments.user', 'fullName email role')
       .populate('resolution.resolvedBy', 'fullName email')
+      .populate('relatedFine', 'status amount reason agent')
       .sort(sortOptions)
       .skip(skip)
       .limit(parseInt(limit));
@@ -124,7 +125,15 @@ exports.getTicket = async (req, res) => {
       .populate('assignedTo', 'fullName email role')
       .populate('comments.user', 'fullName email role')
       .populate('resolution.resolvedBy', 'fullName email')
-      .populate('lastActivityBy', 'fullName email');
+      .populate('lastActivityBy', 'fullName email')
+      .populate({
+        path: 'relatedFine',
+        populate: [
+          { path: 'agent', select: 'fullName email' },
+          { path: 'imposedBy', select: 'fullName email' },
+          { path: 'adminDecision.decidedBy', select: 'fullName email' }
+        ]
+      });
 
     if (!ticket) {
       return res.status(404).json({
@@ -506,6 +515,18 @@ exports.resolveTicket = async (req, res) => {
         success: false,
         message: 'Only admin can resolve tickets'
       });
+    }
+
+    // For fine dispute tickets, require the fine to be decided first
+    if (ticket.category === 'fine_dispute' && ticket.relatedFine) {
+      const AgentFine = require('../models/AgentFine');
+      const relatedFine = await AgentFine.findById(ticket.relatedFine);
+      if (relatedFine && !['admin_approved', 'admin_rejected'].includes(relatedFine.status)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Cannot resolve a fine dispute ticket before making a decision on the fine. Please approve or reject the dispute first.'
+        });
+      }
     }
 
     // Use instance method to resolve

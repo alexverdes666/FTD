@@ -17,12 +17,13 @@ const ticketSchema = new mongoose.Schema({
     type: String,
     enum: [
       'leads_request',
-      'salary_issue', 
+      'salary_issue',
       'technical_support',
       'account_access',
       'payment_issue',
       'feature_request',
       'bug_report',
+      'fine_dispute',
       'other'
     ],
     required: true
@@ -125,6 +126,12 @@ const ticketSchema = new mongoose.Schema({
   // Due date for urgent tickets
   dueDate: {
     type: Date,
+    default: null
+  },
+  // Related fine (for fine_dispute tickets)
+  relatedFine: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'AgentFine',
     default: null
   },
   // Last activity timestamp

@@ -608,6 +608,7 @@ const TicketsPage = () => {
                     <MenuItem value="payment_issue">Payment Issue</MenuItem>
                     <MenuItem value="feature_request">Feature Request</MenuItem>
                     <MenuItem value="bug_report">Bug Report</MenuItem>
+                    <MenuItem value="fine_dispute">Fine Dispute</MenuItem>
                     <MenuItem value="other">Other</MenuItem>
                   </Select>
                 </FormControl>

@@ -146,6 +146,7 @@ export const formatTicketCategory = (category) => {
     payment_issue: 'Payment Issue',
     feature_request: 'Feature Request',
     bug_report: 'Bug Report',
+    fine_dispute: 'Fine Dispute',
     other: 'Other'
   };
   return categoryMap[category] || category;
@@ -160,6 +161,7 @@ export const getCategoryIcon = (category) => {
     payment_issue: 'Payment',
     feature_request: 'Lightbulb',
     bug_report: 'BugReport',
+    fine_dispute: 'Gavel',
     other: 'Help'
   };
   return iconMap[category] || 'Help';

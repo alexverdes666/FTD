@@ -1,6 +1,8 @@
 const AgentFine = require("../models/AgentFine");
 const User = require("../models/User");
 const FineImage = require("../models/FineImage");
+const Ticket = require("../models/Ticket");
+const { createTicketNotification } = require("./notifications");
 
 // Get all fines for all agents (admin view)
 const getAllAgentFines = async (req, res) => {
@@ -438,6 +440,42 @@ const agentRespondToFine = async (req, res) => {
     fine.status = action; // 'approved' or 'disputed'
 
     await fine.save();
+
+    // If disputed, also create a ticket for admin visibility
+    if (action === "disputed") {
+      try {
+        const agent = await User.findById(agentId, "fullName");
+        const agentName = agent ? agent.fullName : "Agent";
+
+        const ticket = await Ticket.create({
+          title: `Fine Dispute - ${fine.reason}`,
+          description: `Agent ${agentName} disputed a fine of $${fine.amount}.\n\nFine reason: ${fine.reason}\n${fine.description ? `Fine description: ${fine.description}\n` : ""}\nDispute reason: ${disputeReason.trim()}${description ? `\nAdditional details: ${description.trim()}` : ""}`,
+          category: "fine_dispute",
+          priority: "high",
+          createdBy: agentId,
+          relatedFine: fine._id,
+          tags: ["fine-dispute"],
+          lastActivityBy: agentId,
+        });
+
+        // Notify all admins about the new ticket
+        const admins = await User.find({ role: "admin", isActive: true });
+        for (const admin of admins) {
+          if (admin._id.toString() !== agentId) {
+            await createTicketNotification(
+              "ticket_created",
+              ticket,
+              admin._id,
+              agentId,
+              req.io
+            );
+          }
+        }
+      } catch (ticketError) {
+        console.error("Failed to create dispute ticket:", ticketError);
+        // Don't fail the dispute itself if ticket creation fails
+      }
+    }
 
     // Populate the response
     await fine.populate("agent", "fullName email");

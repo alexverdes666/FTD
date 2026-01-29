@@ -29,17 +29,22 @@ import {
   CheckCircle as ResolveIcon,
   Comment as CommentIcon,
   Image as ImageIcon,
-  Send as SendIcon
+  Send as SendIcon,
+  Gavel as GavelIcon,
+  ThumbUp as ThumbUpIcon,
+  ThumbDown as ThumbDownIcon
 } from '@mui/icons-material';
 import { toast } from 'react-hot-toast';
 import { selectUser } from '../store/slices/authSlice';
 import ticketsService from '../services/tickets';
+import { adminDecideFine } from '../services/agentFines';
+import { getFineImageUrl, getFineImageThumbnailUrl } from '../services/fineImages';
 
-const TicketDetailDialog = ({ 
-  open, 
-  onClose, 
-  ticketId, 
-  onTicketUpdate 
+const TicketDetailDialog = ({
+  open,
+  onClose,
+  ticketId,
+  onTicketUpdate
 }) => {
   const theme = useTheme();
   const user = useSelector(selectUser);
@@ -47,32 +52,41 @@ const TicketDetailDialog = ({
   const [loading, setLoading] = useState(false);
   const [newComment, setNewComment] = useState('');
   const [addingComment, setAddingComment] = useState(false);
-  
+
   // Resolve ticket states
   const [showResolveForm, setShowResolveForm] = useState(false);
   const [resolutionNote, setResolutionNote] = useState('');
   const [resolving, setResolving] = useState(false);
-  
+
+  // Fine dispute decision states
+  const [decidingFine, setDecidingFine] = useState(false);
+  const [showDecisionNotes, setShowDecisionNotes] = useState(null); // 'approve' or 'reject'
+  const [decisionNotes, setDecisionNotes] = useState('');
+
   // Image upload states
   const [uploadingImages, setUploadingImages] = useState(false);
   const [commentImages, setCommentImages] = useState([]);
   const [commentImageIds, setCommentImageIds] = useState([]);
-  
+
   // Ticket images state
   const [ticketImages, setTicketImages] = useState([]);
   const [loadingImages, setLoadingImages] = useState(false);
-  
+
   // Image preview state
   const [previewImage, setPreviewImage] = useState(null);
   const [previewPosition, setPreviewPosition] = useState({ x: 0, y: 0 });
+  // Track whether preview is a fine image or ticket image
+  const [previewIsFineImage, setPreviewIsFineImage] = useState(false);
 
-  const handleImageMouseEnter = (event, img) => {
+  const handleImageMouseEnter = (event, img, isFineImage = false) => {
     setPreviewPosition({ x: 20, y: 20 });
     setPreviewImage(img);
+    setPreviewIsFineImage(isFineImage);
   };
 
   const handleImageMouseLeave = () => {
     setPreviewImage(null);
+    setPreviewIsFineImage(false);
   };
 
   // Load ticket details
@@ -105,7 +119,6 @@ const TicketDetailDialog = ({
       }
     } catch (error) {
       console.error('Failed to load ticket images:', error);
-      // Don't show error toast as this is not critical
     } finally {
       setLoadingImages(false);
     }
@@ -115,19 +128,17 @@ const TicketDetailDialog = ({
     const files = Array.from(event.target.files);
     if (files.length === 0) return;
 
-    // Validate file types
     const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
     const invalidFiles = files.filter(file => !validTypes.includes(file.type));
-    
+
     if (invalidFiles.length > 0) {
       toast.error('Only JPEG, PNG, GIF, and WebP images are allowed');
       return;
     }
 
-    // Validate file sizes (50MB max per file)
     const maxSize = 50 * 1024 * 1024;
     const oversizedFiles = files.filter(file => file.size > maxSize);
-    
+
     if (oversizedFiles.length > 0) {
       toast.error('Image files must be under 50MB');
       return;
@@ -185,13 +196,11 @@ const TicketDetailDialog = ({
       setNewComment('');
       setCommentImages([]);
       setCommentImageIds([]);
-      
-      // Reload images to show newly attached ones
+
       await loadTicketImages();
-      
+
       toast.success('Comment added successfully');
-      
-      // Notify parent of update
+
       if (onTicketUpdate) {
         onTicketUpdate(response.data);
       }
@@ -210,10 +219,8 @@ const TicketDetailDialog = ({
       setShowResolveForm(false);
       setResolutionNote('');
 
-      // Update local ticket state with response data
       setTicket(response.data);
 
-      // Notify parent of update with the full updated ticket
       if (onTicketUpdate) {
         onTicketUpdate(response.data);
       }
@@ -224,8 +231,62 @@ const TicketDetailDialog = ({
     }
   };
 
+  // Handle fine dispute decision (approve = drop fine, reject = keep fine)
+  const handleFineDecision = async (decision) => {
+    if (!ticket?.relatedFine?._id) return;
+
+    try {
+      setDecidingFine(true);
+      // "approve" the dispute = reject the fine (fine is dropped)
+      // "reject" the dispute = approve the fine (fine stands)
+      const apiAction = decision === 'approve' ? 'rejected' : 'approved';
+      await adminDecideFine(ticket.relatedFine._id, apiAction, decisionNotes || null);
+
+      toast.success(
+        decision === 'approve'
+          ? 'Dispute approved - fine has been dropped'
+          : 'Dispute rejected - fine still stands'
+      );
+
+      setShowDecisionNotes(null);
+      setDecisionNotes('');
+
+      // Reload ticket to get updated fine status
+      await loadTicketDetails();
+
+      if (onTicketUpdate && ticket) {
+        onTicketUpdate(ticket);
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to make decision on fine');
+    } finally {
+      setDecidingFine(false);
+    }
+  };
+
   const isAdmin = user?.role === 'admin';
   const isTicketOwner = ticket && ticket.createdBy._id === user?._id;
+
+  // Fine dispute helpers
+  const isFineDispute = ticket?.category === 'fine_dispute' && ticket?.relatedFine;
+  const fine = ticket?.relatedFine;
+  const fineIsDecided = fine && ['admin_approved', 'admin_rejected'].includes(fine.status);
+  const fineStatusLabel = fine ? {
+    'pending_approval': 'Pending',
+    'approved': 'Approved by Agent',
+    'disputed': 'Disputed',
+    'admin_approved': 'Fine Stands (Dispute Rejected)',
+    'admin_rejected': 'Fine Dropped (Dispute Approved)',
+    'paid': 'Paid',
+    'waived': 'Waived'
+  }[fine.status] || fine.status : '';
+  const fineStatusColor = fine ? {
+    'disputed': 'warning',
+    'admin_approved': 'error',
+    'admin_rejected': 'success',
+    'paid': 'info',
+    'waived': 'default'
+  }[fine.status] || 'default' : 'default';
 
   if (!ticket && loading) {
     return (
@@ -239,12 +300,51 @@ const TicketDetailDialog = ({
 
   if (!ticket) return null;
 
+  // Helper to render fine image thumbnails
+  const renderFineImages = (imageIds, label) => {
+    if (!imageIds || imageIds.length === 0) return null;
+    return (
+      <Box>
+        <Typography variant="caption" fontWeight={600}>{label}:</Typography>
+        <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap sx={{ mt: 0.5 }}>
+          {imageIds.map((imgId) => {
+            const id = typeof imgId === 'object' ? imgId._id || imgId : imgId;
+            return (
+              <Box
+                key={id}
+                sx={{
+                  width: 50,
+                  height: 50,
+                  borderRadius: 1,
+                  overflow: 'hidden',
+                  cursor: 'pointer',
+                  border: `1px solid ${theme.palette.divider}`,
+                  '&:hover': { boxShadow: 2, borderColor: theme.palette.primary.main }
+                }}
+                onClick={() => window.open(getFineImageUrl(id), '_blank')}
+                onMouseEnter={(e) => handleImageMouseEnter(e, { _id: id }, true)}
+                onMouseLeave={handleImageMouseLeave}
+              >
+                <Box
+                  component="img"
+                  src={getFineImageThumbnailUrl(id)}
+                  alt="Evidence"
+                  sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                />
+              </Box>
+            );
+          })}
+        </Stack>
+      </Box>
+    );
+  };
+
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', py: 1.5, px: 2 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
           <Typography variant="subtitle1" fontWeight={600}>
-            Ticket Details
+            {isFineDispute ? 'Fine Dispute Details' : 'Ticket Details'}
           </Typography>
           {ticketsService.isTicketOverdue(ticket) && (
             <ScheduleIcon color="warning" fontSize="small" />
@@ -287,6 +387,240 @@ const TicketDetailDialog = ({
             </Stack>
           </Box>
 
+          {/* Fine Dispute Details Section */}
+          {isFineDispute && fine && (
+            <Card variant="outlined" sx={{ bgcolor: alpha(theme.palette.warning.main, 0.04), borderColor: alpha(theme.palette.warning.main, 0.3) }}>
+              <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+                <Stack spacing={1.5}>
+                  {/* Fine Status */}
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      <GavelIcon sx={{ fontSize: 18 }} color="warning" />
+                      <Typography variant="caption" fontWeight={700} sx={{ fontSize: '0.8rem' }}>
+                        Fine Details
+                      </Typography>
+                    </Box>
+                    <Chip
+                      label={fineStatusLabel}
+                      color={fineStatusColor}
+                      size="small"
+                      sx={{ height: 22, fontSize: '0.7rem', fontWeight: 600 }}
+                    />
+                  </Box>
+
+                  <Divider />
+
+                  {/* Manager / Fine Imposer Side */}
+                  <Box>
+                    <Typography variant="caption" fontWeight={700} color="error.main" sx={{ fontSize: '0.75rem', mb: 0.5, display: 'block' }}>
+                      Imposed By (Manager)
+                    </Typography>
+                    <Stack spacing={0.75} sx={{ pl: 0.5 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                        <Avatar sx={{ width: 22, height: 22, fontSize: '0.65rem', bgcolor: theme.palette.error.main }}>
+                          {fine.imposedBy?.fullName?.charAt(0) || '?'}
+                        </Avatar>
+                        <Typography variant="caption" fontWeight={600}>
+                          {fine.imposedBy?.fullName || 'Unknown'}
+                        </Typography>
+                        {fine.imposedDate && (
+                          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.6rem' }}>
+                            {new Date(fine.imposedDate).toLocaleDateString()}
+                          </Typography>
+                        )}
+                      </Box>
+                      <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+                        <Box>
+                          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem' }}>Amount</Typography>
+                          <Typography variant="caption" fontWeight={700} display="block" color="error.main" sx={{ fontSize: '0.85rem' }}>
+                            ${fine.amount}
+                          </Typography>
+                        </Box>
+                        <Box>
+                          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem' }}>Reason</Typography>
+                          <Typography variant="caption" fontWeight={600} display="block">
+                            {fine.reason}
+                          </Typography>
+                        </Box>
+                        {fine.fineMonth && fine.fineYear && (
+                          <Box>
+                            <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem' }}>Period</Typography>
+                            <Typography variant="caption" fontWeight={600} display="block">
+                              {fine.fineMonth}/{fine.fineYear}
+                            </Typography>
+                          </Box>
+                        )}
+                        {fine.orderId && (
+                          <Box>
+                            <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem' }}>Order ID</Typography>
+                            <Typography variant="caption" fontWeight={600} display="block" sx={{ fontSize: '0.7rem' }}>
+                              {typeof fine.orderId === 'object' ? fine.orderId._id : fine.orderId}
+                            </Typography>
+                          </Box>
+                        )}
+                      </Box>
+                      {fine.description && (
+                        <Box>
+                          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem' }}>Description</Typography>
+                          <Typography variant="caption" display="block" sx={{ fontSize: '0.75rem' }}>
+                            {fine.description}
+                          </Typography>
+                        </Box>
+                      )}
+                      {fine.notes && (
+                        <Box>
+                          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem' }}>Notes</Typography>
+                          <Typography variant="caption" display="block" sx={{ fontSize: '0.75rem' }}>
+                            {fine.notes}
+                          </Typography>
+                        </Box>
+                      )}
+                      {renderFineImages(fine.images, 'Evidence')}
+                    </Stack>
+                  </Box>
+
+                  <Divider />
+
+                  {/* Agent / Dispute Side */}
+                  <Box>
+                    <Typography variant="caption" fontWeight={700} color="info.main" sx={{ fontSize: '0.75rem', mb: 0.5, display: 'block' }}>
+                      Agent Dispute
+                    </Typography>
+                    <Stack spacing={0.75} sx={{ pl: 0.5 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                        <Avatar sx={{ width: 22, height: 22, fontSize: '0.65rem', bgcolor: theme.palette.info.main }}>
+                          {fine.agent?.fullName?.charAt(0) || '?'}
+                        </Avatar>
+                        <Typography variant="caption" fontWeight={600}>
+                          {fine.agent?.fullName || 'Unknown'}
+                        </Typography>
+                        {fine.agentResponse?.respondedAt && (
+                          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.6rem' }}>
+                            {new Date(fine.agentResponse.respondedAt).toLocaleDateString()}
+                          </Typography>
+                        )}
+                      </Box>
+                      {fine.agentResponse?.disputeReason && (
+                        <Box>
+                          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem' }}>Dispute Reason</Typography>
+                          <Typography variant="caption" display="block" sx={{ fontSize: '0.75rem' }}>
+                            {fine.agentResponse.disputeReason}
+                          </Typography>
+                        </Box>
+                      )}
+                      {fine.agentResponse?.description && (
+                        <Box>
+                          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem' }}>Additional Details</Typography>
+                          <Typography variant="caption" display="block" sx={{ fontSize: '0.75rem' }}>
+                            {fine.agentResponse.description}
+                          </Typography>
+                        </Box>
+                      )}
+                      {renderFineImages(fine.agentResponse?.images, 'Agent Evidence')}
+                    </Stack>
+                  </Box>
+
+                  {/* Admin Decision (if already decided) */}
+                  {fine.adminDecision?.action && (
+                    <>
+                      <Divider />
+                      <Alert
+                        severity={fine.status === 'admin_rejected' ? 'success' : 'error'}
+                        sx={{ py: 0.25, px: 1, '& .MuiAlert-message': { py: 0.5 } }}
+                      >
+                        <Typography variant="caption" fontWeight={600}>
+                          {fine.status === 'admin_rejected'
+                            ? 'Dispute Approved - Fine has been dropped'
+                            : 'Dispute Rejected - Fine still stands'}
+                        </Typography>
+                        {fine.adminDecision.decidedBy && (
+                          <Typography variant="caption" display="block" sx={{ fontSize: '0.65rem' }}>
+                            Decided by: {fine.adminDecision.decidedBy?.fullName || 'Admin'}
+                            {fine.adminDecision.decidedAt && ` on ${new Date(fine.adminDecision.decidedAt).toLocaleDateString()}`}
+                          </Typography>
+                        )}
+                        {fine.adminDecision.notes && (
+                          <Typography variant="caption" display="block" sx={{ mt: 0.25 }}>
+                            {fine.adminDecision.notes}
+                          </Typography>
+                        )}
+                      </Alert>
+                    </>
+                  )}
+
+                  {/* Decision Buttons (only for admin, only if fine is still disputed) */}
+                  {isAdmin && fine.status === 'disputed' && (
+                    <>
+                      <Divider />
+                      {showDecisionNotes ? (
+                        <Stack spacing={0.75}>
+                          <Typography variant="caption" fontWeight={600}>
+                            {showDecisionNotes === 'approve' ? 'Approve dispute (drop the fine):' : 'Reject dispute (fine still stands):'}
+                          </Typography>
+                          <TextField
+                            size="small"
+                            placeholder="Add notes (optional)..."
+                            value={decisionNotes}
+                            onChange={(e) => setDecisionNotes(e.target.value)}
+                            fullWidth
+                            multiline
+                            rows={2}
+                            sx={{
+                              '& .MuiOutlinedInput-root': { borderRadius: 1.5, fontSize: '0.75rem' },
+                            }}
+                          />
+                          <Stack direction="row" spacing={0.5}>
+                            <Button
+                              variant="contained"
+                              color={showDecisionNotes === 'approve' ? 'success' : 'error'}
+                              onClick={() => handleFineDecision(showDecisionNotes)}
+                              disabled={decidingFine}
+                              size="small"
+                              sx={{ textTransform: 'none', borderRadius: 1.5, fontSize: '0.7rem', py: 0.5 }}
+                            >
+                              {decidingFine ? <CircularProgress size={14} color="inherit" /> : 'Confirm'}
+                            </Button>
+                            <Button
+                              variant="outlined"
+                              onClick={() => { setShowDecisionNotes(null); setDecisionNotes(''); }}
+                              size="small"
+                              sx={{ textTransform: 'none', borderRadius: 1.5, fontSize: '0.7rem', py: 0.5 }}
+                            >
+                              Cancel
+                            </Button>
+                          </Stack>
+                        </Stack>
+                      ) : (
+                        <Stack direction="row" spacing={1} justifyContent="center">
+                          <Button
+                            variant="contained"
+                            color="success"
+                            size="small"
+                            startIcon={<ThumbUpIcon sx={{ fontSize: 14 }} />}
+                            onClick={() => setShowDecisionNotes('approve')}
+                            sx={{ textTransform: 'none', borderRadius: 1.5, fontSize: '0.75rem', py: 0.5, flex: 1 }}
+                          >
+                            Approve Dispute
+                          </Button>
+                          <Button
+                            variant="contained"
+                            color="error"
+                            size="small"
+                            startIcon={<ThumbDownIcon sx={{ fontSize: 14 }} />}
+                            onClick={() => setShowDecisionNotes('reject')}
+                            sx={{ textTransform: 'none', borderRadius: 1.5, fontSize: '0.75rem', py: 0.5, flex: 1 }}
+                          >
+                            Reject Dispute
+                          </Button>
+                        </Stack>
+                      )}
+                    </>
+                  )}
+                </Stack>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Ticket Info */}
           <Card variant="outlined" sx={{ bgcolor: alpha(theme.palette.background.default, 0.5) }}>
             <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
@@ -305,7 +639,7 @@ const TicketDetailDialog = ({
                       </Typography>
                     </Box>
                   </Box>
-                  
+
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                     <AssignIcon sx={{ fontSize: 16 }} color="action" />
                     <Typography variant="caption" fontWeight={600}>Admin Handled</Typography>
@@ -314,7 +648,7 @@ const TicketDetailDialog = ({
 
                 <Divider sx={{ my: 0.5 }} />
 
-                <Typography variant="body2" sx={{ fontSize: '0.8rem', lineHeight: 1.4 }}>
+                <Typography variant="body2" sx={{ fontSize: '0.8rem', lineHeight: 1.4, whiteSpace: 'pre-line' }}>
                   {ticket.description}
                 </Typography>
 
@@ -326,10 +660,10 @@ const TicketDetailDialog = ({
                       {ticketImages
                         .filter(img => img.commentIndex === null)
                         .map((img) => (
-                          <Box 
-                            key={img._id} 
-                            sx={{ 
-                              width: 60, 
+                          <Box
+                            key={img._id}
+                            sx={{
+                              width: 60,
                               height: 60,
                               borderRadius: 1,
                               overflow: 'hidden',
@@ -354,7 +688,7 @@ const TicketDetailDialog = ({
                 )}
 
                 {ticket.dueDate && (
-                  <Alert 
+                  <Alert
                     severity={ticketsService.isTicketOverdue(ticket) ? 'warning' : 'info'}
                     sx={{ py: 0.25, px: 1, '& .MuiAlert-message': { py: 0.5 } }}
                   >
@@ -416,8 +750,8 @@ const TicketDetailDialog = ({
                         sx={{
                           width: 24,
                           height: 24,
-                          bgcolor: isOwnComment 
-                            ? theme.palette.primary.main 
+                          bgcolor: isOwnComment
+                            ? theme.palette.primary.main
                             : theme.palette.secondary.main,
                           fontSize: '0.7rem',
                           fontWeight: 600,
@@ -425,7 +759,7 @@ const TicketDetailDialog = ({
                       >
                         {comment.user.fullName?.charAt(0)}
                       </Avatar>
-                      
+
                       <Box
                         sx={{
                           maxWidth: '80%',
@@ -439,15 +773,15 @@ const TicketDetailDialog = ({
                             {comment.user.fullName}
                           </Typography>
                           {comment.isInternal && (
-                            <Chip 
-                              label="Internal" 
-                              size="small" 
-                              color="warning" 
-                              sx={{ height: 14, fontSize: '0.55rem', '& .MuiChip-label': { px: 0.5 } }} 
+                            <Chip
+                              label="Internal"
+                              size="small"
+                              color="warning"
+                              sx={{ height: 14, fontSize: '0.55rem', '& .MuiChip-label': { px: 0.5 } }}
                             />
                           )}
                         </Box>
-                        
+
                         <Box
                           sx={{
                             bgcolor: isOwnComment
@@ -459,7 +793,7 @@ const TicketDetailDialog = ({
                             borderRadius: 2,
                             borderTopRightRadius: isOwnComment ? 3 : 16,
                             borderTopLeftRadius: isOwnComment ? 16 : 3,
-                            boxShadow: isOwnComment 
+                            boxShadow: isOwnComment
                               ? `0 1px 4px ${alpha(theme.palette.primary.main, 0.25)}`
                               : 'none',
                           }}
@@ -468,24 +802,24 @@ const TicketDetailDialog = ({
                             {comment.message}
                           </Typography>
                         </Box>
-                        
+
                         {/* Display comment images */}
                         {ticketImages.filter(img => img.commentIndex === index).length > 0 && (
                           <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap sx={{ mt: 0.5 }}>
                             {ticketImages
                               .filter(img => img.commentIndex === index)
                               .map((img) => (
-                                <Box 
-                                  key={img._id} 
-                                  sx={{ 
-                                    width: 40, 
+                                <Box
+                                  key={img._id}
+                                  sx={{
+                                    width: 40,
                                     height: 40,
                                     borderRadius: 1,
                                     overflow: 'hidden',
                                     cursor: 'pointer',
                                     border: `1px solid ${alpha(theme.palette.divider, 0.3)}`,
                                     transition: 'all 0.15s ease',
-                                    '&:hover': { 
+                                    '&:hover': {
                                       boxShadow: 2,
                                       borderColor: theme.palette.primary.main,
                                       transform: 'scale(1.05)'
@@ -505,7 +839,7 @@ const TicketDetailDialog = ({
                               ))}
                           </Stack>
                         )}
-                        
+
                         <Typography
                           variant="caption"
                           color="text.disabled"
@@ -551,7 +885,7 @@ const TicketDetailDialog = ({
                     }
                   }}
                 />
-                
+
                 {/* Image Upload for Comment */}
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <Box>
@@ -575,7 +909,7 @@ const TicketDetailDialog = ({
                       </IconButton>
                     </label>
                   </Box>
-                  
+
                   <Button
                     variant="contained"
                     onClick={handleAddComment}
@@ -594,13 +928,13 @@ const TicketDetailDialog = ({
                     Send
                   </Button>
                 </Box>
-                
+
                 {/* Display selected comment images */}
                 {commentImages.length > 0 && (
                   <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
                     {commentImages.map((img) => (
-                      <Box 
-                        key={img.id} 
+                      <Box
+                        key={img.id}
                         sx={{ position: 'relative', width: 36, height: 36, borderRadius: 0.75, overflow: 'hidden' }}
                       >
                         <Box
@@ -638,60 +972,69 @@ const TicketDetailDialog = ({
         {/* Resolve Ticket Section */}
         {isAdmin && ticket.status !== 'resolved' && ticket.status !== 'closed' && (
           <>
-            {!showResolveForm ? (
-              <Button
-                variant="contained"
-                color="success"
-                size="small"
-                startIcon={<ResolveIcon sx={{ fontSize: 16 }} />}
-                onClick={() => setShowResolveForm(true)}
-                sx={{
-                  mr: 'auto',
-                  textTransform: 'none',
-                  borderRadius: 1.5,
-                  fontSize: '0.75rem',
-                  py: 0.5,
-                }}
-              >
-                Resolve
-              </Button>
+            {/* For fine dispute tickets, only allow resolve after fine is decided */}
+            {isFineDispute && !fineIsDecided ? (
+              <Typography variant="caption" color="text.secondary" sx={{ mr: 'auto', fontSize: '0.7rem', fontStyle: 'italic' }}>
+                Decide on the dispute before resolving the ticket
+              </Typography>
             ) : (
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mr: 'auto', flex: 1, maxWidth: '65%' }}>
-                <TextField
-                  size="small"
-                  placeholder="Resolution note..."
-                  value={resolutionNote}
-                  onChange={(e) => setResolutionNote(e.target.value)}
-                  fullWidth
-                  sx={{
-                    '& .MuiOutlinedInput-root': { borderRadius: 1.5, fontSize: '0.75rem' },
-                    '& .MuiOutlinedInput-input': { py: 0.5 }
-                  }}
-                />
-                <Button
-                  variant="contained"
-                  color="success"
-                  onClick={handleResolveTicket}
-                  disabled={resolving}
-                  size="small"
-                  sx={{ minWidth: 'auto', px: 1.5, borderRadius: 1.5, textTransform: 'none', fontSize: '0.7rem', py: 0.5 }}
-                >
-                  {resolving ? <CircularProgress size={14} color="inherit" /> : 'OK'}
-                </Button>
-                <Button
-                  variant="outlined"
-                  onClick={() => { setShowResolveForm(false); setResolutionNote(''); }}
-                  size="small"
-                  sx={{ minWidth: 'auto', px: 1, borderRadius: 1.5, textTransform: 'none', fontSize: '0.7rem', py: 0.5 }}
-                >
-                  ✕
-                </Button>
-              </Box>
+              <>
+                {!showResolveForm ? (
+                  <Button
+                    variant="contained"
+                    color="success"
+                    size="small"
+                    startIcon={<ResolveIcon sx={{ fontSize: 16 }} />}
+                    onClick={() => setShowResolveForm(true)}
+                    sx={{
+                      mr: 'auto',
+                      textTransform: 'none',
+                      borderRadius: 1.5,
+                      fontSize: '0.75rem',
+                      py: 0.5,
+                    }}
+                  >
+                    Resolve
+                  </Button>
+                ) : (
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mr: 'auto', flex: 1, maxWidth: '65%' }}>
+                    <TextField
+                      size="small"
+                      placeholder="Resolution note..."
+                      value={resolutionNote}
+                      onChange={(e) => setResolutionNote(e.target.value)}
+                      fullWidth
+                      sx={{
+                        '& .MuiOutlinedInput-root': { borderRadius: 1.5, fontSize: '0.75rem' },
+                        '& .MuiOutlinedInput-input': { py: 0.5 }
+                      }}
+                    />
+                    <Button
+                      variant="contained"
+                      color="success"
+                      onClick={handleResolveTicket}
+                      disabled={resolving}
+                      size="small"
+                      sx={{ minWidth: 'auto', px: 1.5, borderRadius: 1.5, textTransform: 'none', fontSize: '0.7rem', py: 0.5 }}
+                    >
+                      {resolving ? <CircularProgress size={14} color="inherit" /> : 'OK'}
+                    </Button>
+                    <Button
+                      variant="outlined"
+                      onClick={() => { setShowResolveForm(false); setResolutionNote(''); }}
+                      size="small"
+                      sx={{ minWidth: 'auto', px: 1, borderRadius: 1.5, textTransform: 'none', fontSize: '0.7rem', py: 0.5 }}
+                    >
+                      ✕
+                    </Button>
+                  </Box>
+                )}
+              </>
             )}
           </>
         )}
-        <Button 
-          onClick={onClose} 
+        <Button
+          onClick={onClose}
           variant="contained"
           size="small"
           sx={{ borderRadius: 1.5, textTransform: 'none', fontSize: '0.75rem', py: 0.5 }}
@@ -704,8 +1047,11 @@ const TicketDetailDialog = ({
       {previewImage && (
         <Box
           component="img"
-          src={ticketsService.getTicketImageUrl(previewImage._id)}
-          alt={previewImage.originalName}
+          src={previewIsFineImage
+            ? getFineImageUrl(previewImage._id)
+            : ticketsService.getTicketImageUrl(previewImage._id)
+          }
+          alt="Preview"
           onMouseEnter={() => setPreviewImage(previewImage)}
           onMouseLeave={handleImageMouseLeave}
           sx={{
@@ -735,4 +1081,3 @@ const TicketDetailDialog = ({
 };
 
 export default TicketDetailDialog;
-
