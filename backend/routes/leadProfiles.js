@@ -9,6 +9,8 @@ const {
   createProfile,
   updateProfile,
   deleteProfile,
+  getProfileAuditLogs,
+  getProfileAuditLogsSensitive,
 } = require("../controllers/leadProfiles");
 
 const router = express.Router();
@@ -31,6 +33,20 @@ router.get(
   "/lead/:leadId",
   [protect, authorize(...authorizedRoles)],
   getProfilesByLead
+);
+
+// Get audit logs for a lead's profiles (admin only)
+router.get(
+  "/lead/:leadId/audit-logs",
+  [protect, authorize("admin")],
+  getProfileAuditLogs
+);
+
+// Get audit logs with decrypted sensitive values (admin only, requires unlock token)
+router.get(
+  "/lead/:leadId/audit-logs/sensitive",
+  [protect, authorize("admin")],
+  getProfileAuditLogsSensitive
 );
 
 // Get decrypted sensitive fields (requires X-Unlock-Token header)

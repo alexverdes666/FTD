@@ -4,6 +4,8 @@ const User = require("../models/User");
 const Lead = require("../models/Lead");
 const LeadProfileCredential = require("../models/LeadProfileCredential");
 const { validationResult } = require("express-validator");
+const LeadProfileAuditService = require("../services/leadProfileAuditService");
+const { decrypt } = require("../utils/encryption");
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
@@ -234,6 +236,9 @@ exports.createProfile = async (req, res, next) => {
       createdBy: req.user._id,
     });
 
+    // Audit log
+    await LeadProfileAuditService.logCreated(profile, lead, req.user, req);
+
     res.status(201).json({ success: true, data: redactProfile(profile) });
   } catch (error) {
     next(error);
@@ -257,6 +262,18 @@ exports.updateProfile = async (req, res, next) => {
         .json({ success: false, message: "Profile credential not found" });
     }
 
+    // Capture previous state for audit logging
+    const previousData = {
+      accountType: profile.accountType,
+      username: profile.username,
+      password: profile.password,
+      twoFactorSecret: profile.twoFactorSecret,
+      recoveryCodes: profile.recoveryCodes
+        ? [...profile.recoveryCodes]
+        : [],
+      notes: profile.notes,
+    };
+
     const { accountType, username, password, twoFactorSecret, recoveryCodes, notes } =
       req.body;
 
@@ -273,6 +290,30 @@ exports.updateProfile = async (req, res, next) => {
 
     profile.updatedBy = req.user._id;
     await profile.save();
+
+    // Audit log
+    const lead = await Lead.findById(profile.lead);
+    const newData = {
+      accountType: accountType !== undefined ? accountType : undefined,
+      username: username !== undefined ? username : undefined,
+      password: password !== undefined ? password : undefined,
+      twoFactorSecret:
+        twoFactorSecret !== undefined
+          ? twoFactorSecret
+            ? twoFactorSecret.replace(/\s+/g, "").toUpperCase()
+            : twoFactorSecret
+          : undefined,
+      recoveryCodes: recoveryCodes !== undefined ? recoveryCodes : undefined,
+      notes: notes !== undefined ? notes : undefined,
+    };
+    await LeadProfileAuditService.logUpdated(
+      profile,
+      previousData,
+      newData,
+      lead || { _id: profile.lead },
+      req.user,
+      req
+    );
 
     res.status(200).json({ success: true, data: redactProfile(profile) });
   } catch (error) {
@@ -292,11 +333,117 @@ exports.deleteProfile = async (req, res, next) => {
         .json({ success: false, message: "Profile credential not found" });
     }
 
+    // Audit log before deletion
+    const lead = await Lead.findById(profile.lead);
+    await LeadProfileAuditService.logDeleted(
+      profile,
+      lead || { _id: profile.lead },
+      req.user,
+      req
+    );
+
     await profile.deleteOne();
 
     res
       .status(200)
       .json({ success: true, message: "Profile credential deleted" });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get audit logs for a lead's profile credentials
+// @route   GET /api/lead-profiles/lead/:leadId/audit-logs
+// @access  Private (admin only)
+exports.getProfileAuditLogs = async (req, res, next) => {
+  try {
+    const { page = 1, limit = 20, category, action, startDate, endDate } =
+      req.query;
+
+    const result = await LeadProfileAuditService.getLeadProfileLogs(
+      req.params.leadId,
+      {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        category,
+        action,
+        startDate,
+        endDate,
+      }
+    );
+
+    res.status(200).json({
+      success: true,
+      data: result.logs,
+      pagination: result.pagination,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get audit logs with decrypted sensitive values (requires unlock token)
+// @route   GET /api/lead-profiles/lead/:leadId/audit-logs/sensitive
+// @access  Private (admin only)
+exports.getProfileAuditLogsSensitive = async (req, res, next) => {
+  try {
+    const tokenResult = verifyUnlockToken(req);
+    if (!tokenResult.valid) {
+      return res
+        .status(401)
+        .json({ success: false, message: tokenResult.error });
+    }
+
+    const { page = 1, limit = 20, category, action, startDate, endDate } =
+      req.query;
+
+    const result = await LeadProfileAuditService.getLeadProfileLogs(
+      req.params.leadId,
+      {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        category,
+        action,
+        startDate,
+        endDate,
+      }
+    );
+
+    // Decrypt sensitive values in the logs
+    const decryptedLogs = result.logs.map((log) => {
+      const obj = log.toObject ? log.toObject() : { ...log };
+
+      const decryptMixed = (val) => {
+        if (val === null || val === undefined) return val;
+        if (typeof val === "string" && val.startsWith("ENC:")) {
+          return decrypt(val);
+        }
+        if (Array.isArray(val)) {
+          return val.map((v) =>
+            typeof v === "string" && v.startsWith("ENC:") ? decrypt(v) : v
+          );
+        }
+        if (typeof val === "object") {
+          const decrypted = {};
+          for (const key of Object.keys(val)) {
+            decrypted[key] = decryptMixed(val[key]);
+          }
+          return decrypted;
+        }
+        return val;
+      };
+
+      obj.previousValue = decryptMixed(obj.previousValue);
+      obj.newValue = decryptMixed(obj.newValue);
+
+      return obj;
+    });
+
+    res.status(200).json({
+      success: true,
+      data: decryptedLogs,
+      pagination: result.pagination,
+    });
   } catch (error) {
     next(error);
   }

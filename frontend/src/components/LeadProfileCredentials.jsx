@@ -30,11 +30,13 @@ import {
   Key as KeyIcon,
   ExpandMore as ExpandMoreIcon,
   ExpandLess as ExpandLessIcon,
+  History as HistoryIcon,
 } from "@mui/icons-material";
 import { useSelector } from "react-redux";
 import { selectUser } from "../store/slices/authSlice";
 import { leadProfileService } from "../services/leadProfileService";
 import AddEditProfileDialog from "./AddEditProfileDialog";
+import ProfileAuditHistoryDialog from "./ProfileAuditHistoryDialog";
 
 const AUTHORIZED_ROLES = ["admin", "affiliate_manager", "lead_manager"];
 
@@ -361,6 +363,9 @@ const LeadProfileCredentials = ({ leadId }) => {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
 
+  // Audit history dialog
+  const [auditDialogOpen, setAuditDialogOpen] = useState(false);
+
   const isAuthorized =
     user && AUTHORIZED_ROLES.includes(user.role);
 
@@ -565,6 +570,13 @@ const LeadProfileCredentials = ({ leadId }) => {
               {copyMsg}
             </Typography>
           )}
+          {user?.role === "admin" && profiles.length > 0 && (
+            <Tooltip title="View Change History">
+              <IconButton size="small" onClick={() => setAuditDialogOpen(true)}>
+                <HistoryIcon sx={{ fontSize: "1rem" }} />
+              </IconButton>
+            </Tooltip>
+          )}
           {unlocked && (
             <Chip
               label={`Unlocked ${Math.floor(unlockTimeLeft / 60)}:${String(unlockTimeLeft % 60).padStart(2, "0")}`}
@@ -745,6 +757,14 @@ const LeadProfileCredentials = ({ leadId }) => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Audit History Dialog */}
+      <ProfileAuditHistoryDialog
+        open={auditDialogOpen}
+        onClose={() => setAuditDialogOpen(false)}
+        leadId={leadId}
+        unlockToken={unlockToken}
+      />
     </Paper>
   );
 };

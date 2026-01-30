@@ -69,4 +69,40 @@ export const leadProfileService = {
       throw error.response?.data || error;
     }
   },
+
+  getProfileAuditLogs: async (leadId, params = {}) => {
+    try {
+      const queryParams = new URLSearchParams();
+      if (params.page) queryParams.append("page", params.page);
+      if (params.limit) queryParams.append("limit", params.limit);
+      if (params.category) queryParams.append("category", params.category);
+      if (params.action) queryParams.append("action", params.action);
+      if (params.startDate) queryParams.append("startDate", params.startDate);
+      if (params.endDate) queryParams.append("endDate", params.endDate);
+
+      const response = await api.get(
+        `/lead-profiles/lead/${leadId}/audit-logs?${queryParams.toString()}`
+      );
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error;
+    }
+  },
+
+  getProfileAuditLogsSensitive: async (leadId, unlockToken, params = {}) => {
+    try {
+      const queryParams = new URLSearchParams();
+      if (params.page) queryParams.append("page", params.page);
+      if (params.limit) queryParams.append("limit", params.limit);
+      if (params.category) queryParams.append("category", params.category);
+
+      const response = await api.get(
+        `/lead-profiles/lead/${leadId}/audit-logs/sensitive?${queryParams.toString()}`,
+        { headers: { "X-Unlock-Token": unlockToken } }
+      );
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error;
+    }
+  },
 };

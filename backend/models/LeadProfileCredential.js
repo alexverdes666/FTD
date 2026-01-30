@@ -50,7 +50,7 @@ const leadProfileCredentialSchema = new mongoose.Schema(
 leadProfileCredentialSchema.index({ lead: 1, accountType: 1 });
 
 leadProfileCredentialSchema.plugin(encryptFields, {
-  fields: ["password", "twoFactorSecret", "recoveryCodes"],
+  fields: ["username", "password", "twoFactorSecret", "recoveryCodes"],
 });
 
 module.exports = mongoose.model(
