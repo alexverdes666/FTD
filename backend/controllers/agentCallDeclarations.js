@@ -72,24 +72,26 @@ const fetchCDRCalls = async (req, res) => {
     // Parse calls to normalized format
     const parsedCalls = longCalls.map(cdrService.parseCallRecord);
 
-    // Get all declared cdrCallIds for this agent
+    // Get all declarations for this agent (to attach status to each call)
     const declaredCalls = await AgentCallDeclaration.find({
       agent: userId,
       isActive: true,
-    }).select("cdrCallId");
+    }).select("cdrCallId status");
 
-    const declaredCallIds = new Set(declaredCalls.map((d) => d.cdrCallId));
+    const declarationMap = new Map();
+    for (const d of declaredCalls) {
+      declarationMap.set(d.cdrCallId, d.status);
+    }
 
-    // Filter out already declared calls
-    const undeclaredCalls = parsedCalls.filter(
-      (call) => !declaredCallIds.has(call.cdrCallId)
-    );
-
-    // Add formatted duration and call types info
-    const enrichedCalls = undeclaredCalls.map((call) => ({
-      ...call,
-      formattedDuration: cdrService.formatDuration(call.callDuration),
-    }));
+    // Enrich all calls with declaration status and formatted duration
+    const enrichedCalls = parsedCalls.map((call) => {
+      const declarationStatus = declarationMap.get(call.cdrCallId) || null;
+      return {
+        ...call,
+        formattedDuration: cdrService.formatDuration(call.callDuration),
+        declarationStatus, // null = undeclared, 'pending', 'approved', 'rejected'
+      };
+    });
 
     res.json({
       success: true,

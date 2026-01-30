@@ -42,8 +42,8 @@ const CallBonusesSection = ({ leads: passedLeads = [] }) => {
   const [error, setError] = useState(null);
   const [successMessage, setSuccessMessage] = useState(null);
 
-  // CDR calls data
-  const [undeclaredCalls, setUndeclaredCalls] = useState([]);
+  // CDR calls data (all calls with declaration status)
+  const [cdrCalls, setCdrCalls] = useState([]);
   const [cdrLoading, setCdrLoading] = useState(false);
   const [cdrError, setCdrError] = useState(null);
 
@@ -90,7 +90,7 @@ const CallBonusesSection = ({ leads: passedLeads = [] }) => {
     setCdrError(null);
     try {
       const data = await fetchCDRCalls(3);
-      setUndeclaredCalls(data.calls || []);
+      setCdrCalls(data.calls || []);
     } catch (err) {
       setCdrError(err.response?.data?.message || 'Failed to load CDR calls');
     } finally {
@@ -220,11 +220,11 @@ const CallBonusesSection = ({ leads: passedLeads = [] }) => {
           {/* Left Column - Undeclared Calls Table */}
           <Grid item xs={12} md={8}>
             <UndeclaredCallsTable
-              calls={undeclaredCalls}
+              calls={cdrCalls}
               loading={cdrLoading}
               error={cdrError}
               onDeclare={setSelectedCallForDeclaration}
-              emptyMessage="No undeclared calls found. All your long calls have been declared."
+              emptyMessage="No calls found."
             />
           </Grid>
 
@@ -244,7 +244,7 @@ const CallBonusesSection = ({ leads: passedLeads = [] }) => {
                       Undeclared
                     </Typography>
                     <Typography variant="h5" color="primary.main">
-                      {cdrLoading ? <CircularProgress size={20} /> : undeclaredCalls.length}
+                      {cdrLoading ? <CircularProgress size={20} /> : cdrCalls.filter(c => !c.declarationStatus || c.declarationStatus === 'rejected').length}
                     </Typography>
                   </Box>
                 </Grid>

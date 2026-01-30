@@ -18,6 +18,8 @@ import {
   Phone as PhoneIcon,
   AccessTime as AccessTimeIcon,
   Add as AddIcon,
+  Check as CheckIcon,
+  HourglassEmpty as HourglassIcon,
 } from '@mui/icons-material';
 
 const UndeclaredCallsTable = ({
@@ -112,15 +114,31 @@ const UndeclaredCallsTable = ({
                 </Typography>
               </TableCell>
               <TableCell align="right">
-                <Button
-                  variant="contained"
-                  color="primary"
-                  size="small"
-                  startIcon={<AddIcon />}
-                  onClick={() => onDeclare(call)}
-                >
-                  Declare
-                </Button>
+                {call.declarationStatus === 'approved' ? (
+                  <Chip
+                    icon={<CheckIcon />}
+                    label="Declared"
+                    size="small"
+                    color="success"
+                  />
+                ) : call.declarationStatus === 'pending' ? (
+                  <Chip
+                    icon={<HourglassIcon />}
+                    label="Pending"
+                    size="small"
+                    color="warning"
+                  />
+                ) : (
+                  <Button
+                    variant="contained"
+                    color="primary"
+                    size="small"
+                    startIcon={<AddIcon />}
+                    onClick={() => onDeclare(call)}
+                  >
+                    Declare
+                  </Button>
+                )}
               </TableCell>
             </TableRow>
           ))}
