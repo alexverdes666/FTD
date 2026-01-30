@@ -87,11 +87,11 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
   // Auto-fill lead by phone number when dialog opens
   useEffect(() => {
     const autoFillLead = async () => {
-      if (!open || !call?.sourceNumber) return;
+      if (!open || !call?.lineNumber) return;
 
       setLeadSearchLoading(true);
       try {
-        const matchedLead = await findLeadByPhone(call.sourceNumber);
+        const matchedLead = await findLeadByPhone(call.lineNumber);
         if (matchedLead) {
           setLeadId(matchedLead._id);
           setLeadAutoFilled(true);
@@ -107,7 +107,7 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
     };
 
     autoFillLead();
-  }, [open, call?.sourceNumber]);
+  }, [open, call?.lineNumber]);
 
   // Reset form when dialog opens/closes
   useEffect(() => {
@@ -189,6 +189,7 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
         description: description.trim() || undefined,
         affiliateManagerId,
         leadId,
+        recordFile: call.recordFile || '',
       };
 
       const newDeclaration = await createDeclaration(declarationData);

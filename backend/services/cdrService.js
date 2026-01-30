@@ -152,6 +152,9 @@ const parseCallRecord = (call) => {
     callDuration: billsec,
     sourceNumber: src,
     destinationNumber: dst,
+    lineNumber: call.line || "",
+    email: call.email || "",
+    recordFile: call.record || "",
     rawData: call, // Keep original data for debugging
   };
 };

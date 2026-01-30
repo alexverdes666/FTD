@@ -81,6 +81,7 @@ const UndeclaredCallsTable = ({
       <Table size="small">
         <TableHead>
           <TableRow>
+            <TableCell>Alias</TableCell>
             <TableCell>Date & Time</TableCell>
             <TableCell>Duration</TableCell>
             <TableCell>Phone Number</TableCell>
@@ -94,6 +95,11 @@ const UndeclaredCallsTable = ({
               hover
               sx={{ '&:last-child td, &:last-child th': { border: 0 } }}
             >
+              <TableCell>
+                <Typography variant="body2">
+                  {call.email || 'N/A'}
+                </Typography>
+              </TableCell>
               <TableCell>
                 <Typography variant="body2">
                   {formatDate(call.callDate)}
@@ -110,7 +116,7 @@ const UndeclaredCallsTable = ({
               </TableCell>
               <TableCell>
                 <Typography variant="body2" fontFamily="monospace">
-                  {formatPhoneNumber(call.sourceNumber)}
+                  {formatPhoneNumber(call.lineNumber)}
                 </Typography>
               </TableCell>
               <TableCell align="right">

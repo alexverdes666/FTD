@@ -112,6 +112,11 @@ const agentCallDeclarationSchema = new mongoose.Schema(
       ref: "Lead",
       required: true,
     },
+    // CDR recording filename (used to build playback URL)
+    recordFile: {
+      type: String,
+      default: "",
+    },
   },
   {
     timestamps: true,

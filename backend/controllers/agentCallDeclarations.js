@@ -118,7 +118,7 @@ const fetchCDRCalls = async (req, res) => {
 const createDeclaration = async (req, res) => {
   try {
     const userId = req.user.id;
-    const { cdrCallId, callDate, callDuration, sourceNumber, destinationNumber, callType, callCategory, description, affiliateManagerId, leadId } = req.body;
+    const { cdrCallId, callDate, callDuration, sourceNumber, destinationNumber, callType, callCategory, description, affiliateManagerId, leadId, recordFile } = req.body;
 
     // Validate required fields
     if (!cdrCallId || !callDate || !callDuration || !sourceNumber || !destinationNumber) {
@@ -248,6 +248,7 @@ const createDeclaration = async (req, res) => {
       declarationYear,
       affiliateManager: affiliateManagerId,
       lead: leadId,
+      recordFile: recordFile || "",
     });
 
     // Populate for response
