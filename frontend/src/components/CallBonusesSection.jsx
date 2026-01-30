@@ -19,6 +19,9 @@ import {
   Phone as PhoneIcon,
   AttachMoney as MoneyIcon,
   Pending as PendingIcon,
+  FiberNew as NewIcon,
+  HourglassEmpty as HourglassIcon,
+  CheckCircle as CheckCircleIcon,
 } from '@mui/icons-material';
 import { useSelector } from 'react-redux';
 import { selectUser } from '../store/slices/authSlice';
@@ -190,16 +193,6 @@ const CallBonusesSection = ({ leads: passedLeads = [] }) => {
   // Format currency
   const formatCurrency = (value) => `$${Number(value || 0).toFixed(2)}`;
 
-  // Get summary stats
-  const getDeclarationStats = () => {
-    const pending = myDeclarations.filter(d => d.status === 'pending').length;
-    const approved = myDeclarations.filter(d => d.status === 'approved').length;
-    const rejected = myDeclarations.filter(d => d.status === 'rejected').length;
-    return { pending, approved, rejected };
-  };
-
-  const stats = getDeclarationStats();
-
   return (
     <Box>
       {/* Alerts */}
@@ -214,155 +207,122 @@ const CallBonusesSection = ({ leads: passedLeads = [] }) => {
         </Alert>
       )}
 
-      {/* Agent View - Two Column Layout */}
-      {isAgent && (
-        <Grid container spacing={3}>
-          {/* Left Column - Undeclared Calls Table */}
-          <Grid item xs={12} md={8}>
-            <UndeclaredCallsTable
-              calls={cdrCalls}
-              loading={cdrLoading}
-              error={cdrError}
-              onDeclare={setSelectedCallForDeclaration}
-              emptyMessage="No calls found."
-            />
-          </Grid>
+      {/* Agent View - 3 Category Sections */}
+      {isAgent && (() => {
+        const newCalls = cdrCalls.filter(c => !c.declarationStatus || c.declarationStatus === 'rejected');
+        const pendingCalls = cdrCalls.filter(c => c.declarationStatus === 'pending');
+        const completedCalls = cdrCalls.filter(c => c.declarationStatus === 'approved');
 
-          {/* Right Column - Summary */}
-          <Grid item xs={12} md={4}>
-            {/* Status Summary */}
-            <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
-              <Typography variant="subtitle1" gutterBottom display="flex" alignItems="center" gap={1}>
-                <PhoneIcon color="primary" />
-                Declaration Status
-              </Typography>
-              <Divider sx={{ mb: 2 }} />
-              <Grid container spacing={2}>
-                <Grid item xs={6}>
-                  <Box textAlign="center">
-                    <Typography variant="caption" color="text.secondary">
-                      Undeclared
-                    </Typography>
-                    <Typography variant="h5" color="primary.main">
-                      {cdrLoading ? <CircularProgress size={20} /> : cdrCalls.filter(c => !c.declarationStatus || c.declarationStatus === 'rejected').length}
-                    </Typography>
-                  </Box>
-                </Grid>
-                <Grid item xs={6}>
-                  <Box textAlign="center">
-                    <Typography variant="caption" color="text.secondary">
-                      Pending
-                    </Typography>
-                    <Typography variant="h5" color="warning.main">
-                      {stats.pending}
-                    </Typography>
-                  </Box>
-                </Grid>
-                <Grid item xs={6}>
-                  <Box textAlign="center">
-                    <Typography variant="caption" color="text.secondary">
-                      Approved
-                    </Typography>
-                    <Typography variant="h5" color="success.main">
-                      {stats.approved}
-                    </Typography>
-                  </Box>
-                </Grid>
-                <Grid item xs={6}>
-                  <Box textAlign="center">
-                    <Typography variant="caption" color="text.secondary">
-                      Rejected
-                    </Typography>
-                    <Typography variant="h5" color="error.main">
-                      {stats.rejected}
-                    </Typography>
-                  </Box>
-                </Grid>
-              </Grid>
-            </Paper>
-
+        return (
+          <Box>
             {/* Monthly Bonus Summary */}
             <Paper
               variant="outlined"
               sx={{
                 p: 2,
+                mb: 3,
                 bgcolor: 'success.50',
                 borderColor: 'success.main',
               }}
             >
-              <Typography variant="subtitle1" gutterBottom display="flex" alignItems="center" gap={1}>
-                <MoneyIcon color="success" />
-                Monthly Bonus
-              </Typography>
-              <Divider sx={{ mb: 2 }} />
-
-              {/* Total Bonus - Prominent */}
-              <Box textAlign="center" mb={2}>
-                <Typography variant="caption" color="text.secondary">
-                  Total Approved Bonus
-                </Typography>
-                <Typography variant="h3" color="success.main" fontWeight="bold">
-                  {formatCurrency(monthlyTotals?.totals?.totalBonus)}
-                </Typography>
-              </Box>
-
-              {/* Breakdown */}
-              {monthlyTotals?.totals && (
-                <Grid container spacing={1}>
-                  <Grid item xs={6}>
-                    <Typography variant="caption" color="text.secondary">
-                      Declarations
+              <Grid container spacing={2} alignItems="center">
+                <Grid item xs={12} sm={4}>
+                  <Box display="flex" alignItems="center" gap={1}>
+                    <MoneyIcon color="success" />
+                    <Typography variant="subtitle1" fontWeight="bold">
+                      Monthly Bonus
                     </Typography>
-                    <Typography variant="body1" fontWeight="medium">
-                      {monthlyTotals.totals.declarationCount || 0}
-                    </Typography>
-                  </Grid>
-                  <Grid item xs={6}>
-                    <Typography variant="caption" color="text.secondary">
-                      Base Bonus
-                    </Typography>
-                    <Typography variant="body1" fontWeight="medium">
-                      {formatCurrency(monthlyTotals.totals.totalBaseBonus)}
-                    </Typography>
-                  </Grid>
-                  {monthlyTotals.totals.totalHourlyBonus > 0 && (
-                    <Grid item xs={12}>
-                      <Typography variant="caption" color="text.secondary">
-                        Hourly Bonus (+1hr calls)
-                      </Typography>
+                  </Box>
+                  <Typography variant="h4" color="success.main" fontWeight="bold">
+                    {formatCurrency(monthlyTotals?.totals?.totalBonus)}
+                  </Typography>
+                </Grid>
+                {monthlyTotals?.totals && (
+                  <>
+                    <Grid item xs={6} sm={2}>
+                      <Typography variant="caption" color="text.secondary">Declarations</Typography>
                       <Typography variant="body1" fontWeight="medium">
-                        {formatCurrency(monthlyTotals.totals.totalHourlyBonus)}
+                        {monthlyTotals.totals.declarationCount || 0}
                       </Typography>
                     </Grid>
-                  )}
-                </Grid>
-              )}
-
-              {/* Call Type Breakdown */}
-              {monthlyTotals?.callTypeSummary && monthlyTotals.callTypeSummary.length > 0 && (
-                <Box mt={2}>
-                  <Divider sx={{ mb: 1 }} />
-                  <Typography variant="caption" color="text.secondary" gutterBottom display="block">
-                    By Call Type
-                  </Typography>
-                  <Box display="flex" flexDirection="column" gap={0.5}>
-                    {monthlyTotals.callTypeSummary.map((item) => (
-                      <Box key={item._id} display="flex" justifyContent="space-between">
-                        <Typography variant="body2">
-                          {item._id.replace('_', ' ')} ({item.count})
+                    <Grid item xs={6} sm={2}>
+                      <Typography variant="caption" color="text.secondary">Base Bonus</Typography>
+                      <Typography variant="body1" fontWeight="medium">
+                        {formatCurrency(monthlyTotals.totals.totalBaseBonus)}
+                      </Typography>
+                    </Grid>
+                    {monthlyTotals.totals.totalHourlyBonus > 0 && (
+                      <Grid item xs={6} sm={2}>
+                        <Typography variant="caption" color="text.secondary">Hourly Bonus</Typography>
+                        <Typography variant="body1" fontWeight="medium">
+                          {formatCurrency(monthlyTotals.totals.totalHourlyBonus)}
                         </Typography>
-                        <Typography variant="body2" fontWeight="medium">
-                          {formatCurrency(item.totalBonus)}
-                        </Typography>
-                      </Box>
-                    ))}
-                  </Box>
-                </Box>
-              )}
+                      </Grid>
+                    )}
+                  </>
+                )}
+              </Grid>
             </Paper>
-          </Grid>
-        </Grid>
-      )}
+
+            {/* New Calls Section */}
+            <Paper variant="outlined" sx={{ mb: 3 }}>
+              <Box sx={{ p: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+                <NewIcon color="primary" />
+                <Typography variant="subtitle1" fontWeight="bold">
+                  New
+                </Typography>
+                <Chip label={cdrLoading ? '...' : newCalls.length} size="small" color="primary" />
+              </Box>
+              <Divider />
+              <UndeclaredCallsTable
+                calls={newCalls}
+                loading={cdrLoading}
+                error={cdrError}
+                onDeclare={setSelectedCallForDeclaration}
+                emptyMessage="No new calls to declare."
+              />
+            </Paper>
+
+            {/* Pending Calls Section */}
+            <Paper variant="outlined" sx={{ mb: 3 }}>
+              <Box sx={{ p: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+                <HourglassIcon color="warning" />
+                <Typography variant="subtitle1" fontWeight="bold">
+                  Pending
+                </Typography>
+                <Chip label={cdrLoading ? '...' : pendingCalls.length} size="small" color="warning" />
+              </Box>
+              <Divider />
+              <UndeclaredCallsTable
+                calls={pendingCalls}
+                loading={cdrLoading}
+                error={null}
+                onDeclare={setSelectedCallForDeclaration}
+                emptyMessage="No pending declarations."
+              />
+            </Paper>
+
+            {/* Completed Calls Section */}
+            <Paper variant="outlined" sx={{ mb: 3 }}>
+              <Box sx={{ p: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+                <CheckCircleIcon color="success" />
+                <Typography variant="subtitle1" fontWeight="bold">
+                  Completed
+                </Typography>
+                <Chip label={cdrLoading ? '...' : completedCalls.length} size="small" color="success" />
+              </Box>
+              <Divider />
+              <UndeclaredCallsTable
+                calls={completedCalls}
+                loading={cdrLoading}
+                error={null}
+                onDeclare={setSelectedCallForDeclaration}
+                emptyMessage="No completed declarations."
+              />
+            </Paper>
+          </Box>
+        );
+      })()}
 
       {/* Manager Pending Queue Badge */}
       {isManager && pendingDeclarations.length > 0 && (
