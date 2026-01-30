@@ -59,6 +59,7 @@ import {
   formatCurrency,
   refreshTotalMoneyFromCrypto,
   getAffiliateManagerSummary,
+  getAffiliateManagerNetworkAudit,
 } from "../services/affiliateManagerTable";
 import {
   getAllSalaryConfigurations,
@@ -115,6 +116,12 @@ const AffiliateManagersPage = () => {
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [selectedSummaryManager, setSelectedSummaryManager] = useState("");
 
+  // Network audit dialog state
+  const [networkAuditOpen, setNetworkAuditOpen] = useState(false);
+  const [networkAuditData, setNetworkAuditData] = useState(null);
+  const [networkAuditLoading, setNetworkAuditLoading] = useState(false);
+  const [selectedAuditManager, setSelectedAuditManager] = useState(null);
+
   // General state
   const [alert, setAlert] = useState({
     show: false,
@@ -166,6 +173,34 @@ const AffiliateManagersPage = () => {
     } finally {
       setSummaryLoading(false);
     }
+  };
+
+  const handleOpenNetworkAudit = async (manager) => {
+    setSelectedAuditManager(manager);
+    setNetworkAuditOpen(true);
+    setNetworkAuditLoading(true);
+    try {
+      const params = selectedMonth === "all"
+        ? {}
+        : { month: selectedMonth, year: selectedYear };
+      const response = await getAffiliateManagerNetworkAudit(manager._id, params);
+      if (response.success) {
+        setNetworkAuditData(response.data);
+      } else {
+        showAlert("Failed to fetch network audit data", "error");
+      }
+    } catch (error) {
+      console.error("Error fetching network audit:", error);
+      showAlert("Error fetching network audit data", "error");
+    } finally {
+      setNetworkAuditLoading(false);
+    }
+  };
+
+  const handleCloseNetworkAudit = () => {
+    setNetworkAuditOpen(false);
+    setNetworkAuditData(null);
+    setSelectedAuditManager(null);
   };
 
   const showAlert = (message, severity = "info") => {
@@ -763,7 +798,12 @@ const AffiliateManagersPage = () => {
                       );
 
                       return (
-                        <TableRow key={manager._id} hover>
+                        <TableRow
+                          key={manager._id}
+                          hover
+                          onClick={() => handleOpenNetworkAudit(manager)}
+                          sx={{ cursor: "pointer" }}
+                        >
                           <TableCell>
                             <Box display="flex" alignItems="center" gap={1}>
                               <Avatar sx={{ width: 32, height: 32, fontSize: 14 }}>
@@ -865,7 +905,7 @@ const AffiliateManagersPage = () => {
                               <Tooltip title="Edit Performance Table">
                                 <IconButton
                                   size="small"
-                                  onClick={() => handleEditTable(manager)}
+                                  onClick={(e) => { e.stopPropagation(); handleEditTable(manager); }}
                                   color="primary"
                                 >
                                   <TableChartIcon fontSize="small" />
@@ -874,7 +914,7 @@ const AffiliateManagersPage = () => {
                               <Tooltip title="Manage Salary">
                                 <IconButton
                                   size="small"
-                                  onClick={() => handleOpenSalaryForm(manager)}
+                                  onClick={(e) => { e.stopPropagation(); handleOpenSalaryForm(manager); }}
                                   color="secondary"
                                 >
                                   <SalaryIcon fontSize="small" />
@@ -1546,6 +1586,179 @@ const AffiliateManagersPage = () => {
             >
               {processing ? "Saving..." : "Save Configuration"}
             </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* Network Audit Dialog */}
+        <Dialog
+          open={networkAuditOpen}
+          onClose={handleCloseNetworkAudit}
+          maxWidth="lg"
+          fullWidth
+        >
+          <DialogTitle>
+            <Box display="flex" alignItems="center" justifyContent="space-between">
+              <Box display="flex" alignItems="center" gap={1}>
+                <SummaryIcon />
+                <Typography variant="h6">
+                  Network Audit: {selectedAuditManager?.fullName}
+                </Typography>
+              </Box>
+              <IconButton onClick={handleCloseNetworkAudit} color="inherit">
+                <CloseIcon />
+              </IconButton>
+            </Box>
+          </DialogTitle>
+          <DialogContent dividers>
+            {networkAuditLoading ? (
+              <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px">
+                <CircularProgress />
+              </Box>
+            ) : networkAuditData && networkAuditData.networks.length > 0 ? (
+              <Box>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                  {networkAuditData.totalNetworks} network{networkAuditData.totalNetworks !== 1 ? 's' : ''} assigned
+                </Typography>
+                <Grid container spacing={2}>
+                  {networkAuditData.networks.map((network) => (
+                    <Grid item xs={12} md={6} key={network.networkId}>
+                      <Card variant="outlined">
+                        <CardContent>
+                          {/* Network Header */}
+                          <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+                            <Typography variant="h6">{network.networkName}</Typography>
+                            <Chip
+                              label={network.isArchived ? "Archived" : network.isActive ? "Active" : "Inactive"}
+                              color={network.isArchived ? "default" : network.isActive ? "success" : "warning"}
+                              size="small"
+                            />
+                          </Box>
+
+                          {network.networkDescription && (
+                            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                              {network.networkDescription}
+                            </Typography>
+                          )}
+
+                          {/* Money In */}
+                          <Box mb={2}>
+                            <Typography variant="body2" color="text.secondary">Money In (USD)</Typography>
+                            <Typography variant="h5" color="success.main" fontWeight="bold">
+                              {formatCurrency(network.totalMoneyIn)}
+                            </Typography>
+                          </Box>
+
+                          {/* Order Stats Grid */}
+                          <Grid container spacing={1} mb={2}>
+                            <Grid item xs={3}>
+                              <Paper sx={{ p: 1, textAlign: "center" }} variant="outlined">
+                                <Typography variant="caption" color="text.secondary">FTDs</Typography>
+                                <Typography variant="body1" fontWeight="bold" color="primary">
+                                  {network.totalFTDs}
+                                </Typography>
+                              </Paper>
+                            </Grid>
+                            <Grid item xs={3}>
+                              <Paper sx={{ p: 1, textAlign: "center" }} variant="outlined">
+                                <Typography variant="caption" color="text.secondary">Shaved</Typography>
+                                <Typography variant="body1" fontWeight="bold" color="error.main">
+                                  {network.shavedFTDs}
+                                </Typography>
+                              </Paper>
+                            </Grid>
+                            <Grid item xs={3}>
+                              <Paper sx={{ p: 1, textAlign: "center" }} variant="outlined">
+                                <Typography variant="caption" color="text.secondary">Verified</Typography>
+                                <Typography variant="body1" fontWeight="bold" color="success.main">
+                                  {network.totalVerifiedFTDs}
+                                </Typography>
+                              </Paper>
+                            </Grid>
+                            <Grid item xs={3}>
+                              <Paper sx={{ p: 1, textAlign: "center" }} variant="outlined">
+                                <Typography variant="caption" color="text.secondary">Fillers</Typography>
+                                <Typography variant="body1" fontWeight="bold" color="info.main">
+                                  {network.totalFillers}
+                                </Typography>
+                              </Paper>
+                            </Grid>
+                          </Grid>
+
+                          {/* Orders & Transactions */}
+                          <Box display="flex" justifyContent="space-between" mb={1}>
+                            <Typography variant="body2" color="text.secondary">
+                              Total Orders: <strong>{network.totalOrders}</strong>
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary">
+                              Transactions: <strong>{network.totalTransactions}</strong>
+                            </Typography>
+                          </Box>
+
+                          {/* Per-Blockchain Breakdown */}
+                          {network.cryptoBreakdown && (
+                            <>
+                              <Typography variant="subtitle2" sx={{ mt: 1.5, mb: 0.5 }}>
+                                Blockchain Breakdown
+                              </Typography>
+                              <TableContainer>
+                                <Table size="small">
+                                  <TableHead>
+                                    <TableRow>
+                                      <TableCell>Chain</TableCell>
+                                      <TableCell align="right">Value (USD)</TableCell>
+                                      <TableCell align="right">Tx Count</TableCell>
+                                    </TableRow>
+                                  </TableHead>
+                                  <TableBody>
+                                    {Object.entries(network.cryptoBreakdown).map(([chain, data]) => (
+                                      (data.totalUsdValue > 0 || data.count > 0) ? (
+                                        <TableRow key={chain}>
+                                          <TableCell>
+                                            <Typography variant="body2" sx={{ textTransform: "capitalize" }}>
+                                              {chain === "bitcoin" ? "Bitcoin (BTC)" : chain === "ethereum" ? "Ethereum (ETH)" : "TRON (TRX)"}
+                                            </Typography>
+                                          </TableCell>
+                                          <TableCell align="right">
+                                            <Typography variant="body2" color="success.main">
+                                              {formatCurrency(data.totalUsdValue)}
+                                            </Typography>
+                                          </TableCell>
+                                          <TableCell align="right">
+                                            <Typography variant="body2">{data.count}</Typography>
+                                          </TableCell>
+                                        </TableRow>
+                                      ) : null
+                                    ))}
+                                    {Object.values(network.cryptoBreakdown).every(d => d.totalUsdValue === 0 && d.count === 0) && (
+                                      <TableRow>
+                                        <TableCell colSpan={3} align="center">
+                                          <Typography variant="body2" color="text.secondary">
+                                            No blockchain transactions
+                                          </Typography>
+                                        </TableCell>
+                                      </TableRow>
+                                    )}
+                                  </TableBody>
+                                </Table>
+                              </TableContainer>
+                            </>
+                          )}
+                        </CardContent>
+                      </Card>
+                    </Grid>
+                  ))}
+                </Grid>
+              </Box>
+            ) : (
+              <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px">
+                <Typography variant="body1" color="text.secondary">
+                  No networks assigned to this affiliate manager.
+                </Typography>
+              </Box>
+            )}
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={handleCloseNetworkAudit}>Close</Button>
           </DialogActions>
         </Dialog>
       </Box>

@@ -70,6 +70,18 @@ router.get('/summary',
   affiliateManagerTableController.getAffiliateManagerSummary
 );
 
+// Get per-network audit data for a specific affiliate manager
+router.get('/summary/:affiliateManagerId/network-audit',
+  protect,
+  isAdmin,
+  [
+    param('affiliateManagerId').isMongoId().withMessage('Valid affiliate manager ID is required'),
+    query('month').optional().isInt({ min: 1, max: 12 }).withMessage('Month must be between 1 and 12'),
+    query('year').optional().isInt({ min: 2020, max: 2100 }).withMessage('Invalid year'),
+  ],
+  affiliateManagerTableController.getAffiliateManagerNetworkAudit
+);
+
 // Get table statistics (Admin only)
 router.get('/statistics',
   protect,

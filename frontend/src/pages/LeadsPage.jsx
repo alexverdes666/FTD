@@ -4663,7 +4663,7 @@ const LeadRow = React.memo(
                 <EditIcon sx={{ fontSize: "1rem" }} />
               </IconButton>
             )}
-            {user?.role === ROLES.AFFILIATE_MANAGER && (
+            {(user?.role === ROLES.AFFILIATE_MANAGER || isLeadManager) && (
               <Tooltip title="View History">
                 <IconButton
                   size="small"

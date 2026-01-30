@@ -934,3 +934,152 @@ exports.getAffiliateManagerSummary = async (req, res, next) => {
     next(error);
   }
 };
+
+// Get per-network audit data for a specific affiliate manager
+exports.getAffiliateManagerNetworkAudit = async (req, res, next) => {
+  try {
+    const { affiliateManagerId } = req.params;
+    const { month, year } = req.query;
+
+    // Validate affiliate manager exists
+    const affiliateManager = await User.findById(affiliateManagerId);
+    if (!affiliateManager || affiliateManager.role !== 'affiliate_manager') {
+      return res.status(404).json({
+        success: false,
+        message: 'Affiliate manager not found',
+      });
+    }
+
+    const isAllTime = !month && !year;
+    const targetMonth = month ? parseInt(month) : null;
+    const targetYear = year ? parseInt(year) : null;
+
+    // Calculate date range
+    let startDate = null;
+    let endDate = null;
+    if (!isAllTime && targetMonth && targetYear) {
+      startDate = new Date(targetYear, targetMonth - 1, 1);
+      endDate = new Date(targetYear, targetMonth, 0, 23, 59, 59, 999);
+    }
+
+    // Get all networks assigned to this affiliate manager
+    const OurNetwork = require('../models/OurNetwork');
+    const networks = await OurNetwork.find({
+      assignedAffiliateManager: affiliateManagerId,
+      isActive: true,
+    }).select('_id name description isActive isArchived cryptoWallets createdAt');
+
+    // Import BlockchainScraperService
+    let BlockchainScraperService;
+    try {
+      BlockchainScraperService = require('../services/blockchainScraperService');
+    } catch (error) {
+      console.warn('BlockchainScraperService not available:', error.message);
+    }
+
+    const networkAuditData = [];
+
+    for (const network of networks) {
+      // Query orders for this AM + this specific network
+      const orderQuery = {
+        requester: affiliateManagerId,
+        selectedOurNetwork: network._id,
+      };
+      if (!isAllTime && startDate && endDate) {
+        orderQuery.createdAt = { $gte: startDate, $lte: endDate };
+      }
+      const orders = await Order.find(orderQuery).select('leads leadsMetadata');
+
+      // Count FTDs, fillers, shaved from leadsMetadata
+      let totalFTDs = 0;
+      let totalFillers = 0;
+      let shavedFTDs = 0;
+
+      for (const order of orders) {
+        if (order.leadsMetadata && order.leadsMetadata.length > 0) {
+          for (const metadata of order.leadsMetadata) {
+            if (metadata.orderedAs === 'ftd') {
+              totalFTDs++;
+              if (metadata.shaved === true) {
+                shavedFTDs++;
+              }
+            } else if (metadata.orderedAs === 'filler') {
+              totalFillers++;
+            }
+          }
+        }
+      }
+
+      // Get crypto data for this specific network
+      let cryptoData = { totalUsdValue: 0, totalTransactions: 0, breakdown: {} };
+      if (BlockchainScraperService) {
+        try {
+          const service = new BlockchainScraperService();
+          const networkSummary = await service.getNetworkSummary(
+            network._id,
+            0,
+            isAllTime ? null : targetMonth,
+            isAllTime ? null : targetYear
+          );
+          cryptoData = {
+            totalUsdValue: networkSummary.totalUsdValue || 0,
+            totalTransactions: networkSummary.totalTransactions || 0,
+            breakdown: {
+              bitcoin: {
+                count: networkSummary.breakdown?.bitcoin?.total?.count || 0,
+                totalUsdValue: networkSummary.breakdown?.bitcoin?.total?.totalUsdValue || 0,
+              },
+              ethereum: {
+                count: networkSummary.breakdown?.ethereum?.total?.count || 0,
+                totalUsdValue: networkSummary.breakdown?.ethereum?.total?.totalUsdValue || 0,
+              },
+              tron: {
+                count: networkSummary.breakdown?.tron?.total?.count || 0,
+                totalUsdValue: networkSummary.breakdown?.tron?.total?.totalUsdValue || 0,
+              },
+            },
+          };
+        } catch (err) {
+          console.warn(`Failed to get crypto data for network ${network.name}:`, err.message);
+        }
+      }
+
+      networkAuditData.push({
+        networkId: network._id,
+        networkName: network.name,
+        networkDescription: network.description || '',
+        isActive: network.isActive,
+        isArchived: network.isArchived,
+        createdAt: network.createdAt,
+        totalOrders: orders.length,
+        totalFTDs,
+        shavedFTDs,
+        totalVerifiedFTDs: totalFTDs - shavedFTDs,
+        totalFillers,
+        totalMoneyIn: cryptoData.totalUsdValue,
+        totalTransactions: cryptoData.totalTransactions,
+        cryptoBreakdown: cryptoData.breakdown,
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        affiliateManager: {
+          _id: affiliateManager._id,
+          fullName: affiliateManager.fullName,
+          email: affiliateManager.email,
+        },
+        networks: networkAuditData,
+        totalNetworks: networks.length,
+      },
+      period: {
+        isAllTime,
+        month: targetMonth,
+        year: targetYear,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};

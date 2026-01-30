@@ -140,6 +140,20 @@ export const getAffiliateManagerSummary = async (params = {}) => {
   }
 };
 
+// Get per-network audit data for a specific affiliate manager
+export const getAffiliateManagerNetworkAudit = async (affiliateManagerId, params = {}) => {
+  try {
+    const response = await api.get(
+      `/affiliate-manager-table/summary/${affiliateManagerId}/network-audit`,
+      { params }
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching affiliate manager network audit:", error);
+    throw error;
+  }
+};
+
 // Helper functions for table data formatting
 export const formatCurrency = (amount, currency = "USD") => {
   return new Intl.NumberFormat("en-US", {
