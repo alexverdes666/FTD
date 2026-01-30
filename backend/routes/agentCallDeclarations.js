@@ -15,6 +15,7 @@ const {
   getCallTypes,
   previewBonus,
   getAffiliateManagers,
+  findLeadByPhone,
 } = require("../controllers/agentCallDeclarations");
 
 // All routes require authentication
@@ -31,6 +32,9 @@ router.post("/preview-bonus", previewBonus);
 
 // Agent fetches CDR calls (only their own based on fourDigitCode)
 router.get("/cdr", fetchCDRCalls);
+
+// Find lead by phone number (for auto-fill in declaration dialog)
+router.get("/lead-by-phone", findLeadByPhone);
 
 // Get monthly totals for all agents (admin/manager)
 router.get("/all-agents-monthly", isManager, getAllAgentsMonthlyTotals);

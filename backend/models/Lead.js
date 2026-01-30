@@ -787,6 +787,7 @@ leadSchema.index({ createdAt: -1 });
 leadSchema.index({ client: 1 }, { sparse: true });
 leadSchema.index({ assignedClientBrokers: 1 });
 leadSchema.index({ newEmail: 1 });
+leadSchema.index({ newPhone: 1 });
 leadSchema.index({ status: 1 });
 leadSchema.index({ assignedAgentAt: -1 });
 leadSchema.index({ firstName: 1, lastName: 1 });

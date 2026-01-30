@@ -116,14 +116,34 @@ const fetchCDRCalls = async (req, res) => {
 const createDeclaration = async (req, res) => {
   try {
     const userId = req.user.id;
-    const { cdrCallId, callDate, callDuration, sourceNumber, destinationNumber, callType, description, affiliateManagerId, leadId } = req.body;
+    const { cdrCallId, callDate, callDuration, sourceNumber, destinationNumber, callType, callCategory, description, affiliateManagerId, leadId } = req.body;
 
     // Validate required fields
-    if (!cdrCallId || !callDate || !callDuration || !sourceNumber || !destinationNumber || !callType) {
+    if (!cdrCallId || !callDate || !callDuration || !sourceNumber || !destinationNumber) {
       return res.status(400).json({
         success: false,
         message: "Missing required fields",
       });
+    }
+
+    // Validate call category
+    const validCallCategories = ["ftd", "filler"];
+    if (!callCategory || !validCallCategories.includes(callCategory)) {
+      return res.status(400).json({
+        success: false,
+        message: "Call category is required (ftd or filler)",
+      });
+    }
+
+    // Validate call type (required only for FTD calls)
+    if (callCategory === "ftd") {
+      const validCallTypes = ["deposit", "first_call", "second_call", "third_call", "fourth_call"];
+      if (!callType || !validCallTypes.includes(callType)) {
+        return res.status(400).json({
+          success: false,
+          message: "Valid call type is required for FTD calls",
+        });
+      }
     }
 
     // Validate affiliate manager is provided
@@ -147,15 +167,6 @@ const createDeclaration = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: `Call duration must be at least ${cdrService.MIN_CALL_DURATION} seconds (15 minutes)`,
-      });
-    }
-
-    // Validate call type
-    const validCallTypes = ["deposit", "first_call", "second_call", "third_call", "fourth_call"];
-    if (!validCallTypes.includes(callType)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid call type",
       });
     }
 
@@ -203,7 +214,13 @@ const createDeclaration = async (req, res) => {
     }
 
     // Calculate bonuses
-    const { baseBonus, hourlyBonus, totalBonus } = cdrService.calculateBonus(callType, callDuration);
+    let bonusData;
+    if (callCategory === "filler") {
+      bonusData = { baseBonus: 0, hourlyBonus: 0, totalBonus: 0 };
+    } else {
+      bonusData = cdrService.calculateBonus(callType, callDuration);
+    }
+    const { baseBonus, hourlyBonus, totalBonus } = bonusData;
 
     // Determine declaration month/year from call date
     const callDateObj = new Date(callDate);
@@ -218,7 +235,8 @@ const createDeclaration = async (req, res) => {
       callDuration,
       sourceNumber,
       destinationNumber,
-      callType,
+      callCategory,
+      callType: callCategory === "ftd" ? callType : undefined,
       description: description?.trim() || "",
       baseBonus,
       hourlyBonus,
@@ -510,7 +528,12 @@ const approveDeclaration = async (req, res) => {
  * This is called when a call declaration is approved
  */
 const addCallExpenseToAffiliateManager = async (declaration) => {
-  const { affiliateManager, callType, totalBonus, declarationMonth, declarationYear } = declaration;
+  const { affiliateManager, callType, callCategory, totalBonus, declarationMonth, declarationYear } = declaration;
+
+  // Skip filler calls - they have $0 bonus, no expense to track
+  if (callCategory === "filler" || totalBonus === 0) {
+    return;
+  }
 
   // Get the row ID for this call type
   const rowId = CALL_TYPE_TO_TABLE_ROW[callType];
@@ -823,6 +846,63 @@ const getAllAgentsMonthlyTotals = async (req, res) => {
   }
 };
 
+/**
+ * Find a lead by phone number (for auto-filling in declaration dialog)
+ * GET /call-declarations/lead-by-phone?phone=XXXX
+ * Returns matching lead only if assigned to the requesting agent
+ */
+const findLeadByPhone = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { phone } = req.query;
+
+    if (!phone || phone.trim().length < 4) {
+      return res.status(400).json({
+        success: false,
+        message: "Phone number is required (minimum 4 digits)",
+      });
+    }
+
+    const cleanPhone = phone.replace(/[\s\-\(\)]/g, "");
+
+    // 1. Exact match on newPhone
+    let lead = await Lead.findOne({
+      newPhone: cleanPhone,
+      assignedAgent: userId,
+    }).select("_id firstName lastName newEmail newPhone");
+
+    // 2. If not found, try suffix-based matching (last 10 digits)
+    //    CDR sourceNumber may have country code prefix that the lead's newPhone lacks
+    if (!lead && cleanPhone.length >= 7) {
+      const suffix = cleanPhone.slice(-10);
+      lead = await Lead.findOne({
+        newPhone: { $regex: suffix + "$" },
+        assignedAgent: userId,
+      }).select("_id firstName lastName newEmail newPhone");
+    }
+
+    if (!lead) {
+      return res.json({
+        success: true,
+        data: null,
+        message: "No matching lead found for this phone number",
+      });
+    }
+
+    res.json({
+      success: true,
+      data: lead,
+    });
+  } catch (error) {
+    console.error("Error finding lead by phone:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to find lead by phone number",
+      error: error.message,
+    });
+  }
+};
+
 module.exports = {
   fetchCDRCalls,
   createDeclaration,
@@ -837,4 +917,5 @@ module.exports = {
   getCallTypes,
   previewBonus,
   getAffiliateManagers,
+  findLeadByPhone,
 };

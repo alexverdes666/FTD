@@ -56,7 +56,8 @@ const CallDeclarationsTable = ({
     }
   };
 
-  const getCallTypeLabel = (callType) => {
+  const getCallTypeLabel = (callType, callCategory) => {
+    if (callCategory === 'filler') return 'Filler Call';
     const labels = {
       deposit: 'Deposit Call',
       first_call: 'First Call',
@@ -64,7 +65,7 @@ const CallDeclarationsTable = ({
       third_call: '3rd Call',
       fourth_call: '4th Call',
     };
-    return labels[callType] || callType;
+    return labels[callType] || callType || 'N/A';
   };
 
   const formatDuration = (seconds) => {
@@ -151,7 +152,7 @@ const CallDeclarationsTable = ({
               </TableCell>
               <TableCell>
                 <Typography variant="body2">
-                  {getCallTypeLabel(declaration.callType)}
+                  {getCallTypeLabel(declaration.callType, declaration.callCategory)}
                 </Typography>
               </TableCell>
               <TableCell align="right">

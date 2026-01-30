@@ -17,6 +17,23 @@ export const fetchCDRCalls = async (months = 3) => {
 };
 
 /**
+ * Find a lead by phone number (for auto-fill in declaration dialog)
+ * @param {string} phone - Phone number to search
+ * @returns {Object|null} - Matching lead or null
+ */
+export const findLeadByPhone = async (phone) => {
+  try {
+    const response = await api.get("/call-declarations/lead-by-phone", {
+      params: { phone },
+    });
+    return response.data.data;
+  } catch (error) {
+    console.error("Error finding lead by phone:", error);
+    return null;
+  }
+};
+
+/**
  * Get call types with bonus info
  */
 export const getCallTypes = async () => {

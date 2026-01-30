@@ -19,6 +19,8 @@ import {
   InputLabel,
   Select,
   ListItemText,
+  ToggleButton,
+  ToggleButtonGroup,
 } from '@mui/material';
 import {
   Phone as PhoneIcon,
@@ -28,7 +30,7 @@ import {
   Person as PersonIcon,
   Contacts as ContactsIcon,
 } from '@mui/icons-material';
-import { createDeclaration, previewBonus } from '../services/callDeclarations';
+import { createDeclaration, previewBonus, findLeadByPhone } from '../services/callDeclarations';
 import api from '../services/api';
 
 const CALL_TYPES = [
@@ -41,6 +43,7 @@ const CALL_TYPES = [
 
 const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, leads: passedLeads = [] }) => {
   const [callType, setCallType] = useState('');
+  const [callCategory, setCallCategory] = useState('ftd');
   const [description, setDescription] = useState('');
   const [bonusPreview, setBonusPreview] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -52,6 +55,10 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
   const [leadId, setLeadId] = useState('');
   const [affiliateManagers, setAffiliateManagers] = useState([]);
   const [affiliateManagersLoading, setAffiliateManagersLoading] = useState(false);
+
+  // Lead auto-fill state
+  const [leadAutoFilled, setLeadAutoFilled] = useState(false);
+  const [leadSearchLoading, setLeadSearchLoading] = useState(false);
 
   // Fetch affiliate managers only
   const fetchAffiliateManagers = useCallback(async () => {
@@ -76,26 +83,55 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
     }
   }, [open, fetchAffiliateManagers]);
 
+  // Auto-fill lead by phone number when dialog opens
+  useEffect(() => {
+    const autoFillLead = async () => {
+      if (!open || !call?.sourceNumber) return;
+
+      setLeadSearchLoading(true);
+      try {
+        const matchedLead = await findLeadByPhone(call.sourceNumber);
+        if (matchedLead) {
+          setLeadId(matchedLead._id);
+          setLeadAutoFilled(true);
+        } else {
+          setLeadAutoFilled(false);
+        }
+      } catch (err) {
+        console.error('Error auto-filling lead:', err);
+        setLeadAutoFilled(false);
+      } finally {
+        setLeadSearchLoading(false);
+      }
+    };
+
+    autoFillLead();
+  }, [open, call?.sourceNumber]);
+
   // Reset form when dialog opens/closes
   useEffect(() => {
     if (open) {
       setCallType('');
+      setCallCategory('ftd');
       setDescription('');
       setBonusPreview(null);
       setError(null);
       setAffiliateManagerId('');
       setLeadId('');
+      setLeadAutoFilled(false);
     }
   }, [open]);
 
-  // Calculate bonus preview when call type changes
+  // Calculate bonus preview when call type or category changes
   useEffect(() => {
-    if (callType && call?.callDuration) {
+    if (callCategory === 'filler') {
+      setBonusPreview({ baseBonus: 0, hourlyBonus: 0, totalBonus: 0 });
+    } else if (callType && call?.callDuration) {
       calculateBonusPreview();
     } else {
       setBonusPreview(null);
     }
-  }, [callType, call]);
+  }, [callCategory, callType, call]);
 
   const calculateBonusPreview = async () => {
     if (!callType || !call?.callDuration) return;
@@ -124,7 +160,7 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
   };
 
   const handleSubmit = async () => {
-    if (!callType) {
+    if (callCategory === 'ftd' && !callType) {
       setError('Please select a call type');
       return;
     }
@@ -147,7 +183,8 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
         callDuration: call.callDuration,
         sourceNumber: call.sourceNumber,
         destinationNumber: call.destinationNumber,
-        callType,
+        callCategory,
+        callType: callCategory === 'ftd' ? callType : undefined,
         description: description.trim() || undefined,
         affiliateManagerId,
         leadId,
@@ -248,31 +285,70 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
           Declaration Details
         </Typography>
 
-        <TextField
-          select
-          fullWidth
-          label="Call Type *"
-          value={callType}
-          onChange={(e) => setCallType(e.target.value)}
-          disabled={loading}
-          sx={{ mb: 2 }}
-          helperText="Select the type of call for bonus calculation"
-        >
-          {CALL_TYPES.map((type) => (
-            <MenuItem key={type.value} value={type.value}>
-              <Box display="flex" justifyContent="space-between" width="100%">
-                <span>{type.label}</span>
-                <Chip
-                  label={formatCurrency(type.bonus)}
-                  size="small"
-                  color="success"
-                  variant="outlined"
-                  sx={{ ml: 2 }}
-                />
-              </Box>
-            </MenuItem>
-          ))}
-        </TextField>
+        {/* Call Category Selection (FTD / Filler) */}
+        <Box sx={{ mb: 2 }}>
+          <Typography variant="body2" color="text.secondary" gutterBottom>
+            Call Category *
+          </Typography>
+          <ToggleButtonGroup
+            value={callCategory}
+            exclusive
+            onChange={(e, newValue) => {
+              if (newValue !== null) {
+                setCallCategory(newValue);
+                if (newValue === 'filler') {
+                  setCallType('');
+                }
+              }
+            }}
+            fullWidth
+            disabled={loading}
+            size="small"
+          >
+            <ToggleButton value="ftd" color="primary">
+              FTD Call
+            </ToggleButton>
+            <ToggleButton value="filler" color="secondary">
+              Filler Call
+            </ToggleButton>
+          </ToggleButtonGroup>
+        </Box>
+
+        {/* Call Type - only shown for FTD calls */}
+        {callCategory === 'ftd' && (
+          <TextField
+            select
+            fullWidth
+            label="Call Type *"
+            value={callType}
+            onChange={(e) => setCallType(e.target.value)}
+            disabled={loading}
+            sx={{ mb: 2 }}
+            helperText="Select the type of call for bonus calculation"
+          >
+            {CALL_TYPES.map((type) => (
+              <MenuItem key={type.value} value={type.value}>
+                <Box display="flex" justifyContent="space-between" width="100%">
+                  <span>{type.label}</span>
+                  <Chip
+                    label={formatCurrency(type.bonus)}
+                    size="small"
+                    color="success"
+                    variant="outlined"
+                    sx={{ ml: 2 }}
+                  />
+                </Box>
+              </MenuItem>
+            ))}
+          </TextField>
+        )}
+
+        {/* Filler call info */}
+        {callCategory === 'filler' && (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            Filler calls have a $0.00 bonus. No call type selection needed.
+          </Alert>
+        )}
 
         {/* Affiliate Manager Selection */}
         <TextField
@@ -314,16 +390,28 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
           fullWidth
           label="Lead *"
           value={leadId}
-          onChange={(e) => setLeadId(e.target.value)}
-          disabled={loading || !passedLeads || passedLeads.length === 0}
+          onChange={(e) => {
+            if (!leadAutoFilled) {
+              setLeadId(e.target.value);
+            }
+          }}
+          disabled={loading || leadAutoFilled || leadSearchLoading || (!passedLeads || passedLeads.length === 0)}
           sx={{ mb: 2 }}
           helperText={
-            !passedLeads || passedLeads.length === 0
-              ? "No leads assigned to you"
-              : "Select the lead this call was for"
+            leadSearchLoading
+              ? "Searching for matching lead..."
+              : leadAutoFilled
+                ? "Lead auto-matched by phone number"
+                : !passedLeads || passedLeads.length === 0
+                  ? "No leads assigned to you"
+                  : "Select the lead this call was for"
           }
           InputProps={{
-            startAdornment: <ContactsIcon color="action" sx={{ mr: 1 }} />,
+            startAdornment: leadSearchLoading ? (
+              <CircularProgress size={16} sx={{ mr: 1 }} />
+            ) : (
+              <ContactsIcon color={leadAutoFilled ? "success" : "action"} sx={{ mr: 1 }} />
+            ),
           }}
         >
           {(!passedLeads || passedLeads.length === 0) ? (
@@ -359,7 +447,7 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
         />
 
         {/* Bonus Preview */}
-        {callType && (
+        {(callCategory === 'filler' || callType) && (
           <Paper
             variant="outlined"
             sx={{
@@ -422,7 +510,7 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
           variant="contained"
           color="primary"
           onClick={handleSubmit}
-          disabled={loading || !callType || !affiliateManagerId || !leadId}
+          disabled={loading || (callCategory === 'ftd' && !callType) || !affiliateManagerId || !leadId}
           startIcon={loading ? <CircularProgress size={16} /> : <SendIcon />}
         >
           {loading ? 'Submitting...' : 'Submit Declaration'}

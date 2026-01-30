@@ -52,7 +52,8 @@ const CallDeclarationApprovalDialog = ({ open, onClose, declaration, onDeclarati
     return `${minutes}:${String(secs).padStart(2, '0')}`;
   };
 
-  const getCallTypeLabel = (callType) => {
+  const getCallTypeLabel = (callType, callCategory) => {
+    if (callCategory === 'filler') return 'Filler Call';
     const labels = {
       deposit: 'Deposit Call',
       first_call: 'First Call',
@@ -60,7 +61,7 @@ const CallDeclarationApprovalDialog = ({ open, onClose, declaration, onDeclarati
       third_call: '3rd Call',
       fourth_call: '4th Call',
     };
-    return labels[callType] || callType;
+    return labels[callType] || callType || 'N/A';
   };
 
   const getStatusColor = (status) => {
@@ -207,12 +208,25 @@ const CallDeclarationApprovalDialog = ({ open, onClose, declaration, onDeclarati
                 {declaration.destinationNumber}
               </Typography>
             </Grid>
-            <Grid item xs={12}>
+            <Grid item xs={12} sm={6}>
+              <Typography variant="caption" color="text.secondary">
+                Call Category
+              </Typography>
+              <Box>
+                <Chip
+                  label={declaration.callCategory === 'filler' ? 'Filler' : 'FTD'}
+                  size="small"
+                  color={declaration.callCategory === 'filler' ? 'default' : 'primary'}
+                  variant="outlined"
+                />
+              </Box>
+            </Grid>
+            <Grid item xs={12} sm={6}>
               <Typography variant="caption" color="text.secondary">
                 Call Type
               </Typography>
               <Typography variant="body2">
-                {getCallTypeLabel(declaration.callType)}
+                {getCallTypeLabel(declaration.callType, declaration.callCategory)}
               </Typography>
             </Grid>
             {declaration.description && (
