@@ -21,6 +21,7 @@ import {
   ListItemText,
   ToggleButton,
   ToggleButtonGroup,
+  Autocomplete,
 } from '@mui/material';
 import {
   Phone as PhoneIcon,
@@ -384,53 +385,73 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
           )}
         </TextField>
 
-        {/* Lead Selection */}
-        <TextField
-          select
-          fullWidth
-          label="Lead *"
-          value={leadId}
-          onChange={(e) => {
+        {/* Lead Selection (searchable) */}
+        <Autocomplete
+          options={passedLeads || []}
+          value={(passedLeads || []).find((l) => (l._id || l.leadId) === leadId) || null}
+          onChange={(e, newValue) => {
             if (!leadAutoFilled) {
-              setLeadId(e.target.value);
+              setLeadId(newValue ? (newValue._id || newValue.leadId) : '');
             }
           }}
-          disabled={loading || leadAutoFilled || leadSearchLoading || (!passedLeads || passedLeads.length === 0)}
-          sx={{ mb: 2 }}
-          helperText={
-            leadSearchLoading
-              ? "Searching for matching lead..."
-              : leadAutoFilled
-                ? "Lead auto-matched by phone number"
-                : !passedLeads || passedLeads.length === 0
-                  ? "No leads assigned to you"
-                  : "Select the lead this call was for"
+          getOptionLabel={(option) =>
+            `${option.firstName || ''} ${option.lastName || ''} - ${option.newEmail || ''} - ${option.newPhone || ''}`
           }
-          InputProps={{
-            startAdornment: leadSearchLoading ? (
-              <CircularProgress size={16} sx={{ mr: 1 }} />
-            ) : (
-              <ContactsIcon color={leadAutoFilled ? "success" : "action"} sx={{ mr: 1 }} />
-            ),
+          isOptionEqualToValue={(option, value) =>
+            (option._id || option.leadId) === (value._id || value.leadId)
+          }
+          filterOptions={(options, { inputValue }) => {
+            const search = inputValue.toLowerCase();
+            return options.filter((lead) =>
+              `${lead.firstName} ${lead.lastName} ${lead.newEmail} ${lead.newPhone}`
+                .toLowerCase()
+                .includes(search)
+            );
           }}
-        >
-          {(!passedLeads || passedLeads.length === 0) ? (
-            <MenuItem disabled>No leads available</MenuItem>
-          ) : (
-            passedLeads.map((lead) => (
-              <MenuItem key={lead._id || lead.leadId} value={lead._id || lead.leadId}>
-                <Box>
-                  <Typography variant="body2">
-                    {lead.firstName} {lead.lastName}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    {lead.newEmail} | {lead.newPhone}
-                  </Typography>
-                </Box>
-              </MenuItem>
-            ))
+          disabled={loading || leadAutoFilled || leadSearchLoading || (!passedLeads || passedLeads.length === 0)}
+          noOptionsText="No leads found"
+          renderOption={(props, option) => (
+            <li {...props} key={option._id || option.leadId}>
+              <Box>
+                <Typography variant="body2">
+                  {option.firstName} {option.lastName}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {option.newEmail} | {option.newPhone}
+                </Typography>
+              </Box>
+            </li>
           )}
-        </TextField>
+          renderInput={(params) => (
+            <TextField
+              {...params}
+              label="Lead *"
+              helperText={
+                leadSearchLoading
+                  ? "Searching for matching lead..."
+                  : leadAutoFilled
+                    ? "Lead auto-matched by phone number"
+                    : !passedLeads || passedLeads.length === 0
+                      ? "No leads assigned to you"
+                      : "Search by name, email or phone"
+              }
+              InputProps={{
+                ...params.InputProps,
+                startAdornment: (
+                  <>
+                    {leadSearchLoading ? (
+                      <CircularProgress size={16} sx={{ mr: 1 }} />
+                    ) : (
+                      <ContactsIcon color={leadAutoFilled ? "success" : "action"} sx={{ mr: 1 }} />
+                    )}
+                    {params.InputProps.startAdornment}
+                  </>
+                ),
+              }}
+            />
+          )}
+          sx={{ mb: 2 }}
+        />
 
         <TextField
           fullWidth
