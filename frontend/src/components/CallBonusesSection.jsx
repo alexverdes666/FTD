@@ -43,6 +43,7 @@ const CallBonusesSection = ({ leads: passedLeads = [] }) => {
   const isManager = ['admin', 'affiliate_manager'].includes(user?.role);
 
   const [tabValue, setTabValue] = useState(0);
+  const [agentTab, setAgentTab] = useState(0);
   const [error, setError] = useState(null);
   const [successMessage, setSuccessMessage] = useState(null);
 
@@ -208,7 +209,7 @@ const CallBonusesSection = ({ leads: passedLeads = [] }) => {
         </Alert>
       )}
 
-      {/* Agent View - 3 Category Sections */}
+      {/* Agent View - Tabbed Categories */}
       {isAgent && (() => {
         const newCalls = cdrCalls.filter(c => !c.declarationStatus || c.declarationStatus === 'rejected');
         const pendingCalls = cdrCalls.filter(c => c.declarationStatus === 'pending');
@@ -265,16 +266,48 @@ const CallBonusesSection = ({ leads: passedLeads = [] }) => {
               </Grid>
             </Paper>
 
-            {/* New Calls Section */}
-            <Paper variant="outlined" sx={{ mb: 3 }}>
-              <Box sx={{ p: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
-                <NewIcon color="primary" />
-                <Typography variant="subtitle1" fontWeight="bold">
-                  New
-                </Typography>
-                <Chip label={cdrLoading ? '...' : newCalls.length} size="small" color="primary" />
-              </Box>
-              <Divider />
+            {/* Tabs */}
+            <Paper sx={{ mb: 2 }}>
+              <Tabs
+                value={agentTab}
+                onChange={(e, newValue) => setAgentTab(newValue)}
+                variant="fullWidth"
+              >
+                <Tab
+                  icon={<NewIcon />}
+                  iconPosition="start"
+                  label={
+                    <Box display="flex" alignItems="center" gap={1}>
+                      New
+                      <Chip label={cdrLoading ? '...' : newCalls.length} size="small" color="primary" />
+                    </Box>
+                  }
+                />
+                <Tab
+                  icon={<HourglassIcon />}
+                  iconPosition="start"
+                  label={
+                    <Box display="flex" alignItems="center" gap={1}>
+                      Pending
+                      <Chip label={cdrLoading ? '...' : pendingCalls.length} size="small" color="warning" />
+                    </Box>
+                  }
+                />
+                <Tab
+                  icon={<CheckCircleIcon />}
+                  iconPosition="start"
+                  label={
+                    <Box display="flex" alignItems="center" gap={1}>
+                      Completed
+                      <Chip label={cdrLoading ? '...' : completedCalls.length} size="small" color="success" />
+                    </Box>
+                  }
+                />
+              </Tabs>
+            </Paper>
+
+            {/* Tab Content */}
+            {agentTab === 0 && (
               <UndeclaredCallsTable
                 calls={newCalls}
                 loading={cdrLoading}
@@ -282,18 +315,8 @@ const CallBonusesSection = ({ leads: passedLeads = [] }) => {
                 onDeclare={setSelectedCallForDeclaration}
                 emptyMessage="No new calls to declare."
               />
-            </Paper>
-
-            {/* Pending Calls Section */}
-            <Paper variant="outlined" sx={{ mb: 3 }}>
-              <Box sx={{ p: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
-                <HourglassIcon color="warning" />
-                <Typography variant="subtitle1" fontWeight="bold">
-                  Pending
-                </Typography>
-                <Chip label={cdrLoading ? '...' : pendingCalls.length} size="small" color="warning" />
-              </Box>
-              <Divider />
+            )}
+            {agentTab === 1 && (
               <UndeclaredCallsTable
                 calls={pendingCalls}
                 loading={cdrLoading}
@@ -301,18 +324,8 @@ const CallBonusesSection = ({ leads: passedLeads = [] }) => {
                 onDeclare={setSelectedCallForDeclaration}
                 emptyMessage="No pending declarations."
               />
-            </Paper>
-
-            {/* Completed Calls Section */}
-            <Paper variant="outlined" sx={{ mb: 3 }}>
-              <Box sx={{ p: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
-                <CheckCircleIcon color="success" />
-                <Typography variant="subtitle1" fontWeight="bold">
-                  Completed
-                </Typography>
-                <Chip label={cdrLoading ? '...' : completedCalls.length} size="small" color="success" />
-              </Box>
-              <Divider />
+            )}
+            {agentTab === 2 && (
               <UndeclaredCallsTable
                 calls={completedCalls}
                 loading={cdrLoading}
@@ -320,7 +333,7 @@ const CallBonusesSection = ({ leads: passedLeads = [] }) => {
                 onDeclare={setSelectedCallForDeclaration}
                 emptyMessage="No completed declarations."
               />
-            </Paper>
+            )}
           </Box>
         );
       })()}
