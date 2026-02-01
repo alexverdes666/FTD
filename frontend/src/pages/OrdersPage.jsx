@@ -1933,13 +1933,13 @@ const OrdersPage = () => {
             return;
           }
 
-          // Validate that all leads have agent assignments
+          // Validate that all non-cold leads have agent assignments (cold leads don't need agents)
           const leadsWithoutAgents = activeLeads.filter(
-            (entry) => !entry.agent
+            (entry) => !entry.agent && entry.lead.leadType !== "cold"
           );
           if (leadsWithoutAgents.length > 0) {
             setNotification({
-              message: `Please assign agents to all leads (${leadsWithoutAgents.length} unassigned)`,
+              message: `Please assign agents to all FTD/Filler leads (${leadsWithoutAgents.length} unassigned)`,
               severity: "warning",
             });
             return;
@@ -1948,7 +1948,7 @@ const OrdersPage = () => {
           // Build manual leads data - admin includes all, non-admin excludes cooldown
           const manualLeadsData = activeLeads.map((entry) => ({
             leadId: entry.lead._id,
-            agentId: entry.agent,
+            agentId: entry.agent || null, // Cold leads won't have an agent
             leadType: entry.lead.leadType, // Use original lead type from the record
           }));
 
@@ -6561,36 +6561,42 @@ const OrdersPage = () => {
                                   </Box>
                                 </TableCell>
                                 <TableCell>
-                                  <FormControl fullWidth size="small">
-                                    <Select
-                                      value={entry.agent}
-                                      onChange={(e) =>
-                                        updateManualLeadAgent(
-                                          index,
-                                          e.target.value
-                                        )
-                                      }
-                                      displayEmpty
-                                      error={!entry.agent && (!entry.isOnCooldown || user?.role === "admin")}
-                                      disabled={entry.isOnCooldown && user?.role !== "admin"}
-                                    >
-                                      <MenuItem value="">
-                                        <em>
-                                          {entry.isOnCooldown && user?.role !== "admin"
-                                            ? "On Cooldown"
-                                            : "Select Agent"}
-                                        </em>
-                                      </MenuItem>
-                                      {allAgents.map((agent) => (
-                                        <MenuItem
-                                          key={agent._id}
-                                          value={agent._id}
-                                        >
-                                          {agent.fullName || agent.email}
+                                  {entry.lead.leadType === "cold" ? (
+                                    <Typography variant="body2" color="text.secondary" sx={{ fontStyle: "italic" }}>
+                                      N/A
+                                    </Typography>
+                                  ) : (
+                                    <FormControl fullWidth size="small">
+                                      <Select
+                                        value={entry.agent}
+                                        onChange={(e) =>
+                                          updateManualLeadAgent(
+                                            index,
+                                            e.target.value
+                                          )
+                                        }
+                                        displayEmpty
+                                        error={!entry.agent && (!entry.isOnCooldown || user?.role === "admin")}
+                                        disabled={entry.isOnCooldown && user?.role !== "admin"}
+                                      >
+                                        <MenuItem value="">
+                                          <em>
+                                            {entry.isOnCooldown && user?.role !== "admin"
+                                              ? "On Cooldown"
+                                              : "Select Agent"}
+                                          </em>
                                         </MenuItem>
-                                      ))}
-                                    </Select>
-                                  </FormControl>
+                                        {allAgents.map((agent) => (
+                                          <MenuItem
+                                            key={agent._id}
+                                            value={agent._id}
+                                          >
+                                            {agent.fullName || agent.email}
+                                          </MenuItem>
+                                        ))}
+                                      </Select>
+                                    </FormControl>
+                                  )}
                                 </TableCell>
                                 <TableCell>
                                   <IconButton
@@ -6611,7 +6617,7 @@ const OrdersPage = () => {
                         color="text.secondary"
                         sx={{ mt: 1, display: "block" }}
                       >
-                        * All active leads must have an agent assigned. Leads on
+                        * All active FTD/Filler leads must have an agent assigned. Cold leads do not require agent assignment. Leads on
                         cooldown will be automatically excluded from the order.
                       </Typography>
                     </Grid>

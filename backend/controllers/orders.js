@@ -1104,23 +1104,29 @@ const handleManualSelectionOrder = async (req, res, next) => {
       });
     }
 
-    // Validate agents exist
+    // Validate agents exist (only for non-cold leads, cold leads don't need agents)
     const User = require("../models/User");
-    const agentIds = [...new Set(manualLeads.map((ml) => ml.agentId))];
-    const foundAgents = await User.find({
-      _id: { $in: agentIds },
-      role: "agent",
-    });
-
-    if (foundAgents.length !== agentIds.length) {
-      const foundAgentIds = foundAgents.map((a) => a._id.toString());
-      const missingAgentIds = agentIds.filter(
-        (id) => !foundAgentIds.includes(id)
-      );
-      return res.status(400).json({
-        success: false,
-        message: `Some agents not found: ${missingAgentIds.join(", ")}`,
+    const agentIds = [...new Set(
+      manualLeads
+        .filter((ml) => ml.agentId && ml.leadType !== "cold")
+        .map((ml) => ml.agentId)
+    )];
+    if (agentIds.length > 0) {
+      const foundAgents = await User.find({
+        _id: { $in: agentIds },
+        role: "agent",
       });
+
+      if (foundAgents.length !== agentIds.length) {
+        const foundAgentIds = foundAgents.map((a) => a._id.toString());
+        const missingAgentIds = agentIds.filter(
+          (id) => !foundAgentIds.includes(id)
+        );
+        return res.status(400).json({
+          success: false,
+          message: `Some agents not found: ${missingAgentIds.join(", ")}`,
+        });
+      }
     }
 
     // Create a map of leadId -> lead for easy lookup
@@ -1169,9 +1175,11 @@ const handleManualSelectionOrder = async (req, res, next) => {
     const updatePromises = manualLeads.map(async (ml) => {
       const lead = leadMap.get(ml.leadId);
 
-      // Update assigned agent
-      lead.assignedAgent = ml.agentId;
-      lead.assignedAgentAt = new Date();
+      // Update assigned agent (cold leads don't get agent assignment)
+      if (ml.agentId && ml.leadType !== "cold") {
+        lead.assignedAgent = ml.agentId;
+        lead.assignedAgentAt = new Date();
+      }
 
       // Update lastUsedInOrder for cooldown tracking
       lead.lastUsedInOrder = new Date();
