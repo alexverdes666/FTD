@@ -18,6 +18,10 @@ import {
   IconButton,
   Alert,
   CircularProgress,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
   alpha,
   useTheme
 } from '@mui/material';
@@ -26,6 +30,7 @@ import {
   Schedule as ScheduleIcon,
   Person as PersonIcon,
   Assignment as AssignIcon,
+  AssignmentInd as AssignmentIndIcon,
   CheckCircle as ResolveIcon,
   Comment as CommentIcon,
   Image as ImageIcon,
@@ -63,6 +68,13 @@ const TicketDetailDialog = ({
   const [showDecisionNotes, setShowDecisionNotes] = useState(null); // 'approve' or 'reject'
   const [decisionNotes, setDecisionNotes] = useState('');
 
+  // Assignment states
+  const [assignableUsers, setAssignableUsers] = useState([]);
+  const [loadingAssignableUsers, setLoadingAssignableUsers] = useState(false);
+  const [selectedAssignee, setSelectedAssignee] = useState('');
+  const [assigning, setAssigning] = useState(false);
+  const [showAssignForm, setShowAssignForm] = useState(false);
+
   // Image upload states
   const [uploadingImages, setUploadingImages] = useState(false);
   const [commentImages, setCommentImages] = useState([]);
@@ -95,6 +107,10 @@ const TicketDetailDialog = ({
       loadTicketDetails();
       loadTicketImages();
     }
+    if (!open) {
+      setShowAssignForm(false);
+      setSelectedAssignee('');
+    }
   }, [open, ticketId]);
 
   const loadTicketDetails = async () => {
@@ -121,6 +137,51 @@ const TicketDetailDialog = ({
       console.error('Failed to load ticket images:', error);
     } finally {
       setLoadingImages(false);
+    }
+  };
+
+  const loadAssignableUsers = async () => {
+    try {
+      setLoadingAssignableUsers(true);
+      const response = await ticketsService.getAssignableUsers();
+      if (response.success) {
+        setAssignableUsers(response.data);
+      }
+    } catch (error) {
+      console.error('Failed to load assignable users:', error);
+    } finally {
+      setLoadingAssignableUsers(false);
+    }
+  };
+
+  const handleAssignTicket = async () => {
+    if (!selectedAssignee) {
+      toast.error('Please select a user to assign');
+      return;
+    }
+
+    try {
+      setAssigning(true);
+      const response = await ticketsService.assignTicket(ticketId, selectedAssignee);
+      toast.success(response.message || 'Ticket assigned successfully');
+      setTicket(response.data);
+      setShowAssignForm(false);
+      setSelectedAssignee('');
+
+      if (onTicketUpdate) {
+        onTicketUpdate(response.data);
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to assign ticket');
+    } finally {
+      setAssigning(false);
+    }
+  };
+
+  const handleShowAssignForm = () => {
+    setShowAssignForm(true);
+    if (assignableUsers.length === 0) {
+      loadAssignableUsers();
     }
   };
 
@@ -266,6 +327,7 @@ const TicketDetailDialog = ({
 
   const isAdmin = user?.role === 'admin';
   const isTicketOwner = ticket && ticket.createdBy._id === user?._id;
+  const isAssignee = ticket && ticket.assignedTo && ticket.assignedTo._id === user?._id;
 
   // Fine dispute helpers
   const isFineDispute = ticket?.category === 'fine_dispute' && ticket?.relatedFine;
@@ -641,8 +703,19 @@ const TicketDetailDialog = ({
                   </Box>
 
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                    <AssignIcon sx={{ fontSize: 16 }} color="action" />
-                    <Typography variant="caption" fontWeight={600}>Admin Handled</Typography>
+                    {ticket.assignedTo ? (
+                      <>
+                        <AssignmentIndIcon sx={{ fontSize: 16 }} color="primary" />
+                        <Typography variant="caption" fontWeight={600} color="primary.main">
+                          {ticket.assignedTo.fullName}
+                        </Typography>
+                      </>
+                    ) : (
+                      <>
+                        <AssignIcon sx={{ fontSize: 16 }} color="action" />
+                        <Typography variant="caption" fontWeight={600}>Unassigned</Typography>
+                      </>
+                    )}
                   </Box>
                 </Box>
 
@@ -856,7 +929,7 @@ const TicketDetailDialog = ({
           )}
 
           {/* Add Comment */}
-          {(isTicketOwner || isAdmin) && ticket.status !== 'closed' && (
+          {(isTicketOwner || isAdmin || isAssignee) && ticket.status !== 'closed' && (
             <Box
               sx={{
                 bgcolor: alpha(theme.palette.background.paper, 0.6),
@@ -968,9 +1041,69 @@ const TicketDetailDialog = ({
         </Stack>
       </DialogContent>
 
-      <DialogActions sx={{ px: 1.5, py: 1, gap: 0.5 }}>
-        {/* Resolve Ticket Section */}
+      <DialogActions sx={{ px: 1.5, py: 1, gap: 0.5, flexWrap: 'wrap' }}>
+        {/* Assign Ticket Section - Admin only, unresolved tickets */}
         {isAdmin && ticket.status !== 'resolved' && ticket.status !== 'closed' && (
+          <>
+            {!showAssignForm ? (
+              <Button
+                variant="outlined"
+                color="primary"
+                size="small"
+                startIcon={<AssignmentIndIcon sx={{ fontSize: 16 }} />}
+                onClick={handleShowAssignForm}
+                sx={{
+                  textTransform: 'none',
+                  borderRadius: 1.5,
+                  fontSize: '0.75rem',
+                  py: 0.5,
+                }}
+              >
+                {ticket.assignedTo ? 'Reassign' : 'Assign'}
+              </Button>
+            ) : (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flex: 1, maxWidth: '65%' }}>
+                <FormControl size="small" fullWidth>
+                  <InputLabel sx={{ fontSize: '0.75rem' }}>Assign to</InputLabel>
+                  <Select
+                    value={selectedAssignee}
+                    onChange={(e) => setSelectedAssignee(e.target.value)}
+                    label="Assign to"
+                    disabled={loadingAssignableUsers}
+                    sx={{ borderRadius: 1.5, fontSize: '0.75rem', '& .MuiSelect-select': { py: 0.625 } }}
+                  >
+                    {assignableUsers.map((u) => (
+                      <MenuItem key={u._id} value={u._id} sx={{ fontSize: '0.75rem' }}>
+                        {u.fullName} ({u.role.replace('_', ' ')})
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+                <Button
+                  variant="contained"
+                  color="primary"
+                  onClick={handleAssignTicket}
+                  disabled={assigning || !selectedAssignee}
+                  size="small"
+                  sx={{ minWidth: 'auto', px: 1.5, borderRadius: 1.5, textTransform: 'none', fontSize: '0.7rem', py: 0.5 }}
+                >
+                  {assigning ? <CircularProgress size={14} color="inherit" /> : 'OK'}
+                </Button>
+                <Button
+                  variant="outlined"
+                  onClick={() => { setShowAssignForm(false); setSelectedAssignee(''); }}
+                  size="small"
+                  sx={{ minWidth: 'auto', px: 1, borderRadius: 1.5, textTransform: 'none', fontSize: '0.7rem', py: 0.5 }}
+                >
+                  ✕
+                </Button>
+              </Box>
+            )}
+          </>
+        )}
+
+        {/* Resolve Ticket Section - Admin or Assignee */}
+        {(isAdmin || isAssignee) && ticket.status !== 'resolved' && ticket.status !== 'closed' && (
           <>
             {/* For fine dispute tickets, only allow resolve after fine is decided */}
             {isFineDispute && !fineIsDecided ? (

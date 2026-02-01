@@ -50,7 +50,8 @@ import {
   ChatBubbleOutline as ChatBubbleOutlineIcon,
   DoneAll as DoneAllIcon,
   ConfirmationNumber as TicketIcon,
-  TrendingUp as TrendingUpIcon
+  TrendingUp as TrendingUpIcon,
+  AssignmentInd as AssignmentIndIcon
 } from '@mui/icons-material';
 import { toast } from 'react-hot-toast';
 import { selectUser } from '../store/slices/authSlice';
@@ -86,6 +87,7 @@ const TicketsPage = () => {
     category: '',
     priority: '',
     search: '',
+    assignedTo: '',
     isEscalated: '',
     sortBy: 'createdAt',
     sortOrder: 'desc'
@@ -190,6 +192,7 @@ const TicketsPage = () => {
       category: '',
       priority: '',
       search: '',
+      assignedTo: '',
       isEscalated: '',
       sortBy: 'createdAt',
       sortOrder: 'desc'
@@ -316,8 +319,6 @@ const TicketsPage = () => {
     if (filters.priority && ticket.priority !== filters.priority) return false;
     return true;
   };
-
-  // Assignment functionality removed - only admins handle all tickets
 
   const handleResolveTicket = async () => {
     try {
@@ -630,19 +631,39 @@ const TicketsPage = () => {
                   </Select>
                 </FormControl>
               </Grid>
-              <Grid item xs={6} sm={6} md={3}>
+              {isAdmin && (
+                <Grid item xs={6} sm={6} md={2}>
+                  <TextField
+                    fullWidth
+                    placeholder="Search assignee..."
+                    value={filters.assignedTo}
+                    onChange={(e) => handleFilterChange('assignedTo', e.target.value)}
+                    InputProps={{
+                      startAdornment: <AssignmentIndIcon sx={{ mr: 1, fontSize: 18, color: 'text.secondary' }} />
+                    }}
+                    size="small"
+                    sx={{
+                      '& .MuiOutlinedInput-root': {
+                        borderRadius: 2,
+                        bgcolor: 'background.paper'
+                      }
+                    }}
+                  />
+                </Grid>
+              )}
+              <Grid item xs={6} sm={6} md={isAdmin ? 1 : 3}>
                 <Button
                   startIcon={<ClearIcon />}
                   onClick={clearFilters}
                   variant="outlined"
                   size="small"
-                  sx={{ 
+                  sx={{
                     borderRadius: 2,
                     textTransform: 'none',
                     px: 2
                   }}
                 >
-                  Clear Filters
+                  Clear
                 </Button>
               </Grid>
             </Grid>
@@ -796,18 +817,33 @@ const TicketsPage = () => {
                         </Typography>
 
                         {/* Category Badge */}
-                        <Chip
-                          label={ticketsService.formatTicketCategory(ticket.category)}
-                          variant="outlined"
-                          size="small"
-                          sx={{ 
-                            height: 22, 
-                            fontSize: '0.65rem',
-                            mb: 1.5,
-                            bgcolor: alpha(theme.palette.background.default, 0.5),
-                            borderColor: alpha(theme.palette.divider, 0.3)
-                          }}
-                        />
+                        <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap sx={{ mb: 1.5 }}>
+                          <Chip
+                            label={ticketsService.formatTicketCategory(ticket.category)}
+                            variant="outlined"
+                            size="small"
+                            sx={{
+                              height: 22,
+                              fontSize: '0.65rem',
+                              bgcolor: alpha(theme.palette.background.default, 0.5),
+                              borderColor: alpha(theme.palette.divider, 0.3)
+                            }}
+                          />
+                          {ticket.assignedTo && (
+                            <Chip
+                              icon={<AssignmentIndIcon sx={{ fontSize: 14 }} />}
+                              label={ticket.assignedTo.fullName}
+                              size="small"
+                              color="primary"
+                              variant="outlined"
+                              sx={{
+                                height: 22,
+                                fontSize: '0.65rem',
+                                '& .MuiChip-icon': { ml: 0.5 }
+                              }}
+                            />
+                          )}
+                        </Stack>
 
                         {/* Description Preview */}
                         <Typography 
@@ -901,14 +937,14 @@ const TicketsPage = () => {
                             </Button>
                           </Tooltip>
 
-                          {isAdmin && !isResolved && (
+                          {(isAdmin || (ticket.assignedTo && ticket.assignedTo._id === user?._id)) && !isResolved && (
                             <Tooltip title="Resolve Ticket" arrow>
                               <Button
                                 size="small"
                                 variant="contained"
                                 color="success"
                                 onClick={() => openDialog('resolve', ticket)}
-                                sx={{ 
+                                sx={{
                                   minWidth: 'auto',
                                   px: 1.5,
                                   py: 0.5,
@@ -1376,8 +1412,6 @@ const TicketsPage = () => {
           </Button>
         </DialogActions>
       </Dialog>
-
-      {/* Assignment dialog removed - only admins handle all tickets */}
 
       {/* Resolve Dialog */}
       <Dialog 

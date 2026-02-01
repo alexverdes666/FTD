@@ -37,7 +37,17 @@ export const addComment = async (id, commentData) => {
   return response.data;
 };
 
-// Assignment functionality removed - only admins handle all tickets
+// Assign ticket to a manager (Admin only)
+export const assignTicket = async (id, assignedTo) => {
+  const response = await api.put(`/tickets/${id}/assign`, { assignedTo });
+  return response.data;
+};
+
+// Get assignable users (Admin only)
+export const getAssignableUsers = async () => {
+  const response = await api.get('/tickets/assignable-users');
+  return response.data;
+};
 
 // Resolve ticket
 export const resolveTicket = async (id, resolutionNote) => {
@@ -89,8 +99,6 @@ export const getTicketImageThumbnailUrl = (imageId) => {
   const token = state.auth.token;
   return `${apiUrl}/ticket-images/${imageId}/thumbnail?token=${encodeURIComponent(token)}`;
 };
-
-// Assignment functionality removed - only admins handle all tickets
 
 // Utility functions for formatting and display
 export const formatTicketStatus = (status) => {
@@ -197,6 +205,7 @@ export const buildTicketFilters = (filters) => {
   if (filters.category) params.category = filters.category;
   if (filters.priority) params.priority = filters.priority;
   if (filters.createdBy) params.createdBy = filters.createdBy;
+  if (filters.assignedTo) params.assignedTo = filters.assignedTo;
   if (filters.search) params.search = filters.search;
   if (filters.tags && filters.tags.length > 0) params.tags = filters.tags.join(',');
   if (filters.dueDate) params.dueDate = filters.dueDate;
@@ -306,6 +315,8 @@ export default {
   updateTicket,
   deleteTicket,
   addComment,
+  assignTicket,
+  getAssignableUsers,
   resolveTicket,
   getTicketStats,
   uploadTicketImage,

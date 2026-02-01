@@ -8,6 +8,8 @@ const {
   updateTicket,
   deleteTicket,
   addComment,
+  assignTicket,
+  getAssignableUsers,
   resolveTicket,
   getTicketStats
 } = require('../controllers/tickets');
@@ -89,7 +91,11 @@ const commentValidation = [
     .withMessage('isInternal must be a boolean')
 ];
 
-// assignValidation removed - no assignment functionality
+const assignValidation = [
+  body('assignedTo')
+    .isMongoId()
+    .withMessage('Invalid user ID for assignment')
+];
 
 const resolveValidation = [
   body('resolutionNote')
@@ -156,9 +162,15 @@ const queryValidation = [
 // Routes
 
 // Get ticket statistics (Admin only)
-router.get('/stats', 
+router.get('/stats',
   isAdmin,
   getTicketStats
+);
+
+// Get assignable users (Admin only)
+router.get('/assignable-users',
+  isAdmin,
+  getAssignableUsers
 );
 
 // Get all tickets with filtering and pagination
@@ -200,11 +212,18 @@ router.post('/:id/comments',
   addComment
 );
 
-// Resolve ticket (Admin only)
-router.put('/:id/resolve', 
+// Assign ticket (Admin only)
+router.put('/:id/assign',
+  paramValidation,
+  assignValidation,
+  isAdmin,
+  assignTicket
+);
+
+// Resolve ticket (Admin or Assignee)
+router.put('/:id/resolve',
   paramValidation,
   resolveValidation,
-  isAdmin,
   resolveTicket
 );
 

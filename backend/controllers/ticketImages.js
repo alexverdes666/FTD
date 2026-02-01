@@ -41,11 +41,12 @@ exports.uploadTicketImage = async (req, res, next) => {
       // Check permissions
       const isOwner = ticket.createdBy.toString() === req.user._id.toString();
       const isAdmin = req.user.role === 'admin';
+      const isAssignee = ticket.assignedTo && ticket.assignedTo.toString() === req.user._id.toString();
 
-      if (!isOwner && !isAdmin) {
+      if (!isOwner && !isAdmin && !isAssignee) {
         return res.status(403).json({
           success: false,
-          message: 'You can only attach images to your own tickets'
+          message: 'You can only attach images to your own tickets or tickets assigned to you'
         });
       }
     }
@@ -231,11 +232,12 @@ exports.getTicketImage = async (req, res, next) => {
     if (ticket) {
       const isOwner = ticket.createdBy.toString() === req.user._id.toString();
       const isAdmin = req.user.role === 'admin';
+      const isAssignee = ticket.assignedTo && ticket.assignedTo.toString() === req.user._id.toString();
 
-      if (!isOwner && !isAdmin) {
+      if (!isOwner && !isAdmin && !isAssignee) {
         return res.status(403).json({
           success: false,
-          message: 'You can only view images from your own tickets'
+          message: 'You can only view images from your own tickets or tickets assigned to you'
         });
       }
     }
@@ -289,11 +291,12 @@ exports.getTicketImageThumbnail = async (req, res, next) => {
     if (ticket) {
       const isOwner = ticket.createdBy.toString() === req.user._id.toString();
       const isAdmin = req.user.role === 'admin';
+      const isAssignee = ticket.assignedTo && ticket.assignedTo.toString() === req.user._id.toString();
 
-      if (!isOwner && !isAdmin) {
+      if (!isOwner && !isAdmin && !isAssignee) {
         return res.status(403).json({
           success: false,
-          message: 'You can only view images from your own tickets'
+          message: 'You can only view images from your own tickets or tickets assigned to you'
         });
       }
     }
@@ -344,11 +347,12 @@ exports.getTicketImageInfo = async (req, res, next) => {
     if (ticket) {
       const isOwner = ticket.createdBy.toString() === req.user._id.toString();
       const isAdmin = req.user.role === 'admin';
+      const isAssignee = ticket.assignedTo && ticket.assignedTo.toString() === req.user._id.toString();
 
-      if (!isOwner && !isAdmin) {
+      if (!isOwner && !isAdmin && !isAssignee) {
         return res.status(403).json({
           success: false,
-          message: 'You can only view images from your own tickets'
+          message: 'You can only view images from your own tickets or tickets assigned to you'
         });
       }
     }
@@ -415,11 +419,12 @@ exports.getTicketImages = async (req, res, next) => {
 
     const isOwner = ticket.createdBy.toString() === req.user._id.toString();
     const isAdmin = req.user.role === 'admin';
+    const isAssignee = ticket.assignedTo && ticket.assignedTo.toString() === req.user._id.toString();
 
-    if (!isOwner && !isAdmin) {
+    if (!isOwner && !isAdmin && !isAssignee) {
       return res.status(403).json({
         success: false,
-        message: 'You can only view images from your own tickets'
+        message: 'You can only view images from your own tickets or tickets assigned to you'
       });
     }
 

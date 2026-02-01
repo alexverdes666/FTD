@@ -31,8 +31,11 @@ exports.getTickets = async (req, res) => {
     
     // Role-based filtering - only admins can see all tickets
     if (req.user.role !== 'admin') {
-      // Non-admins can only see their own tickets
-      filter.createdBy = req.user._id;
+      // Non-admins can see their own tickets OR tickets assigned to them
+      filter.$or = [
+        { createdBy: req.user._id },
+        { assignedTo: req.user._id }
+      ];
       // Non-admins should never see deleted tickets
       filter.status = { $ne: 'deleted' };
     }
@@ -58,6 +61,14 @@ exports.getTickets = async (req, res) => {
     if (createdBy && req.user.role === 'admin') {
       filter.createdBy = createdBy;
     }
+    // Filter by assignee name (admin only, partial match)
+    if (assignedTo && req.user.role === 'admin') {
+      const matchingUsers = await User.find({
+        fullName: { $regex: assignedTo, $options: 'i' },
+        isActive: true
+      }).select('_id');
+      filter.assignedTo = { $in: matchingUsers.map(u => u._id) };
+    }
     if (tags) filter.tags = { $in: tags.split(',') };
     
     // Due date filtering
@@ -82,6 +93,7 @@ exports.getTickets = async (req, res) => {
     const tickets = await Ticket.find(filter)
       .populate('createdBy', 'fullName email role')
       .populate('assignedTo', 'fullName email role')
+      .populate('assignedBy', 'fullName email role')
       .populate('comments.user', 'fullName email role')
       .populate('resolution.resolvedBy', 'fullName email')
       .populate('relatedFine', 'status amount reason agent')
@@ -123,6 +135,7 @@ exports.getTicket = async (req, res) => {
     const ticket = await Ticket.findById(req.params.id)
       .populate('createdBy', 'fullName email role')
       .populate('assignedTo', 'fullName email role')
+      .populate('assignedBy', 'fullName email role')
       .populate('comments.user', 'fullName email role')
       .populate('resolution.resolvedBy', 'fullName email')
       .populate('lastActivityBy', 'fullName email')
@@ -142,18 +155,20 @@ exports.getTicket = async (req, res) => {
       });
     }
 
-    // Check access permissions - only admins can see all tickets
-    if (req.user.role !== 'admin') {
-      if (ticket.createdBy._id.toString() !== req.user._id.toString()) {
-        return res.status(403).json({
-          success: false,
-          message: 'You can only access your own tickets'
-        });
-      }
+    // Check access permissions - admins see all, others see own or assigned
+    const isOwner = ticket.createdBy._id.toString() === req.user._id.toString();
+    const isAssignee = ticket.assignedTo && ticket.assignedTo._id.toString() === req.user._id.toString();
+    const isAdmin = req.user.role === 'admin';
+
+    if (!isAdmin && !isOwner && !isAssignee) {
+      return res.status(403).json({
+        success: false,
+        message: 'You can only access your own tickets or tickets assigned to you'
+      });
     }
 
-    // Filter internal comments for non-admin users
-    if (req.user.role !== 'admin') {
+    // Filter internal comments for non-admin users (assignees can't see internal comments)
+    if (!isAdmin) {
       ticket.comments = ticket.comments.filter(comment => !comment.isInternal);
     }
 
@@ -393,14 +408,15 @@ exports.addComment = async (req, res) => {
       });
     }
 
-    // Check permissions - only ticket owner or admin can comment
+    // Check permissions - ticket owner, admin, or assignee can comment
     const isOwner = ticket.createdBy.toString() === req.user._id.toString();
     const isAdmin = req.user.role === 'admin';
+    const isAssignee = ticket.assignedTo && ticket.assignedTo.toString() === req.user._id.toString();
 
-    if (!isOwner && !isAdmin) {
+    if (!isOwner && !isAdmin && !isAssignee) {
       return res.status(403).json({
         success: false,
-        message: 'You can only comment on your own tickets'
+        message: 'You can only comment on your own tickets or tickets assigned to you'
       });
     }
 
@@ -458,6 +474,17 @@ exports.addComment = async (req, res) => {
               req.io
             );
           }
+          // Also notify assignee if different from admin and creator
+          if (updatedTicket.assignedTo && updatedTicket.assignedTo._id.toString() !== req.user._id.toString() &&
+              updatedTicket.assignedTo._id.toString() !== updatedTicket.createdBy._id.toString()) {
+            await createTicketNotification(
+              'ticket_commented',
+              updatedTicket,
+              updatedTicket.assignedTo._id,
+              req.user._id,
+              req.io
+            );
+          }
         } else {
           // User commented - notify all admins
           const admins = await User.find({ role: 'admin', isActive: true });
@@ -466,6 +493,17 @@ exports.addComment = async (req, res) => {
               'ticket_commented',
               updatedTicket,
               admin._id,
+              req.user._id,
+              req.io
+            );
+          }
+          // Also notify assignee if different from commenter
+          if (updatedTicket.assignedTo && updatedTicket.assignedTo.toString() !== req.user._id.toString()) {
+            const assigneeId = updatedTicket.assignedTo._id || updatedTicket.assignedTo;
+            await createTicketNotification(
+              'ticket_commented',
+              updatedTicket,
+              assigneeId,
               req.user._id,
               req.io
             );
@@ -491,11 +529,135 @@ exports.addComment = async (req, res) => {
   }
 };
 
-// Note: Assignment functionality removed - only admins handle all tickets
+// @desc    Get users who can be assigned tickets
+// @route   GET /api/tickets/assignable-users
+// @access  Private (Admin only)
+exports.getAssignableUsers = async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Admin access required'
+      });
+    }
+
+    const assignableRoles = ['lead_manager', 'inventory_manager', 'affiliate_manager'];
+    const users = await User.find({
+      role: { $in: assignableRoles },
+      isActive: true
+    }).select('fullName email role').sort('fullName');
+
+    res.status(200).json({
+      success: true,
+      data: users
+    });
+  } catch (error) {
+    console.error('Get assignable users error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching assignable users'
+    });
+  }
+};
+
+// @desc    Assign ticket to a manager
+// @route   PUT /api/tickets/:id/assign
+// @access  Private (Admin only)
+exports.assignTicket = async (req, res) => {
+  try {
+    const { assignedTo } = req.body;
+
+    if (!assignedTo) {
+      return res.status(400).json({
+        success: false,
+        message: 'assignedTo user ID is required'
+      });
+    }
+
+    // Only admins can assign tickets
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Only admin can assign tickets'
+      });
+    }
+
+    const ticket = await Ticket.findById(req.params.id);
+
+    if (!ticket) {
+      return res.status(404).json({
+        success: false,
+        message: 'Ticket not found'
+      });
+    }
+
+    // Validate the target user exists and has an assignable role
+    const targetUser = await User.findById(assignedTo);
+    if (!targetUser) {
+      return res.status(404).json({
+        success: false,
+        message: 'Target user not found'
+      });
+    }
+
+    if (!targetUser.isActive) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot assign ticket to an inactive user'
+      });
+    }
+
+    const assignableRoles = ['lead_manager', 'inventory_manager', 'affiliate_manager'];
+    if (!assignableRoles.includes(targetUser.role)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Tickets can only be assigned to lead managers, inventory managers, or affiliate managers'
+      });
+    }
+
+    // Use instance method to assign
+    await ticket.assignTo(assignedTo, req.user._id);
+
+    // Get updated ticket with populated data
+    const updatedTicket = await Ticket.findById(req.params.id)
+      .populate('createdBy', 'fullName email role')
+      .populate('assignedTo', 'fullName email role')
+      .populate('assignedBy', 'fullName email role')
+      .populate('comments.user', 'fullName email role')
+      .populate('resolution.resolvedBy', 'fullName email')
+      .populate('lastActivityBy', 'fullName email');
+
+    // Notify the assignee
+    try {
+      await createTicketNotification(
+        'ticket_assigned',
+        updatedTicket,
+        assignedTo,
+        req.user._id,
+        req.io
+      );
+    } catch (notificationError) {
+      console.error('Failed to create assignment notification:', notificationError);
+    }
+
+    res.status(200).json({
+      success: true,
+      data: updatedTicket,
+      message: `Ticket assigned to ${targetUser.fullName} successfully`
+    });
+
+  } catch (error) {
+    console.error('Assign ticket error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while assigning ticket'
+    });
+  }
+};
 
 // @desc    Resolve ticket
 // @route   PUT /api/tickets/:id/resolve
-// @access  Private (Admin only)
+// @access  Private (Admin or Assignee)
 exports.resolveTicket = async (req, res) => {
   try {
     const { resolutionNote } = req.body;
@@ -509,11 +671,14 @@ exports.resolveTicket = async (req, res) => {
       });
     }
 
-    // Check permissions - only admins can resolve tickets
-    if (req.user.role !== 'admin') {
+    // Check permissions - admins or assignees can resolve tickets
+    const isAdmin = req.user.role === 'admin';
+    const isAssignee = ticket.assignedTo && ticket.assignedTo.toString() === req.user._id.toString();
+
+    if (!isAdmin && !isAssignee) {
       return res.status(403).json({
         success: false,
-        message: 'Only admin can resolve tickets'
+        message: 'Only admin or the assigned manager can resolve tickets'
       });
     }
 
@@ -536,6 +701,7 @@ exports.resolveTicket = async (req, res) => {
     const updatedTicket = await Ticket.findById(req.params.id)
       .populate('createdBy', 'fullName email role')
       .populate('assignedTo', 'fullName email role')
+      .populate('assignedBy', 'fullName email role')
       .populate('resolution.resolvedBy', 'fullName email')
       .populate('lastActivityBy', 'fullName email');
 
@@ -549,6 +715,19 @@ exports.resolveTicket = async (req, res) => {
           req.user._id,
           req.io
         );
+      }
+      // If resolved by assignee, also notify the admin who assigned it
+      if (isAssignee && updatedTicket.assignedBy) {
+        const assignedById = updatedTicket.assignedBy._id || updatedTicket.assignedBy;
+        if (assignedById.toString() !== req.user._id.toString()) {
+          await createTicketNotification(
+            'ticket_resolved',
+            updatedTicket,
+            assignedById,
+            req.user._id,
+            req.io
+          );
+        }
       }
     } catch (notificationError) {
       console.error('Failed to create resolution notification:', notificationError);
@@ -643,4 +822,3 @@ exports.getTicketStats = async (req, res) => {
   }
 };
 
-// Note: Assignees functionality removed - only admins handle all tickets

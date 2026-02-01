@@ -50,6 +50,17 @@ const ticketSchema = new mongoose.Schema({
     ref: 'User',
     default: null
   },
+  // Who assigned the ticket
+  assignedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null
+  },
+  // When the ticket was assigned
+  assignedAt: {
+    type: Date,
+    default: null
+  },
   // Comments/conversation thread
   comments: [{
     user: {
@@ -246,13 +257,12 @@ ticketSchema.methods.addComment = function(userId, message, isInternal = false) 
   return this.save();
 };
 
-ticketSchema.methods.assignTo = function(userId, assignedBy) {
+ticketSchema.methods.assignTo = function(userId, assignedByUserId) {
   this.assignedTo = userId;
+  this.assignedBy = assignedByUserId;
+  this.assignedAt = new Date();
   this.lastActivityAt = new Date();
-  this.lastActivityBy = assignedBy;
-  if (this.status === 'open') {
-    this.status = 'in_progress';
-  }
+  this.lastActivityBy = assignedByUserId;
   return this.save();
 };
 
