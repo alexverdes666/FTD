@@ -75,6 +75,7 @@ import NotificationBell from "../components/NotificationBell";
 import GlobalSearch from "../components/GlobalSearch";
 import Force2FASetup from "../components/Force2FASetup";
 import AnnouncementPopup from "../components/AnnouncementPopup";
+import FineNotificationPopup from "../components/FineNotificationPopup";
 import TwoFactorVerification from "../components/TwoFactorVerification";
 import QRCodeLogin from "../components/QRCodeLogin";
 const drawerWidth = 240;
@@ -897,6 +898,9 @@ const MainLayout = () => {
 
       {/* Announcement Popup for agents and affiliate managers */}
       <AnnouncementPopup />
+
+      {/* Fine Notification Popup for agents */}
+      <FineNotificationPopup />
 
       {/* 2FA Verification Dialog */}
       <TwoFactorVerification

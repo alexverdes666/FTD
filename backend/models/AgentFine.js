@@ -116,6 +116,11 @@ const agentFineSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Order",
     },
+    // Whether the agent has acknowledged/dismissed the fine notification popup
+    acknowledgedByAgent: {
+      type: Boolean,
+      default: false,
+    },
     isActive: {
       type: Boolean,
       default: true,
@@ -136,6 +141,7 @@ agentFineSchema.index({ agent: 1, status: 1 });
 agentFineSchema.index({ agent: 1, fineYear: 1, fineMonth: 1 });
 agentFineSchema.index({ fineYear: 1, fineMonth: 1 });
 agentFineSchema.index({ lead: 1 });
+agentFineSchema.index({ agent: 1, acknowledgedByAgent: 1, isActive: 1 });
 
 // Virtual for fine age in days
 agentFineSchema.virtual("ageInDays").get(function () {

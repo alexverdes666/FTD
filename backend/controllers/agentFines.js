@@ -207,6 +207,13 @@ const createAgentFine = async (req, res) => {
       await fine.populate("orderId", "_id createdAt");
     }
 
+    // Emit real-time notification to the agent via Socket.IO
+    if (req.io) {
+      req.io.to(`user:${agentId}`).emit('fine_created', {
+        fine: fine.toJSON(),
+      });
+    }
+
     res.status(201).json({
       success: true,
       message: "Fine created successfully. Awaiting agent approval.",
@@ -728,6 +735,74 @@ const getFinesByLeadId = async (req, res) => {
   }
 };
 
+// Get unacknowledged fines for the current agent (for popup notifications)
+const getUnacknowledgedFines = async (req, res) => {
+  try {
+    const agentId = req.user.id;
+
+    const fines = await AgentFine.find({
+      agent: agentId,
+      acknowledgedByAgent: false,
+      isActive: true,
+    })
+      .populate("imposedBy", "fullName email")
+      .populate("lead", "firstName lastName email phone")
+      .populate("orderId", "_id createdAt")
+      .sort({ createdAt: -1 });
+
+    res.json({
+      success: true,
+      data: fines,
+    });
+  } catch (error) {
+    console.error("Error fetching unacknowledged fines:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch unacknowledged fines",
+      error: error.message,
+    });
+  }
+};
+
+// Acknowledge a fine (dismiss the popup notification)
+const acknowledgeFine = async (req, res) => {
+  try {
+    const { fineId } = req.params;
+    const agentId = req.user.id;
+
+    const fine = await AgentFine.findById(fineId);
+    if (!fine) {
+      return res.status(404).json({
+        success: false,
+        message: "Fine not found",
+      });
+    }
+
+    // Ensure the agent can only acknowledge their own fines
+    if (fine.agent.toString() !== agentId) {
+      return res.status(403).json({
+        success: false,
+        message: "You can only acknowledge your own fines",
+      });
+    }
+
+    fine.acknowledgedByAgent = true;
+    await fine.save();
+
+    res.json({
+      success: true,
+      message: "Fine acknowledged",
+    });
+  } catch (error) {
+    console.error("Error acknowledging fine:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to acknowledge fine",
+      error: error.message,
+    });
+  }
+};
+
 module.exports = {
   getAllAgentFines,
   getFinesSummary,
@@ -743,4 +818,6 @@ module.exports = {
   getPendingApprovalFines,
   getDisputedFines,
   getFinesByLeadId,
+  getUnacknowledgedFines,
+  acknowledgeFine,
 };

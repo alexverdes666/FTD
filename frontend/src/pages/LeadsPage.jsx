@@ -1186,6 +1186,8 @@ const LeadsPage = () => {
       assignedToMe: false,
       orderCreatedStart: "",
       orderCreatedEnd: "",
+      ipqsType: "",
+      ipqsResult: "",
     };
   });
   const [showFilters, setShowFilters] = useState(false);
@@ -1329,6 +1331,12 @@ const LeadsPage = () => {
       });
       if ((isAdminOrManager || isLeadManager) && filters.isAssigned === "") {
         params.delete("isAssigned");
+      }
+      if (filters.ipqsType === "") {
+        params.delete("ipqsType");
+      }
+      if (filters.ipqsResult === "") {
+        params.delete("ipqsResult");
       }
       const endpoint = isAgent ? "/leads/assigned" : "/leads";
       const response = await api.get(`${endpoint}?${params}`);
@@ -2436,6 +2444,49 @@ const LeadsPage = () => {
                 </Select>
               </FormControl>
             </Grid>
+            <Grid item xs={12} sm={6} md={2}>
+              <FormControl fullWidth>
+                <InputLabel>IPQS Type</InputLabel>
+                <Select
+                  value={filters.ipqsType}
+                  label="IPQS Type"
+                  onChange={(e) => {
+                    handleFilterChange("ipqsType", e.target.value);
+                    if (!e.target.value) {
+                      handleFilterChange("ipqsResult", "");
+                    }
+                  }}
+                  sx={{ borderRadius: 2 }}
+                >
+                  <MenuItem value="">All</MenuItem>
+                  <MenuItem value="phone">Phone</MenuItem>
+                  <MenuItem value="email">Email</MenuItem>
+                  <MenuItem value="both">Both</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            {filters.ipqsType && (
+              <Grid item xs={12} sm={6} md={2}>
+                <FormControl fullWidth>
+                  <InputLabel>IPQS Result</InputLabel>
+                  <Select
+                    value={filters.ipqsResult}
+                    label="IPQS Result"
+                    onChange={(e) =>
+                      handleFilterChange("ipqsResult", e.target.value)
+                    }
+                    sx={{ borderRadius: 2 }}
+                  >
+                    <MenuItem value="">All</MenuItem>
+                    <MenuItem value="clean">Clean</MenuItem>
+                    <MenuItem value="low_risk">Low Risk</MenuItem>
+                    <MenuItem value="medium_risk">Medium Risk</MenuItem>
+                    <MenuItem value="high_risk">High Risk</MenuItem>
+                    <MenuItem value="invalid">Invalid</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+            )}
             <Grid item xs={12} sm={6} md={2}>
               <TextField
                 fullWidth

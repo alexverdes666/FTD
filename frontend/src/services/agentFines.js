@@ -185,6 +185,28 @@ export const getDisputedFines = async () => {
   }
 };
 
+// Get unacknowledged fines for the current agent (popup notifications)
+export const getUnacknowledgedFines = async () => {
+  try {
+    const response = await api.get("/agent-fines/unacknowledged");
+    return response.data.data;
+  } catch (error) {
+    console.error("Error fetching unacknowledged fines:", error);
+    throw error;
+  }
+};
+
+// Acknowledge a fine (dismiss popup notification)
+export const acknowledgeFine = async (fineId) => {
+  try {
+    const response = await api.patch(`/agent-fines/${fineId}/acknowledge`);
+    return response.data;
+  } catch (error) {
+    console.error("Error acknowledging fine:", error);
+    throw error;
+  }
+};
+
 // Get fines by lead ID
 export const getFinesByLeadId = async (leadId) => {
   try {

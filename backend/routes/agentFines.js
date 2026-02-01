@@ -16,6 +16,8 @@ const {
   getPendingApprovalFines,
   getDisputedFines,
   getFinesByLeadId,
+  getUnacknowledgedFines,
+  acknowledgeFine,
 } = require("../controllers/agentFines");
 
 // All routes require authentication
@@ -26,6 +28,9 @@ router.get("/all", isManager, getAllAgentFines);
 
 // Get fines summary for all agents (managers and admins)
 router.get("/summary", isManager, getFinesSummary);
+
+// Get unacknowledged fines for the current agent (popup notifications)
+router.get("/unacknowledged", getUnacknowledgedFines);
 
 // Get fines pending agent approval (agent gets own, manager/admin get all)
 router.get("/pending-approval", getPendingApprovalFines);
@@ -50,6 +55,9 @@ router.post("/agent/:agentId", isManager, createAgentFine);
 
 // Update a fine (managers and admins)
 router.put("/:fineId", isManager, updateAgentFine);
+
+// Acknowledge a fine notification (dismiss popup)
+router.patch("/:fineId/acknowledge", acknowledgeFine);
 
 // Agent response to fine (approve or dispute) - agent only
 router.patch("/:fineId/agent-response", agentRespondToFine);

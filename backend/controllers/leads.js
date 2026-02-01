@@ -64,6 +64,8 @@ exports.getLeads = async (req, res, next) => {
       orderPriority,
       orderCreatedStart,
       orderCreatedEnd,
+      ipqsType,
+      ipqsResult,
     } = req.query;
     const filter = {};
     
@@ -111,6 +113,30 @@ exports.getLeads = async (req, res, next) => {
       filter.status = { $ne: "converted" };
     }
     if (documentStatus) filter["documents.status"] = documentStatus;
+
+    // IPQS validation filter - filter by risk status for phone, email, or both (overall)
+    if (ipqsType) {
+      if (ipqsResult) {
+        if (ipqsType === "phone") {
+          filter["ipqsValidation.summary.phoneStatus"] = ipqsResult;
+        } else if (ipqsType === "email") {
+          filter["ipqsValidation.summary.emailStatus"] = ipqsResult;
+        } else if (ipqsType === "both") {
+          filter["ipqsValidation.summary.phoneStatus"] = ipqsResult;
+          filter["ipqsValidation.summary.emailStatus"] = ipqsResult;
+        }
+      } else {
+        // Type selected but no result filter - show all leads that have that validation
+        if (ipqsType === "phone") {
+          filter["ipqsValidation.summary.phoneStatus"] = { $exists: true, $ne: null };
+        } else if (ipqsType === "email") {
+          filter["ipqsValidation.summary.emailStatus"] = { $exists: true, $ne: null };
+        } else if (ipqsType === "both") {
+          filter["ipqsValidation.summary.phoneStatus"] = { $exists: true, $ne: null };
+          filter["ipqsValidation.summary.emailStatus"] = { $exists: true, $ne: null };
+        }
+      }
+    }
 
     // Store search keywords for use in aggregation pipeline (for assignedAgent search)
     let searchKeywords = [];

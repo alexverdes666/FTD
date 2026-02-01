@@ -100,6 +100,16 @@ router.get(
       .optional()
       .isBoolean()
       .withMessage("assignedToMe must be a boolean"),
+    query("ipqsType")
+      .optional()
+      .isIn(["phone", "email", "both"])
+      .withMessage("ipqsType must be phone, email, or both"),
+    query("ipqsResult")
+      .optional()
+      .isIn(["clean", "low_risk", "medium_risk", "high_risk", "invalid"])
+      .withMessage(
+        "ipqsResult must be clean, low_risk, medium_risk, high_risk, or invalid"
+      ),
   ],
   getLeads
 );
