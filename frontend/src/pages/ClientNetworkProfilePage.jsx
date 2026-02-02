@@ -66,6 +66,7 @@ const ClientNetworkProfilePage = () => {
   const [editLoading, setEditLoading] = useState(false);
 
   const isAdmin = user?.role === "admin";
+  const canManageCrm = ["admin", "affiliate_manager"].includes(user?.role);
 
   const fetchProfile = useCallback(async () => {
     try {
@@ -211,7 +212,7 @@ const ClientNetworkProfilePage = () => {
             label={profile.isActive ? "Active" : "Inactive"}
             color={profile.isActive ? "success" : "default"}
           />
-          {isAdmin && (
+          {canManageCrm && (
             <Button
               variant="outlined"
               startIcon={<EditIcon />}
@@ -284,7 +285,7 @@ const ClientNetworkProfilePage = () => {
                 <PersonIcon sx={{ mr: 1, verticalAlign: "middle" }} />
                 Employees
               </Typography>
-              {isAdmin && (
+              {canManageCrm && (
                 <Button size="small" startIcon={<AddIcon />} onClick={handleAddEmployee}>
                   Add
                 </Button>
@@ -297,7 +298,7 @@ const ClientNetworkProfilePage = () => {
                     <TableCell>Name</TableCell>
                     <TableCell>Position</TableCell>
                     <TableCell>Telegram</TableCell>
-                    {isAdmin && <TableCell align="right">Actions</TableCell>}
+                    {canManageCrm && <TableCell align="right">Actions</TableCell>}
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -309,7 +310,7 @@ const ClientNetworkProfilePage = () => {
                           <Chip label={getPositionLabel(emp.position)} size="small" />
                         </TableCell>
                         <TableCell>{emp.telegramUsername || "-"}</TableCell>
-                        {isAdmin && (
+                        {canManageCrm && (
                           <TableCell align="right">
                             <IconButton size="small" onClick={() => handleEditEmployee(emp)}>
                               <EditIcon fontSize="small" />
@@ -327,7 +328,7 @@ const ClientNetworkProfilePage = () => {
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={isAdmin ? 4 : 3} align="center">
+                      <TableCell colSpan={canManageCrm ? 4 : 3} align="center">
                         No employees
                       </TableCell>
                     </TableRow>
@@ -346,7 +347,7 @@ const ClientNetworkProfilePage = () => {
                 <LinkIcon sx={{ mr: 1, verticalAlign: "middle" }} />
                 References
               </Typography>
-              {isAdmin && (
+              {canManageCrm && (
                 <Button size="small" startIcon={<AddIcon />} onClick={() => setReferenceDialogOpen(true)}>
                   Add
                 </Button>
@@ -377,7 +378,7 @@ const ClientNetworkProfilePage = () => {
                         </Typography>
                       )}
                     </Box>
-                    {isAdmin && (
+                    {canManageCrm && (
                       <IconButton
                         size="small"
                         color="error"

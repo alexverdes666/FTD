@@ -69,6 +69,7 @@ const VerificationsPage = () => {
   // Email and phone editing for approval
   const [editableEmail, setEditableEmail] = useState("");
   const [editablePhone, setEditablePhone] = useState("");
+  const [editableFullName, setEditableFullName] = useState("");
 
   // Filters and pagination
   const [filters, setFilters] = useState({
@@ -148,17 +149,46 @@ const VerificationsPage = () => {
     }
   };
 
+  // Helper to check if a value is N/A or empty
+  const isNA = (val) => !val || val.trim() === "" || val.trim() === "N/A";
+
+  // Check if the selected verification has N/A personal info
+  const isExternalNA = selectedVerification
+    ? isNA(selectedVerification.personalInfo?.firstName) &&
+      isNA(selectedVerification.personalInfo?.lastName)
+    : false;
+
   // Approve verification
   const handleApprove = async () => {
+    if (isExternalNA && !editableFullName.trim()) {
+      showNotification("Please provide a full name", "error");
+      return;
+    }
+
     try {
       setProcessing(true);
+
+      const payload = {
+        notes: notes.trim() || undefined,
+      };
+
+      if (isExternalNA) {
+        payload.fullName = editableFullName.trim();
+        // Only send email/phone if user provided real values
+        if (editableEmail.trim() && editableEmail.trim() !== "N/A") {
+          payload.newEmail = editableEmail.trim();
+        }
+        if (editablePhone.trim() && editablePhone.trim() !== "N/A") {
+          payload.newPhone = editablePhone.trim();
+        }
+      } else {
+        payload.newEmail = editableEmail.trim();
+        payload.newPhone = editablePhone.trim();
+      }
+
       await api.put(
         `/verifications/${selectedVerification.sessionId}/approve`,
-        {
-          notes: notes.trim() || undefined,
-          newEmail: editableEmail.trim(),
-          newPhone: editablePhone.trim(),
-        }
+        payload
       );
 
       // Close dialog and clear form since verification is now migrated
@@ -167,6 +197,7 @@ const VerificationsPage = () => {
       setNotes("");
       setEditableEmail("");
       setEditablePhone("");
+      setEditableFullName("");
       setSelectedVerification(null); // Clear selected verification
 
       showNotification(
@@ -561,12 +592,14 @@ const VerificationsPage = () => {
                                     color="success"
                                     onClick={() => {
                                       setSelectedVerification(verification);
+                                      const naCheck = (v) => !v || v.trim() === "" || v.trim() === "N/A";
                                       setEditableEmail(
-                                        verification.personalInfo.email
+                                        naCheck(verification.personalInfo.email) ? "" : verification.personalInfo.email
                                       );
                                       setEditablePhone(
-                                        verification.personalInfo.phone
+                                        naCheck(verification.personalInfo.phone) ? "" : verification.personalInfo.phone
                                       );
+                                      setEditableFullName("");
                                       setApproveDialog(true);
                                     }}
                                     disabled={processing}
@@ -983,7 +1016,17 @@ const VerificationsPage = () => {
                 </Button>
                 <Button
                   color="success"
-                  onClick={() => setApproveDialog(true)}
+                  onClick={() => {
+                    const naCheck = (v) => !v || v.trim() === "" || v.trim() === "N/A";
+                    setEditableEmail(
+                      naCheck(selectedVerification.personalInfo?.email) ? "" : selectedVerification.personalInfo.email
+                    );
+                    setEditablePhone(
+                      naCheck(selectedVerification.personalInfo?.phone) ? "" : selectedVerification.personalInfo.phone
+                    );
+                    setEditableFullName("");
+                    setApproveDialog(true);
+                  }}
                   startIcon={<ApproveIcon />}
                   variant="contained"
                   disabled={processing}
@@ -1055,7 +1098,52 @@ const VerificationsPage = () => {
           </Typography>
 
           {/* Contact Information Editing */}
-          {selectedVerification && (
+          {selectedVerification && isExternalNA && (
+            <Box sx={{ mt: 3, mb: 3 }}>
+              <Typography variant="h6" gutterBottom>
+                Lead Information
+              </Typography>
+              <Typography variant="body2" color="textSecondary" gutterBottom>
+                This verification has no personal info. Please provide a full name for the lead.
+                Email and phone are optional.
+              </Typography>
+
+              <Grid container spacing={2} sx={{ mt: 1 }}>
+                <Grid item xs={12}>
+                  <TextField
+                    fullWidth
+                    label="Full Name"
+                    value={editableFullName}
+                    onChange={(e) => setEditableFullName(e.target.value)}
+                    placeholder="Enter full name"
+                    required
+                    error={!editableFullName.trim()}
+                    helperText={!editableFullName.trim() ? "Full name is required" : ""}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="Email (optional)"
+                    type="email"
+                    value={editableEmail}
+                    onChange={(e) => setEditableEmail(e.target.value)}
+                    placeholder="Enter email address"
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="Phone (optional)"
+                    value={editablePhone}
+                    onChange={(e) => setEditablePhone(e.target.value)}
+                    placeholder="Enter phone number"
+                  />
+                </Grid>
+              </Grid>
+            </Box>
+          )}
+          {selectedVerification && !isExternalNA && (
             <Box sx={{ mt: 3, mb: 3 }}>
               <Typography variant="h6" gutterBottom>
                 Contact Information
@@ -1116,6 +1204,7 @@ const VerificationsPage = () => {
               setApproveDialog(false);
               setEditableEmail("");
               setEditablePhone("");
+              setEditableFullName("");
               setNotes("");
             }}
             disabled={processing}
@@ -1126,7 +1215,7 @@ const VerificationsPage = () => {
             onClick={handleApprove}
             color="success"
             variant="contained"
-            disabled={processing}
+            disabled={processing || (isExternalNA && !editableFullName.trim())}
             startIcon={<ApproveIcon />}
           >
             {processing ? "Processing..." : "Approve & Create Lead"}

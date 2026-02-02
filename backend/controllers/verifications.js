@@ -291,7 +291,7 @@ exports.approveVerification = async (req, res, next) => {
     }
 
     const { sessionId } = req.params;
-    const { notes, newEmail, newPhone } = req.body;
+    const { notes, newEmail, newPhone, fullName } = req.body;
 
     const db = await initializeTemporaryDatabase();
     const collection = db.collection(VERIFICATION_COLLECTION_NAME);
@@ -323,12 +323,31 @@ exports.approveVerification = async (req, res, next) => {
     }
 
     // Create lead from verification data
+    const isNA = (val) => !val || val.trim() === "" || val.trim() === "N/A";
+
     const originalEmail = verification.personalInfo.email;
     const originalPhone = verification.personalInfo.phone;
     const finalEmail =
-      newEmail && newEmail.trim() ? newEmail.trim() : originalEmail;
+      newEmail && newEmail.trim() && newEmail.trim() !== "N/A"
+        ? newEmail.trim()
+        : isNA(originalEmail)
+          ? ""
+          : originalEmail;
     const finalPhone =
-      newPhone && newPhone.trim() ? newPhone.trim() : originalPhone;
+      newPhone && newPhone.trim() && newPhone.trim() !== "N/A"
+        ? newPhone.trim()
+        : isNA(originalPhone)
+          ? ""
+          : originalPhone;
+
+    // Determine firstName/lastName - use fullName override if provided
+    let firstName = verification.personalInfo.firstName;
+    let lastName = verification.personalInfo.lastName;
+    if (fullName && fullName.trim()) {
+      const nameParts = fullName.trim().split(/\s+/);
+      firstName = nameParts[0];
+      lastName = nameParts.slice(1).join(" ") || "";
+    }
 
     // Extract country code and pure phone number
     const { countryCode, purePhone } = extractPhoneComponents(finalPhone);
@@ -342,21 +361,21 @@ exports.approveVerification = async (req, res, next) => {
 
     const leadData = {
       leadType: "ftd",
-      firstName: verification.personalInfo.firstName,
-      lastName: verification.personalInfo.lastName,
-      newEmail: finalEmail,
-      newPhone: purePhone || finalPhone, // Use pure phone number without country code
-      prefix: countryCode, // Store country code separately
+      firstName,
+      lastName,
+      newEmail: finalEmail || "N/A",
+      newPhone: purePhone || finalPhone || "N/A", // Use pure phone number without country code
+      prefix: countryCode || undefined, // Store country code separately
       // Store original values as old if they were changed
-      oldEmail: finalEmail !== originalEmail ? originalEmail : undefined,
-      oldPhone: purePhone !== originalPurePhone ? originalPurePhone : undefined,
+      oldEmail: finalEmail && finalEmail !== originalEmail && !isNA(originalEmail) ? originalEmail : undefined,
+      oldPhone: purePhone && purePhone !== originalPurePhone && !isNA(originalPurePhone) ? originalPurePhone : undefined,
       country: "Bulgaria", // Default since EGN is Bulgarian
       client: "CreditoPro",
       status: "active",
       priority: "high",
       assignedAgent: null,
-      address: verification.personalInfo.address,
-      sin: verification.personalInfo.egn,
+      address: isNA(verification.personalInfo.address) ? undefined : verification.personalInfo.address,
+      sin: isNA(verification.personalInfo.egn) ? undefined : verification.personalInfo.egn,
       createdBy: req.user._id,
       submissionMode: "external",
       // Store verification reference
@@ -405,8 +424,9 @@ exports.approveVerification = async (req, res, next) => {
     // Create the lead
     const newLead = await Lead.create(leadData);
 
-    // Delete verification from temporary database since it's now migrated to leads
-    const deleteResult = await collection.deleteOne({ sessionId });
+    // Delete ALL verification documents with this sessionId from temporary database
+    // (there may be duplicates due to external source submissions)
+    const deleteResult = await collection.deleteMany({ sessionId });
 
     if (deleteResult.deletedCount === 0) {
       console.warn(
@@ -415,7 +435,7 @@ exports.approveVerification = async (req, res, next) => {
       // Continue execution - the lead was created successfully, this is just cleanup
     } else {
       console.log(
-        `✅ Verification ${sessionId} successfully migrated to lead ${newLead._id} and removed from temporary database`
+        `✅ Verification ${sessionId} successfully migrated to lead ${newLead._id} and ${deleteResult.deletedCount} document(s) removed from temporary database`
       );
     }
 

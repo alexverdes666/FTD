@@ -14,7 +14,7 @@ const {
   addReference,
   removeReference,
 } = require("../controllers/clientNetworks");
-const { protect, isAdmin, authorize } = require("../middleware/auth");
+const { protect, isAdmin, isManager, authorize } = require("../middleware/auth");
 const {
   requireSensitiveActionVerification,
 } = require("../middleware/sensitiveAction");
@@ -34,7 +34,7 @@ router.post(
   "/:id/employees",
   [
     protect,
-    isAdmin,
+    isManager,
     body("name")
       .trim()
       .isLength({ min: 1, max: 100 })
@@ -55,7 +55,7 @@ router.put(
   "/:id/employees/:empId",
   [
     protect,
-    isAdmin,
+    isManager,
     body("name")
       .optional()
       .trim()
@@ -78,14 +78,14 @@ router.put(
   updateEmployee
 );
 
-router.delete("/:id/employees/:empId", [protect, isAdmin], removeEmployee);
+router.delete("/:id/employees/:empId", [protect, isManager], removeEmployee);
 
 // Reference routes
 router.post(
   "/:id/references",
   [
     protect,
-    isAdmin,
+    isManager,
     body("clientNetworkId")
       .isMongoId()
       .withMessage("Valid client network ID is required"),
@@ -98,7 +98,7 @@ router.post(
   addReference
 );
 
-router.delete("/:id/references/:refId", [protect, isAdmin], removeReference);
+router.delete("/:id/references/:refId", [protect, isManager], removeReference);
 
 // Single network route
 router.get("/:id", protect, getClientNetwork);
@@ -107,7 +107,7 @@ router.post(
   "/",
   [
     protect,
-    isAdmin,
+    isManager,
     body("name")
       .trim()
       .isLength({ min: 1, max: 100 })
@@ -125,7 +125,7 @@ router.put(
   "/:id",
   [
     protect,
-    isAdmin,
+    isManager,
     body("name")
       .optional()
       .trim()

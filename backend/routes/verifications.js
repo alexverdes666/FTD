@@ -36,13 +36,26 @@ router.put(
     body("newEmail")
       .optional()
       .trim()
-      .isEmail()
-      .withMessage("Please provide a valid email address"),
+      .custom((value) => {
+        // Allow empty string or skip validation for N/A values
+        if (!value || value === "N/A") return true;
+        // Validate as email only if a real value is provided
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(value)) {
+          throw new Error("Please provide a valid email address");
+        }
+        return true;
+      }),
     body("newPhone")
       .optional()
       .trim()
       .isLength({ min: 1 })
       .withMessage("Phone number cannot be empty if provided"),
+    body("fullName")
+      .optional()
+      .trim()
+      .isLength({ min: 2 })
+      .withMessage("Full name must be at least 2 characters"),
   ],
   approveVerification
 );

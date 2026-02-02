@@ -33,8 +33,8 @@ router.post(
     authorize("admin", "affiliate_manager"),
     body("website")
       .trim()
-      .isLength({ min: 1, max: 200 })
-      .withMessage("Website URL is required and must be less than 200 characters"),
+      .isLength({ min: 1, max: 2000 })
+      .withMessage("Website URL is required and must be less than 2000 characters"),
     body("description")
       .optional()
       .trim()
@@ -70,8 +70,8 @@ router.put(
     body("website")
       .optional()
       .trim()
-      .isLength({ max: 200 })
-      .withMessage("Website must be less than 200 characters"),
+      .isLength({ max: 2000 })
+      .withMessage("Website must be less than 2000 characters"),
     body("isActive")
       .optional()
       .isBoolean()
