@@ -70,6 +70,10 @@ const VerificationsPage = () => {
   const [editableEmail, setEditableEmail] = useState("");
   const [editablePhone, setEditablePhone] = useState("");
   const [editableFullName, setEditableFullName] = useState("");
+  const [editableCountry, setEditableCountry] = useState("Bulgaria");
+  const [editableAddress, setEditableAddress] = useState("");
+  const [editableGender, setEditableGender] = useState("not_defined");
+  const [editableDob, setEditableDob] = useState("");
 
   // Filters and pagination
   const [filters, setFilters] = useState({
@@ -170,6 +174,10 @@ const VerificationsPage = () => {
 
       const payload = {
         notes: notes.trim() || undefined,
+        country: editableCountry.trim() || "Bulgaria",
+        address: editableAddress.trim() || undefined,
+        gender: editableGender || "not_defined",
+        dob: editableDob || undefined,
       };
 
       if (isExternalNA) {
@@ -198,6 +206,10 @@ const VerificationsPage = () => {
       setEditableEmail("");
       setEditablePhone("");
       setEditableFullName("");
+      setEditableCountry("Bulgaria");
+      setEditableAddress("");
+      setEditableGender("not_defined");
+      setEditableDob("");
       setSelectedVerification(null); // Clear selected verification
 
       showNotification(
@@ -600,6 +612,11 @@ const VerificationsPage = () => {
                                         naCheck(verification.personalInfo.phone) ? "" : verification.personalInfo.phone
                                       );
                                       setEditableFullName("");
+                                      setEditableCountry("Bulgaria");
+                                      setEditableAddress(naCheck(verification.personalInfo.address) ? "" : verification.personalInfo.address);
+                                      setEditableGender("not_defined");
+                                      setEditableDob("");
+                                      setNotes("");
                                       setApproveDialog(true);
                                     }}
                                     disabled={processing}
@@ -1025,6 +1042,11 @@ const VerificationsPage = () => {
                       naCheck(selectedVerification.personalInfo?.phone) ? "" : selectedVerification.personalInfo.phone
                     );
                     setEditableFullName("");
+                    setEditableCountry("Bulgaria");
+                    setEditableAddress(naCheck(selectedVerification.personalInfo?.address) ? "" : selectedVerification.personalInfo.address);
+                    setEditableGender("not_defined");
+                    setEditableDob("");
+                    setNotes("");
                     setApproveDialog(true);
                   }}
                   startIcon={<ApproveIcon />}
@@ -1187,6 +1209,59 @@ const VerificationsPage = () => {
             </Box>
           )}
 
+          {/* Additional Lead Information */}
+          {selectedVerification && (
+            <Box sx={{ mt: 3, mb: 1 }}>
+              <Typography variant="h6" gutterBottom>
+                Additional Information
+              </Typography>
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="Country"
+                    value={editableCountry}
+                    onChange={(e) => setEditableCountry(e.target.value)}
+                    placeholder="Enter country"
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <FormControl fullWidth>
+                    <InputLabel>Gender</InputLabel>
+                    <Select
+                      value={editableGender}
+                      label="Gender"
+                      onChange={(e) => setEditableGender(e.target.value)}
+                    >
+                      <MenuItem value="not_defined">Not Defined</MenuItem>
+                      <MenuItem value="male">Male</MenuItem>
+                      <MenuItem value="female">Female</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="Date of Birth"
+                    type="date"
+                    value={editableDob}
+                    onChange={(e) => setEditableDob(e.target.value)}
+                    InputLabelProps={{ shrink: true }}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="Address"
+                    value={editableAddress}
+                    onChange={(e) => setEditableAddress(e.target.value)}
+                    placeholder="Enter address"
+                  />
+                </Grid>
+              </Grid>
+            </Box>
+          )}
+
           <TextField
             fullWidth
             multiline
@@ -1205,6 +1280,10 @@ const VerificationsPage = () => {
               setEditableEmail("");
               setEditablePhone("");
               setEditableFullName("");
+              setEditableCountry("Bulgaria");
+              setEditableAddress("");
+              setEditableGender("not_defined");
+              setEditableDob("");
               setNotes("");
             }}
             disabled={processing}

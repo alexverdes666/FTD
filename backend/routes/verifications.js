@@ -56,6 +56,24 @@ router.put(
       .trim()
       .isLength({ min: 2 })
       .withMessage("Full name must be at least 2 characters"),
+    body("country")
+      .optional()
+      .trim()
+      .isLength({ min: 2, max: 100 })
+      .withMessage("Country must be between 2 and 100 characters"),
+    body("address")
+      .optional()
+      .trim()
+      .isLength({ max: 500 })
+      .withMessage("Address must not exceed 500 characters"),
+    body("gender")
+      .optional()
+      .isIn(["male", "female", "not_defined"])
+      .withMessage("Gender must be male, female, or not_defined"),
+    body("dob")
+      .optional()
+      .isISO8601()
+      .withMessage("Date of birth must be a valid date"),
   ],
   approveVerification
 );

@@ -291,7 +291,7 @@ exports.approveVerification = async (req, res, next) => {
     }
 
     const { sessionId } = req.params;
-    const { notes, newEmail, newPhone, fullName } = req.body;
+    const { notes, newEmail, newPhone, fullName, country, address, gender, dob } = req.body;
 
     const db = await initializeTemporaryDatabase();
     const collection = db.collection(VERIFICATION_COLLECTION_NAME);
@@ -369,12 +369,14 @@ exports.approveVerification = async (req, res, next) => {
       // Store original values as old if they were changed
       oldEmail: finalEmail && finalEmail !== originalEmail && !isNA(originalEmail) ? originalEmail : undefined,
       oldPhone: purePhone && purePhone !== originalPurePhone && !isNA(originalPurePhone) ? originalPurePhone : undefined,
-      country: "Bulgaria", // Default since EGN is Bulgarian
+      country: country || "Bulgaria", // Default to Bulgaria if not provided
       client: "CreditoPro",
       status: "active",
       priority: "high",
       assignedAgent: null,
-      address: isNA(verification.personalInfo.address) ? undefined : verification.personalInfo.address,
+      address: address || (isNA(verification.personalInfo.address) ? undefined : verification.personalInfo.address),
+      gender: gender || "not_defined",
+      dob: dob ? new Date(dob) : undefined,
       sin: isNA(verification.personalInfo.egn) ? undefined : verification.personalInfo.egn,
       createdBy: req.user._id,
       submissionMode: "external",

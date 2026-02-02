@@ -42,7 +42,7 @@ import api from "../services/api";
 import toast from "react-hot-toast";
 import EmployeeForm, { getPositionLabel } from "../components/accountManagement/EmployeeForm";
 import ReferenceSelector from "../components/accountManagement/ReferenceSelector";
-import CrmDealsTable from "../components/crm/CrmDealsTable";
+import CrmNetworkOrdersTable from "../components/crm/CrmNetworkOrdersTable";
 import GroupedComments from "../components/accountManagement/GroupedComments";
 
 const ClientNetworkProfilePage = () => {
@@ -414,7 +414,7 @@ const ClientNetworkProfilePage = () => {
             <Typography variant="h6" sx={{ mb: 2 }}>
               CRM Deals
             </Typography>
-            <CrmDealsTable networkId={id} isAdmin={isAdmin} />
+            <CrmNetworkOrdersTable networkId={id} />
           </Paper>
         </Grid>
       </Grid>

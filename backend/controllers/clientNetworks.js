@@ -349,8 +349,9 @@ exports.getNetworkDeals = async (req, res, next) => {
         .populate("requester", "fullName email")
         .populate("selectedOurNetwork", "name")
         .populate("selectedCampaign", "name")
+        .populate("selectedClientBrokers", "name domain")
         .select(
-          "createdAt plannedDate status requests fulfilled requester selectedOurNetwork selectedCampaign"
+          "createdAt plannedDate status requests fulfilled requester selectedOurNetwork selectedCampaign countryFilter selectedClientBrokers leads"
         )
         .skip(skip)
         .limit(parseInt(limit))

@@ -262,6 +262,9 @@ orderSchema.index({ selectedCampaign: 1, status: 1 });
 // Index for planned date statistics queries
 orderSchema.index({ plannedDate: 1, status: 1 });
 
+// Index for client network order queries (used in client network profile page)
+orderSchema.index({ selectedClientNetwork: 1, createdAt: -1 });
+
 // --- Virtuals (Logic remains unchanged) ---
 orderSchema.virtual("totalRequested").get(function () {
   const requests = this.requests || {};
