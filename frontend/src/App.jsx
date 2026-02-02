@@ -85,6 +85,7 @@ import QRSetupPage from "./pages/QRSetupPage.jsx";
 import SearchResultsPage from "./pages/SearchResultsPage.jsx";
 import SheetsPage from "./pages/SheetsPage.jsx";
 import WorkspacePage from "./pages/WorkspacePage.jsx";
+import CrmPage from "./pages/CrmPage.jsx";
 
 // Component to handle role-based default routing
 const RoleBasedRedirect = () => {
@@ -414,6 +415,14 @@ function AppContent() {
               }
             />
             <Route path="campaigns" element={<CampaignsPage />} />
+            <Route
+              path="crm"
+              element={
+                <ProtectedRoute allowedRoles={["admin", "affiliate_manager"]}>
+                  <CrmPage />
+                </ProtectedRoute>
+              }
+            />
             <Route path="payroll" element={<PayrollPage />} />
             <Route path="withdrawals" element={<WithdrawalsPage />} />
             <Route path="payment-history" element={<PaymentHistoryPage />} />

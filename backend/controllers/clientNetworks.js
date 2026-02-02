@@ -4,6 +4,7 @@ const ClientNetwork = require("../models/ClientNetwork");
 const User = require("../models/User");
 const Lead = require("../models/Lead");
 const Order = require("../models/Order");
+const CrmDeal = require("../models/CrmDeal");
 const AgentComment = require("../models/AgentComment");
 const ClientNetworkAuditService = require("../services/clientNetworkAuditService");
 
@@ -279,6 +280,21 @@ exports.getClientNetworkProfile = async (req, res, next) => {
       },
     ]);
 
+    // Get CRM deals summary
+    const crmDealsSummary = await CrmDeal.aggregate([
+      { $match: { clientNetwork: clientNetwork._id } },
+      {
+        $group: {
+          _id: null,
+          totalDeals: { $sum: 1 },
+          totalSentLeads: { $sum: "$totalSentLeads" },
+          totalFiredFtds: { $sum: "$firedFtds" },
+          totalShavedFtds: { $sum: "$shavedFtds" },
+          totalPaid: { $sum: "$totalPaid" },
+        },
+      },
+    ]);
+
     res.status(200).json({
       success: true,
       data: {
@@ -292,6 +308,13 @@ exports.getClientNetworkProfile = async (req, res, next) => {
           totalFTDFulfilled: 0,
           totalFillerRequested: 0,
           totalFillerFulfilled: 0,
+        },
+        crmDealsSummary: crmDealsSummary[0] || {
+          totalDeals: 0,
+          totalSentLeads: 0,
+          totalFiredFtds: 0,
+          totalShavedFtds: 0,
+          totalPaid: 0,
         },
       },
     });

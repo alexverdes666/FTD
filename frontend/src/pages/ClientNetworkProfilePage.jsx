@@ -42,7 +42,7 @@ import api from "../services/api";
 import toast from "react-hot-toast";
 import EmployeeForm, { getPositionLabel } from "../components/accountManagement/EmployeeForm";
 import ReferenceSelector from "../components/accountManagement/ReferenceSelector";
-import DealsTable from "../components/accountManagement/DealsTable";
+import CrmDealsTable from "../components/crm/CrmDealsTable";
 import GroupedComments from "../components/accountManagement/GroupedComments";
 
 const ClientNetworkProfilePage = () => {
@@ -52,14 +52,6 @@ const ClientNetworkProfilePage = () => {
 
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [deals, setDeals] = useState([]);
-  const [dealsLoading, setDealsLoading] = useState(false);
-  const [dealsPagination, setDealsPagination] = useState({
-    current: 1,
-    pages: 1,
-    total: 0,
-    limit: 10,
-  });
 
   // Dialog states
   const [employeeDialogOpen, setEmployeeDialogOpen] = useState(false);
@@ -91,28 +83,9 @@ const ClientNetworkProfilePage = () => {
     }
   }, [id]);
 
-  const fetchDeals = useCallback(
-    async (page = 1) => {
-      try {
-        setDealsLoading(true);
-        const response = await api.get(`/client-networks/${id}/deals`, {
-          params: { page, limit: 10 },
-        });
-        setDeals(response.data.data);
-        setDealsPagination(response.data.pagination);
-      } catch (error) {
-        console.error("Failed to load deals", error);
-      } finally {
-        setDealsLoading(false);
-      }
-    },
-    [id]
-  );
-
   useEffect(() => {
     fetchProfile();
-    fetchDeals();
-  }, [fetchProfile, fetchDeals]);
+  }, [fetchProfile]);
 
   // Employee handlers
   const handleAddEmployee = () => {
@@ -279,7 +252,7 @@ const ClientNetworkProfilePage = () => {
             <Card variant="outlined">
               <CardContent sx={{ textAlign: "center", py: 1 }}>
                 <Typography variant="h4" color="primary.main">
-                  {profile.dealsSummary?.totalOrders || 0}
+                  {profile.crmDealsSummary?.totalDeals || 0}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
                   Total Deals
@@ -438,14 +411,9 @@ const ClientNetworkProfilePage = () => {
         <Grid item xs={12}>
           <Paper sx={{ p: 2 }}>
             <Typography variant="h6" sx={{ mb: 2 }}>
-              Deals History
+              CRM Deals
             </Typography>
-            <DealsTable
-              deals={deals}
-              pagination={dealsPagination}
-              onPageChange={(page) => fetchDeals(page)}
-              loading={dealsLoading}
-            />
+            <CrmDealsTable networkId={id} isAdmin={isAdmin} />
           </Paper>
         </Grid>
       </Grid>
