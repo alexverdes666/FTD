@@ -109,7 +109,7 @@ const getCommentsByTarget = async (req, res) => {
 // Create a new comment
 const createComment = async (req, res) => {
   try {
-    const { targetType, targetId, comment, status, parentCommentId, ourNetworkId } = req.body;
+    const { targetType, targetId, comment, status, parentCommentId, ourNetworkId, images } = req.body;
     const agentId = req.user.id;
 
     // Validate target exists
@@ -141,24 +141,6 @@ const createComment = async (req, res) => {
       }
     }
 
-    // For top-level comments, check if agent already has an unresolved comment for this target
-    if (!parentCommentId) {
-      const existingComment = await AgentComment.findOne({
-        agent: agentId,
-        targetType,
-        targetId,
-        parentComment: null,
-        isResolved: false,
-      });
-
-      if (existingComment) {
-        return res.status(400).json({
-          success: false,
-          message: "You already have an unresolved comment for this target",
-        });
-      }
-    }
-
     // Auto-set ourNetwork from affiliate manager's assigned network if not provided
     let ourNetwork = ourNetworkId || null;
     if (!ourNetwork && req.user.role === "affiliate_manager") {
@@ -173,10 +155,11 @@ const createComment = async (req, res) => {
       targetType,
       targetId,
       comment,
-      status: parentCommentId ? undefined : status, // Replies don't need status
+      status: parentCommentId ? undefined : (status || "other"),
       parentComment: parentCommentId || null,
       isReply: !!parentCommentId,
       ourNetwork,
+      images: images || [],
     });
 
     await newComment.save();

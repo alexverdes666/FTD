@@ -245,25 +245,16 @@ exports.getClientNetworkProfile = async (req, res, next) => {
       .populate("agent", "fullName email")
       .populate("ourNetwork", "name")
       .populate("resolvedBy", "fullName email")
+      .populate("images", "originalName mimetype width height")
       .populate({
         path: "replies",
-        populate: { path: "agent", select: "fullName email" },
+        populate: [
+          { path: "agent", select: "fullName email" },
+          { path: "images", select: "originalName mimetype width height" },
+        ],
       })
       .sort({ createdAt: -1 });
 
-    // Group comments by ourNetwork
-    const groupedComments = {};
-    comments.forEach((comment) => {
-      const networkKey = comment.ourNetwork?._id?.toString() || "unassigned";
-      const networkName = comment.ourNetwork?.name || "Unassigned";
-      if (!groupedComments[networkKey]) {
-        groupedComments[networkKey] = {
-          ourNetwork: comment.ourNetwork || { _id: null, name: "Unassigned" },
-          comments: [],
-        };
-      }
-      groupedComments[networkKey].comments.push(comment);
-    });
 
     // Get deals (orders) summary for this network
     const dealsSummary = await Order.aggregate([
@@ -299,7 +290,7 @@ exports.getClientNetworkProfile = async (req, res, next) => {
       success: true,
       data: {
         ...clientNetwork.toObject(),
-        groupedComments: Object.values(groupedComments),
+        comments,
         commentsCount: comments.length,
         unresolvedCommentsCount: comments.filter((c) => !c.isResolved).length,
         dealsSummary: dealsSummary[0] || {

@@ -80,7 +80,7 @@ const chatImageSchema = new mongoose.Schema({
     },
     format: {
       type: String,
-      enum: ['jpeg', 'png', 'webp'],
+      enum: ['jpeg', 'png', 'webp', 'gif'],
       default: 'jpeg'
     },
     resized: {

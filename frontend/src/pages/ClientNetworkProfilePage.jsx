@@ -45,8 +45,9 @@ import toast from "react-hot-toast";
 import EmployeeForm, { getPositionLabel } from "../components/accountManagement/EmployeeForm";
 import ReferenceSelector from "../components/accountManagement/ReferenceSelector";
 import CrmNetworkOrdersTable from "../components/crm/CrmNetworkOrdersTable";
-import GroupedComments from "../components/accountManagement/GroupedComments";
-import CommentButton from "../components/CommentButton";
+import CommentsList from "../components/accountManagement/CommentsList";
+import { createComment as createAgentComment } from "../services/agentComments";
+import chatService from "../services/chatService";
 
 const ClientNetworkProfilePage = () => {
   const { id } = useParams();
@@ -69,6 +70,12 @@ const ClientNetworkProfilePage = () => {
   const [editLoading, setEditLoading] = useState(false);
 
   const [activeTab, setActiveTab] = useState(0);
+
+  // Comment form states
+  const [showCommentForm, setShowCommentForm] = useState(false);
+  const [commentText, setCommentText] = useState("");
+  const [commentImages, setCommentImages] = useState([]);
+  const [commentLoading, setCommentLoading] = useState(false);
 
   const isAdmin = user?.role === "admin";
   const canManageCrm = ["admin", "affiliate_manager"].includes(user?.role);
@@ -173,6 +180,69 @@ const ClientNetworkProfilePage = () => {
     } finally {
       setEditLoading(false);
     }
+  };
+
+  // Comment handlers
+  const handleImageSelect = (e) => {
+    const files = Array.from(e.target.files);
+    const previews = files.map((file) => ({
+      file,
+      preview: URL.createObjectURL(file),
+    }));
+    setCommentImages((prev) => [...prev, ...previews]);
+  };
+
+  const handleRemoveImage = (index) => {
+    setCommentImages((prev) => {
+      const updated = [...prev];
+      URL.revokeObjectURL(updated[index].preview);
+      updated.splice(index, 1);
+      return updated;
+    });
+  };
+
+  const handleCommentSubmit = async () => {
+    if (!commentText.trim()) {
+      toast.error("Please enter a comment");
+      return;
+    }
+    try {
+      setCommentLoading(true);
+
+      // Upload images first
+      const imageIds = [];
+      for (const img of commentImages) {
+        const result = await chatService.uploadImage(img.file);
+        if (result?.data?._id) {
+          imageIds.push(result.data._id);
+        }
+      }
+
+      await createAgentComment({
+        targetType: "client_network",
+        targetId: id,
+        comment: commentText,
+        status: "other",
+        images: imageIds,
+      });
+
+      toast.success("Comment added");
+      setCommentText("");
+      setCommentImages([]);
+      setShowCommentForm(false);
+      fetchProfile();
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to add comment");
+    } finally {
+      setCommentLoading(false);
+    }
+  };
+
+  const handleCancelComment = () => {
+    setCommentText("");
+    commentImages.forEach((img) => URL.revokeObjectURL(img.preview));
+    setCommentImages([]);
+    setShowCommentForm(false);
   };
 
   if (loading) {
@@ -414,13 +484,84 @@ const ClientNetworkProfilePage = () => {
         <Paper sx={{ p: 2 }}>
           <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
             <Typography variant="h6">Comments</Typography>
-            <CommentButton
-              targetType="client_network"
-              targetId={id}
-              targetName={profile.name}
-            />
+            {!showCommentForm && (
+              <Button size="small" startIcon={<AddIcon />} onClick={() => setShowCommentForm(true)}>
+                Add
+              </Button>
+            )}
           </Box>
-          <GroupedComments groupedComments={profile.groupedComments || []} />
+
+          {showCommentForm && (
+            <Box sx={{ mb: 3, p: 2, border: 1, borderColor: "divider", borderRadius: 1 }}>
+              <TextField
+                label="Comment"
+                value={commentText}
+                onChange={(e) => setCommentText(e.target.value)}
+                multiline
+                rows={3}
+                fullWidth
+                sx={{ mb: 2 }}
+              />
+              {commentImages.length > 0 && (
+                <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", mb: 2 }}>
+                  {commentImages.map((img, idx) => (
+                    <Box key={idx} sx={{ position: "relative" }}>
+                      <Box
+                        component="img"
+                        src={img.preview}
+                        sx={{
+                          width: 80,
+                          height: 80,
+                          objectFit: "cover",
+                          borderRadius: 1,
+                          border: 1,
+                          borderColor: "divider",
+                        }}
+                      />
+                      <IconButton
+                        size="small"
+                        onClick={() => handleRemoveImage(idx)}
+                        sx={{
+                          position: "absolute",
+                          top: -8,
+                          right: -8,
+                          backgroundColor: "background.paper",
+                          boxShadow: 1,
+                          "&:hover": { backgroundColor: "error.light", color: "white" },
+                        }}
+                      >
+                        <DeleteIcon sx={{ fontSize: 14 }} />
+                      </IconButton>
+                    </Box>
+                  ))}
+                </Box>
+              )}
+              <Stack direction="row" spacing={1} alignItems="center">
+                <Button
+                  variant="contained"
+                  onClick={handleCommentSubmit}
+                  disabled={commentLoading || !commentText.trim()}
+                >
+                  {commentLoading ? <CircularProgress size={20} /> : "Add Comment"}
+                </Button>
+                <Button variant="outlined" onClick={handleCancelComment} disabled={commentLoading}>
+                  Cancel
+                </Button>
+                <Button component="label" variant="text" size="small">
+                  Attach Images
+                  <input
+                    type="file"
+                    hidden
+                    multiple
+                    accept="image/jpeg,image/png,image/gif,image/webp"
+                    onChange={handleImageSelect}
+                  />
+                </Button>
+              </Stack>
+            </Box>
+          )}
+
+          <CommentsList comments={profile.comments || []} />
         </Paper>
       )}
 

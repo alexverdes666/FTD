@@ -167,6 +167,31 @@ const CallDeclarationApprovalDialog = ({ open, onClose, declaration, onDeclarati
           )}
         </Paper>
 
+        {/* Lead Info */}
+        {declaration.lead && (
+          <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
+            <Box display="flex" alignItems="center" gap={1} mb={1}>
+              <PhoneIcon color="action" />
+              <Typography variant="subtitle2" color="text.secondary">
+                Lead
+              </Typography>
+            </Box>
+            <Typography variant="body1" fontWeight="medium">
+              {`${declaration.lead.firstName || ''} ${declaration.lead.lastName || ''}`.trim() || 'N/A'}
+            </Typography>
+            {declaration.lead.newPhone && (
+              <Typography variant="body2" color="text.secondary" fontFamily="monospace">
+                Phone: {declaration.lead.newPhone}
+              </Typography>
+            )}
+            {declaration.lead.newEmail && (
+              <Typography variant="body2" color="text.secondary">
+                Email: {declaration.lead.newEmail}
+              </Typography>
+            )}
+          </Paper>
+        )}
+
         {/* Call Details */}
         <Typography variant="subtitle2" color="text.secondary" gutterBottom>
           Call Details

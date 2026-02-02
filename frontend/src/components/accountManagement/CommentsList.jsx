@@ -3,13 +3,10 @@ import {
   Box,
   Paper,
   Typography,
-  Chip,
   Avatar,
   Stack,
   Button,
   Collapse,
-  Divider,
-  IconButton,
   Tooltip,
 } from "@mui/material";
 import {
@@ -19,26 +16,6 @@ import {
   Warning as UnresolvedIcon,
   Reply as ReplyIcon,
 } from "@mui/icons-material";
-
-const formatStatus = (status) => {
-  const statusMap = {
-    working_ok: "Working OK",
-    shaving: "Shaving",
-    playing_games: "Playing Games",
-    other: "Other",
-  };
-  return statusMap[status] || status;
-};
-
-const getStatusColor = (status) => {
-  const colorMap = {
-    working_ok: "success",
-    shaving: "error",
-    playing_games: "warning",
-    other: "default",
-  };
-  return colorMap[status] || "default";
-};
 
 const CommentItem = ({ comment }) => {
   const [showReplies, setShowReplies] = useState(true);
@@ -54,7 +31,6 @@ const CommentItem = ({ comment }) => {
         backgroundColor: comment.isResolved
           ? "rgba(76, 175, 80, 0.05)"
           : "rgba(255, 152, 0, 0.05)",
-        mb: 1,
       }}
     >
       {/* Comment Header */}
@@ -79,20 +55,13 @@ const CommentItem = ({ comment }) => {
             </Typography>
           </Box>
         </Box>
-        <Stack direction="row" spacing={1} alignItems="center">
-          <Chip
-            label={formatStatus(comment.status)}
-            color={getStatusColor(comment.status)}
-            size="small"
-          />
-          <Tooltip title={comment.isResolved ? "Resolved" : "Unresolved"}>
-            {comment.isResolved ? (
-              <ResolvedIcon color="success" fontSize="small" />
-            ) : (
-              <UnresolvedIcon color="warning" fontSize="small" />
-            )}
-          </Tooltip>
-        </Stack>
+        <Tooltip title={comment.isResolved ? "Resolved" : "Unresolved"}>
+          {comment.isResolved ? (
+            <ResolvedIcon color="success" fontSize="small" />
+          ) : (
+            <UnresolvedIcon color="warning" fontSize="small" />
+          )}
+        </Tooltip>
       </Box>
 
       {/* Comment Content */}
@@ -197,17 +166,8 @@ const CommentItem = ({ comment }) => {
   );
 };
 
-const GroupedComments = ({ groupedComments = [] }) => {
-  const [expandedGroups, setExpandedGroups] = useState({});
-
-  const toggleGroup = (groupKey) => {
-    setExpandedGroups((prev) => ({
-      ...prev,
-      [groupKey]: !prev[groupKey],
-    }));
-  };
-
-  if (!groupedComments.length) {
+const CommentsList = ({ comments = [] }) => {
+  if (!comments.length) {
     return (
       <Paper sx={{ p: 3, textAlign: "center" }}>
         <Typography color="text.secondary">No comments yet</Typography>
@@ -216,66 +176,12 @@ const GroupedComments = ({ groupedComments = [] }) => {
   }
 
   return (
-    <Box>
-      {groupedComments.map((group) => {
-        const groupKey = group.ourNetwork?._id || "unassigned";
-        const isExpanded = expandedGroups[groupKey] !== false; // Default expanded
-
-        return (
-          <Paper key={groupKey} sx={{ mb: 2, overflow: "hidden" }}>
-            {/* Group Header */}
-            <Box
-              sx={{
-                p: 2,
-                backgroundColor: "grey.100",
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                cursor: "pointer",
-              }}
-              onClick={() => toggleGroup(groupKey)}
-            >
-              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                <Typography variant="subtitle1" fontWeight="bold">
-                  {group.ourNetwork?.name || "Unassigned"}
-                </Typography>
-                <Chip
-                  label={`${group.comments.length} ${
-                    group.comments.length === 1 ? "comment" : "comments"
-                  }`}
-                  size="small"
-                  variant="outlined"
-                />
-                <Chip
-                  label={`${
-                    group.comments.filter((c) => !c.isResolved).length
-                  } unresolved`}
-                  size="small"
-                  color={
-                    group.comments.filter((c) => !c.isResolved).length > 0
-                      ? "warning"
-                      : "success"
-                  }
-                />
-              </Box>
-              <IconButton size="small">
-                {isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-              </IconButton>
-            </Box>
-
-            {/* Group Content */}
-            <Collapse in={isExpanded}>
-              <Box sx={{ p: 2 }}>
-                {group.comments.map((comment) => (
-                  <CommentItem key={comment._id} comment={comment} />
-                ))}
-              </Box>
-            </Collapse>
-          </Paper>
-        );
-      })}
-    </Box>
+    <Stack spacing={1}>
+      {comments.map((comment) => (
+        <CommentItem key={comment._id} comment={comment} />
+      ))}
+    </Stack>
   );
 };
 
-export default GroupedComments;
+export default CommentsList;

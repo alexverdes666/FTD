@@ -125,6 +125,8 @@ const CallDeclarationsTable = ({
               {showAgent && <TableCell>Agent</TableCell>}
               <TableCell>Call Date</TableCell>
               <TableCell>Duration</TableCell>
+              <TableCell>Lead</TableCell>
+              <TableCell>Phone Number</TableCell>
               <TableCell>Type</TableCell>
               <TableCell align="right">Bonus</TableCell>
               <TableCell align="center">Status</TableCell>
@@ -157,6 +159,18 @@ const CallDeclarationsTable = ({
                     size="small"
                     variant="outlined"
                   />
+                </TableCell>
+                <TableCell>
+                  <Typography variant="body2">
+                    {declaration.lead
+                      ? `${declaration.lead.firstName || ''} ${declaration.lead.lastName || ''}`.trim() || 'N/A'
+                      : 'N/A'}
+                  </Typography>
+                </TableCell>
+                <TableCell>
+                  <Typography variant="body2" fontFamily="monospace">
+                    {declaration.destinationNumber || 'N/A'}
+                  </Typography>
                 </TableCell>
                 <TableCell>
                   <Typography variant="body2">

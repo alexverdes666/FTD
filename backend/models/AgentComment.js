@@ -60,6 +60,10 @@ const agentCommentSchema = new mongoose.Schema(
       trim: true,
       maxlength: 500,
     },
+    images: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "ChatImage",
+    }],
   },
   {
     timestamps: true,
