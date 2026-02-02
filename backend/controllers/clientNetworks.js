@@ -344,29 +344,60 @@ exports.getNetworkDeals = async (req, res, next) => {
     }
 
     const skip = (page - 1) * limit;
-    const [deals, total] = await Promise.all([
+    const [deals, total, networkTotals] = await Promise.all([
       Order.find(filter)
         .populate("requester", "fullName email")
         .populate("selectedOurNetwork", "name")
         .populate("selectedCampaign", "name")
         .populate("selectedClientBrokers", "name domain")
         .select(
-          "createdAt plannedDate status requests fulfilled requester selectedOurNetwork selectedCampaign countryFilter selectedClientBrokers leads"
+          "createdAt plannedDate status requests fulfilled requester selectedOurNetwork selectedCampaign countryFilter selectedClientBrokers leads leadsMetadata"
         )
         .skip(skip)
         .limit(parseInt(limit))
         .sort({ createdAt: -1 }),
       Order.countDocuments(filter),
+      Order.aggregate([
+        { $match: { selectedClientNetwork: clientNetwork._id } },
+        { $unwind: { path: "$leadsMetadata", preserveNullAndEmptyArrays: true } },
+        {
+          $group: {
+            _id: null,
+            totalConfirmedDeposits: {
+              $sum: { $cond: [{ $eq: ["$leadsMetadata.depositConfirmed", true] }, 1, 0] },
+            },
+            totalShavedFtds: {
+              $sum: { $cond: [{ $eq: ["$leadsMetadata.shaved", true] }, 1, 0] },
+            },
+          },
+        },
+      ]),
     ]);
+
+    // Compute per-order counts and strip raw leadsMetadata
+    const data = deals.map((order) => {
+      const obj = order.toObject();
+      const metadata = obj.leadsMetadata || [];
+      obj.confirmedDeposits = metadata.filter((m) => m.depositConfirmed).length;
+      obj.shavedFtds = metadata.filter((m) => m.shaved).length;
+      delete obj.leadsMetadata;
+      return obj;
+    });
+
+    const totals = networkTotals[0] || { totalConfirmedDeposits: 0, totalShavedFtds: 0 };
 
     res.status(200).json({
       success: true,
-      data: deals,
+      data,
       pagination: {
         current: parseInt(page),
         pages: Math.ceil(total / limit),
         total,
         limit: parseInt(limit),
+      },
+      totals: {
+        confirmedDeposits: totals.totalConfirmedDeposits,
+        shavedFtds: totals.totalShavedFtds,
       },
     });
   } catch (error) {

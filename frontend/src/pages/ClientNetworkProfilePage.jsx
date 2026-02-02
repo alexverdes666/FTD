@@ -9,14 +9,7 @@ import {
   Grid,
   Card,
   CardContent,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
   IconButton,
-  Tooltip,
   CircularProgress,
   Alert,
   Dialog,
@@ -24,8 +17,15 @@ import {
   DialogContent,
   DialogActions,
   TextField,
-  Divider,
   Stack,
+  Tabs,
+  Tab,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
 } from "@mui/material";
 import {
   ArrowBack as BackIcon,
@@ -35,6 +35,8 @@ import {
   Person as PersonIcon,
   Hub as NetworkIcon,
   Link as LinkIcon,
+  Comment as CommentIcon,
+  Handshake as DealsIcon,
 } from "@mui/icons-material";
 import { useSelector } from "react-redux";
 import { selectUser } from "../store/slices/authSlice";
@@ -44,6 +46,7 @@ import EmployeeForm, { getPositionLabel } from "../components/accountManagement/
 import ReferenceSelector from "../components/accountManagement/ReferenceSelector";
 import CrmNetworkOrdersTable from "../components/crm/CrmNetworkOrdersTable";
 import GroupedComments from "../components/accountManagement/GroupedComments";
+import CommentButton from "../components/CommentButton";
 
 const ClientNetworkProfilePage = () => {
   const { id } = useParams();
@@ -64,6 +67,8 @@ const ClientNetworkProfilePage = () => {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editData, setEditData] = useState({ name: "", description: "" });
   const [editLoading, setEditLoading] = useState(false);
+
+  const [activeTab, setActiveTab] = useState(0);
 
   const isAdmin = user?.role === "admin";
   const canManageCrm = ["admin", "affiliate_manager"].includes(user?.role);
@@ -276,148 +281,155 @@ const ClientNetworkProfilePage = () => {
         </Grid>
       </Paper>
 
-      <Grid container spacing={3}>
-        {/* Employees Section */}
-        <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 2 }}>
-            <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
-              <Typography variant="h6">
-                <PersonIcon sx={{ mr: 1, verticalAlign: "middle" }} />
-                Employees
-              </Typography>
-              {canManageCrm && (
-                <Button size="small" startIcon={<AddIcon />} onClick={handleAddEmployee}>
-                  Add
-                </Button>
-              )}
-            </Box>
-            <TableContainer>
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Name</TableCell>
-                    <TableCell>Position</TableCell>
-                    <TableCell>Telegram</TableCell>
-                    {canManageCrm && <TableCell align="right">Actions</TableCell>}
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {profile.employees?.length ? (
-                    profile.employees.map((emp) => (
-                      <TableRow key={emp._id}>
-                        <TableCell>{emp.name}</TableCell>
-                        <TableCell>
-                          <Chip label={getPositionLabel(emp.position)} size="small" />
-                        </TableCell>
-                        <TableCell>{emp.telegramUsername || "-"}</TableCell>
-                        {canManageCrm && (
-                          <TableCell align="right">
-                            <IconButton size="small" onClick={() => handleEditEmployee(emp)}>
-                              <EditIcon fontSize="small" />
-                            </IconButton>
-                            <IconButton
-                              size="small"
-                              color="error"
-                              onClick={() => handleDeleteEmployee(emp._id)}
-                            >
-                              <DeleteIcon fontSize="small" />
-                            </IconButton>
-                          </TableCell>
-                        )}
-                      </TableRow>
-                    ))
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={canManageCrm ? 4 : 3} align="center">
-                        No employees
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          </Paper>
-        </Grid>
+      <Paper sx={{ mb: 3 }}>
+        <Tabs
+          value={activeTab}
+          onChange={(e, v) => setActiveTab(v)}
+          variant="fullWidth"
+        >
+          <Tab icon={<PersonIcon />} iconPosition="start" label={`Employees (${profile.employees?.length || 0})`} />
+          <Tab icon={<LinkIcon />} iconPosition="start" label={`References (${profile.references?.length || 0})`} />
+          <Tab icon={<CommentIcon />} iconPosition="start" label={`Comments (${profile.unresolvedCommentsCount || 0})`} />
+          <Tab icon={<DealsIcon />} iconPosition="start" label="CRM Deals" />
+        </Tabs>
+      </Paper>
 
-        {/* References Section */}
-        <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 2 }}>
-            <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
-              <Typography variant="h6">
-                <LinkIcon sx={{ mr: 1, verticalAlign: "middle" }} />
-                References
-              </Typography>
-              {canManageCrm && (
-                <Button size="small" startIcon={<AddIcon />} onClick={() => setReferenceDialogOpen(true)}>
-                  Add
-                </Button>
-              )}
-            </Box>
-            {profile.references?.length ? (
-              <Stack spacing={1}>
-                {profile.references.map((ref) => (
-                  <Box
-                    key={ref._id}
-                    sx={{
-                      p: 1.5,
-                      border: 1,
-                      borderColor: "divider",
-                      borderRadius: 1,
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                    }}
-                  >
-                    <Box>
-                      <Typography fontWeight="medium">
-                        {ref.clientNetwork?.name || "Unknown"}
-                      </Typography>
-                      {ref.notes && (
-                        <Typography variant="body2" color="text.secondary">
-                          {ref.notes}
-                        </Typography>
+      {/* Employees Tab */}
+      {activeTab === 0 && (
+        <Paper sx={{ p: 2 }}>
+          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
+            <Typography variant="h6">Employees</Typography>
+            {canManageCrm && (
+              <Button size="small" startIcon={<AddIcon />} onClick={handleAddEmployee}>
+                Add
+              </Button>
+            )}
+          </Box>
+          <TableContainer>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Name</TableCell>
+                  <TableCell>Position</TableCell>
+                  <TableCell>Telegram</TableCell>
+                  {canManageCrm && <TableCell align="right">Actions</TableCell>}
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {profile.employees?.length ? (
+                  profile.employees.map((emp) => (
+                    <TableRow key={emp._id} hover>
+                      <TableCell>{emp.name}</TableCell>
+                      <TableCell>
+                        <Chip label={getPositionLabel(emp.position)} size="small" />
+                      </TableCell>
+                      <TableCell>{emp.telegramUsername || "-"}</TableCell>
+                      {canManageCrm && (
+                        <TableCell align="right">
+                          <IconButton size="small" onClick={() => handleEditEmployee(emp)}>
+                            <EditIcon fontSize="small" />
+                          </IconButton>
+                          <IconButton
+                            size="small"
+                            color="error"
+                            onClick={() => handleDeleteEmployee(emp._id)}
+                          >
+                            <DeleteIcon fontSize="small" />
+                          </IconButton>
+                        </TableCell>
                       )}
-                    </Box>
-                    {canManageCrm && (
-                      <IconButton
-                        size="small"
-                        color="error"
-                        onClick={() => handleDeleteReference(ref._id)}
-                      >
-                        <DeleteIcon fontSize="small" />
-                      </IconButton>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={canManageCrm ? 4 : 3} align="center">
+                      No employees
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </Paper>
+      )}
+
+      {/* References Tab */}
+      {activeTab === 1 && (
+        <Paper sx={{ p: 2 }}>
+          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
+            <Typography variant="h6">References</Typography>
+            {canManageCrm && (
+              <Button size="small" startIcon={<AddIcon />} onClick={() => setReferenceDialogOpen(true)}>
+                Add
+              </Button>
+            )}
+          </Box>
+          {profile.references?.length ? (
+            <Stack spacing={1}>
+              {profile.references.map((ref) => (
+                <Box
+                  key={ref._id}
+                  sx={{
+                    p: 1.5,
+                    border: 1,
+                    borderColor: "divider",
+                    borderRadius: 1,
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                  }}
+                >
+                  <Box>
+                    <Typography fontWeight="medium">
+                      {ref.clientNetwork?.name || "Unknown"}
+                    </Typography>
+                    {ref.notes && (
+                      <Typography variant="body2" color="text.secondary">
+                        {ref.notes}
+                      </Typography>
                     )}
                   </Box>
-                ))}
-              </Stack>
-            ) : (
-              <Typography color="text.secondary" align="center">
-                No references
-              </Typography>
-            )}
-          </Paper>
-        </Grid>
-
-        {/* Comments Section */}
-        <Grid item xs={12}>
-          <Paper sx={{ p: 2 }}>
-            <Typography variant="h6" sx={{ mb: 2 }}>
-              Comments (Grouped by Our Network)
+                  {canManageCrm && (
+                    <IconButton
+                      size="small"
+                      color="error"
+                      onClick={() => handleDeleteReference(ref._id)}
+                    >
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  )}
+                </Box>
+              ))}
+            </Stack>
+          ) : (
+            <Typography color="text.secondary" align="center" sx={{ py: 3 }}>
+              No references
             </Typography>
-            <GroupedComments groupedComments={profile.groupedComments || []} />
-          </Paper>
-        </Grid>
+          )}
+        </Paper>
+      )}
 
-        {/* Deals Section */}
-        <Grid item xs={12}>
-          <Paper sx={{ p: 2 }}>
-            <Typography variant="h6" sx={{ mb: 2 }}>
-              CRM Deals
-            </Typography>
-            <CrmNetworkOrdersTable networkId={id} />
-          </Paper>
-        </Grid>
-      </Grid>
+      {/* Comments Tab */}
+      {activeTab === 2 && (
+        <Paper sx={{ p: 2 }}>
+          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
+            <Typography variant="h6">Comments</Typography>
+            <CommentButton
+              targetType="client_network"
+              targetId={id}
+              targetName={profile.name}
+            />
+          </Box>
+          <GroupedComments groupedComments={profile.groupedComments || []} />
+        </Paper>
+      )}
+
+      {/* CRM Deals Tab */}
+      {activeTab === 3 && (
+        <Paper sx={{ p: 2 }}>
+          <CrmNetworkOrdersTable networkId={id} />
+        </Paper>
+      )}
 
       {/* Employee Dialog */}
       <EmployeeForm

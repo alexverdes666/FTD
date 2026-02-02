@@ -12,6 +12,7 @@ import {
   TablePagination,
   CircularProgress,
   Tooltip,
+  Chip,
 } from "@mui/material";
 import api from "../../services/api";
 
@@ -24,6 +25,10 @@ const CrmNetworkOrdersTable = ({ networkId }) => {
     total: 0,
     limit: 10,
   });
+  const [totals, setTotals] = useState({
+    confirmedDeposits: 0,
+    shavedFtds: 0,
+  });
 
   const fetchOrders = useCallback(
     async (page = 1) => {
@@ -34,6 +39,9 @@ const CrmNetworkOrdersTable = ({ networkId }) => {
         });
         setOrders(response.data.data);
         setPagination(response.data.pagination);
+        if (response.data.totals) {
+          setTotals(response.data.totals);
+        }
       } catch (error) {
         console.error("Failed to load orders", error);
       } finally {
@@ -77,6 +85,20 @@ const CrmNetworkOrdersTable = ({ networkId }) => {
         <Typography variant="body2" color="text.secondary">
           {pagination.total} {pagination.total === 1 ? "order" : "orders"} total
         </Typography>
+        <Box sx={{ display: "flex", gap: 1 }}>
+          <Chip
+            label={`Confirmed Deposits: ${totals.confirmedDeposits}`}
+            color="success"
+            size="small"
+            variant="outlined"
+          />
+          <Chip
+            label={`Shaved FTDs: ${totals.shavedFtds}`}
+            color={totals.shavedFtds > 0 ? "error" : "default"}
+            size="small"
+            variant="outlined"
+          />
+        </Box>
       </Box>
 
       {!orders.length && !loading ? (
@@ -91,6 +113,9 @@ const CrmNetworkOrdersTable = ({ networkId }) => {
                 <TableRow>
                   <TableCell sx={{ fontWeight: "bold", backgroundColor: "#f5f5f5" }}>
                     Order ID
+                  </TableCell>
+                  <TableCell sx={{ fontWeight: "bold", backgroundColor: "#f5f5f5" }}>
+                    Date
                   </TableCell>
                   <TableCell sx={{ fontWeight: "bold", backgroundColor: "#f5f5f5" }}>
                     Requester
@@ -110,12 +135,24 @@ const CrmNetworkOrdersTable = ({ networkId }) => {
                   >
                     Leads
                   </TableCell>
+                  <TableCell
+                    align="center"
+                    sx={{ fontWeight: "bold", backgroundColor: "#f5f5f5" }}
+                  >
+                    Confirmed Deposits
+                  </TableCell>
+                  <TableCell
+                    align="center"
+                    sx={{ fontWeight: "bold", backgroundColor: "#f5f5f5" }}
+                  >
+                    Shaved FTDs
+                  </TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={6} align="center" sx={{ py: 3 }}>
+                    <TableCell colSpan={9} align="center" sx={{ py: 3 }}>
                       <CircularProgress size={24} />
                     </TableCell>
                   </TableRow>
@@ -123,6 +160,11 @@ const CrmNetworkOrdersTable = ({ networkId }) => {
                   orders.map((order) => (
                     <TableRow key={order._id} hover>
                       <TableCell>{formatOrderId(order._id)}</TableCell>
+                      <TableCell>
+                        {order.plannedDate
+                          ? new Date(order.plannedDate).toLocaleDateString()
+                          : "-"}
+                      </TableCell>
                       <TableCell>
                         {order.requester?.fullName || "-"}
                       </TableCell>
@@ -140,6 +182,24 @@ const CrmNetworkOrdersTable = ({ networkId }) => {
                       <TableCell align="center">
                         <Typography variant="body2" fontWeight="medium">
                           {order.leads?.length || 0}
+                        </Typography>
+                      </TableCell>
+                      <TableCell align="center">
+                        <Typography
+                          variant="body2"
+                          fontWeight="medium"
+                          color={order.confirmedDeposits > 0 ? "success.main" : "text.primary"}
+                        >
+                          {order.confirmedDeposits || 0}
+                        </Typography>
+                      </TableCell>
+                      <TableCell align="center">
+                        <Typography
+                          variant="body2"
+                          fontWeight="medium"
+                          color={order.shavedFtds > 0 ? "error.main" : "text.primary"}
+                        >
+                          {order.shavedFtds || 0}
                         </Typography>
                       </TableCell>
                     </TableRow>
