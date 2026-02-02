@@ -87,6 +87,7 @@ import {
   PersonRemove as PersonRemoveIcon,
   History as HistoryIcon,
   Gavel as GavelIcon,
+  Refresh as RefreshIcon,
 } from "@mui/icons-material";
 import AddLeadForm from "../components/AddLeadForm";
 import DocumentPreview from "../components/DocumentPreview";
@@ -1246,6 +1247,10 @@ const LeadsPage = () => {
   );
   const isAgent = useMemo(() => user?.role === ROLES.AGENT, [user?.role]);
   const canAssignLeads = useMemo(() => isAdminOrManager, [isAdminOrManager]);
+  const canSelectLeads = useMemo(
+    () => isAdminOrManager || isLeadManager,
+    [isAdminOrManager, isLeadManager]
+  );
   const canDeleteLeads = useMemo(
     () => user?.role === ROLES.ADMIN,
     [user?.role]
@@ -1258,6 +1263,18 @@ const LeadsPage = () => {
     selectedLeads.forEach((leadId) => {
       const lead = leads.find((l) => l._id === leadId);
       if (lead && (lead.leadType === "ftd" || lead.leadType === "filler")) {
+        count++;
+      }
+    });
+    return count;
+  }, [selectedLeads, leads]);
+
+  // Count selected leads that already have IPQS validation
+  const numIPQSValidatedSelected = useMemo(() => {
+    let count = 0;
+    selectedLeads.forEach((leadId) => {
+      const lead = leads.find((l) => l._id === leadId);
+      if (lead && lead.ipqsValidation?.validatedAt) {
         count++;
       }
     });
@@ -1766,6 +1783,71 @@ const LeadsPage = () => {
     }
   };
 
+  // Force recheck IPQS validation for selected leads (including already validated)
+  const handleBatchIPQSRecheck = async () => {
+    if (selectedLeads.size === 0) return;
+
+    try {
+      setIpqsValidating(true);
+      setError(null);
+
+      const leadIds = Array.from(selectedLeads);
+
+      const response = await api.post(
+        "/leads/batch-validate-ipqs?force=true",
+        { leadIds }
+      );
+
+      if (response.data.success) {
+        const { stats, results } = response.data.data;
+
+        // Update the leads in state with the new IPQS validation data
+        setLeads((prevLeads) =>
+          prevLeads.map((lead) => {
+            const result = results.find((r) => r.leadId === lead._id);
+            if (result && !result.error) {
+              return {
+                ...lead,
+                ipqsValidation: {
+                  email: result.email,
+                  phone: result.phone,
+                  summary: result.summary,
+                  validatedAt: result.validatedAt,
+                },
+              };
+            }
+            return lead;
+          })
+        );
+
+        // Show success animation for validated leads
+        const validatedLeadIds = results
+          .filter((r) => !r.error)
+          .map((r) => r.leadId);
+        setIpqsValidationSuccess(validatedLeadIds);
+        setTimeout(() => setIpqsValidationSuccess([]), 2000);
+
+        // Show success message
+        if (stats.newlyValidated > 0) {
+          let message = `IPQS Recheck complete: ${stats.newlyValidated} rechecked`;
+          if (stats.failed > 0) {
+            message += `, ${stats.failed} failed`;
+          }
+          setSuccess(message);
+        } else if (stats.failed > 0) {
+          setError(`IPQS recheck failed for ${stats.failed} lead(s)`);
+        }
+      }
+    } catch (err) {
+      console.error("Error rechecking IPQS:", err);
+      setError(
+        err.response?.data?.message || "Failed to recheck leads with IPQS"
+      );
+    } finally {
+      setIpqsValidating(false);
+    }
+  };
+
   // Fetch archived leads
   const fetchArchivedLeads = useCallback(
     async (page = 1, search = "") => {
@@ -2083,10 +2165,10 @@ const LeadsPage = () => {
   return (
     <Box sx={{ position: "relative" }}>
       {/* Floating action bar for selected leads */}
-      {(canAssignLeads && numSelected > 0 && numAssignableSelected === 0) ||
+      {(canSelectLeads && numSelected > 0 && numAssignableSelected === 0) ||
       (isAdminOrManager && numAssignableSelected > 0) ||
       (isAdminOrManager && numAssignedAgentSelected > 0) ||
-      (isAdminOrManager && numSelected > 0) ? (
+      (canSelectLeads && numSelected > 0) ? (
         <Box
           sx={{
             position: "fixed",
@@ -2109,7 +2191,7 @@ const LeadsPage = () => {
             },
           }}
         >
-          {canAssignLeads && numSelected > 0 && numAssignableSelected === 0 && (
+          {canSelectLeads && numSelected > 0 && numAssignableSelected === 0 && (
             <Alert severity="info" sx={{ py: 0.5, px: 2 }}>
               Cold leads cannot be assigned to agents, but can be IPQS validated.
             </Alert>
@@ -2156,7 +2238,7 @@ const LeadsPage = () => {
               Unassign from Agent ({numAssignedAgentSelected})
             </Button>
           )}
-          {isAdminOrManager && numSelected > 0 && (
+          {canSelectLeads && numSelected > 0 && (
             <Button
               variant="contained"
               color="info"
@@ -2176,6 +2258,28 @@ const LeadsPage = () => {
               }}
             >
               {ipqsValidating ? "Validating..." : `IPQS Check (${numSelected})`}
+            </Button>
+          )}
+          {canSelectLeads && numSelected > 0 && numIPQSValidatedSelected > 0 && (
+            <Button
+              variant="contained"
+              color="secondary"
+              startIcon={ipqsValidating ? <CircularProgress size={16} color="inherit" /> : <RefreshIcon />}
+              onClick={handleBatchIPQSRecheck}
+              disabled={ipqsValidating}
+              sx={{
+                borderRadius: 2,
+                px: 3,
+                py: 1,
+                transition: "all 0.2s",
+                boxShadow: 4,
+                "&:hover": {
+                  transform: "translateY(-2px)",
+                  boxShadow: 6,
+                },
+              }}
+            >
+              {ipqsValidating ? "Rechecking..." : `IPQS Recheck (${numIPQSValidatedSelected})`}
             </Button>
           )}
         </Box>
@@ -2560,7 +2664,7 @@ const LeadsPage = () => {
             >
               <TableHead>
                 <TableRow>
-                  {!isAgent && canAssignLeads && (
+                  {!isAgent && canSelectLeads && (
                     <TableCell
                       padding="checkbox"
                       sx={{
@@ -2771,7 +2875,7 @@ const LeadsPage = () => {
                     <React.Fragment key={lead._id}>
                       <LeadRow
                         lead={lead}
-                        canAssignLeads={canAssignLeads}
+                        canAssignLeads={canSelectLeads}
                         canDeleteLeads={canDeleteLeads}
                         isAdminOrManager={isAdminOrManager}
                         isLeadManager={isLeadManager}
@@ -3083,7 +3187,7 @@ const LeadsPage = () => {
               <LeadCard
                 key={lead._id}
                 lead={lead}
-                canAssignLeads={canAssignLeads}
+                canAssignLeads={canSelectLeads}
                 canDeleteLeads={canDeleteLeads}
                 selectedLeads={selectedLeads}
                 expandedRows={expandedRows}

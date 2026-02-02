@@ -3966,7 +3966,7 @@ const OrdersPage = () => {
         });
 
         const response = await api.get("/card-issuers", {
-          params: { limit: 100, isActive: true },
+          params: { limit: 10000, isActive: true },
         });
 
         setPspDepositDialog((prev) => ({
@@ -4022,7 +4022,7 @@ const OrdersPage = () => {
 
         // Fetch all active PSPs (not filtered by issuer since PSPs may not have issuer set)
         const pspsResponse = await api.get("/psps", {
-          params: { isActive: true, limit: 100 },
+          params: { isActive: true, limit: 10000 },
         });
 
         setPspDepositDialog((prev) => ({
@@ -4055,7 +4055,7 @@ const OrdersPage = () => {
 
       // Fetch all active PSPs
       const response = await api.get("/psps", {
-        params: { isActive: true, limit: 100 },
+        params: { isActive: true, limit: 10000 },
       });
 
       setPspDepositDialog((prev) => ({
@@ -4105,13 +4105,28 @@ const OrdersPage = () => {
             creatingPsp: false,
           }));
         } catch (err) {
-          console.error("Error creating PSP:", err);
-          setNotification({
-            message: err.response?.data?.message || "Failed to create PSP",
-            severity: "error",
-          });
-          setPspDepositDialog((prev) => ({ ...prev, creatingPsp: false }));
-          return;
+          // If PSP already exists (409), use the existing one
+          if (err.response?.status === 409 && err.response?.data?.existingPsp) {
+            pspToUse = err.response.data.existingPsp;
+            setPspDepositDialog((prev) => ({
+              ...prev,
+              selectedPsp: pspToUse,
+              newPspWebsite: "",
+              creatingPsp: false,
+            }));
+            setNotification({
+              message: "PSP already exists - using existing one",
+              severity: "info",
+            });
+          } else {
+            console.error("Error creating PSP:", err);
+            setNotification({
+              message: err.response?.data?.message || "Failed to create PSP",
+              severity: "error",
+            });
+            setPspDepositDialog((prev) => ({ ...prev, creatingPsp: false }));
+            return;
+          }
         }
       }
 

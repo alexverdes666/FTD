@@ -188,6 +188,19 @@ exports.createPSP = async (req, res, next) => {
     });
   } catch (error) {
     if (error.code === 11000) {
+      // Find and return the existing PSP so the frontend can use it
+      const existingPsp = await PSP.findOne({ name })
+        .populate("createdBy", "fullName email")
+        .populate("cardIssuer", "name description logo");
+
+      if (existingPsp) {
+        return res.status(409).json({
+          success: false,
+          message: "A PSP with this domain already exists",
+          existingPsp: existingPsp,
+        });
+      }
+
       return res.status(400).json({
         success: false,
         message: "A PSP with this domain already exists",

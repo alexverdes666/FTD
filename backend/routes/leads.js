@@ -432,7 +432,7 @@ router.post(
   "/batch-validate-ipqs",
   [
     protect,
-    authorize("admin", "affiliate_manager"),
+    authorize("admin", "affiliate_manager", "lead_manager"),
     body("leadIds")
       .isArray({ min: 1 })
       .withMessage("leadIds must be a non-empty array"),
