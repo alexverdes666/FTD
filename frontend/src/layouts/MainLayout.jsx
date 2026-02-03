@@ -243,6 +243,7 @@ const MainLayout = () => {
         ...commonItems,
         { text: "Orders", icon: <OrdersIcon />, path: "/orders" },
         { text: "Leads", icon: <LeadsIcon />, path: "/leads" },
+        { text: "CRM", icon: <CrmIcon />, path: "/crm" },
         // { text: "Workspace", icon: <WorkspaceIcon />, path: "/workspace" }, // Temporarily hidden
         {
           text: "Users",
@@ -305,7 +306,6 @@ const MainLayout = () => {
             },
           ],
         },
-        { text: "CRM", icon: <CrmIcon />, path: "/crm" },
         {
           text: "Payroll",
           icon: <PaymentIcon />,
@@ -589,6 +589,50 @@ const MainLayout = () => {
   };
   const navigationItems = getNavigationItems();
 
+  const iconColorMap = {
+    "/": "#42a5f5",
+    "/orders": "#ff7043",
+    "/leads": "#66bb6a",
+    "/crm": "#ec407a",
+    "/users": "#ab47bc",
+    "/account-management": "#7e57c2",
+    "/activity": "#26a69a",
+    "/client-networks": "#29b6f6",
+    "/our-networks": "#29b6f6",
+    "/client-brokers": "#8d6e63",
+    "/client-psps": "#5c6bc0",
+    "/card-issuers": "#ffa726",
+    "/campaigns": "#ef5350",
+    "/payroll": "#4caf50",
+    "/affiliate-managers": "#42a5f5",
+    "/withdrawals": "#ef5350",
+    "/refunds": "#e53935",
+    "/simcards": "#26c6da",
+    "/numbers": "#26c6da",
+    "/sms": "#42a5f5",
+    "/am-targets": "#ffa726",
+    "/announcements": "#ffb300",
+    "/agent-schedule": "#26a69a",
+    "/agent-call-calendar": "#26a69a",
+    "/approve-am-calls": "#66bb6a",
+    "/deposit-calls": "#42a5f5",
+    "/agent-comments": "#78909c",
+    "/tickets": "#ff7043",
+    "/sheets": "#66bb6a",
+    "/my-table": "#42a5f5",
+    "/notes": "#ffca28",
+    "/payment-history": "#78909c",
+    "/verifications": "#66bb6a",
+    "/lead-management": "#66bb6a",
+  };
+  const expandableIconColorMap = {
+    users: "#ab47bc",
+    networks: "#29b6f6",
+    payroll: "#4caf50",
+    erp: "#5c6bc0",
+    schedules: "#26a69a",
+  };
+
   // Helper function to get all navigation paths (including nested ones) for title display
   const getAllNavigationPaths = (items) => {
     const paths = [];
@@ -631,7 +675,7 @@ const MainLayout = () => {
                     },
                   }}
                 >
-                  <ListItemIcon>{item.icon}</ListItemIcon>
+                  <ListItemIcon sx={{ color: expandableIconColorMap[item.key] }}>{item.icon}</ListItemIcon>
                   <ListItemText primary={item.text} />
                   {expandedMenus[item.key] ? <ExpandLess /> : <ExpandMore />}
                 </ListItem>
@@ -662,7 +706,7 @@ const MainLayout = () => {
                           },
                         }}
                       >
-                        <ListItemIcon>{child.icon}</ListItemIcon>
+                        <ListItemIcon sx={{ color: iconColorMap[child.path] }}>{child.icon}</ListItemIcon>
                         <ListItemText primary={child.text} />
                       </ListItem>
                     ))}
@@ -689,7 +733,7 @@ const MainLayout = () => {
                   },
                 }}
               >
-                <ListItemIcon>{item.icon}</ListItemIcon>
+                <ListItemIcon sx={{ color: iconColorMap[item.path] }}>{item.icon}</ListItemIcon>
                 <ListItemText primary={item.text} />
               </ListItem>
             )}
