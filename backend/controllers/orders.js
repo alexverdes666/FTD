@@ -6576,14 +6576,6 @@ exports.restoreLeadToOrder = async (req, res, next) => {
       });
     }
 
-    // Check if lead is already assigned to another order
-    if (lead.orderId && lead.orderId.toString() !== orderId) {
-      return res.status(400).json({
-        success: false,
-        message: "Lead has already been assigned to another order and cannot be restored",
-      });
-    }
-
     // Get client IP for audit log
     const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
                      req.headers['x-real-ip'] ||

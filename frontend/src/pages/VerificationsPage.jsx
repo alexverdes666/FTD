@@ -337,6 +337,8 @@ const VerificationsPage = () => {
         return "success";
       case "failed":
         return "error";
+      case "verification_failed":
+        return "error";
       case "manually_rejected":
         return "error";
       default:
@@ -353,6 +355,8 @@ const VerificationsPage = () => {
         return "AWS Approved";
       case "failed":
         return "AWS Failed";
+      case "verification_failed":
+        return "Verification Failed";
       case "manually_rejected":
         return "Manually Rejected";
       default:
@@ -425,7 +429,7 @@ const VerificationsPage = () => {
           <Card>
             <CardContent sx={{ textAlign: "center" }}>
               <Typography variant="h4" color="error.main">
-                {(stats.failed || 0) + (stats.manually_rejected || 0)}
+                {(stats.failed || 0) + (stats.verification_failed || 0) + (stats.manually_rejected || 0)}
               </Typography>
               <Typography color="textSecondary">Rejected</Typography>
             </CardContent>
@@ -449,6 +453,9 @@ const VerificationsPage = () => {
                   <MenuItem value="pending">Pending Review</MenuItem>
                   <MenuItem value="approved">AWS Approved</MenuItem>
                   <MenuItem value="failed">AWS Failed</MenuItem>
+                  <MenuItem value="verification_failed">
+                    Verification Failed
+                  </MenuItem>
                   <MenuItem value="manually_rejected">
                     Manually Rejected
                   </MenuItem>
@@ -598,7 +605,7 @@ const VerificationsPage = () => {
                           </Tooltip>
                           {canTakeAction && (
                               <>
-                                <Tooltip title={verification.metadata.status === "manually_rejected" ? "Re-approve" : "Approve"}>
+                                <Tooltip title={verification.metadata.status === "manually_rejected" || verification.metadata.status === "verification_failed" ? "Re-approve" : "Approve"}>
                                   <IconButton
                                     size="small"
                                     color="success"
@@ -624,7 +631,7 @@ const VerificationsPage = () => {
                                     <ApproveIcon />
                                   </IconButton>
                                 </Tooltip>
-                                <Tooltip title={verification.metadata.status === "manually_rejected" ? "Re-reject" : "Reject"}>
+                                <Tooltip title={verification.metadata.status === "manually_rejected" || verification.metadata.status === "verification_failed" ? "Re-reject" : "Reject"}>
                                   <IconButton
                                     size="small"
                                     color="error"
@@ -639,8 +646,8 @@ const VerificationsPage = () => {
                                 </Tooltip>
                               </>
                             )}
-                          {verification.metadata.status ===
-                            "manually_rejected" && (
+                          {(verification.metadata.status ===
+                            "manually_rejected" || verification.metadata.status === "verification_failed") && (
                             <Chip
                               size="small"
                               label="Rejected"
@@ -1029,7 +1036,7 @@ const VerificationsPage = () => {
                   startIcon={<RejectIcon />}
                   disabled={processing}
                 >
-                  {selectedVerification.metadata.status === "manually_rejected" ? "Re-reject" : "Reject"}
+                  {selectedVerification.metadata.status === "manually_rejected" || selectedVerification.metadata.status === "verification_failed" ? "Re-reject" : "Reject"}
                 </Button>
                 <Button
                   color="success"
@@ -1053,18 +1060,23 @@ const VerificationsPage = () => {
                   variant="contained"
                   disabled={processing}
                 >
-                  {selectedVerification.metadata.status === "manually_rejected" ? "Re-approve & Create Lead" : "Approve & Create Lead"}
+                  {selectedVerification.metadata.status === "manually_rejected" || selectedVerification.metadata.status === "verification_failed" ? "Re-approve & Create Lead" : "Approve & Create Lead"}
                 </Button>
               </>
             )}
           {selectedVerification &&
-            selectedVerification.metadata.status === "manually_rejected" && (
+            (selectedVerification.metadata.status === "manually_rejected" || selectedVerification.metadata.status === "verification_failed") && (
               <Alert severity="warning">
-                This verification was previously rejected
-                {selectedVerification.metadata.rejectedAt &&
-                  ` on ${formatDate(selectedVerification.metadata.rejectedAt)}`}
-                {selectedVerification.metadata.rejectionReason &&
-                  `. Reason: ${selectedVerification.metadata.rejectionReason}`}
+                {selectedVerification.metadata.status === "verification_failed"
+                  ? "This verification failed AWS automated checks."
+                  : <>
+                      This verification was previously rejected
+                      {selectedVerification.metadata.rejectedAt &&
+                        ` on ${formatDate(selectedVerification.metadata.rejectedAt)}`}
+                      {selectedVerification.metadata.rejectionReason &&
+                        `. Reason: ${selectedVerification.metadata.rejectionReason}`}
+                    </>
+                }
                 <br />
                 You can still change the status by approving or re-rejecting it.
               </Alert>

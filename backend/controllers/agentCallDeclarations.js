@@ -906,6 +906,55 @@ const findLeadByPhone = async (req, res) => {
   }
 };
 
+/**
+ * Proxy call recording to avoid mixed content issues
+ * GET /call-declarations/recording/:filename
+ * Streams the recording from the CDR server through the backend
+ */
+const streamRecording = async (req, res) => {
+  try {
+    const { filename } = req.params;
+
+    // Validate filename to prevent path traversal
+    if (!filename || !/^[\w\-\+\.]+$/.test(filename)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid filename",
+      });
+    }
+
+    const recordingUrl = `http://188.126.10.151:6680/rec/${filename}.mp3`;
+
+    const response = await axios.get(recordingUrl, {
+      responseType: "stream",
+      timeout: 30000,
+    });
+
+    res.set({
+      "Content-Type": "audio/mpeg",
+      "Cache-Control": "public, max-age=86400",
+    });
+
+    if (response.headers["content-length"]) {
+      res.set("Content-Length", response.headers["content-length"]);
+    }
+
+    response.data.pipe(res);
+  } catch (error) {
+    console.error("Error streaming recording:", error.message);
+    if (error.response && error.response.status === 404) {
+      return res.status(404).json({
+        success: false,
+        message: "Recording not found",
+      });
+    }
+    res.status(500).json({
+      success: false,
+      message: "Failed to stream recording",
+    });
+  }
+};
+
 module.exports = {
   fetchCDRCalls,
   createDeclaration,
@@ -921,4 +970,5 @@ module.exports = {
   previewBonus,
   getAffiliateManagers,
   findLeadByPhone,
+  streamRecording,
 };

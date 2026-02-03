@@ -311,7 +311,7 @@ exports.approveVerification = async (req, res, next) => {
 
     // Allow status changes - including approving previously rejected verifications
     // Add audit logging for status changes
-    if (verification.metadata.status === "manually_rejected") {
+    if (verification.metadata.status === "manually_rejected" || verification.metadata.status === "verification_failed") {
       console.log(`[AUDIT] Approving previously rejected verification ${sessionId}:`, {
         previousStatus: verification.metadata.status,
         previouslyRejectedBy: verification.metadata.rejectedBy,
@@ -371,7 +371,7 @@ exports.approveVerification = async (req, res, next) => {
       oldPhone: purePhone && purePhone !== originalPurePhone && !isNA(originalPurePhone) ? originalPurePhone : undefined,
       country: country || "Bulgaria", // Default to Bulgaria if not provided
       client: "CreditoPro",
-      status: "active",
+      status: "inactive",
       priority: "high",
       assignedAgent: null,
       address: address || (isNA(verification.personalInfo.address) ? undefined : verification.personalInfo.address),
@@ -504,7 +504,7 @@ exports.rejectVerification = async (req, res, next) => {
 
     // Allow re-rejection for complete status flexibility
     // Add audit logging for re-rejection
-    if (verification.metadata.status === "manually_rejected") {
+    if (verification.metadata.status === "manually_rejected" || verification.metadata.status === "verification_failed") {
       console.log(`[AUDIT] Re-rejecting already rejected verification ${sessionId}:`, {
         previousStatus: verification.metadata.status,
         previouslyRejectedBy: verification.metadata.rejectedBy,
@@ -584,6 +584,7 @@ exports.getVerificationStats = async (req, res, next) => {
       pending: 0,
       approved: 0,
       failed: 0,
+      verification_failed: 0,
       manually_approved: 0,
       manually_rejected: 0,
     };
