@@ -10518,7 +10518,9 @@ const OrdersPage = () => {
                               variant="body2"
                               sx={{ whiteSpace: "nowrap", fontSize: "0.75rem" }}
                             >
-                              {lead.assignedClientBrokers?.[0]?.name ||
+                              {(lead.assignedClientBrokers?.length > 0
+                                ? lead.assignedClientBrokers[lead.assignedClientBrokers.length - 1]?.name
+                                : null) ||
                                 lead.clientBroker ||
                                 "-"}
                             </Typography>

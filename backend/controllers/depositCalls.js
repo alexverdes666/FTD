@@ -1091,6 +1091,14 @@ exports.syncConfirmedDeposits = async (req, res, next) => {
             depositCall.accountManager = meta.depositConfirmedBy;
             changed = true;
           }
+          if (!depositCall.clientBrokerId) {
+            const lead = await Lead.findById(leadId);
+            const broker = lead?.assignedClientBrokers?.[0] || order.selectedClientBrokers?.[0] || null;
+            if (broker) {
+              depositCall.clientBrokerId = broker;
+              changed = true;
+            }
+          }
           if (changed) {
             await depositCall.save();
             updated++;
@@ -1111,7 +1119,7 @@ exports.syncConfirmedDeposits = async (req, res, next) => {
           await DepositCall.create({
             leadId: lead._id,
             orderId: order._id,
-            clientBrokerId: order.selectedClientBrokers?.[0] || null,
+            clientBrokerId: lead.assignedClientBrokers?.[0] || order.selectedClientBrokers?.[0] || null,
             accountManager: meta.depositConfirmedBy || null,
             assignedAgent: lead.assignedAgent || null,
             ftdName: `${lead.firstName} ${lead.lastName}`,

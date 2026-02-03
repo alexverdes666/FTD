@@ -4700,7 +4700,7 @@ exports.confirmDeposit = async (req, res, next) => {
       depositCall = await DepositCall.create({
         leadId: lead._id,
         orderId,
-        clientBrokerId: order.selectedClientBrokers?.[0] || null,
+        clientBrokerId: lead.assignedClientBrokers?.[0] || order.selectedClientBrokers?.[0] || null,
         accountManager: userId,
         assignedAgent: lead.assignedAgent,
         ftdName: `${lead.firstName} ${lead.lastName}`,
