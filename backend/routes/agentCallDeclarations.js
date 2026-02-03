@@ -16,6 +16,7 @@ const {
   previewBonus,
   getAffiliateManagers,
   findLeadByPhone,
+  streamRecording,
 } = require("../controllers/agentCallDeclarations");
 
 // All routes require authentication
@@ -35,6 +36,9 @@ router.get("/cdr", fetchCDRCalls);
 
 // Find lead by phone number (for auto-fill in declaration dialog)
 router.get("/lead-by-phone", findLeadByPhone);
+
+// Proxy call recording to avoid mixed content (HTTP→HTTPS)
+router.get("/recording/:filename", streamRecording);
 
 // Get monthly totals for all agents (admin/manager)
 router.get("/all-agents-monthly", isManager, getAllAgentsMonthlyTotals);

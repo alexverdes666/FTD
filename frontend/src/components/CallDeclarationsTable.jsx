@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Table,
   TableBody,
@@ -26,6 +26,7 @@ import {
   PlayCircleOutline as PlayIcon,
   Close as CloseIcon,
 } from '@mui/icons-material';
+import { fetchRecordingBlob } from '../services/callDeclarations';
 
 const CallDeclarationsTable = ({
   declarations = [],
@@ -104,6 +105,32 @@ const CallDeclarationsTable = ({
   }
 
   const [recordingDeclaration, setRecordingDeclaration] = useState(null);
+  const [audioUrl, setAudioUrl] = useState(null);
+  const [audioLoading, setAudioLoading] = useState(false);
+  const audioUrlRef = useRef(null);
+
+  useEffect(() => {
+    if (recordingDeclaration?.recordFile) {
+      setAudioLoading(true);
+      setAudioUrl(null);
+      fetchRecordingBlob(recordingDeclaration.recordFile)
+        .then((url) => {
+          audioUrlRef.current = url;
+          setAudioUrl(url);
+        })
+        .catch((err) => {
+          console.error("Failed to load recording:", err);
+        })
+        .finally(() => setAudioLoading(false));
+    }
+
+    return () => {
+      if (audioUrlRef.current) {
+        URL.revokeObjectURL(audioUrlRef.current);
+        audioUrlRef.current = null;
+      }
+    };
+  }, [recordingDeclaration]);
 
   if (!declarations || declarations.length === 0) {
     return (
@@ -273,16 +300,20 @@ const CallDeclarationsTable = ({
                   <Typography variant="body2">{formatDuration(recordingDeclaration.callDuration)}</Typography>
                 </Box>
               </Box>
-              <audio
-                controls
-                preload="metadata"
-                style={{ width: '100%' }}
-              >
-                <source
-                  src={`http://188.126.10.151:6680/rec/${recordingDeclaration.recordFile}.mp3`}
-                  type="audio/mpeg"
+              {audioLoading ? (
+                <Box display="flex" justifyContent="center" alignItems="center" py={2}>
+                  <CircularProgress size={24} sx={{ mr: 1 }} />
+                  <Typography variant="body2" color="text.secondary">Loading recording...</Typography>
+                </Box>
+              ) : audioUrl ? (
+                <audio
+                  controls
+                  src={audioUrl}
+                  style={{ width: '100%' }}
                 />
-              </audio>
+              ) : (
+                <Typography variant="body2" color="error">Failed to load recording</Typography>
+              )}
             </Box>
           )}
         </DialogContent>

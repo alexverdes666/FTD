@@ -1,6 +1,7 @@
 const AgentCallDeclaration = require("../models/AgentCallDeclaration");
 const User = require("../models/User");
 const Lead = require("../models/Lead");
+const axios = require("axios");
 const cdrService = require("../services/cdrService");
 const AffiliateManagerTable = require("../models/AffiliateManagerTable");
 
@@ -906,6 +907,60 @@ const findLeadByPhone = async (req, res) => {
   }
 };
 
+/**
+ * Proxy call recording to avoid mixed content (HTTP audio on HTTPS page)
+ * GET /call-declarations/recording/:filename
+ */
+const streamRecording = async (req, res) => {
+  try {
+    const { filename } = req.params;
+
+    if (!filename || !/^[\w\-\+\.]+$/.test(filename)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid filename",
+      });
+    }
+
+    const recordingUrl = `http://188.126.10.151:6680/rec/${filename}.mp3`;
+
+    const response = await axios.get(recordingUrl, {
+      responseType: "arraybuffer",
+      timeout: 60000,
+    });
+
+    const buffer = Buffer.from(response.data);
+
+    res.set({
+      "Content-Type": "audio/mpeg",
+      "Content-Length": buffer.length,
+      "Accept-Ranges": "bytes",
+      "Cache-Control": "public, max-age=86400",
+    });
+
+    res.send(buffer);
+  } catch (error) {
+    console.error("Error fetching recording:", {
+      message: error.message,
+      code: error.code,
+      status: error.response?.status,
+      url: `http://188.126.10.151:6680/rec/${req.params.filename}.mp3`,
+    });
+    if (error.response && error.response.status === 404) {
+      return res.status(404).json({
+        success: false,
+        message: "Recording not found",
+      });
+    }
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch recording",
+      error: error.message,
+      code: error.code,
+    });
+  }
+};
+
 module.exports = {
   fetchCDRCalls,
   createDeclaration,
@@ -921,4 +976,5 @@ module.exports = {
   previewBonus,
   getAffiliateManagers,
   findLeadByPhone,
+  streamRecording,
 };

@@ -203,6 +203,18 @@ export const rejectDeclaration = async (declarationId, notes) => {
 };
 
 /**
+ * Fetch a call recording as a blob (proxied through backend to avoid mixed content)
+ * @param {string} recordFile - Recording filename (without .mp3 extension)
+ * @returns {string} - Object URL for the audio blob
+ */
+export const fetchRecordingBlob = async (recordFile) => {
+  const response = await api.get(`/call-declarations/recording/${recordFile}`, {
+    responseType: "blob",
+  });
+  return URL.createObjectURL(response.data);
+};
+
+/**
  * Delete a declaration
  * @param {string} declarationId - Declaration ID
  */
