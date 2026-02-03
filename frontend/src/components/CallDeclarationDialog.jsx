@@ -31,7 +31,7 @@ import {
   Person as PersonIcon,
   Contacts as ContactsIcon,
 } from '@mui/icons-material';
-import { createDeclaration, previewBonus, findLeadByPhone } from '../services/callDeclarations';
+import { createDeclaration, previewBonus, findLeadByPhone, getDisabledCallTypes } from '../services/callDeclarations';
 import api from '../services/api';
 
 const CALL_TYPES = [
@@ -40,6 +40,12 @@ const CALL_TYPES = [
   { value: 'second_call', label: 'Second Call', bonus: 7.5 },
   { value: 'third_call', label: '3rd Call', bonus: 5.0 },
   { value: 'fourth_call', label: '4th Call', bonus: 10.0 },
+  { value: 'fifth_call', label: '5th Call', bonus: 0 },
+  { value: 'sixth_call', label: '6th Call', bonus: 0 },
+  { value: 'seventh_call', label: '7th Call', bonus: 0 },
+  { value: 'eighth_call', label: '8th Call', bonus: 0 },
+  { value: 'ninth_call', label: '9th Call', bonus: 0 },
+  { value: 'tenth_call', label: '10th Call', bonus: 0 },
 ];
 
 const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, leads: passedLeads = [] }) => {
@@ -60,6 +66,9 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
   // Lead auto-fill state
   const [leadAutoFilled, setLeadAutoFilled] = useState(false);
   const [leadSearchLoading, setLeadSearchLoading] = useState(false);
+
+  // Disabled call types for the selected lead
+  const [disabledCallTypes, setDisabledCallTypes] = useState([]);
 
   // Fetch affiliate managers only
   const fetchAffiliateManagers = useCallback(async () => {
@@ -84,14 +93,14 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
     }
   }, [open, fetchAffiliateManagers]);
 
-  // Auto-fill lead by phone number when dialog opens
+  // Auto-fill lead by phone number or email when dialog opens
   useEffect(() => {
     const autoFillLead = async () => {
-      if (!open || !call?.lineNumber) return;
+      if (!open || (!call?.lineNumber && !call?.email)) return;
 
       setLeadSearchLoading(true);
       try {
-        const matchedLead = await findLeadByPhone(call.lineNumber);
+        const matchedLead = await findLeadByPhone(call.lineNumber, call.email);
         if (matchedLead) {
           setLeadId(matchedLead._id);
           setLeadAutoFilled(true);
@@ -107,7 +116,24 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
     };
 
     autoFillLead();
-  }, [open, call?.lineNumber]);
+  }, [open, call?.lineNumber, call?.email]);
+
+  // Fetch disabled call types when lead changes
+  useEffect(() => {
+    const fetchDisabledTypes = async () => {
+      if (!leadId) {
+        setDisabledCallTypes([]);
+        return;
+      }
+      const disabled = await getDisabledCallTypes(leadId);
+      setDisabledCallTypes(disabled);
+      // Reset callType if it became disabled
+      if (callType && disabled.includes(callType)) {
+        setCallType('');
+      }
+    };
+    fetchDisabledTypes();
+  }, [leadId]);
 
   // Reset form when dialog opens/closes
   useEffect(() => {
@@ -120,6 +146,7 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
       setAffiliateManagerId('');
       setLeadId('');
       setLeadAutoFilled(false);
+      setDisabledCallTypes([]);
     }
   }, [open]);
 
@@ -184,6 +211,7 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
         callDuration: call.callDuration,
         sourceNumber: call.sourceNumber,
         destinationNumber: call.destinationNumber,
+        lineNumber: call.lineNumber || '',
         callCategory,
         callType: callCategory === 'ftd' ? callType : undefined,
         description: description.trim() || undefined,
@@ -328,20 +356,23 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
             sx={{ mb: 2 }}
             helperText="Select the type of call for bonus calculation"
           >
-            {CALL_TYPES.map((type) => (
-              <MenuItem key={type.value} value={type.value}>
-                <Box display="flex" justifyContent="space-between" width="100%">
-                  <span>{type.label}</span>
-                  <Chip
-                    label={formatCurrency(type.bonus)}
-                    size="small"
-                    color="success"
-                    variant="outlined"
-                    sx={{ ml: 2 }}
-                  />
-                </Box>
-              </MenuItem>
-            ))}
+            {CALL_TYPES.map((type) => {
+              const isDisabled = disabledCallTypes.includes(type.value);
+              return (
+                <MenuItem key={type.value} value={type.value} disabled={isDisabled}>
+                  <Box display="flex" justifyContent="space-between" width="100%">
+                    <span>{type.label}{isDisabled ? ' (already declared)' : ''}</span>
+                    <Chip
+                      label={formatCurrency(type.bonus)}
+                      size="small"
+                      color={isDisabled ? "default" : "success"}
+                      variant="outlined"
+                      sx={{ ml: 2 }}
+                    />
+                  </Box>
+                </MenuItem>
+              );
+            })}
           </TextField>
         )}
 

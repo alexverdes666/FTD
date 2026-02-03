@@ -16,6 +16,7 @@ exports.getPSPs = async (req, res, next) => {
       filter.$or = [
         { name: new RegExp(search, "i") },
         { description: new RegExp(search, "i") },
+        { website: new RegExp(search, "i") },
       ];
     }
 

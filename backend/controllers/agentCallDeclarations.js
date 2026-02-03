@@ -1,9 +1,49 @@
 const AgentCallDeclaration = require("../models/AgentCallDeclaration");
 const User = require("../models/User");
 const Lead = require("../models/Lead");
+const DepositCall = require("../models/DepositCall");
 const axios = require("axios");
 const cdrService = require("../services/cdrService");
 const AffiliateManagerTable = require("../models/AffiliateManagerTable");
+
+/**
+ * Find a DepositCall record for a lead, matching by leadId first, then by email fallback.
+ * Phone formats can differ between orders and leads (e.g. "+34 617243543" vs "34617243543"),
+ * so email is used as the reliable fallback identifier.
+ * @param {string} leadId - Lead ObjectId
+ * @param {Object} extraQuery - Additional query filters (e.g. { depositConfirmed: true })
+ * @returns {Object|null} - DepositCall document or null
+ */
+const findDepositCallForLead = async (leadId, extraQuery = {}) => {
+  // Try exact leadId match first
+  let depositCall = await DepositCall.findOne({ leadId, ...extraQuery });
+  if (depositCall) return depositCall;
+
+  // Fallback: match by email
+  const lead = await Lead.findById(leadId).select("newEmail");
+  if (lead && lead.newEmail) {
+    depositCall = await DepositCall.findOne({
+      ftdEmail: lead.newEmail,
+      ...extraQuery,
+    });
+  }
+
+  return depositCall;
+};
+
+// Map call types to call slot numbers on DepositCall model
+const CALL_TYPE_TO_CALL_NUMBER = {
+  first_call: 1,
+  second_call: 2,
+  third_call: 3,
+  fourth_call: 4,
+  fifth_call: 5,
+  sixth_call: 6,
+  seventh_call: 7,
+  eighth_call: 8,
+  ninth_call: 9,
+  tenth_call: 10,
+};
 
 // Map call types to affiliate manager table row IDs
 const CALL_TYPE_TO_TABLE_ROW = {
@@ -12,6 +52,12 @@ const CALL_TYPE_TO_TABLE_ROW = {
   second_call: "second_am_call",
   third_call: "third_am_call",
   fourth_call: "fourth_am_call",
+  fifth_call: "fifth_am_call",
+  sixth_call: "sixth_am_call",
+  seventh_call: "seventh_am_call",
+  eighth_call: "eighth_am_call",
+  ninth_call: "ninth_am_call",
+  tenth_call: "tenth_am_call",
 };
 
 /**
@@ -119,7 +165,7 @@ const fetchCDRCalls = async (req, res) => {
 const createDeclaration = async (req, res) => {
   try {
     const userId = req.user.id;
-    const { cdrCallId, callDate, callDuration, sourceNumber, destinationNumber, callType, callCategory, description, affiliateManagerId, leadId, recordFile } = req.body;
+    const { cdrCallId, callDate, callDuration, sourceNumber, destinationNumber, lineNumber, callType, callCategory, description, affiliateManagerId, leadId, recordFile } = req.body;
 
     // Validate required fields
     if (!cdrCallId || !callDate || !callDuration || !sourceNumber || !destinationNumber) {
@@ -140,7 +186,7 @@ const createDeclaration = async (req, res) => {
 
     // Validate call type (required only for FTD calls)
     if (callCategory === "ftd") {
-      const validCallTypes = ["deposit", "first_call", "second_call", "third_call", "fourth_call"];
+      const validCallTypes = ["deposit", "first_call", "second_call", "third_call", "fourth_call", "fifth_call", "sixth_call", "seventh_call", "eighth_call", "ninth_call", "tenth_call"];
       if (!callType || !validCallTypes.includes(callType)) {
         return res.status(400).json({
           success: false,
@@ -216,6 +262,36 @@ const createDeclaration = async (req, res) => {
       });
     }
 
+    // Prevent duplicate call type per lead (check approved or pending declarations)
+    if (callCategory === "ftd" && callType) {
+      const duplicateDeclaration = await AgentCallDeclaration.findOne({
+        lead: leadId,
+        callType,
+        status: { $in: ["approved", "pending"] },
+        isActive: true,
+      });
+
+      if (duplicateDeclaration) {
+        const statusText = duplicateDeclaration.status === "approved" ? "already approved" : "already pending approval";
+        return res.status(400).json({
+          success: false,
+          message: `This call type is ${statusText} for this lead`,
+        });
+      }
+
+      // For "deposit" type, also check if lead has a confirmed deposit in DepositCall
+      if (callType === "deposit") {
+        const depositCall = await findDepositCallForLead(leadId, { depositConfirmed: true });
+
+        if (depositCall) {
+          return res.status(400).json({
+            success: false,
+            message: "Deposit has already been confirmed for this lead",
+          });
+        }
+      }
+    }
+
     // Calculate bonuses
     let bonusData;
     if (callCategory === "filler") {
@@ -238,6 +314,7 @@ const createDeclaration = async (req, res) => {
       callDuration,
       sourceNumber,
       destinationNumber,
+      lineNumber: lineNumber || "",
       callCategory,
       callType: callCategory === "ftd" ? callType : undefined,
       description: description?.trim() || "",
@@ -506,6 +583,14 @@ const approveDeclaration = async (req, res) => {
       // Don't fail the approval if expense tracking fails, just log it
     }
 
+    // Update corresponding DepositCall record (link declaration to deposit calls table)
+    try {
+      await updateDepositCallOnApproval(declaration, reviewerId);
+    } catch (depositCallError) {
+      console.error("Error updating deposit call record:", depositCallError);
+      // Don't fail the approval if deposit call update fails, just log it
+    }
+
     // Populate for response
     await declaration.populate("agent", "fullName email fourDigitCode");
     await declaration.populate("reviewedBy", "fullName email");
@@ -575,6 +660,97 @@ const addCallExpenseToAffiliateManager = async (declaration) => {
   console.log(
     `Added expense for ${callType} ($${totalBonus}) to affiliate manager ${affiliateManager} for ${declarationMonth}/${declarationYear}`
   );
+};
+
+/**
+ * Update DepositCall record when a call declaration is approved
+ * Maps the declaration's callType to the corresponding call slot on the DepositCall
+ */
+const updateDepositCallOnApproval = async (declaration, reviewerId) => {
+  const { lead, callType, callCategory } = declaration;
+
+  // Skip filler calls and deposit type (deposit confirmation is handled via Orders page)
+  if (callCategory === "filler" || callType === "deposit") {
+    return;
+  }
+
+  const callNumber = CALL_TYPE_TO_CALL_NUMBER[callType];
+  if (!callNumber) {
+    console.warn(`Unknown call type for deposit call update: ${callType}`);
+    return;
+  }
+
+  // Find the DepositCall record for this lead (by leadId, then email fallback)
+  const depositCall = await findDepositCallForLead(lead);
+  if (!depositCall) {
+    console.log(`No DepositCall record found for lead ${lead}, skipping deposit call update`);
+    return;
+  }
+
+  const callField = `call${callNumber}`;
+  depositCall[callField].status = "completed";
+  depositCall[callField].doneDate = new Date();
+  depositCall[callField].approvedBy = reviewerId;
+  depositCall[callField].approvedAt = new Date();
+
+  await depositCall.save();
+
+  console.log(
+    `Updated DepositCall ${depositCall._id} call${callNumber} to completed for lead ${lead}`
+  );
+};
+
+/**
+ * Get disabled call types for a lead
+ * GET /call-declarations/lead-disabled-types/:leadId
+ * Returns call types that should be disabled in the declaration dropdown
+ */
+const getDisabledCallTypes = async (req, res) => {
+  try {
+    const { leadId } = req.params;
+
+    if (!leadId) {
+      return res.status(400).json({
+        success: false,
+        message: "Lead ID is required",
+      });
+    }
+
+    const disabledCallTypes = [];
+
+    // Check if lead has a confirmed deposit in DepositCall (by leadId, then email fallback)
+    const depositCall = await findDepositCallForLead(leadId, { depositConfirmed: true });
+
+    if (depositCall) {
+      disabledCallTypes.push("deposit");
+    }
+
+    // Check for approved or pending declarations for this lead
+    const existingDeclarations = await AgentCallDeclaration.find({
+      lead: leadId,
+      status: { $in: ["approved", "pending"] },
+      isActive: true,
+      callCategory: "ftd",
+    }).select("callType status");
+
+    for (const decl of existingDeclarations) {
+      if (decl.callType && !disabledCallTypes.includes(decl.callType)) {
+        disabledCallTypes.push(decl.callType);
+      }
+    }
+
+    res.json({
+      success: true,
+      data: { disabledCallTypes },
+    });
+  } catch (error) {
+    console.error("Error fetching disabled call types:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch disabled call types",
+      error: error.message,
+    });
+  }
 };
 
 /**
@@ -851,36 +1027,49 @@ const getAllAgentsMonthlyTotals = async (req, res) => {
 };
 
 /**
- * Find a lead by phone number (for auto-filling in declaration dialog)
- * GET /call-declarations/lead-by-phone?phone=XXXX
+ * Find a lead by phone number or email (for auto-filling in declaration dialog)
+ * GET /call-declarations/lead-by-phone?phone=XXXX&email=YYYY
  * Returns matching lead only if assigned to the requesting agent
+ * Tries phone matching first, then email fallback
  */
 const findLeadByPhone = async (req, res) => {
   try {
     const userId = req.user.id;
-    const { phone } = req.query;
+    const { phone, email } = req.query;
 
-    if (!phone || phone.trim().length < 4) {
+    if ((!phone || phone.trim().length < 4) && !email) {
       return res.status(400).json({
         success: false,
-        message: "Phone number is required (minimum 4 digits)",
+        message: "Phone number or email is required",
       });
     }
 
-    const cleanPhone = phone.replace(/[\s\-\(\)]/g, "");
+    let lead = null;
 
-    // 1. Exact match on newPhone
-    let lead = await Lead.findOne({
-      newPhone: cleanPhone,
-      assignedAgent: userId,
-    }).select("_id firstName lastName newEmail newPhone");
+    // 1. Try phone matching first
+    if (phone && phone.trim().length >= 4) {
+      const cleanPhone = phone.replace(/[\s\-\(\)\+]/g, "");
 
-    // 2. If not found, try suffix-based matching (last 10 digits)
-    //    CDR sourceNumber may have country code prefix that the lead's newPhone lacks
-    if (!lead && cleanPhone.length >= 7) {
-      const suffix = cleanPhone.slice(-10);
+      // 1a. Exact match on newPhone (try with and without leading +)
       lead = await Lead.findOne({
-        newPhone: { $regex: suffix + "$" },
+        newPhone: { $in: [cleanPhone, `+${cleanPhone}`, phone.trim()] },
+        assignedAgent: userId,
+      }).select("_id firstName lastName newEmail newPhone");
+
+      // 1b. If not found, try suffix-based matching (last 10 digits)
+      if (!lead && cleanPhone.length >= 7) {
+        const suffix = cleanPhone.slice(-10);
+        lead = await Lead.findOne({
+          newPhone: { $regex: suffix + "$" },
+          assignedAgent: userId,
+        }).select("_id firstName lastName newEmail newPhone");
+      }
+    }
+
+    // 2. If phone didn't match, try email
+    if (!lead && email && email.trim()) {
+      lead = await Lead.findOne({
+        newEmail: email.trim(),
         assignedAgent: userId,
       }).select("_id firstName lastName newEmail newPhone");
     }
@@ -889,7 +1078,7 @@ const findLeadByPhone = async (req, res) => {
       return res.json({
         success: true,
         data: null,
-        message: "No matching lead found for this phone number",
+        message: "No matching lead found",
       });
     }
 
@@ -898,10 +1087,10 @@ const findLeadByPhone = async (req, res) => {
       data: lead,
     });
   } catch (error) {
-    console.error("Error finding lead by phone:", error);
+    console.error("Error finding lead by phone/email:", error);
     res.status(500).json({
       success: false,
-      message: "Failed to find lead by phone number",
+      message: "Failed to find lead",
       error: error.message,
     });
   }
@@ -977,4 +1166,5 @@ module.exports = {
   getAffiliateManagers,
   findLeadByPhone,
   streamRecording,
+  getDisabledCallTypes,
 };

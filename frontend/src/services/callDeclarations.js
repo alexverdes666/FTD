@@ -17,18 +17,23 @@ export const fetchCDRCalls = async (months = 3) => {
 };
 
 /**
- * Find a lead by phone number (for auto-fill in declaration dialog)
+ * Find a lead by phone number or email (for auto-fill in declaration dialog)
  * @param {string} phone - Phone number to search
+ * @param {string} email - Email to search (fallback)
  * @returns {Object|null} - Matching lead or null
  */
-export const findLeadByPhone = async (phone) => {
+export const findLeadByPhone = async (phone, email) => {
   try {
+    const params = {};
+    if (phone) params.phone = phone;
+    if (email) params.email = email;
+
     const response = await api.get("/call-declarations/lead-by-phone", {
-      params: { phone },
+      params,
     });
     return response.data.data;
   } catch (error) {
-    console.error("Error finding lead by phone:", error);
+    console.error("Error finding lead by phone/email:", error);
     return null;
   }
 };
@@ -212,6 +217,21 @@ export const fetchRecordingBlob = async (recordFile) => {
     responseType: "blob",
   });
   return URL.createObjectURL(response.data);
+};
+
+/**
+ * Get disabled call types for a lead
+ * @param {string} leadId - Lead ID
+ * @returns {Array} - Array of disabled call type values
+ */
+export const getDisabledCallTypes = async (leadId) => {
+  try {
+    const response = await api.get(`/call-declarations/lead-disabled-types/${leadId}`);
+    return response.data.data.disabledCallTypes || [];
+  } catch (error) {
+    console.error("Error fetching disabled call types:", error);
+    return [];
+  }
 };
 
 /**

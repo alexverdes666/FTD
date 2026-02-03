@@ -17,6 +17,7 @@ const {
   getAffiliateManagers,
   findLeadByPhone,
   streamRecording,
+  getDisabledCallTypes,
 } = require("../controllers/agentCallDeclarations");
 
 // All routes require authentication
@@ -36,6 +37,9 @@ router.get("/cdr", fetchCDRCalls);
 
 // Find lead by phone number (for auto-fill in declaration dialog)
 router.get("/lead-by-phone", findLeadByPhone);
+
+// Get disabled call types for a lead (checks confirmed deposits and existing declarations)
+router.get("/lead-disabled-types/:leadId", getDisabledCallTypes);
 
 // Proxy call recording to avoid mixed content (HTTP→HTTPS)
 router.get("/recording/:filename", streamRecording);

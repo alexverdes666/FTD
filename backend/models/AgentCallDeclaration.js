@@ -31,6 +31,10 @@ const agentCallDeclarationSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    lineNumber: {
+      type: String,
+      default: "",
+    },
     // Whether this is an FTD call or a Filler call
     callCategory: {
       type: String,
@@ -40,7 +44,7 @@ const agentCallDeclarationSchema = new mongoose.Schema(
     },
     callType: {
       type: String,
-      enum: ["deposit", "first_call", "second_call", "third_call", "fourth_call"],
+      enum: ["deposit", "first_call", "second_call", "third_call", "fourth_call", "fifth_call", "sixth_call", "seventh_call", "eighth_call", "ninth_call", "tenth_call"],
       required: function () {
         return this.callCategory === "ftd";
       },
@@ -160,6 +164,12 @@ agentCallDeclarationSchema.virtual("callTypeDisplay").get(function () {
     second_call: "Second Call",
     third_call: "3rd Call",
     fourth_call: "4th Call",
+    fifth_call: "5th Call",
+    sixth_call: "6th Call",
+    seventh_call: "7th Call",
+    eighth_call: "8th Call",
+    ninth_call: "9th Call",
+    tenth_call: "10th Call",
   };
   return displayNames[this.callType] || this.callType;
 });

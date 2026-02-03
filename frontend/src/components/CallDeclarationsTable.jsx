@@ -70,6 +70,12 @@ const CallDeclarationsTable = ({
       second_call: 'Second Call',
       third_call: '3rd Call',
       fourth_call: '4th Call',
+      fifth_call: '5th Call',
+      sixth_call: '6th Call',
+      seventh_call: '7th Call',
+      eighth_call: '8th Call',
+      ninth_call: '9th Call',
+      tenth_call: '10th Call',
     };
     return labels[callType] || callType || 'N/A';
   };
@@ -150,6 +156,7 @@ const CallDeclarationsTable = ({
           <TableHead>
             <TableRow>
               {showAgent && <TableCell>Agent</TableCell>}
+              {showAgent && <TableCell>Affiliate Manager</TableCell>}
               <TableCell>Call Date</TableCell>
               <TableCell>Duration</TableCell>
               <TableCell>Lead</TableCell>
@@ -171,6 +178,13 @@ const CallDeclarationsTable = ({
                   <TableCell>
                     <Typography variant="body2">
                       {declaration.agent?.fullName || 'N/A'}
+                    </Typography>
+                  </TableCell>
+                )}
+                {showAgent && (
+                  <TableCell>
+                    <Typography variant="body2">
+                      {declaration.affiliateManager?.fullName || 'N/A'}
                     </Typography>
                   </TableCell>
                 )}
@@ -196,7 +210,7 @@ const CallDeclarationsTable = ({
                 </TableCell>
                 <TableCell>
                   <Typography variant="body2" fontFamily="monospace">
-                    {declaration.destinationNumber || 'N/A'}
+                    {declaration.lineNumber || declaration.lead?.newPhone || 'N/A'}
                   </Typography>
                 </TableCell>
                 <TableCell>

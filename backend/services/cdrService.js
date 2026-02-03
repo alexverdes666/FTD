@@ -11,6 +11,12 @@ const BONUS_CONFIG = {
   second_call: 7.5,
   third_call: 5.0,
   fourth_call: 10.0,
+  fifth_call: 0,
+  sixth_call: 0,
+  seventh_call: 0,
+  eighth_call: 0,
+  ninth_call: 0,
+  tenth_call: 0,
 };
 
 // Hourly bonus for calls > 1 hour
@@ -187,6 +193,12 @@ const getCallTypeDisplayName = (callType) => {
     second_call: "Second Call",
     third_call: "3rd Call",
     fourth_call: "4th Call",
+    fifth_call: "5th Call",
+    sixth_call: "6th Call",
+    seventh_call: "7th Call",
+    eighth_call: "8th Call",
+    ninth_call: "9th Call",
+    tenth_call: "10th Call",
   };
   return displayNames[callType] || callType;
 };
@@ -202,6 +214,12 @@ const getCallTypes = () => {
     { value: "second_call", label: "Second Call", bonus: BONUS_CONFIG.second_call },
     { value: "third_call", label: "3rd Call", bonus: BONUS_CONFIG.third_call },
     { value: "fourth_call", label: "4th Call", bonus: BONUS_CONFIG.fourth_call },
+    { value: "fifth_call", label: "5th Call", bonus: BONUS_CONFIG.fifth_call },
+    { value: "sixth_call", label: "6th Call", bonus: BONUS_CONFIG.sixth_call },
+    { value: "seventh_call", label: "7th Call", bonus: BONUS_CONFIG.seventh_call },
+    { value: "eighth_call", label: "8th Call", bonus: BONUS_CONFIG.eighth_call },
+    { value: "ninth_call", label: "9th Call", bonus: BONUS_CONFIG.ninth_call },
+    { value: "tenth_call", label: "10th Call", bonus: BONUS_CONFIG.tenth_call },
   ];
 };
 
