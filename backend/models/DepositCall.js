@@ -96,6 +96,20 @@ const depositCallSchema = new Schema({
   call8: { type: callSlotSchema, default: () => ({}) },
   call9: { type: callSlotSchema, default: () => ({}) },
   call10: { type: callSlotSchema, default: () => ({}) },
+  // Deposit confirmation tracking (synced from Orders page)
+  depositConfirmed: {
+    type: Boolean,
+    default: false
+  },
+  depositConfirmedBy: {
+    type: Schema.Types.ObjectId,
+    ref: 'User',
+    default: null
+  },
+  depositConfirmedAt: {
+    type: Date,
+    default: null
+  },
   // Overall status
   status: {
     type: String,

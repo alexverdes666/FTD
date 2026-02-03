@@ -4692,6 +4692,33 @@ exports.confirmDeposit = async (req, res, next) => {
 
     await order.save();
 
+    // Create or update DepositCall record so it appears on Deposit Calls page
+    const DepositCall = require("../models/DepositCall");
+    let depositCall = await DepositCall.findOne({ leadId: lead._id, orderId });
+
+    if (!depositCall) {
+      depositCall = await DepositCall.create({
+        leadId: lead._id,
+        orderId,
+        clientBrokerId: order.selectedClientBrokers?.[0] || null,
+        accountManager: userId,
+        assignedAgent: lead.assignedAgent,
+        ftdName: `${lead.firstName} ${lead.lastName}`,
+        ftdEmail: lead.newEmail,
+        ftdPhone: lead.newPhone,
+        depositConfirmed: true,
+        depositConfirmedBy: userId,
+        depositConfirmedAt: new Date(),
+        createdBy: userId,
+      });
+    } else {
+      depositCall.depositConfirmed = true;
+      depositCall.depositConfirmedBy = userId;
+      depositCall.depositConfirmedAt = new Date();
+      depositCall.accountManager = userId;
+      await depositCall.save();
+    }
+
     // Populate order metadata for response
     await order.populate("leadsMetadata.depositConfirmedBy", "fullName email");
     await order.populate("leadsMetadata.depositPSP", "name website");
@@ -4808,6 +4835,16 @@ exports.unconfirmDeposit = async (req, res, next) => {
     });
 
     await order.save();
+
+    // Update DepositCall record if it exists
+    const DepositCall = require("../models/DepositCall");
+    const depositCall = await DepositCall.findOne({ leadId: lead._id, orderId });
+    if (depositCall) {
+      depositCall.depositConfirmed = false;
+      depositCall.depositConfirmedBy = null;
+      depositCall.depositConfirmedAt = null;
+      await depositCall.save();
+    }
 
     await lead.populate("assignedAgent", "fullName email fourDigitCode");
 

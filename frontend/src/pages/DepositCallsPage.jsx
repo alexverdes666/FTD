@@ -39,6 +39,8 @@ import {
 import {
   Search as SearchIcon,
   Refresh as RefreshIcon,
+  Sync as SyncIcon,
+  Verified as VerifiedIcon,
   CalendarMonth as CalendarIcon,
   TableChart as TableIcon,
   CheckCircle as ApproveIcon,
@@ -59,6 +61,7 @@ import { selectUser } from '../store/slices/authSlice';
 import depositCallsService from '../services/depositCallsService';
 import api from '../services/api';
 import toast from 'react-hot-toast';
+import { formatPhoneWithCountryCode } from '../utils/phoneUtils';
 
 // Call status colors
 const getStatusColor = (status) => {
@@ -507,6 +510,17 @@ const DepositCallsPage = () => {
     }
   };
 
+  // Sync confirmed deposits from orders (admin only)
+  const handleSyncConfirmedDeposits = async () => {
+    try {
+      const result = await depositCallsService.syncConfirmedDeposits();
+      toast.success(result.message || 'Sync complete');
+      fetchDepositCalls();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to sync confirmed deposits');
+    }
+  };
+
   // Network dialog handlers
   const handleOpenClientNetworksDialog = useCallback((networks, leadName) => {
     setClientNetworksDialog({
@@ -782,6 +796,13 @@ const DepositCallsPage = () => {
                 size="small"
               />
             )}
+            {isAdmin && (
+              <Tooltip title="Sync confirmed deposits from orders">
+                <IconButton onClick={handleSyncConfirmedDeposits} color="secondary">
+                  <SyncIcon />
+                </IconButton>
+              </Tooltip>
+            )}
             <Tooltip title="Refresh">
               <IconButton onClick={() => { fetchDepositCalls(); if (tabValue === 1) fetchCalendarEvents(); }} color="primary">
                 <RefreshIcon />
@@ -820,6 +841,7 @@ const DepositCallsPage = () => {
                       <TableCell sx={{ minWidth: 140, fontWeight: 'bold', bgcolor: 'grey.100' }}>FTD Name</TableCell>
                       <TableCell sx={{ minWidth: 160, fontWeight: 'bold', bgcolor: 'grey.100' }}>FTD Email</TableCell>
                       <TableCell sx={{ minWidth: 120, fontWeight: 'bold', bgcolor: 'grey.100' }}>FTD Phone</TableCell>
+                      <TableCell sx={{ minWidth: 100, fontWeight: 'bold', bgcolor: 'grey.100', textAlign: 'center' }}>Deposit</TableCell>
                       {[1,2,3,4,5,6,7,8,9,10].map(num => (
                         <TableCell key={num} sx={{ minWidth: 100, fontWeight: 'bold', bgcolor: 'grey.100', textAlign: 'center' }}>
                           Call {num}
@@ -915,9 +937,24 @@ const DepositCallsPage = () => {
                           <Box display="flex" alignItems="center" gap={0.5}>
                             <PhoneIcon fontSize="small" color="action" />
                             <Typography variant="caption">
-                              {dc.ftdPhone || dc.leadId?.newPhone || '-'}
+                              {formatPhoneWithCountryCode(dc.ftdPhone || dc.leadId?.newPhone, dc.leadId?.country || dc.lead?.country) || '-'}
                             </Typography>
                           </Box>
+                        </TableCell>
+                        <TableCell sx={{ textAlign: 'center' }}>
+                          {dc.depositConfirmed ? (
+                            <Tooltip title={dc.depositConfirmedAt ? `Confirmed: ${new Date(dc.depositConfirmedAt).toLocaleString()}` : 'Deposit Confirmed'}>
+                              <Chip
+                                icon={<VerifiedIcon />}
+                                label="Confirmed"
+                                color="success"
+                                size="small"
+                                variant="filled"
+                              />
+                            </Tooltip>
+                          ) : (
+                            <Chip label="Pending" size="small" variant="outlined" />
+                          )}
                         </TableCell>
                         {[1,2,3,4,5,6,7,8,9,10].map(num => (
                           <CallCell
@@ -1088,7 +1125,7 @@ const DepositCallsPage = () => {
                           <Box display="flex" alignItems="center" gap={1}>
                             <PhoneIcon fontSize="small" color="action" />
                             <Typography variant="body2" color="text.secondary">
-                              {event.ftdPhone || '-'}
+                              {formatPhoneWithCountryCode(event.ftdPhone, event.country) || '-'}
                             </Typography>
                           </Box>
                         </Grid>

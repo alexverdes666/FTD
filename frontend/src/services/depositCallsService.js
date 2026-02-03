@@ -69,6 +69,17 @@ const depositCallsService = {
     }
   },
 
+  // Sync confirmed deposits from orders into deposit call records (admin only)
+  syncConfirmedDeposits: async () => {
+    try {
+      const response = await api.post("/deposit-calls/sync-confirmed");
+      return response.data;
+    } catch (error) {
+      console.error("Error syncing confirmed deposits:", error);
+      throw error;
+    }
+  },
+
   // Create and assign deposit call for a single FTD lead to an agent
   assignToAgent: async (orderId, leadId, agentId) => {
     try {

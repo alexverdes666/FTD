@@ -27,6 +27,9 @@ router.post("/from-order", depositCallsController.createFromOrder);
 // Create and assign deposit call for a single FTD lead to an agent
 router.post("/assign-to-agent", depositCallsController.createAndAssignToAgent);
 
+// Sync confirmed deposits from orders into deposit call records (admin only)
+router.post("/sync-confirmed", depositCallsController.syncConfirmedDeposits);
+
 // Update deposit call
 router.put("/:id", depositCallsController.updateDepositCall);
 

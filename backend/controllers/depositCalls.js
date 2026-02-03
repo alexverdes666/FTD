@@ -185,6 +185,7 @@ exports.getDepositCalls = async (req, res, next) => {
         { path: "accountManager", select: "fullName email" },
         { path: "assignedAgent", select: "fullName email" },
         { path: "createdBy", select: "fullName" },
+        { path: "depositConfirmedBy", select: "fullName" },
       ]);
     } else {
       // Standard query
@@ -204,6 +205,7 @@ exports.getDepositCalls = async (req, res, next) => {
         .populate("accountManager", "fullName email")
         .populate("assignedAgent", "fullName email")
         .populate("createdBy", "fullName")
+        .populate("depositConfirmedBy", "fullName")
         .sort({ createdAt: -1 })
         .skip((parseInt(page) - 1) * parseInt(limit))
         .limit(parseInt(limit))
@@ -755,6 +757,7 @@ exports.getCalendarAppointments = async (req, res, next) => {
             ftdName: dc.ftdName,
             ftdEmail: dc.ftdEmail,
             ftdPhone: dc.ftdPhone,
+            country: dc.leadId?.country || null,
             clientBroker: dc.clientBrokerId?.name,
             accountManager: dc.accountManager?.fullName,
             agent: dc.assignedAgent?.fullName,
@@ -1032,6 +1035,109 @@ exports.bulkScheduleCalls = async (req, res, next) => {
       success: true,
       message: `Scheduled ${calls.length} calls successfully`,
       data: depositCall,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Sync confirmed deposits from orders into DepositCall records
+exports.syncConfirmedDeposits = async (req, res, next) => {
+  try {
+    // Only admin can sync
+    if (req.user.role !== "admin") {
+      return res.status(403).json({
+        success: false,
+        message: "Only admins can sync confirmed deposits",
+      });
+    }
+
+    // Find all orders that have at least one confirmed deposit
+    const orders = await Order.find({
+      "leadsMetadata.depositConfirmed": true,
+    })
+      .populate("requester", "role")
+      .lean();
+
+    let created = 0;
+    let updated = 0;
+    let skipped = 0;
+
+    for (const order of orders) {
+      const confirmedEntries = order.leadsMetadata.filter(
+        (meta) => meta.depositConfirmed
+      );
+
+      for (const meta of confirmedEntries) {
+        const leadId = meta.leadId;
+
+        // Check if DepositCall already exists
+        let depositCall = await DepositCall.findOne({
+          leadId,
+          orderId: order._id,
+        });
+
+        if (depositCall) {
+          let changed = false;
+          if (!depositCall.depositConfirmed) {
+            depositCall.depositConfirmed = true;
+            depositCall.depositConfirmedBy =
+              meta.depositConfirmedBy || null;
+            depositCall.depositConfirmedAt =
+              meta.depositConfirmedAt || null;
+            changed = true;
+          }
+          if (!depositCall.accountManager && meta.depositConfirmedBy) {
+            depositCall.accountManager = meta.depositConfirmedBy;
+            changed = true;
+          }
+          if (changed) {
+            await depositCall.save();
+            updated++;
+          } else {
+            skipped++;
+          }
+          continue;
+        }
+
+        // Load the lead to get FTD details
+        const lead = await Lead.findById(leadId);
+        if (!lead) {
+          skipped++;
+          continue;
+        }
+
+        try {
+          await DepositCall.create({
+            leadId: lead._id,
+            orderId: order._id,
+            clientBrokerId: order.selectedClientBrokers?.[0] || null,
+            accountManager: meta.depositConfirmedBy || null,
+            assignedAgent: lead.assignedAgent || null,
+            ftdName: `${lead.firstName} ${lead.lastName}`,
+            ftdEmail: lead.newEmail,
+            ftdPhone: lead.newPhone,
+            depositConfirmed: true,
+            depositConfirmedBy: meta.depositConfirmedBy || null,
+            depositConfirmedAt: meta.depositConfirmedAt || null,
+            createdBy: req.user.id,
+          });
+          created++;
+        } catch (err) {
+          // Skip duplicates (race condition safety)
+          if (err.code === 11000) {
+            skipped++;
+          } else {
+            throw err;
+          }
+        }
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `Sync complete: ${created} created, ${updated} updated, ${skipped} skipped`,
+      data: { created, updated, skipped },
     });
   } catch (error) {
     next(error);
