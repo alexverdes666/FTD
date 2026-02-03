@@ -16,13 +16,7 @@ const {
   previewBonus,
   getAffiliateManagers,
   findLeadByPhone,
-  streamRecording,
 } = require("../controllers/agentCallDeclarations");
-
-// Proxy call recording to avoid mixed content (HTTP→HTTPS)
-// Placed before auth middleware since <audio> elements can't send auth headers
-// The upstream CDR server has no authentication itself
-router.get("/recording/:filename", streamRecording);
 
 // All routes require authentication
 router.use(protect);

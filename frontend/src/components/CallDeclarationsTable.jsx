@@ -169,7 +169,7 @@ const CallDeclarationsTable = ({
                 </TableCell>
                 <TableCell>
                   <Typography variant="body2" fontFamily="monospace">
-                    {declaration.lead?.newPhone || 'N/A'}
+                    {declaration.destinationNumber || 'N/A'}
                   </Typography>
                 </TableCell>
                 <TableCell>
@@ -279,7 +279,7 @@ const CallDeclarationsTable = ({
                 style={{ width: '100%' }}
               >
                 <source
-                  src={`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/call-declarations/recording/${recordingDeclaration.recordFile}`}
+                  src={`http://188.126.10.151:6680/rec/${recordingDeclaration.recordFile}.mp3`}
                   type="audio/mpeg"
                 />
               </audio>
