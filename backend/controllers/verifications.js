@@ -7,6 +7,7 @@ const {
 } = require("@aws-sdk/client-s3");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const Lead = require("../models/Lead");
+const leadSearchCache = require("../services/leadSearchCache");
 
 // Initialize S3 client
 const s3Client = new S3Client({
@@ -443,6 +444,8 @@ exports.approveVerification = async (req, res, next) => {
 
     // Populate the created lead for response
     await newLead.populate("createdBy", "fullName fourDigitCode");
+
+    leadSearchCache.clearCache();
 
     res.status(200).json({
       success: true,

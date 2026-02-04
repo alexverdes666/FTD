@@ -14,6 +14,7 @@ const Campaign = require("../models/Campaign");
 const CallChangeRequest = require("../models/CallChangeRequest");
 const sessionSecurity = require("../utils/sessionSecurity");
 const LeadAuditLog = require("../models/LeadAuditLog");
+const leadSearchCache = require("../services/leadSearchCache");
 
 // S3 client for resolving verification photo URLs
 const s3Client = new S3Client({
@@ -1920,6 +1921,8 @@ exports.updateLead = async (req, res, next) => {
       });
     }
 
+    leadSearchCache.clearCache();
+
     res.status(200).json({
       success: true,
       message: "Lead updated successfully",
@@ -2071,6 +2074,8 @@ exports.createLead = async (req, res, next) => {
     ) {
       await lead.save();
     }
+
+    leadSearchCache.clearCache();
 
     res.status(201).json({
       success: true,
@@ -2447,6 +2452,8 @@ exports.importLeads = async (req, res, next) => {
     const totalProcessed = validLeads.length;
     const skippedCount = totalProcessed - importCount - duplicateCount;
 
+    leadSearchCache.clearCache();
+
     res.status(200).json({
       success: true,
       message: `${importCount} leads imported successfully. ${
@@ -2519,6 +2526,8 @@ exports.deleteLead = async (req, res, next) => {
 
     // Delete the lead
     await lead.deleteOne();
+
+    leadSearchCache.clearCache();
 
     res.status(200).json({
       success: true,
@@ -2606,6 +2615,8 @@ exports.bulkDeleteLeads = async (req, res, next) => {
 
     // NOW perform the deletion
     const result = await Lead.deleteMany(filter);
+
+    leadSearchCache.clearCache();
 
     res.status(200).json({
       success: true,

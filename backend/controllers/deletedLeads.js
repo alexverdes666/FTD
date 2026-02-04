@@ -1,5 +1,6 @@
 const DeletedLead = require("../models/DeletedLead");
 const Lead = require("../models/Lead");
+const leadSearchCache = require("../services/leadSearchCache");
 
 /**
  * @desc    Get all deleted leads with filtering, search, and pagination
@@ -189,6 +190,8 @@ exports.restoreDeletedLead = async (req, res, next) => {
     deletedLead.restoredBy = req.user.id;
     deletedLead.restorationCount += 1;
     await deletedLead.save();
+
+    leadSearchCache.clearCache();
 
     res.status(200).json({
       success: true,

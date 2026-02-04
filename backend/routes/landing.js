@@ -4,6 +4,7 @@ const { spawn } = require("child_process");
 const path = require("path");
 const Lead = require("../models/Lead");
 const externalApiService = require("../services/externalApiService");
+const leadSearchCache = require("../services/leadSearchCache");
 const router = express.Router();
 
 // Configuration endpoint to get/set external API settings
@@ -395,7 +396,9 @@ router.post(
 
             await savedLead.save();
             console.log('✅ Lead saved to internal database:', savedLead._id);
-            
+
+            leadSearchCache.clearCache();
+
             res.status(201).json({
               success: true,
               message: externalResult.message || "Lead submitted successfully via dual mode",
@@ -467,7 +470,9 @@ router.post(
 
           await savedLead.save();
           console.log('✅ Lead saved to internal database:', savedLead._id);
-          
+
+          leadSearchCache.clearCache();
+
           res.status(201).json({
             success: true,
             message: "Thank you for your submission! We'll be in touch soon.",

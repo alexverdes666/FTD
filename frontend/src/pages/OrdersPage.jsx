@@ -427,7 +427,7 @@ const OrdersPage = () => {
       return () => clearTimeout(timer);
     }
   }, []);
-  const debouncedFilters = useDebounce(filters, 300);
+  const debouncedFilters = useDebounce(filters, 150);
   const [showFilters, setShowFilters] = useState(false);
   const [expandedRowData, setExpandedRowData] = useState({});
   const [refundAssignmentStatus, setRefundAssignmentStatus] = useState({});
@@ -438,6 +438,7 @@ const OrdersPage = () => {
   const [hoveredOrderId, setHoveredOrderId] = useState(null);
   const popoverTimerRef = React.useRef(null);
   const closeTimerRef = React.useRef(null);
+  const fetchAbortControllerRef = React.useRef(null);
 
   // Assigned Leads Modal State
   const [assignedLeadsModal, setAssignedLeadsModal] = useState({
@@ -1048,6 +1049,13 @@ const OrdersPage = () => {
   }, []);
 
   const fetchOrders = useCallback(async () => {
+    // Cancel any in-flight request
+    if (fetchAbortControllerRef.current) {
+      fetchAbortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    fetchAbortControllerRef.current = controller;
+
     setLoading(true);
     setNotification({ message: "", severity: "info" });
     try {
@@ -1057,24 +1065,45 @@ const OrdersPage = () => {
       });
       Object.entries(debouncedFilters).forEach(([key, value]) => {
         if (value) {
+          // Skip search queries shorter than 2 characters
+          if (key === "search" && value.trim().length < 2) {
+            return;
+          }
           params.append(key, value);
         }
       });
-      const response = await api.get(`/orders?${params}`);
-      setOrders(response.data.data);
-      setTotalOrders(response.data.pagination.total);
+      const response = await api.get(`/orders?${params}`, {
+        signal: controller.signal,
+      });
+      if (!controller.signal.aborted) {
+        setOrders(response.data.data);
+        setTotalOrders(response.data.pagination.total);
+      }
     } catch (err) {
+      // Ignore abort errors - they are expected when a newer request supersedes
+      if (err.name === "CanceledError" || err.code === "ERR_CANCELED") {
+        return;
+      }
       setNotification({
         message: err.response?.data?.message || "Failed to fetch orders",
         severity: "error",
       });
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted) {
+        setLoading(false);
+      }
     }
   }, [page, rowsPerPage, debouncedFilters]);
   useEffect(() => {
     fetchOrders();
   }, [fetchOrders]);
+  useEffect(() => {
+    return () => {
+      if (fetchAbortControllerRef.current) {
+        fetchAbortControllerRef.current.abort();
+      }
+    };
+  }, []);
 
   // Listen for real-time lead updates to sync across pages
   useEffect(() => {
@@ -4719,21 +4748,6 @@ const OrdersPage = () => {
                   InputLabelProps={{ shrink: true }}
                   size="small"
                 />
-              </Grid>
-              <Grid
-                item
-                xs={12}
-                md={4}
-                sx={{ display: "flex", alignItems: "center" }}
-              >
-                <Button
-                  onClick={clearFilters}
-                  variant="outlined"
-                  size="small"
-                  fullWidth
-                >
-                  Clear Filters
-                </Button>
               </Grid>
             </Grid>
           </Collapse>

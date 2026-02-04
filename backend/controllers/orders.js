@@ -7,6 +7,7 @@ const ClientBroker = require("../models/ClientBroker");
 const Campaign = require("../models/Campaign");
 const CallChangeRequest = require("../models/CallChangeRequest");
 const referenceCache = require("../services/referenceCache");
+const leadSearchCache = require("../services/leadSearchCache");
 
 // Helper function to merge order's leadsMetadata with populated leads
 // This ensures each lead shows the correct orderedAs value for THIS specific order
@@ -3094,24 +3095,8 @@ exports.getOrders = async (req, res, next) => {
             referenceCache.searchCollection("ClientBroker", keyword),
           ]);
 
-          // Phase 2: Query leads (depends on user IDs for agent matching)
-          const leadOrConditions = [
-            { firstName: regex },
-            { lastName: regex },
-            { newEmail: regex },
-            { oldEmail: regex },
-            { newPhone: regex },
-            { oldPhone: regex },
-            { country: regex },
-          ];
-          if (matchingUserIds.length > 0) {
-            leadOrConditions.push({
-              assignedAgent: { $in: matchingUserIds },
-            });
-          }
-          const matchingLeads = await Lead.find({
-            $or: leadOrConditions,
-          }).select("_id").lean();
+          // Phase 2: Query leads with caching (expensive regex query is cached for 30s)
+          const matchingLeadIds = await leadSearchCache.searchLeads(keyword, matchingUserIds);
 
           // Build $or conditions for this keyword on Order fields
           const orConditions = [
@@ -3146,9 +3131,9 @@ exports.getOrders = async (req, res, next) => {
               selectedClientBrokers: { $in: matchingClientBrokerIds },
             });
           }
-          if (matchingLeads.length > 0) {
+          if (matchingLeadIds.length > 0) {
             orConditions.push({
-              leads: { $in: matchingLeads.map((l) => l._id) },
+              leads: { $in: matchingLeadIds },
             });
           }
 
@@ -3174,47 +3159,18 @@ exports.getOrders = async (req, res, next) => {
           .populate({
             path: "leads",
             select:
-              "leadType firstName lastName country newEmail oldEmail newPhone oldPhone orderId assignedClientBrokers clientBrokerHistory assignedAgent assignedAgentAt depositConfirmed depositConfirmedBy depositConfirmedAt shaved shavedBy shavedAt shavedRefundsManager shavedManagerAssignedBy shavedManagerAssignedAt",
+              "leadType firstName lastName country newEmail oldEmail newPhone oldPhone assignedAgent assignedClientBrokers depositConfirmed shaved",
             populate: [
               {
                 path: "assignedAgent",
                 select: "fullName email fourDigitCode",
               },
               {
-                path: "comments.author",
-                select: "fullName",
-              },
-              {
                 path: "assignedClientBrokers",
-                select: "name domain description",
-              },
-              {
-                path: "clientBrokerHistory.clientBroker",
-                select: "name domain description",
-              },
-              {
-                path: "depositConfirmedBy",
-                select: "fullName email",
-              },
-              {
-                path: "depositPSP",
-                select: "name website",
-              },
-              {
-                path: "shavedBy",
-                select: "fullName email",
-              },
-              {
-                path: "shavedRefundsManager",
-                select: "fullName email",
-              },
-              {
-                path: "shavedManagerAssignedBy",
-                select: "fullName email",
+                select: "name domain",
               },
             ],
           })
-          .populate("removedLeads.removedBy", "fullName email")
           .sort({ createdAt: -1 })
           .skip(skip)
           .limit(limitNum),
