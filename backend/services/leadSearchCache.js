@@ -1,70 +1,109 @@
 const Lead = require("../models/Lead");
 
-const CACHE_TTL = 30 * 1000; // 30 seconds
-const MAX_CACHE_ENTRIES = 500;
-const MAX_LEAD_RESULTS = 5000;
+const CACHE_TTL = 2 * 60 * 1000; // 2 minutes
 
-// Map<string, { ids: ObjectId[], timestamp: number }>
-const cache = new Map();
+// Full in-memory collection cache for instant lead search
+let leadDocs = null;
+let leadDocsTimestamp = 0;
+let loadingPromise = null;
+
+const PROJECTION = {
+  _id: 1,
+  firstName: 1,
+  lastName: 1,
+  newEmail: 1,
+  oldEmail: 1,
+  newPhone: 1,
+  oldPhone: 1,
+  country: 1,
+  assignedAgent: 1,
+};
+
+const SEARCH_FIELDS = [
+  "firstName",
+  "lastName",
+  "newEmail",
+  "oldEmail",
+  "newPhone",
+  "oldPhone",
+  "country",
+];
+
+async function loadDocs() {
+  const docs = await Lead.find({}).select(PROJECTION).lean();
+  leadDocs = docs;
+  leadDocsTimestamp = Date.now();
+  loadingPromise = null;
+  return docs;
+}
+
+async function getDocs() {
+  if (leadDocs && Date.now() - leadDocsTimestamp < CACHE_TTL) {
+    return leadDocs;
+  }
+  // Prevent multiple concurrent reloads
+  if (loadingPromise) {
+    return loadingPromise;
+  }
+  loadingPromise = loadDocs();
+  return loadingPromise;
+}
 
 /**
- * Search leads by keyword with caching.
- * Returns an array of Lead _id values matching the keyword across
- * firstName, lastName, newEmail, oldEmail, newPhone, oldPhone, country.
+ * Search leads by keyword using in-memory filtering.
+ * All lead searchable fields are pre-loaded into memory for instant search.
+ * Returns an array of Lead _id values.
  */
 async function searchLeads(keyword, agentIds = []) {
-  const agentKey =
-    agentIds.length > 0
-      ? ":" +
-        agentIds
-          .map((id) => id.toString())
-          .sort()
-          .join(",")
-      : "";
-  const cacheKey = keyword.toLowerCase() + agentKey;
-
-  const entry = cache.get(cacheKey);
-  if (entry && Date.now() - entry.timestamp < CACHE_TTL) {
-    return entry.ids;
-  }
-
+  const docs = await getDocs();
   const regex = new RegExp(keyword, "i");
-  const leadOrConditions = [
-    { firstName: regex },
-    { lastName: regex },
-    { newEmail: regex },
-    { oldEmail: regex },
-    { newPhone: regex },
-    { oldPhone: regex },
-    { country: regex },
-  ];
-  if (agentIds.length > 0) {
-    leadOrConditions.push({ assignedAgent: { $in: agentIds } });
+
+  const agentIdSet =
+    agentIds.length > 0
+      ? new Set(agentIds.map((id) => id.toString()))
+      : null;
+
+  const ids = [];
+  for (let i = 0; i < docs.length; i++) {
+    const doc = docs[i];
+    let matched = false;
+    for (let j = 0; j < SEARCH_FIELDS.length; j++) {
+      const val = doc[SEARCH_FIELDS[j]];
+      if (val && regex.test(val)) {
+        matched = true;
+        break;
+      }
+    }
+    if (
+      !matched &&
+      agentIdSet &&
+      doc.assignedAgent &&
+      agentIdSet.has(doc.assignedAgent.toString())
+    ) {
+      matched = true;
+    }
+    if (matched) {
+      ids.push(doc._id);
+    }
   }
-
-  const matchingLeads = await Lead.find({ $or: leadOrConditions })
-    .select("_id")
-    .limit(MAX_LEAD_RESULTS)
-    .lean();
-
-  const ids = matchingLeads.map((l) => l._id);
-
-  // Evict oldest entry if cache is full
-  if (cache.size >= MAX_CACHE_ENTRIES) {
-    const oldestKey = cache.keys().next().value;
-    cache.delete(oldestKey);
-  }
-
-  cache.set(cacheKey, { ids, timestamp: Date.now() });
   return ids;
 }
 
 /**
- * Clear the entire lead search cache.
+ * Pre-load all leads into memory. Call on server startup.
+ */
+async function warmUp() {
+  await loadDocs();
+}
+
+/**
+ * Clear the in-memory cache.
  * Call this whenever leads are created, updated, or deleted.
  */
 function clearCache() {
-  cache.clear();
+  leadDocs = null;
+  leadDocsTimestamp = 0;
+  loadingPromise = null;
 }
 
-module.exports = { searchLeads, clearCache };
+module.exports = { searchLeads, warmUp, clearCache };

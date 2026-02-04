@@ -32,6 +32,7 @@ import {
   ListItemIcon,
   Alert,
   CircularProgress,
+  LinearProgress,
   useMediaQuery,
   useTheme,
   FormControlLabel,
@@ -367,6 +368,7 @@ const OrdersPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [searching, setSearching] = useState(false);
   const [notification, setNotification] = useState({
     message: "",
     severity: "info",
@@ -439,6 +441,7 @@ const OrdersPage = () => {
   const popoverTimerRef = React.useRef(null);
   const closeTimerRef = React.useRef(null);
   const fetchAbortControllerRef = React.useRef(null);
+  const hasDataRef = React.useRef(false);
 
   // Assigned Leads Modal State
   const [assignedLeadsModal, setAssignedLeadsModal] = useState({
@@ -1056,7 +1059,13 @@ const OrdersPage = () => {
     const controller = new AbortController();
     fetchAbortControllerRef.current = controller;
 
-    setLoading(true);
+    // Only show full spinner on initial load (no data yet)
+    // Otherwise keep previous results visible (stale-while-revalidate)
+    if (!hasDataRef.current) {
+      setLoading(true);
+    } else {
+      setSearching(true);
+    }
     setNotification({ message: "", severity: "info" });
     try {
       const params = new URLSearchParams({
@@ -1078,6 +1087,7 @@ const OrdersPage = () => {
       if (!controller.signal.aborted) {
         setOrders(response.data.data);
         setTotalOrders(response.data.pagination.total);
+        hasDataRef.current = true;
       }
     } catch (err) {
       // Ignore abort errors - they are expected when a newer request supersedes
@@ -1091,6 +1101,7 @@ const OrdersPage = () => {
     } finally {
       if (!controller.signal.aborted) {
         setLoading(false);
+        setSearching(false);
       }
     }
   }, [page, rowsPerPage, debouncedFilters]);
@@ -3407,14 +3418,23 @@ const OrdersPage = () => {
           return restStatus;
         });
       } else {
+        // Expand immediately with loading state - no waiting for API
+        setExpandedRowData((prev) => ({
+          ...prev,
+          [orderId]: { loading: true },
+        }));
+
         try {
-          // First, load lightweight order data for fast expansion
-          const lightweightResponse = await api.get(
+          // Fetch lightweight and full data in parallel
+          const lightweightPromise = api.get(
             `/orders/${orderId}?lightweight=true`
           );
+          const fullPromise = api.get(`/orders/${orderId}`);
+
+          // Show lightweight data as soon as it arrives
+          const lightweightResponse = await lightweightPromise;
           const lightweightData = lightweightResponse.data.data;
 
-          // Set lightweight data with loading flag for leads
           setExpandedRowData((prev) => ({
             ...prev,
             [orderId]: {
@@ -3428,8 +3448,8 @@ const OrdersPage = () => {
             fetchRefundAssignmentStatus(orderId);
           }
 
-          // Then immediately fetch full lead details in the background
-          const fullResponse = await api.get(`/orders/${orderId}`);
+          // Update with full data when it arrives
+          const fullResponse = await fullPromise;
           const fullOrderData = fullResponse.data.data;
 
           setExpandedRowData((prev) => ({
@@ -3440,6 +3460,12 @@ const OrdersPage = () => {
             },
           }));
         } catch (err) {
+          // Remove the loading entry on error
+          setExpandedRowData((prev) => {
+            const newData = { ...prev };
+            delete newData[orderId];
+            return newData;
+          });
           setNotification({
             message: "Could not load order details for expansion.",
             severity: "error",
@@ -4725,7 +4751,7 @@ const OrdersPage = () => {
               </IconButton>
             </Box>
           </Box>
-          <Collapse in={showFilters}>
+          {showFilters && (
             <Grid container spacing={2} sx={{ mt: 1 }}>
               <Grid item xs={12} sm={6} md={4}>
                 <TextField
@@ -4750,11 +4776,23 @@ const OrdersPage = () => {
                 />
               </Grid>
             </Grid>
-          </Collapse>
+          )}
         </CardContent>
       </Card>
       {}
-      <Paper>
+      <Paper sx={{ position: "relative" }}>
+        {searching && (
+          <LinearProgress
+            sx={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              zIndex: 1,
+              height: 3,
+            }}
+          />
+        )}
         <TableContainer>
           <Table size="small" sx={{ tableLayout: "fixed" }}>
             <TableHead>
@@ -5168,11 +5206,22 @@ const OrdersPage = () => {
                         >
                           <Collapse
                             in={isExpanded}
-                            timeout="auto"
+                            timeout={150}
                             unmountOnExit
                           >
                             <Box sx={{ p: 3, bgcolor: "grey.50" }}>
-                              {expandedDetails ? (
+                              {expandedDetails?.loading ? (
+                                <Box
+                                  sx={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    p: 4,
+                                  }}
+                                >
+                                  <CircularProgress size={28} />
+                                </Box>
+                              ) : expandedDetails ? (
                                 <Grid container spacing={2}>
                                   {/* Status Reason Alerts */}
                                   {expandedDetails.status === "cancelled" &&

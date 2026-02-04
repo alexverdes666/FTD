@@ -117,6 +117,14 @@ db.once("open", () => {
         error
       );
     }
+
+    try {
+      const leadSearchCache = require("./services/leadSearchCache");
+      leadSearchCache.warmUp();
+      console.log("✅ Lead search cache warming up");
+    } catch (error) {
+      console.error("❌ Failed to warm up lead search cache:", error);
+    }
   }
 });
 app.use(
