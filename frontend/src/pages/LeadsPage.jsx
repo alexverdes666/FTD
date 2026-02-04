@@ -36,6 +36,7 @@ import {
   MenuItem,
   Alert,
   CircularProgress,
+  LinearProgress,
   Checkbox,
   Stack,
   Avatar,
@@ -1153,6 +1154,9 @@ const LeadsPage = () => {
     }
   }, []);
   const searchDebounceTimer = useRef(null);
+  const fetchAbortControllerRef = useRef(null);
+  const hasDataRef = useRef(false);
+  const [searching, setSearching] = useState(false);
 
   const isAdminOrManager = useMemo(
     () => user?.role === ROLES.ADMIN || user?.role === ROLES.AFFILIATE_MANAGER,
@@ -1291,7 +1295,19 @@ const LeadsPage = () => {
   );
 
   const fetchLeads = useCallback(async () => {
-    setLoading(true);
+    // Cancel any in-flight request
+    if (fetchAbortControllerRef.current) {
+      fetchAbortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    fetchAbortControllerRef.current = controller;
+
+    // Only show full spinner on initial load (stale-while-revalidate)
+    if (!hasDataRef.current) {
+      setLoading(true);
+    } else {
+      setSearching(true);
+    }
     setError(null);
     try {
       const params = new URLSearchParams({
@@ -1299,6 +1315,10 @@ const LeadsPage = () => {
         limit: rowsPerPage,
         ...filters,
       });
+      // Skip search queries shorter than 2 characters
+      if (filters.search && filters.search.trim().length < 2) {
+        params.delete("search");
+      }
       if ((isAdminOrManager || isLeadManager) && filters.isAssigned === "") {
         params.delete("isAssigned");
       }
@@ -1309,26 +1329,37 @@ const LeadsPage = () => {
         params.delete("ipqsResult");
       }
       const endpoint = isAgent ? "/leads/assigned" : "/leads";
-      const response = await api.get(`${endpoint}?${params}`);
-      if (!response.data.success) {
-        throw new Error(response.data.message || "Failed to fetch leads");
-      }
-      const leadsData = response.data.data;
-      setLeads(leadsData);
-      setTotalLeads(response.data.pagination.totalLeads);
+      const response = await api.get(`${endpoint}?${params}`, {
+        signal: controller.signal,
+      });
+      if (!controller.signal.aborted) {
+        if (!response.data.success) {
+          throw new Error(response.data.message || "Failed to fetch leads");
+        }
+        const leadsData = response.data.data;
+        setLeads(leadsData);
+        setTotalLeads(response.data.pagination.totalLeads);
+        hasDataRef.current = true;
 
-      // Fetch pending requests for agents
-      if (isAgent && leadsData.length > 0) {
-        fetchPendingRequests(leadsData);
+        // Fetch pending requests for agents
+        if (isAgent && leadsData.length > 0) {
+          fetchPendingRequests(leadsData);
+        }
       }
     } catch (err) {
+      if (err.name === "CanceledError" || err.code === "ERR_CANCELED") {
+        return;
+      }
       const errorMessage =
         err.response?.data?.message ||
         err.message ||
         "An unexpected error occurred.";
       setError(errorMessage);
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted) {
+        setLoading(false);
+        setSearching(false);
+      }
     }
   }, [
     page,
@@ -1927,6 +1958,13 @@ const LeadsPage = () => {
     fetchLeads();
   }, [fetchLeads]);
   useEffect(() => {
+    return () => {
+      if (fetchAbortControllerRef.current) {
+        fetchAbortControllerRef.current.abort();
+      }
+    };
+  }, []);
+  useEffect(() => {
     if (isAdminOrManager) {
       fetchAgents();
       fetchOrders();
@@ -2031,7 +2069,7 @@ const LeadsPage = () => {
     searchDebounceTimer.current = setTimeout(() => {
       setFilters((prev) => ({ ...prev, search: value }));
       setPage(0);
-    }, 300); // 300ms debounce delay
+    }, 150); // 150ms debounce delay
   }, []);
 
   // Cleanup debounce timer on unmount
@@ -2629,7 +2667,19 @@ const LeadsPage = () => {
       </Paper>
       {}
       <Box sx={{ display: { xs: "none", md: "block" }, width: "100%" }}>
-        <Paper sx={{ width: "100%" }}>
+        <Paper sx={{ width: "100%", position: "relative" }}>
+          {searching && (
+            <LinearProgress
+              sx={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                right: 0,
+                zIndex: 1,
+                height: 3,
+              }}
+            />
+          )}
           <TableContainer sx={{ width: "100%", overflowX: "auto" }}>
             <Table
               size="small"
@@ -2957,7 +3007,19 @@ const LeadsPage = () => {
         </Paper>
       </Box>
       {}
-      <Box sx={{ display: { xs: "block", md: "none" } }}>
+      <Box sx={{ display: { xs: "block", md: "none" }, position: "relative" }}>
+        {searching && (
+          <LinearProgress
+            sx={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              zIndex: 1,
+              height: 3,
+            }}
+          />
+        )}
         {loading ? (
           <Box display="flex" justifyContent="center" p={3}>
             <CircularProgress />

@@ -15,6 +15,7 @@ const CallChangeRequest = require("../models/CallChangeRequest");
 const sessionSecurity = require("../utils/sessionSecurity");
 const LeadAuditLog = require("../models/LeadAuditLog");
 const leadSearchCache = require("../services/leadSearchCache");
+const referenceCache = require("../services/referenceCache");
 
 // S3 client for resolving verification photo URLs
 const s3Client = new S3Client({
@@ -259,7 +260,7 @@ exports.getLeads = async (req, res, next) => {
       filter.orderId = { $in: matchingOrders.map((o) => o._id) };
     }
 
-    // Pre-query for search keywords (avoids expensive $lookup on ALL docs)
+    // Pre-query for search keywords using in-memory caches for speed
     if (searchKeywords.length > 0 && !searchById) {
       const Order = require("../models/Order");
 
@@ -267,34 +268,34 @@ exports.getLeads = async (req, res, next) => {
         searchKeywords.map(async (keyword) => {
           const regex = new RegExp(keyword, "i");
 
-          // Query User and Order collections in parallel for this keyword
-          const [matchingAgents, matchingOrders] = await Promise.all([
-            User.find({
-              $or: [{ fullName: regex }, { email: regex }],
-            })
-              .select("_id")
-              .lean(),
-            Order.find({
-              $or: [{ status: regex }, { priority: regex }],
-            })
-              .select("_id")
-              .lean(),
-          ]);
+          // Phase 1: In-memory lookups (no DB queries)
+          const matchingAgentIds = await referenceCache.searchCollection(
+            "User",
+            keyword
+          );
+          const matchingLeadIds = await leadSearchCache.searchLeads(
+            keyword,
+            matchingAgentIds
+          );
 
+          // Phase 2: Order matching (small collection, fast DB query)
+          const matchingOrders = await Order.find({
+            $or: [{ status: regex }, { priority: regex }],
+          })
+            .select("_id")
+            .lean();
+
+          // Use _id index for leads matched by name/email/phone/country/agent
+          // Keep regex only for low-cardinality fields not in the cache
           const orConditions = [
-            { firstName: regex },
-            { lastName: regex },
-            { newEmail: regex },
-            { newPhone: regex },
-            { country: regex },
             { status: regex },
             { leadType: regex },
             { gender: regex },
           ];
 
-          if (matchingAgents.length > 0) {
+          if (matchingLeadIds.length > 0) {
             orConditions.push({
-              assignedAgent: { $in: matchingAgents.map((a) => a._id) },
+              _id: { $in: matchingLeadIds },
             });
           }
           if (matchingOrders.length > 0) {
