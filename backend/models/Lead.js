@@ -780,6 +780,7 @@ const leadSchema = new mongoose.Schema(
   }
 );
 leadSchema.index({ assignedAgent: 1, leadType: 1, "documents.status": 1 });
+leadSchema.index({ orderId: 1 });
 leadSchema.index({ leadType: 1 });
 leadSchema.index({ country: 1 });
 leadSchema.index({ assignedAgent: 1 });

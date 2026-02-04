@@ -106,85 +106,6 @@ import ImportLeadsDialog from "../components/ImportLeadsDialog";
 import EditLeadForm from "../components/EditLeadForm";
 import LeadProfileCredentials from "../components/LeadProfileCredentials";
 import { formatPhoneWithCountryCode } from "../utils/phoneUtils";
-const glassMorphismStyles = {
-  bgcolor: "rgba(255, 255, 255, 0.1)",
-  backdropFilter: "blur(10px)",
-  borderRadius: 2,
-  border: "1px solid rgba(255, 255, 255, 0.2)",
-  transition: "all 0.3s ease-in-out",
-  "&:hover": {
-    bgcolor: "rgba(255, 255, 255, 0.15)",
-    backdropFilter: "blur(15px)",
-    boxShadow: "0 4px 16px rgba(0, 0, 0, 0.1)",
-  },
-  "& .MuiButton-root": {
-    bgcolor: "rgba(255, 255, 255, 0.1)",
-    backdropFilter: "blur(10px)",
-    border: "1px solid rgba(255, 255, 255, 0.2)",
-    "&:hover": {
-      bgcolor: "rgba(255, 255, 255, 0.15)",
-      boxShadow: "0 4px 16px rgba(0, 0, 0, 0.1)",
-    },
-  },
-  "& .MuiInputBase-root": {
-    bgcolor: "rgba(255, 255, 255, 0.1)",
-    backdropFilter: "blur(10px)",
-    border: "1px solid rgba(255, 255, 255, 0.2)",
-    "&:hover": {
-      bgcolor: "rgba(255, 255, 255, 0.15)",
-      boxShadow: "0 4px 16px rgba(0, 0, 0, 0.1)",
-    },
-    "&.Mui-focused": {
-      boxShadow: "0 0 0 3px rgba(100, 181, 246, 0.3)",
-      borderColor: "primary.main",
-    },
-    "& .MuiOutlinedInput-notchedOutline": {
-      borderColor: "rgba(255, 255, 255, 0.3)",
-    },
-    "&:hover .MuiOutlinedInput-notchedOutline": {
-      borderColor: "primary.light",
-    },
-    "&.Mui-focused .MuiOutlinedInput-notchedOutline": {
-      borderColor: "primary.main",
-    },
-  },
-};
-const buttonGlassMorphismStyles = {
-  bgcolor: "rgba(255, 255, 255, 0.15)",
-  backdropFilter: "blur(10px)",
-  border: "1px solid rgba(255, 255, 255, 0.3)",
-  color: "text.primary",
-  transition: "all 0.3s ease-in-out",
-  "&:hover": {
-    bgcolor: "rgba(255, 255, 255, 0.25)",
-    boxShadow: "0 4px 16px rgba(0, 0, 0, 0.1)",
-  },
-};
-const inputGlassMorphismStyles = {
-  bgcolor: "rgba(255, 255, 255, 0.1)",
-  backdropFilter: "blur(8px)",
-  border: "1px solid rgba(255, 255, 255, 0.2)",
-  borderRadius: 2,
-  "& .MuiOutlinedInput-notchedOutline": {
-    borderColor: "transparent",
-  },
-  "&:hover .MuiOutlinedInput-notchedOutline": {
-    borderColor: "rgba(255, 255, 255, 0.4)",
-  },
-  "&.Mui-focused .MuiOutlinedInput-notchedOutline": {
-    borderColor: "primary.main",
-    boxShadow: "0 0 0 3px rgba(100, 181, 246, 0.3)",
-  },
-  "& .MuiInputBase-input": {
-    color: "text.primary",
-  },
-  "& .MuiInputLabel-root": {
-    color: "text.secondary",
-  },
-  "& .MuiInputLabel-root.Mui-focused": {
-    color: "primary.main",
-  },
-};
 const ROLES = {
   ADMIN: "admin",
   AFFILIATE_MANAGER: "affiliate_manager",
@@ -1293,6 +1214,38 @@ const LeadsPage = () => {
     return count;
   }, [selectedLeads, leads]);
 
+  // Compute lead stats from current page data
+  const leadStats = useMemo(() => {
+    const stats = { ftd: 0, filler: 0, cold: 0 };
+    leads.forEach((lead) => {
+      const type = isAgent
+        ? lead.leadInfo?.leadType?.toLowerCase()
+        : (lead.orderedAs || lead.leadType)?.toLowerCase();
+      if (type === "ftd") stats.ftd++;
+      else if (type === "filler") stats.filler++;
+      else if (type === "cold") stats.cold++;
+    });
+    return stats;
+  }, [leads, isAgent]);
+
+  // Compute active filter count for the filter toggle badge
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (filters.orderId) count++;
+    if (filters.isAssigned) count++;
+    if (filters.gender) count++;
+    if (filters.documentStatus) count++;
+    if (!filters.includeConverted) count++;
+    if (filters.assignedToMe) count++;
+    if (filters.orderCreatedStart) count++;
+    if (filters.orderCreatedEnd) count++;
+    if (filters.ipqsType) count++;
+    if (filters.ipqsResult) count++;
+    return count;
+  }, [filters]);
+
+  const hasActiveFilters = activeFilterCount > 0;
+
   const fetchPendingRequests = useCallback(
     async (leadsData) => {
       // Only for agents - check for pending requests for each lead/order
@@ -2169,15 +2122,22 @@ const LeadsPage = () => {
       (isAdminOrManager && numAssignableSelected > 0) ||
       (isAdminOrManager && numAssignedAgentSelected > 0) ||
       (canSelectLeads && numSelected > 0) ? (
-        <Box
+        <Paper
+          elevation={8}
           sx={{
             position: "fixed",
             top: 80,
             right: 24,
             zIndex: 1200,
             display: "flex",
-            gap: 2,
+            gap: 1.5,
             alignItems: "center",
+            px: 2.5,
+            py: 1.5,
+            borderRadius: 3,
+            bgcolor: "rgba(255, 255, 255, 0.85)",
+            backdropFilter: "blur(12px)",
+            border: "1px solid rgba(0, 0, 0, 0.08)",
             animation: "slideInFromRight 0.3s ease-out",
             "@keyframes slideInFromRight": {
               "0%": {
@@ -2191,98 +2151,100 @@ const LeadsPage = () => {
             },
           }}
         >
+          <Chip
+            label={`${numSelected} selected`}
+            color="primary"
+            size="small"
+            sx={{ fontWeight: 600 }}
+          />
           {canSelectLeads && numSelected > 0 && numAssignableSelected === 0 && (
-            <Alert severity="info" sx={{ py: 0.5, px: 2 }}>
-              Cold leads cannot be assigned to agents, but can be IPQS validated.
+            <Alert severity="info" sx={{ py: 0, px: 1, fontSize: "0.75rem" }}>
+              Cold leads cannot be assigned
             </Alert>
           )}
           {isAdminOrManager && numAssignableSelected > 0 && (
             <Button
               variant="contained"
               color="success"
+              size="small"
               startIcon={<AssignmentIndIcon />}
               onClick={() => setBulkAssignDialogOpen(true)}
               sx={{
                 borderRadius: 2,
-                px: 3,
-                py: 1,
+                px: 2,
                 transition: "all 0.2s",
-                boxShadow: 4,
                 "&:hover": {
-                  transform: "translateY(-2px)",
-                  boxShadow: 6,
+                  transform: "translateY(-1px)",
+                  boxShadow: 4,
                 },
               }}
             >
-              Assign to Agent (Permanent)
+              Assign
             </Button>
           )}
           {isAdminOrManager && numAssignedAgentSelected > 0 && (
             <Button
               variant="contained"
               color="warning"
+              size="small"
               startIcon={<PersonRemoveIcon />}
               onClick={() => setBulkUnassignDialogOpen(true)}
               sx={{
                 borderRadius: 2,
-                px: 3,
-                py: 1,
+                px: 2,
                 transition: "all 0.2s",
-                boxShadow: 4,
                 "&:hover": {
-                  transform: "translateY(-2px)",
-                  boxShadow: 6,
+                  transform: "translateY(-1px)",
+                  boxShadow: 4,
                 },
               }}
             >
-              Unassign from Agent ({numAssignedAgentSelected})
+              Unassign ({numAssignedAgentSelected})
             </Button>
           )}
           {canSelectLeads && numSelected > 0 && (
             <Button
               variant="contained"
               color="info"
-              startIcon={ipqsValidating ? <CircularProgress size={16} color="inherit" /> : <CheckCircleIcon />}
+              size="small"
+              startIcon={ipqsValidating ? <CircularProgress size={14} color="inherit" /> : <CheckCircleIcon />}
               onClick={handleBatchIPQSValidation}
               disabled={ipqsValidating}
               sx={{
                 borderRadius: 2,
-                px: 3,
-                py: 1,
+                px: 2,
                 transition: "all 0.2s",
-                boxShadow: 4,
                 "&:hover": {
-                  transform: "translateY(-2px)",
-                  boxShadow: 6,
+                  transform: "translateY(-1px)",
+                  boxShadow: 4,
                 },
               }}
             >
-              {ipqsValidating ? "Validating..." : `IPQS Check (${numSelected})`}
+              {ipqsValidating ? "..." : `IPQS (${numSelected})`}
             </Button>
           )}
           {canSelectLeads && numSelected > 0 && numIPQSValidatedSelected > 0 && (
             <Button
               variant="contained"
               color="secondary"
-              startIcon={ipqsValidating ? <CircularProgress size={16} color="inherit" /> : <RefreshIcon />}
+              size="small"
+              startIcon={ipqsValidating ? <CircularProgress size={14} color="inherit" /> : <RefreshIcon />}
               onClick={handleBatchIPQSRecheck}
               disabled={ipqsValidating}
               sx={{
                 borderRadius: 2,
-                px: 3,
-                py: 1,
+                px: 2,
                 transition: "all 0.2s",
-                boxShadow: 4,
                 "&:hover": {
-                  transform: "translateY(-2px)",
-                  boxShadow: 6,
+                  transform: "translateY(-1px)",
+                  boxShadow: 4,
                 },
               }}
             >
-              {ipqsValidating ? "Rechecking..." : `IPQS Recheck (${numIPQSValidatedSelected})`}
+              {ipqsValidating ? "..." : `Recheck (${numIPQSValidatedSelected})`}
             </Button>
           )}
-        </Box>
+        </Paper>
       ) : null}
       {success && (
         <Alert
@@ -2343,7 +2305,119 @@ const LeadsPage = () => {
         </Paper>
       )}
 
-      {}
+      {/* Page Header */}
+      <Box sx={{ mb: 3, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+          <ContactsIcon sx={{ fontSize: 28, color: "primary.main" }} />
+          <Typography variant="h5" fontWeight={700}>Leads</Typography>
+          <Chip label={totalLeads} color="primary" size="small" sx={{ fontWeight: 600 }} />
+        </Box>
+        <Box display="flex" gap={0.5}>
+          {(isLeadManager || user?.role === ROLES.ADMIN) && (
+            <Tooltip title="Add New Lead">
+              <IconButton
+                size="small"
+                onClick={() => setAddLeadDialogOpen(true)}
+                sx={{
+                  color: "primary.main",
+                  "&:hover": { bgcolor: "primary.lighter" },
+                }}
+              >
+                <PersonAddIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          )}
+          {isAdminOrManager && (
+            <Tooltip title="Import Leads">
+              <IconButton
+                size="small"
+                onClick={() => setImportDialogOpen(true)}
+                sx={{
+                  color: "info.main",
+                  "&:hover": { bgcolor: "info.lighter" },
+                }}
+              >
+                <ImportIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          )}
+          {canDeleteLeads && (
+            <Tooltip title="Bulk Delete">
+              <IconButton
+                size="small"
+                onClick={() => setBulkDeleteDialogOpen(true)}
+                sx={{
+                  color: "error.main",
+                  "&:hover": { bgcolor: "error.lighter" },
+                }}
+              >
+                <DeleteIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          )}
+          {user?.role === ROLES.ADMIN && (
+            <Tooltip title="View Archived Leads">
+              <IconButton
+                size="small"
+                onClick={handleOpenArchivedLeadsDialog}
+                sx={{
+                  color: "warning.main",
+                  "&:hover": { bgcolor: "warning.lighter" },
+                }}
+              >
+                <ArchiveIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          )}
+          {(isAdminOrManager || isLeadManager) && (
+            <Tooltip title="View Lead Changes Audit">
+              <IconButton
+                size="small"
+                onClick={() => setGlobalAuditDialogOpen(true)}
+                sx={{
+                  color: "secondary.main",
+                  "&:hover": { bgcolor: "secondary.lighter" },
+                }}
+              >
+                <HistoryIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          )}
+        </Box>
+      </Box>
+
+      {/* Stats Cards */}
+      <Grid container spacing={2} sx={{ mb: 3 }}>
+        {[
+          { label: "Total", value: totalLeads, color: "#1976d2", bg: "#e3f2fd" },
+          { label: "FTD", value: leadStats.ftd, color: "#2e7d32", bg: "#e8f5e9" },
+          { label: "Filler", value: leadStats.filler, color: "#ed6c02", bg: "#fff3e0" },
+          { label: "Cold", value: leadStats.cold, color: "#0288d1", bg: "#e1f5fe" },
+        ].map((stat) => (
+          <Grid item xs={6} sm={3} key={stat.label}>
+            <Paper
+              elevation={0}
+              sx={{
+                p: 2,
+                borderRadius: 2,
+                border: "1px solid",
+                borderColor: "divider",
+                bgcolor: stat.bg,
+                textAlign: "center",
+              }}
+            >
+              <Typography variant="h5" fontWeight={700} sx={{ color: stat.color }}>
+                {stat.value}
+              </Typography>
+              <Typography variant="body2" color="text.secondary" fontWeight={500}>
+                {stat.label}
+              </Typography>
+            </Paper>
+          </Grid>
+        ))}
+      </Grid>
+
+      {/* Filters */}
       <Paper
         elevation={0}
         sx={{
@@ -2354,129 +2428,54 @@ const LeadsPage = () => {
           borderColor: "divider",
         }}
       >
-        <Box
-          display="flex"
-          justifyContent="space-between"
-          alignItems="center"
-          mb={2}
-        >
+        {/* Always-visible search */}
+        <TextField
+          fullWidth
+          size="medium"
+          placeholder="Search by name, email, phone, country, agent..."
+          value={searchInput}
+          onChange={(e) => handleSearchChange(e.target.value)}
+          InputProps={{
+            startAdornment: (
+              <SearchIcon sx={{ mr: 1, color: "text.secondary" }} />
+            ),
+          }}
+          sx={{
+            mb: 2,
+            "& .MuiOutlinedInput-root": {
+              borderRadius: 3,
+              bgcolor: "grey.50",
+              "&:hover": { bgcolor: "grey.100" },
+            },
+          }}
+        />
+        <Box display="flex" alignItems="center" gap={1} mb={showFilters ? 2 : 0}>
           <Button
             startIcon={showFilters ? <ExpandLessIcon /> : <FilterIcon />}
             onClick={() => setShowFilters(!showFilters)}
-            sx={{
-              color: "primary.main",
-              "&:hover": {
-                bgcolor: "primary.lighter",
-              },
-            }}
+            size="small"
+            variant={hasActiveFilters ? "outlined" : "text"}
+            sx={{ borderRadius: 2 }}
           >
-            {showFilters ? "Hide Filters" : "Show Filters"}
+            {showFilters ? "Hide Filters" : "Filters"}
+            {hasActiveFilters && (
+              <Chip label={activeFilterCount} size="small" color="primary" sx={{ ml: 1, height: 20, minWidth: 20, fontSize: "0.7rem" }} />
+            )}
           </Button>
-          {/* Action Icon Buttons - Top Right */}
-          <Box display="flex" gap={0.5}>
-            {(isLeadManager || user?.role === ROLES.ADMIN) && (
-              <Tooltip title="Add New Lead">
-                <IconButton
-                  size="small"
-                  onClick={() => setAddLeadDialogOpen(true)}
-                  sx={{
-                    color: "primary.main",
-                    "&:hover": {
-                      bgcolor: "primary.lighter",
-                    },
-                  }}
-                >
-                  <PersonAddIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-            )}
-            {isAdminOrManager && (
-              <Tooltip title="Import Leads">
-                <IconButton
-                  size="small"
-                  onClick={() => setImportDialogOpen(true)}
-                  sx={{
-                    color: "info.main",
-                    "&:hover": {
-                      bgcolor: "info.lighter",
-                    },
-                  }}
-                >
-                  <ImportIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-            )}
-            {canDeleteLeads && (
-              <Tooltip title="Bulk Delete">
-                <IconButton
-                  size="small"
-                  onClick={() => setBulkDeleteDialogOpen(true)}
-                  sx={{
-                    color: "error.main",
-                    "&:hover": {
-                      bgcolor: "error.lighter",
-                    },
-                  }}
-                >
-                  <DeleteIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-            )}
-            {user?.role === ROLES.ADMIN && (
-              <Tooltip title="View Archived Leads">
-                <IconButton
-                  size="small"
-                  onClick={handleOpenArchivedLeadsDialog}
-                  sx={{
-                    color: "warning.main",
-                    "&:hover": {
-                      bgcolor: "warning.lighter",
-                    },
-                  }}
-                >
-                  <ArchiveIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-            )}
-            {(isAdminOrManager || isLeadManager) && (
-              <Tooltip title="View Lead Changes Audit">
-                <IconButton
-                  size="small"
-                  onClick={() => setGlobalAuditDialogOpen(true)}
-                  sx={{
-                    color: "secondary.main",
-                    "&:hover": {
-                      bgcolor: "secondary.lighter",
-                    },
-                  }}
-                >
-                  <HistoryIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-            )}
-          </Box>
+          {hasActiveFilters && (
+            <Chip
+              label="Clear Filters"
+              size="small"
+              onDelete={clearFilters}
+              onClick={clearFilters}
+              color="default"
+              variant="outlined"
+              sx={{ height: 24 }}
+            />
+          )}
         </Box>
         <Collapse in={showFilters}>
           <Grid container spacing={2}>
-            <Grid item xs={12} sm={6} md={4}>
-              <TextField
-                fullWidth
-                label="Search"
-                value={searchInput}
-                onChange={(e) => handleSearchChange(e.target.value)}
-                placeholder="Search by name, email, phone, country, gender, status, lead type, agent, or use 'assigned', 'unassigned', 'archived'..."
-                InputProps={{
-                  startAdornment: (
-                    <SearchIcon sx={{ mr: 1, color: "action.active" }} />
-                  ),
-                }}
-                sx={{
-                  "& .MuiOutlinedInput-root": {
-                    borderRadius: 2,
-                  },
-                }}
-              />
-            </Grid>
             {isAdminOrManager && (
               <Grid item xs={12} sm={6} md={2}>
                 <FormControlLabel
@@ -2645,10 +2644,25 @@ const LeadsPage = () => {
                 "& .MuiTableHead-root .MuiTableCell-root": {
                   padding: "4px 6px",
                   fontSize: "0.75rem",
-                  fontWeight: 600,
+                  fontWeight: 700,
+                  background: "linear-gradient(135deg, #f5f7fa 0%, #e4e9f0 100%)",
+                  color: "#1e293b",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.5px",
+                  borderBottom: "2px solid #e2e8f0",
+                  position: "sticky",
+                  top: 0,
+                  zIndex: 2,
                 },
                 "& .MuiTableBody-root .MuiTableRow-root": {
                   height: "28px",
+                  transition: "background-color 0.15s ease",
+                  "&:nth-of-type(even)": {
+                    bgcolor: "rgba(0, 0, 0, 0.015)",
+                  },
+                  "&:hover": {
+                    bgcolor: "rgba(25, 118, 210, 0.04) !important",
+                  },
                 },
                 "& .MuiChip-root": {
                   height: "18px",
@@ -2846,8 +2860,17 @@ const LeadsPage = () => {
                     <TableCell
                       colSpan={isAgent ? 7 : isAdminOrManager ? 10 : 9}
                       align="center"
+                      sx={{ py: 8, border: "none" }}
                     >
-                      No leads found
+                      <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+                        <ContactsIcon sx={{ fontSize: 64, color: "grey.300" }} />
+                        <Typography variant="h6" color="text.secondary" fontWeight={500}>
+                          No leads found
+                        </Typography>
+                        <Typography variant="body2" color="text.disabled">
+                          Try adjusting your search or filter criteria
+                        </Typography>
+                      </Box>
                     </TableCell>
                   </TableRow>
                 ) : isAgent ? (
@@ -2940,8 +2963,16 @@ const LeadsPage = () => {
             <CircularProgress />
           </Box>
         ) : leads.length === 0 ? (
-          <Paper sx={{ p: 3, textAlign: "center" }}>
-            <Typography color="text.secondary">No leads found</Typography>
+          <Paper sx={{ p: 5, textAlign: "center" }}>
+            <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+              <ContactsIcon sx={{ fontSize: 64, color: "grey.300" }} />
+              <Typography variant="h6" color="text.secondary" fontWeight={500}>
+                No leads found
+              </Typography>
+              <Typography variant="body2" color="text.disabled">
+                Try adjusting your search or filter criteria
+              </Typography>
+            </Box>
           </Paper>
         ) : isAgent ? (
           // Agent View: Grouped leads mobile cards

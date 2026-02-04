@@ -225,36 +225,100 @@ exports.getLeads = async (req, res, next) => {
     }
     const skip = (page - 1) * limit;
     const limitNum = parseInt(limit);
-    // Build order filters
-    const orderFilters = {};
-    if (orderStatus) {
-      orderFilters["order.status"] = orderStatus;
+    // Move assignedToMe filter into initial filter (avoids pipeline stage)
+    if (req.user.role === "affiliate_manager" && assignedToMe === "true") {
+      filter.assignedAgent = new mongoose.Types.ObjectId(req.user.id);
     }
-    if (orderPriority) {
-      orderFilters["order.priority"] = orderPriority;
-    }
-    if (orderCreatedStart || orderCreatedEnd) {
-      orderFilters["order.createdAt"] = {};
-      if (orderCreatedStart) {
-        orderFilters["order.createdAt"]["$gte"] = new Date(orderCreatedStart);
+
+    // Pre-query Order collection for order filters (avoids expensive $lookup on all docs)
+    const hasOrderFilters =
+      orderStatus || orderPriority || orderCreatedStart || orderCreatedEnd;
+    if (hasOrderFilters) {
+      const Order = require("../models/Order");
+      const orderFilter = {};
+      if (orderStatus) orderFilter.status = orderStatus;
+      if (orderPriority) orderFilter.priority = orderPriority;
+      if (orderCreatedStart || orderCreatedEnd) {
+        orderFilter.createdAt = {};
+        if (orderCreatedStart) {
+          orderFilter.createdAt.$gte = new Date(orderCreatedStart);
+        }
+        if (orderCreatedEnd) {
+          orderFilter.createdAt.$lte = new Date(
+            orderCreatedEnd + "T23:59:59.999Z"
+          );
+        }
       }
-      if (orderCreatedEnd) {
-        orderFilters["order.createdAt"]["$lte"] = new Date(
-          orderCreatedEnd + "T23:59:59.999Z"
-        );
+      if (filter.orderId) {
+        orderFilter._id = filter.orderId;
+      }
+      const matchingOrders = await Order.find(orderFilter)
+        .select("_id")
+        .lean();
+      filter.orderId = { $in: matchingOrders.map((o) => o._id) };
+    }
+
+    // Pre-query for search keywords (avoids expensive $lookup on ALL docs)
+    if (searchKeywords.length > 0 && !searchById) {
+      const Order = require("../models/Order");
+
+      const keywordConditions = await Promise.all(
+        searchKeywords.map(async (keyword) => {
+          const regex = new RegExp(keyword, "i");
+
+          // Query User and Order collections in parallel for this keyword
+          const [matchingAgents, matchingOrders] = await Promise.all([
+            User.find({
+              $or: [{ fullName: regex }, { email: regex }],
+            })
+              .select("_id")
+              .lean(),
+            Order.find({
+              $or: [{ status: regex }, { priority: regex }],
+            })
+              .select("_id")
+              .lean(),
+          ]);
+
+          const orConditions = [
+            { firstName: regex },
+            { lastName: regex },
+            { newEmail: regex },
+            { newPhone: regex },
+            { country: regex },
+            { status: regex },
+            { leadType: regex },
+            { gender: regex },
+          ];
+
+          if (matchingAgents.length > 0) {
+            orConditions.push({
+              assignedAgent: { $in: matchingAgents.map((a) => a._id) },
+            });
+          }
+          if (matchingOrders.length > 0) {
+            orConditions.push({
+              orderId: { $in: matchingOrders.map((o) => o._id) },
+            });
+          }
+
+          return { $or: orConditions };
+        })
+      );
+
+      if (filter.$and) {
+        filter.$and.push(...keywordConditions);
+      } else {
+        filter.$and = keywordConditions;
       }
     }
 
-    const aggregationPipeline = [
+    // Optimized pipeline: $lookup only on paginated results (10-50 docs) instead of all
+    const dataPipeline = [
       { $match: filter },
-      {
-        $lookup: {
-          from: "users",
-          localField: "assignedAgent",
-          foreignField: "_id",
-          as: "assignedAgentDetails",
-        },
-      },
+      { $sort: sortOrder },
+      { $skip: skip },
+      { $limit: limitNum },
       {
         $lookup: {
           from: "orders",
@@ -266,52 +330,8 @@ exports.getLeads = async (req, res, next) => {
       {
         $addFields: {
           order: { $arrayElemAt: ["$orderDetails", 0] },
-          assignedAgentInfo: { $arrayElemAt: ["$assignedAgentDetails", 0] },
         },
       },
-      // Filter by assignedAgent name if search keywords are provided (skip if searching by ID)
-      ...(searchKeywords.length > 0 && !searchById
-        ? [
-            {
-              $match: {
-                $and: searchKeywords.map((keyword) => ({
-                  $or: [
-                    { firstName: new RegExp(keyword, "i") },
-                    { lastName: new RegExp(keyword, "i") },
-                    { newEmail: new RegExp(keyword, "i") },
-                    { newPhone: new RegExp(keyword, "i") },
-                    { country: new RegExp(keyword, "i") },
-                    { status: new RegExp(keyword, "i") },
-                    { leadType: new RegExp(keyword, "i") },
-                    { gender: new RegExp(keyword, "i") },
-                    { "assignedAgentInfo.fullName": new RegExp(keyword, "i") },
-                    { "assignedAgentInfo.email": new RegExp(keyword, "i") },
-                    { "order.status": new RegExp(keyword, "i") },
-                    { "order.priority": new RegExp(keyword, "i") },
-                  ],
-                })),
-              },
-            },
-          ]
-        : []),
-      // Affiliate managers can now see all leads (no filtering needed)
-      // Only filter if assignedToMe is explicitly requested
-      ...(req.user.role === "affiliate_manager" && assignedToMe === "true"
-        ? [
-            {
-              $match: {
-                assignedAgent: new mongoose.Types.ObjectId(req.user.id),
-              },
-            },
-          ]
-        : []),
-      // Add order filters after the lookup and addFields
-      ...(Object.keys(orderFilters).length > 0
-        ? [{ $match: orderFilters }]
-        : []),
-      { $sort: sortOrder },
-      { $skip: skip },
-      { $limit: limitNum },
       {
         $project: {
           _id: 1,
@@ -367,7 +387,12 @@ exports.getLeads = async (req, res, next) => {
         },
       },
     ];
-    const leads = await Lead.aggregate(aggregationPipeline);
+
+    // Run data query and count in parallel
+    const [leads, total] = await Promise.all([
+      Lead.aggregate(dataPipeline),
+      Lead.countDocuments(filter),
+    ]);
 
     // Populate comments.author, assignedAgent, and depositConfirmedBy for the leads
     await Lead.populate(leads, [
@@ -384,75 +409,6 @@ exports.getLeads = async (req, res, next) => {
         select: "fullName email",
       },
     ]);
-
-    // Count total documents with order filters
-    const countPipeline = [
-      { $match: filter },
-      {
-        $lookup: {
-          from: "users",
-          localField: "assignedAgent",
-          foreignField: "_id",
-          as: "assignedAgentDetails",
-        },
-      },
-      {
-        $lookup: {
-          from: "orders",
-          localField: "orderId",
-          foreignField: "_id",
-          as: "orderDetails",
-        },
-      },
-      {
-        $addFields: {
-          order: { $arrayElemAt: ["$orderDetails", 0] },
-          assignedAgentInfo: { $arrayElemAt: ["$assignedAgentDetails", 0] },
-        },
-      },
-      // Filter by assignedAgent name if search keywords are provided (skip if searching by ID)
-      ...(searchKeywords.length > 0 && !searchById
-        ? [
-            {
-              $match: {
-                $and: searchKeywords.map((keyword) => ({
-                  $or: [
-                    { firstName: new RegExp(keyword, "i") },
-                    { lastName: new RegExp(keyword, "i") },
-                    { newEmail: new RegExp(keyword, "i") },
-                    { newPhone: new RegExp(keyword, "i") },
-                    { country: new RegExp(keyword, "i") },
-                    { status: new RegExp(keyword, "i") },
-                    { leadType: new RegExp(keyword, "i") },
-                    { gender: new RegExp(keyword, "i") },
-                    { "assignedAgentInfo.fullName": new RegExp(keyword, "i") },
-                    { "assignedAgentInfo.email": new RegExp(keyword, "i") },
-                    { "order.status": new RegExp(keyword, "i") },
-                    { "order.priority": new RegExp(keyword, "i") },
-                  ],
-                })),
-              },
-            },
-          ]
-        : []),
-      // Affiliate managers can now see all leads (no filtering for count)
-      ...(req.user.role === "affiliate_manager" && assignedToMe === "true"
-        ? [
-            {
-              $match: {
-                assignedAgent: new mongoose.Types.ObjectId(req.user.id),
-              },
-            },
-          ]
-        : []),
-      ...(Object.keys(orderFilters).length > 0
-        ? [{ $match: orderFilters }]
-        : []),
-      { $count: "total" },
-    ];
-
-    const countResult = await Lead.aggregate(countPipeline);
-    const total = countResult.length > 0 ? countResult[0].total : 0;
 
     // Resolve s3: document URLs to signed S3 URLs
     try {

@@ -265,6 +265,12 @@ orderSchema.index({ plannedDate: 1, status: 1 });
 // Index for client network order queries (used in client network profile page)
 orderSchema.index({ selectedClientNetwork: 1, createdAt: -1 });
 
+// Index for leads array lookup (used in getAssignedLeads)
+orderSchema.index({ leads: 1 });
+
+// Compound index for non-admin users filtering by date range
+orderSchema.index({ requester: 1, plannedDate: -1, createdAt: -1 });
+
 // --- Virtuals (Logic remains unchanged) ---
 orderSchema.virtual("totalRequested").get(function () {
   const requests = this.requests || {};
