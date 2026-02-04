@@ -6,6 +6,7 @@ const ClientNetwork = require("../models/ClientNetwork");
 const ClientBroker = require("../models/ClientBroker");
 const Campaign = require("../models/Campaign");
 const CallChangeRequest = require("../models/CallChangeRequest");
+const referenceCache = require("../services/referenceCache");
 
 // Helper function to merge order's leadsMetadata with populated leads
 // This ensures each lead shows the correct orderedAs value for THIS specific order
@@ -3066,41 +3067,32 @@ exports.getOrders = async (req, res, next) => {
     const skip = (pageNum - 1) * limitNum;
 
     if (search && search.trim()) {
-      const User = require("../models/User");
-      const OurNetwork = require("../models/OurNetwork");
-
       const searchKeywords = search
         .toLowerCase()
         .trim()
         .split(/\s+/)
         .filter((k) => k.length > 0);
 
-      // For each keyword, pre-query referenced collections to find matching IDs,
-      // then build a MongoDB $or condition. All keywords are combined with $and.
+      // For each keyword, search cached reference collections in-memory,
+      // then query only Lead from DB. All keywords are combined with $and.
       const keywordConditions = await Promise.all(
         searchKeywords.map(async (keyword) => {
           const regex = new RegExp(keyword, "i");
 
-          // Phase 1: Query User + other referenced collections in parallel
+          // Phase 1: Search cached collections in-memory (no DB queries)
           const [
-            matchingUsers,
-            matchingCampaigns,
-            matchingOurNetworks,
-            matchingClientNetworks,
-            matchingClientBrokers,
+            matchingUserIds,
+            matchingCampaignIds,
+            matchingOurNetworkIds,
+            matchingClientNetworkIds,
+            matchingClientBrokerIds,
           ] = await Promise.all([
-            User.find({
-              $or: [{ fullName: regex }, { email: regex }],
-            }).select("_id").lean(),
-            Campaign.find({ name: regex }).select("_id").lean(),
-            OurNetwork.find({ name: regex }).select("_id").lean(),
-            ClientNetwork.find({ name: regex }).select("_id").lean(),
-            ClientBroker.find({
-              $or: [{ name: regex }, { domain: regex }],
-            }).select("_id").lean(),
+            referenceCache.searchCollection("User", keyword),
+            referenceCache.searchCollection("Campaign", keyword),
+            referenceCache.searchCollection("OurNetwork", keyword),
+            referenceCache.searchCollection("ClientNetwork", keyword),
+            referenceCache.searchCollection("ClientBroker", keyword),
           ]);
-
-          const matchingUserIds = matchingUsers.map((u) => u._id);
 
           // Phase 2: Query leads (depends on user IDs for agent matching)
           const leadOrConditions = [
@@ -3134,32 +3126,24 @@ exports.getOrders = async (req, res, next) => {
               requester: { $in: matchingUserIds },
             });
           }
-          if (matchingCampaigns.length > 0) {
+          if (matchingCampaignIds.length > 0) {
             orConditions.push({
-              selectedCampaign: {
-                $in: matchingCampaigns.map((c) => c._id),
-              },
+              selectedCampaign: { $in: matchingCampaignIds },
             });
           }
-          if (matchingOurNetworks.length > 0) {
+          if (matchingOurNetworkIds.length > 0) {
             orConditions.push({
-              selectedOurNetwork: {
-                $in: matchingOurNetworks.map((n) => n._id),
-              },
+              selectedOurNetwork: { $in: matchingOurNetworkIds },
             });
           }
-          if (matchingClientNetworks.length > 0) {
+          if (matchingClientNetworkIds.length > 0) {
             orConditions.push({
-              selectedClientNetwork: {
-                $in: matchingClientNetworks.map((n) => n._id),
-              },
+              selectedClientNetwork: { $in: matchingClientNetworkIds },
             });
           }
-          if (matchingClientBrokers.length > 0) {
+          if (matchingClientBrokerIds.length > 0) {
             orConditions.push({
-              selectedClientBrokers: {
-                $in: matchingClientBrokers.map((b) => b._id),
-              },
+              selectedClientBrokers: { $in: matchingClientBrokerIds },
             });
           }
           if (matchingLeads.length > 0) {
@@ -3177,63 +3161,65 @@ exports.getOrders = async (req, res, next) => {
         query.$and = keywordConditions;
       }
 
-      const total = await Order.countDocuments(query);
-      orders = await Order.find(query)
-        .populate("requester", "fullName email role")
-        .populate("requesterHistory.previousRequester", "fullName email")
-        .populate("requesterHistory.newRequester", "fullName email")
-        .populate("requesterHistory.changedBy", "fullName email")
-        .populate("selectedCampaign", "name description")
-        .populate("selectedOurNetwork", "name description")
-        .populate("selectedClientNetwork", "name description")
-        .populate("selectedClientBrokers", "name domain description")
-        .populate({
-          path: "leads",
-          select:
-            "leadType firstName lastName country newEmail oldEmail newPhone oldPhone orderId assignedClientBrokers clientBrokerHistory assignedAgent assignedAgentAt depositConfirmed depositConfirmedBy depositConfirmedAt shaved shavedBy shavedAt shavedRefundsManager shavedManagerAssignedBy shavedManagerAssignedAt",
-          populate: [
-            {
-              path: "assignedAgent",
-              select: "fullName email fourDigitCode",
-            },
-            {
-              path: "comments.author",
-              select: "fullName",
-            },
-            {
-              path: "assignedClientBrokers",
-              select: "name domain description",
-            },
-            {
-              path: "clientBrokerHistory.clientBroker",
-              select: "name domain description",
-            },
-            {
-              path: "depositConfirmedBy",
-              select: "fullName email",
-            },
-            {
-              path: "depositPSP",
-              select: "name website",
-            },
-            {
-              path: "shavedBy",
-              select: "fullName email",
-            },
-            {
-              path: "shavedRefundsManager",
-              select: "fullName email",
-            },
-            {
-              path: "shavedManagerAssignedBy",
-              select: "fullName email",
-            },
-          ],
-        })
-        .populate("removedLeads.removedBy", "fullName email")
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limitNum);
+      const [orders, total] = await Promise.all([
+        Order.find(query)
+          .populate("requester", "fullName email role")
+          .populate("requesterHistory.previousRequester", "fullName email")
+          .populate("requesterHistory.newRequester", "fullName email")
+          .populate("requesterHistory.changedBy", "fullName email")
+          .populate("selectedCampaign", "name description")
+          .populate("selectedOurNetwork", "name description")
+          .populate("selectedClientNetwork", "name description")
+          .populate("selectedClientBrokers", "name domain description")
+          .populate({
+            path: "leads",
+            select:
+              "leadType firstName lastName country newEmail oldEmail newPhone oldPhone orderId assignedClientBrokers clientBrokerHistory assignedAgent assignedAgentAt depositConfirmed depositConfirmedBy depositConfirmedAt shaved shavedBy shavedAt shavedRefundsManager shavedManagerAssignedBy shavedManagerAssignedAt",
+            populate: [
+              {
+                path: "assignedAgent",
+                select: "fullName email fourDigitCode",
+              },
+              {
+                path: "comments.author",
+                select: "fullName",
+              },
+              {
+                path: "assignedClientBrokers",
+                select: "name domain description",
+              },
+              {
+                path: "clientBrokerHistory.clientBroker",
+                select: "name domain description",
+              },
+              {
+                path: "depositConfirmedBy",
+                select: "fullName email",
+              },
+              {
+                path: "depositPSP",
+                select: "name website",
+              },
+              {
+                path: "shavedBy",
+                select: "fullName email",
+              },
+              {
+                path: "shavedRefundsManager",
+                select: "fullName email",
+              },
+              {
+                path: "shavedManagerAssignedBy",
+                select: "fullName email",
+              },
+            ],
+          })
+          .populate("removedLeads.removedBy", "fullName email")
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(limitNum),
+        Order.countDocuments(query),
+      ]);
 
       // Merge leadsMetadata with each order's leads
       const ordersWithMetadata = orders.map((order) =>

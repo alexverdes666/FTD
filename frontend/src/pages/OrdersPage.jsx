@@ -427,7 +427,7 @@ const OrdersPage = () => {
       return () => clearTimeout(timer);
     }
   }, []);
-  const debouncedFilters = useDebounce(filters, 500);
+  const debouncedFilters = useDebounce(filters, 300);
   const [showFilters, setShowFilters] = useState(false);
   const [expandedRowData, setExpandedRowData] = useState({});
   const [refundAssignmentStatus, setRefundAssignmentStatus] = useState({});
