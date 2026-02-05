@@ -1173,21 +1173,13 @@ const PayrollPage = () => {
       }
     }
 
-    // Calculate bonuses from agent bonuses data
-    if (agentBonusesData && agentBonusesData.length > 0) {
-      const agentBonus = agentBonusesData[0];
-      if (agentBonus?.callCounts && agentBonus?.bonusRates) {
-        const callCounts = agentBonus.callCounts;
-        const bonusRates = agentBonus.bonusRates;
-
-        bonuses =
-          (callCounts.firstCalls || 0) * (bonusRates.firstCall || 5) +
-          (callCounts.secondCalls || 0) * (bonusRates.secondCall || 10) +
-          (callCounts.thirdCalls || 0) * (bonusRates.thirdCall || 15) +
-          (callCounts.fourthCalls || 0) * (bonusRates.fourthCall || 20) +
-          (callCounts.fifthCalls || 0) * (bonusRates.fifthCall || 25) +
-          (callCounts.verifiedAccounts || 0) * (bonusRates.verifiedAcc || 50);
-      }
+    // Calculate bonuses from declaration totals (same as Monthly Bonuses card)
+    const declTotal = declarationTotals.find(d => d.agentName === user.fullName);
+    if (declTotal) {
+      bonuses = declTotal.totalBonus || 0;
+    } else if (bonusesStats) {
+      // Fallback to bonusesStats if no declaration totals
+      bonuses = bonusesStats.totalBonus || 0;
     }
 
     // Calculate fines from agent fines data (only approved/admin_approved count as deductions)
@@ -1950,33 +1942,11 @@ const PayrollPage = () => {
                             })()}{" "}
                             + 🎁 Bonuses: $
                             {(() => {
-                              if (
-                                !agentBonusesData ||
-                                agentBonusesData.length === 0
-                              )
-                                return "0.00";
-                              const agentBonus = agentBonusesData[0];
-                              if (
-                                !agentBonus?.callCounts ||
-                                !agentBonus?.bonusRates
-                              )
-                                return "0.00";
-                              const callCounts = agentBonus.callCounts;
-                              const bonusRates = agentBonus.bonusRates;
-                              const total =
-                                (callCounts.firstCalls || 0) *
-                                  (bonusRates.firstCall || 5) +
-                                (callCounts.secondCalls || 0) *
-                                  (bonusRates.secondCall || 10) +
-                                (callCounts.thirdCalls || 0) *
-                                  (bonusRates.thirdCall || 15) +
-                                (callCounts.fourthCalls || 0) *
-                                  (bonusRates.fourthCall || 20) +
-                                (callCounts.fifthCalls || 0) *
-                                  (bonusRates.fifthCall || 25) +
-                                (callCounts.verifiedAccounts || 0) *
-                                  (bonusRates.verifiedAcc || 50);
-                              return total.toFixed(2);
+                              // Use declaration totals (same as Monthly Bonuses card)
+                              const declTotal = declarationTotals.find(d => d.agentName === user.fullName);
+                              if (declTotal) return (declTotal.totalBonus || 0).toFixed(2);
+                              // Fallback to bonusesStats if no declaration totals
+                              return bonusesStats ? bonusesStats.totalBonus.toFixed(2) : "0.00";
                             })()}
                             {(() => {
                               if (
