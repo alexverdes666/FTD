@@ -11,7 +11,6 @@ const agentCallDeclarationSchema = new mongoose.Schema(
     cdrCallId: {
       type: String,
       required: true,
-      unique: true,
     },
     callDate: {
       type: Date,
@@ -136,7 +135,7 @@ agentCallDeclarationSchema.index({ callDate: -1 });
 agentCallDeclarationSchema.index({ agent: 1, status: 1 });
 agentCallDeclarationSchema.index({ agent: 1, declarationYear: 1, declarationMonth: 1 });
 agentCallDeclarationSchema.index({ declarationYear: 1, declarationMonth: 1 });
-agentCallDeclarationSchema.index({ cdrCallId: 1 }, { unique: true });
+agentCallDeclarationSchema.index({ cdrCallId: 1 }, { unique: true, partialFilterExpression: { isActive: true } });
 agentCallDeclarationSchema.index({ affiliateManager: 1 });
 agentCallDeclarationSchema.index({ lead: 1 });
 agentCallDeclarationSchema.index({ affiliateManager: 1, status: 1 });

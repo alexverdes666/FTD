@@ -3106,6 +3106,17 @@ exports.getOrders = async (req, res, next) => {
             { notes: regex },
           ];
 
+          // Search by partial Order ID (hex string match)
+          if (/^[a-f0-9]+$/i.test(keyword)) {
+            const matchingOrders = await Order.find(
+              { $expr: { $regexMatch: { input: { $toString: "$_id" }, regex: keyword, options: "i" } } },
+              { _id: 1 }
+            ).lean();
+            if (matchingOrders.length > 0) {
+              orConditions.push({ _id: { $in: matchingOrders.map(o => o._id) } });
+            }
+          }
+
           if (matchingUserIds.length > 0) {
             orConditions.push({
               requester: { $in: matchingUserIds },

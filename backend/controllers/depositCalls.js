@@ -180,7 +180,14 @@ exports.getDepositCalls = async (req, res, next) => {
             { path: "ourNetworkHistory.ourNetwork", select: "name" },
           ],
         },
-        { path: "orderId", select: "createdAt plannedDate status" },
+        {
+          path: "orderId",
+          select: "createdAt plannedDate status selectedClientNetwork selectedOurNetwork",
+          populate: [
+            { path: "selectedClientNetwork", select: "name" },
+            { path: "selectedOurNetwork", select: "name" },
+          ],
+        },
         { path: "clientBrokerId", select: "name domain" },
         { path: "accountManager", select: "fullName email" },
         { path: "assignedAgent", select: "fullName email" },
@@ -200,7 +207,14 @@ exports.getDepositCalls = async (req, res, next) => {
             { path: "ourNetworkHistory.ourNetwork", select: "name" },
           ],
         })
-        .populate("orderId", "createdAt plannedDate status")
+        .populate({
+          path: "orderId",
+          select: "createdAt plannedDate status selectedClientNetwork selectedOurNetwork",
+          populate: [
+            { path: "selectedClientNetwork", select: "name" },
+            { path: "selectedOurNetwork", select: "name" },
+          ],
+        })
         .populate("clientBrokerId", "name domain")
         .populate("accountManager", "fullName email")
         .populate("assignedAgent", "fullName email")

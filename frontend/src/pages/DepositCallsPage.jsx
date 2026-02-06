@@ -887,7 +887,7 @@ const DepositCallsPage = () => {
                       <TableRow key={dc._id} hover>
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>
                           <Typography fontWeight="medium" sx={{ fontFamily: 'monospace', fontSize: '0.6rem' }}>
-                            {dc.orderId?._id ? `...${dc.orderId._id.toString().slice(-6)}` : '-'}
+                            {dc.orderId?._id ? dc.orderId._id.toString().slice(-8) : '-'}
                           </Typography>
                         </TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>
@@ -899,54 +899,14 @@ const DepositCallsPage = () => {
                           <Typography sx={{ fontSize: '0.55rem' }}>{dc.clientBrokerId?.name || '-'}</Typography>
                         </TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                          <Box sx={{ display: "flex", alignItems: "center", gap: 0.25 }}>
-                            <Typography sx={{ fontSize: '0.55rem' }}>
-                              {(dc.leadId?.clientNetworkHistory || dc.lead?.clientNetworkHistory)?.length > 0
-                                ? (dc.leadId?.clientNetworkHistory || dc.lead?.clientNetworkHistory)[(dc.leadId?.clientNetworkHistory || dc.lead?.clientNetworkHistory).length - 1]?.clientNetwork?.name || "-"
-                                : "-"}
-                            </Typography>
-                            {(dc.leadId?.clientNetworkHistory || dc.lead?.clientNetworkHistory)?.length > 0 && (
-                              <Tooltip title="View all client networks">
-                                <IconButton
-                                  size="small"
-                                  onClick={() =>
-                                    handleOpenClientNetworksDialog(
-                                      dc.leadId?.clientNetworkHistory || dc.lead?.clientNetworkHistory,
-                                      dc.ftdName || `${dc.leadId?.firstName} ${dc.leadId?.lastName}`
-                                    )
-                                  }
-                                  sx={{ p: 0 }}
-                                >
-                                  <ListIcon sx={{ fontSize: 12 }} />
-                                </IconButton>
-                              </Tooltip>
-                            )}
-                          </Box>
+                          <Typography sx={{ fontSize: '0.55rem' }}>
+                            {dc.orderId?.selectedClientNetwork?.name || '-'}
+                          </Typography>
                         </TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                          <Box sx={{ display: "flex", alignItems: "center", gap: 0.25 }}>
-                            <Typography sx={{ fontSize: '0.55rem' }}>
-                              {(dc.leadId?.ourNetworkHistory || dc.lead?.ourNetworkHistory)?.length > 0
-                                ? (dc.leadId?.ourNetworkHistory || dc.lead?.ourNetworkHistory)[(dc.leadId?.ourNetworkHistory || dc.lead?.ourNetworkHistory).length - 1]?.ourNetwork?.name || "-"
-                                : "-"}
-                            </Typography>
-                            {(dc.leadId?.ourNetworkHistory || dc.lead?.ourNetworkHistory)?.length > 0 && (
-                              <Tooltip title="View all our networks">
-                                <IconButton
-                                  size="small"
-                                  onClick={() =>
-                                    handleOpenOurNetworksDialog(
-                                      dc.leadId?.ourNetworkHistory || dc.lead?.ourNetworkHistory,
-                                      dc.ftdName || `${dc.leadId?.firstName} ${dc.leadId?.lastName}`
-                                    )
-                                  }
-                                  sx={{ p: 0 }}
-                                >
-                                  <ListIcon sx={{ fontSize: 12 }} />
-                                </IconButton>
-                              </Tooltip>
-                            )}
-                          </Box>
+                          <Typography sx={{ fontSize: '0.55rem' }}>
+                            {dc.orderId?.selectedOurNetwork?.name || '-'}
+                          </Typography>
                         </TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>
                           <Typography sx={{ fontSize: '0.55rem' }}>{dc.accountManager?.fullName || '-'}</Typography>
