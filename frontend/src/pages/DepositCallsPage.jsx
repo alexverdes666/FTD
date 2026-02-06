@@ -886,7 +886,7 @@ const DepositCallsPage = () => {
                     {depositCalls.map((dc) => (
                       <TableRow key={dc._id} hover>
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                          <Typography variant="caption" fontWeight="medium" sx={{ fontFamily: 'monospace' }}>
+                          <Typography fontWeight="medium" sx={{ fontFamily: 'monospace', fontSize: '0.6rem' }}>
                             {dc.orderId?._id ? `...${dc.orderId._id.toString().slice(-6)}` : '-'}
                           </Typography>
                         </TableCell>
@@ -969,7 +969,7 @@ const DepositCallsPage = () => {
                           </Tooltip>
                         </TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                          <Typography variant="caption">
+                          <Typography sx={{ fontSize: '0.5rem' }}>
                             {formatPhoneWithCountryCode(dc.ftdPhone || dc.leadId?.newPhone, dc.leadId?.country || dc.lead?.country) || '-'}
                           </Typography>
                         </TableCell>
