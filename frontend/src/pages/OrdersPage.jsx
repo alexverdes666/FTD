@@ -47,6 +47,7 @@ import {
   ToggleButton,
   ToggleButtonGroup,
   Divider,
+  Drawer,
   alpha,
   Link,
 } from "@mui/material";
@@ -440,6 +441,8 @@ const OrdersPage = () => {
       startDate: "",
       endDate: "",
       search: urlSearch,
+      createdMonth: "",
+      createdYear: "",
     };
   });
 
@@ -3515,7 +3518,7 @@ const OrdersPage = () => {
     []
   );
   const clearFilters = useCallback(() => {
-    setFilters({ status: "", priority: "", startDate: "", endDate: "" });
+    setFilters({ status: "", priority: "", startDate: "", endDate: "", createdMonth: "", createdYear: "" });
     setPage(0);
   }, []);
 
@@ -4706,114 +4709,158 @@ const OrdersPage = () => {
           </Alert>
         </Collapse>
       )}
-      {/* Search/Filter Toolbar */}
-      <Card sx={{ mb: 3, boxShadow: "none", border: 1, borderColor: "divider" }}>
-        <CardContent
-          sx={{
-            p: isSmallScreen ? 1.5 : 2,
-            "&:last-child": { pb: isSmallScreen ? 1.5 : 2 },
-          }}
+      {/* Sidebar Toggle */}
+      <Box sx={{ display: "flex", justifyContent: "flex-end", mb: 0.5, flexShrink: 0 }}>
+        <IconButton
+          onClick={() => setShowFilters(true)}
+          size="small"
+          sx={{ bgcolor: showFilters ? "primary.main" : "grey.100", color: showFilters ? "#fff" : "text.secondary", "&:hover": { bgcolor: showFilters ? "primary.dark" : "grey.200" }, width: 28, height: 28 }}
         >
-          <Box display="flex" alignItems="center" gap={1.5} flexWrap="wrap">
-            <TextField
-              placeholder="Search orders..."
-              value={filters.search}
-              onChange={handleFilterChange("search")}
-              size="small"
-              sx={{
-                minWidth: 300,
-                maxWidth: 500,
-                flex: 1,
-                "& .MuiOutlinedInput-root": {
-                  borderRadius: 2,
-                  bgcolor: "grey.50",
-                  "&:hover": { bgcolor: "grey.100" },
-                  "&.Mui-focused": {
-                    bgcolor: "background.paper",
-                    boxShadow: (theme) => `0 0 0 2px ${alpha(theme.palette.primary.main, 0.2)}`,
-                  },
+          <FilterListIcon sx={{ fontSize: 16 }} />
+        </IconButton>
+      </Box>
+      {/* Sidebar Drawer */}
+      <Drawer
+        anchor="right"
+        open={showFilters}
+        onClose={() => setShowFilters(false)}
+        variant="temporary"
+        PaperProps={{
+          sx: { width: 340, p: 0 },
+        }}
+      >
+        <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", px: 2.5, py: 1.5, borderBottom: 1, borderColor: "divider" }}>
+          <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+            Orders Panel
+          </Typography>
+          <IconButton size="small" onClick={() => setShowFilters(false)}>
+            <CloseIcon fontSize="small" />
+          </IconButton>
+        </Box>
+        <Box sx={{ p: 2.5, display: "flex", flexDirection: "column", gap: 2.5, overflow: "auto", flex: 1 }}>
+          {/* Search */}
+          <TextField
+            fullWidth
+            placeholder="Search orders..."
+            value={filters.search}
+            onChange={handleFilterChange("search")}
+            size="small"
+            sx={{
+              "& .MuiOutlinedInput-root": {
+                borderRadius: 2,
+                bgcolor: "grey.50",
+                "&:hover": { bgcolor: "grey.100" },
+                "&.Mui-focused": {
+                  bgcolor: "background.paper",
+                  boxShadow: (theme) => `0 0 0 2px ${alpha(theme.palette.primary.main, 0.2)}`,
                 },
-              }}
-              InputProps={{
-                startAdornment: (
-                  <SearchIcon sx={{ color: "action.active", mr: 1, fontSize: 20 }} />
-                ),
-              }}
-            />
-            {(user?.role === "admin" || user?.role === "affiliate_manager") && (
-              <Box sx={{ display: "flex", gap: 1, flexDirection: isSmallScreen ? "column" : "row" }}>
-                <Button
-                  variant="contained"
-                  startIcon={<AddIcon />}
-                  onClick={handleOpenCreateDialog}
-                  size={isSmallScreen ? "small" : "medium"}
-                  sx={{ boxShadow: "0 1px 3px rgba(0,0,0,0.12)" }}
-                >
-                  Create Order
-                </Button>
-                {user?.role === "admin" && (
-                  <Button
-                    variant="outlined"
-                    startIcon={<BusinessIcon />}
-                    onClick={handleManageBrokers}
-                    size={isSmallScreen ? "small" : "medium"}
-                  >
-                    Manage Brokers
-                  </Button>
-                )}
-              </Box>
-            )}
-            <Button
-              variant={showFilters ? "contained" : "outlined"}
-              startIcon={<FilterListIcon />}
-              onClick={() => setShowFilters(!showFilters)}
-              size="small"
-              sx={{ textTransform: "none", borderRadius: 2 }}
-            >
-              Filters
-            </Button>
-            <Tooltip title="Configure copy format for leads">
-              <IconButton
-                onClick={() => setCopyPreferencesOpen(true)}
-                sx={{ border: 1, borderColor: "divider", borderRadius: 1.5 }}
-              >
-                <SettingsIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-          </Box>
-          {showFilters && (
+              },
+            }}
+            InputProps={{
+              startAdornment: (
+                <SearchIcon sx={{ color: "action.active", mr: 1, fontSize: 20 }} />
+              ),
+            }}
+          />
+          {/* Actions */}
+          {(user?.role === "admin" || user?.role === "affiliate_manager") && (
             <>
-              <Divider sx={{ my: 2 }} />
-              <Grid container spacing={2}>
-                <Grid item xs={12} sm={6} md={4}>
-                  <TextField
-                    fullWidth
-                    label="Planned Date (From)"
-                    type="date"
-                    value={filters.startDate}
-                    onChange={handleFilterChange("startDate")}
-                    InputLabelProps={{ shrink: true }}
-                    size="small"
-                    sx={{ "& .MuiOutlinedInput-root": { borderRadius: 2 } }}
-                  />
-                </Grid>
-                <Grid item xs={12} sm={6} md={4}>
-                  <TextField
-                    fullWidth
-                    label="Planned Date (To)"
-                    type="date"
-                    value={filters.endDate}
-                    onChange={handleFilterChange("endDate")}
-                    InputLabelProps={{ shrink: true }}
-                    size="small"
-                    sx={{ "& .MuiOutlinedInput-root": { borderRadius: 2 } }}
-                  />
-                </Grid>
-              </Grid>
+              <Divider />
+              <Typography variant="caption" sx={{ fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px", color: "text.secondary" }}>
+                Actions
+              </Typography>
+              <Button
+                fullWidth
+                variant="contained"
+                startIcon={<AddIcon />}
+                onClick={handleOpenCreateDialog}
+                sx={{ boxShadow: "0 1px 3px rgba(0,0,0,0.12)" }}
+              >
+                Create Order
+              </Button>
+              {user?.role === "admin" && (
+                <Button
+                  fullWidth
+                  variant="outlined"
+                  startIcon={<BusinessIcon />}
+                  onClick={handleManageBrokers}
+                >
+                  Manage Brokers
+                </Button>
+              )}
             </>
           )}
-        </CardContent>
-      </Card>
+          {/* Created Month/Year Filter */}
+          <Divider />
+          <Typography variant="caption" sx={{ fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px", color: "text.secondary" }}>
+            Created Date
+          </Typography>
+          <Box sx={{ display: "flex", gap: 1.5 }}>
+            <FormControl size="small" sx={{ flex: 1, "& .MuiOutlinedInput-root": { borderRadius: 2 } }}>
+              <InputLabel>Month</InputLabel>
+              <Select
+                value={filters.createdMonth}
+                label="Month"
+                onChange={handleFilterChange("createdMonth")}
+              >
+                <MenuItem value="">All</MenuItem>
+                {["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"].map((m, i) => (
+                  <MenuItem key={i + 1} value={String(i + 1)}>{m}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <FormControl size="small" sx={{ width: 100, "& .MuiOutlinedInput-root": { borderRadius: 2 } }}>
+              <InputLabel>Year</InputLabel>
+              <Select
+                value={filters.createdYear}
+                label="Year"
+                onChange={handleFilterChange("createdYear")}
+              >
+                <MenuItem value="">All</MenuItem>
+                {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i).map((y) => (
+                  <MenuItem key={y} value={String(y)}>{y}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Box>
+          {/* Planned Date Filters */}
+          <Divider />
+          <Typography variant="caption" sx={{ fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px", color: "text.secondary" }}>
+            Planned Date
+          </Typography>
+          <TextField
+            fullWidth
+            label="From"
+            type="date"
+            value={filters.startDate}
+            onChange={handleFilterChange("startDate")}
+            InputLabelProps={{ shrink: true }}
+            size="small"
+            sx={{ "& .MuiOutlinedInput-root": { borderRadius: 2 } }}
+          />
+          <TextField
+            fullWidth
+            label="To"
+            type="date"
+            value={filters.endDate}
+            onChange={handleFilterChange("endDate")}
+            InputLabelProps={{ shrink: true }}
+            size="small"
+            sx={{ "& .MuiOutlinedInput-root": { borderRadius: 2 } }}
+          />
+          {/* Settings */}
+          <Divider />
+          <Button
+            fullWidth
+            variant="outlined"
+            startIcon={<SettingsIcon />}
+            onClick={() => { setCopyPreferencesOpen(true); setShowFilters(false); }}
+            sx={{ textTransform: "none" }}
+          >
+            Copy Format Settings
+          </Button>
+        </Box>
+      </Drawer>
       {}
       <Paper sx={{ position: "relative", borderRadius: 2, border: 1, borderColor: "divider", boxShadow: "0 1px 3px rgba(0,0,0,0.08)", overflow: "hidden", flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
         {searching && (
@@ -4844,11 +4891,12 @@ const OrdersPage = () => {
               background: "linear-gradient(135deg, #1e293b 0%, #334155 100%)",
               color: "#fff",
               fontWeight: 700,
-              fontSize: "0.75rem",
+              fontSize: "0.7rem",
               textTransform: "uppercase",
               letterSpacing: "0.5px",
               borderBottom: "2px solid #3b82f6",
-              py: 1.5,
+              py: 0.75,
+              lineHeight: 1.2,
             },
             "& .MuiTableBody-root .MuiTableRow-root:nth-of-type(even)": {
               bgcolor: (theme) => alpha(theme.palette.grey[500], 0.02),

@@ -3048,7 +3048,7 @@ exports.getOrders = async (req, res, next) => {
         errors: errors.array(),
       });
     }
-    const { page = 1, limit = 10, startDate, endDate, search } = req.query;
+    const { page = 1, limit = 10, startDate, endDate, search, createdMonth, createdYear } = req.query;
     let query = {};
     // Admin and lead_manager can see all orders; others see only their own
     if (req.user.role !== "admin" && req.user.role !== "lead_manager") {
@@ -3059,6 +3059,19 @@ exports.getOrders = async (req, res, next) => {
       if (startDate) query.plannedDate.$gte = new Date(startDate);
       if (endDate)
         query.plannedDate.$lte = new Date(endDate + "T23:59:59.999Z");
+    }
+    if (createdMonth || createdYear) {
+      const year = createdYear ? parseInt(createdYear) : new Date().getFullYear();
+      if (createdMonth) {
+        const month = parseInt(createdMonth) - 1;
+        const from = new Date(year, month, 1);
+        const to = new Date(year, month + 1, 0, 23, 59, 59, 999);
+        query.createdAt = { $gte: from, $lte: to };
+      } else {
+        const from = new Date(year, 0, 1);
+        const to = new Date(year, 11, 31, 23, 59, 59, 999);
+        query.createdAt = { $gte: from, $lte: to };
+      }
     }
 
     // Handle search - we'll need to do a more complex query if search is present
