@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useSelector } from 'react-redux';
 import {
   Box,
-  Container,
   Typography,
   Paper,
   Table,
@@ -27,6 +26,7 @@ import {
   CardContent,
   CircularProgress,
   Alert,
+  Collapse,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -43,16 +43,16 @@ import {
   Verified as VerifiedIcon,
   CalendarMonth as CalendarIcon,
   TableChart as TableIcon,
-  CheckCircle as ApproveIcon,
   Cancel as RejectIcon,
   Schedule as ScheduleIcon,
-  Done as DoneIcon,
   ChevronLeft as ChevronLeftIcon,
   ChevronRight as ChevronRightIcon,
   Phone as PhoneIcon,
   Email as EmailIcon,
   Person as PersonIcon,
-  FormatListBulleted as ListIcon
+  FormatListBulleted as ListIcon,
+  FilterList as FilterListIcon,
+  ExpandMore as ExpandMoreIcon
 } from '@mui/icons-material';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -87,6 +87,24 @@ const formatDateTime = (date) => {
   });
 };
 
+// Format relative time (e.g. 5m, 2h, 3d, 1mo, 2y)
+const formatRelativeTime = (date) => {
+  if (!date) return '-';
+  const now = new Date();
+  const diff = now - new Date(date);
+  const minutes = Math.floor(diff / 60000);
+  if (minutes < 1) return 'now';
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months}mo`;
+  const years = Math.floor(months / 12);
+  return `${years}y`;
+};
+
 // Call Cell Component
 const CallCell = ({ call, callNumber, depositCall, onSchedule, onMarkDone, onApprove, onReject, onMarkAnswered, onMarkRejected, isAdmin, isAM, isAgent }) => {
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -114,8 +132,8 @@ const CallCell = ({ call, callNumber, depositCall, onSchedule, onMarkDone, onApp
   const canApprove = (isAM || isAdmin) && call?.status === 'pending_approval';
 
   return (
-    <TableCell sx={{ minWidth: 120, p: 1 }}>
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+    <TableCell sx={{ p: '2px 4px' }}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: '2px', alignItems: 'center', minWidth: 48 }}>
         {call?.status === 'pending' ? (
           <Button
             size="small"
@@ -123,13 +141,13 @@ const CallCell = ({ call, callNumber, depositCall, onSchedule, onMarkDone, onApp
             color="primary"
             onClick={() => setDialogOpen(true)}
             disabled={!canSchedule}
-            sx={{ fontSize: '0.7rem', py: 0.25 }}
+            sx={{ fontSize: '0.55rem', py: 0, px: 0.5, minWidth: 'auto', lineHeight: 1.4 }}
           >
             Schedule
           </Button>
         ) : call?.status === 'scheduled' ? (
           <>
-            <Typography variant="caption" color="info.main" fontWeight="bold">
+            <Typography sx={{ fontSize: '0.55rem', lineHeight: 1.2, color: 'info.main', fontWeight: 'bold' }}>
               {formatDateTime(call.expectedDate)}
             </Typography>
             {canMarkDone && (
@@ -138,8 +156,7 @@ const CallCell = ({ call, callNumber, depositCall, onSchedule, onMarkDone, onApp
                 variant="contained"
                 color="success"
                 onClick={() => setDialogOpen(true)}
-                sx={{ fontSize: '0.65rem', py: 0.25 }}
-                startIcon={<DoneIcon sx={{ fontSize: 12 }} />}
+                sx={{ fontSize: '0.55rem', py: 0, px: 0.5, minWidth: 'auto', lineHeight: 1.4 }}
               >
                 Done
               </Button>
@@ -147,41 +164,38 @@ const CallCell = ({ call, callNumber, depositCall, onSchedule, onMarkDone, onApp
           </>
         ) : call?.status === 'pending_approval' ? (
           <>
-            <Typography variant="caption" color="warning.main" fontWeight="bold">
-              Done: {formatDateTime(call.doneDate)}
-            </Typography>
-            <Chip label="Pending Approval" size="small" color="warning" sx={{ fontSize: '0.65rem' }} />
+            <Chip label="Pending" size="small" color="warning" sx={{ fontSize: '0.5rem', height: 15, '& .MuiChip-label': { px: 0.5 } }} />
             {canApprove && (
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, mt: 0.5 }}>
+              <Box sx={{ display: 'flex', gap: '2px' }}>
                 <Tooltip title="Mark as Answered">
                   <Button
                     size="small"
                     variant="contained"
                     color="success"
                     onClick={() => onMarkAnswered(depositCall._id, callNumber)}
-                    sx={{ fontSize: '0.6rem', py: 0.25, minWidth: 'auto' }}
+                    sx={{ fontSize: '0.5rem', py: 0, px: '3px', minWidth: 'auto', lineHeight: 1.4 }}
                   >
-                    Answered
+                    OK
                   </Button>
                 </Tooltip>
-                <Tooltip title="Mark as Rejected (FTD declined)">
+                <Tooltip title="Mark as Rejected">
                   <Button
                     size="small"
                     variant="contained"
                     color="error"
                     onClick={() => onMarkRejected(depositCall._id, callNumber)}
-                    sx={{ fontSize: '0.6rem', py: 0.25, minWidth: 'auto' }}
+                    sx={{ fontSize: '0.5rem', py: 0, px: '3px', minWidth: 'auto', lineHeight: 1.4 }}
                   >
-                    Rejected
+                    Rej
                   </Button>
                 </Tooltip>
-                <Tooltip title="Return to scheduled (retry)">
+                <Tooltip title="Retry">
                   <Button
                     size="small"
                     variant="outlined"
                     color="warning"
                     onClick={() => onReject(depositCall._id, callNumber)}
-                    sx={{ fontSize: '0.6rem', py: 0.25, minWidth: 'auto' }}
+                    sx={{ fontSize: '0.5rem', py: 0, px: '3px', minWidth: 'auto', lineHeight: 1.4 }}
                   >
                     Retry
                   </Button>
@@ -190,28 +204,13 @@ const CallCell = ({ call, callNumber, depositCall, onSchedule, onMarkDone, onApp
             )}
           </>
         ) : call?.status === 'answered' ? (
-          <>
-            <Typography variant="caption" color="success.main" fontWeight="bold">
-              ✓ {formatDateTime(call.doneDate)}
-            </Typography>
-            <Chip label="Answered" size="small" color="success" sx={{ fontSize: '0.65rem' }} />
-          </>
+          <Chip label="Answered" size="small" color="success" sx={{ fontSize: '0.5rem', height: 15, '& .MuiChip-label': { px: 0.5 } }} />
         ) : call?.status === 'rejected' ? (
-          <>
-            <Typography variant="caption" color="error.main" fontWeight="bold">
-              ✗ {formatDateTime(call.doneDate)}
-            </Typography>
-            <Chip label="Rejected" size="small" color="error" sx={{ fontSize: '0.65rem' }} />
-          </>
+          <Chip label="Rejected" size="small" color="error" sx={{ fontSize: '0.5rem', height: 15, '& .MuiChip-label': { px: 0.5 } }} />
         ) : call?.status === 'completed' ? (
-          <>
-            <Typography variant="caption" color="success.main" fontWeight="bold">
-              ✓ {formatDateTime(call.doneDate)}
-            </Typography>
-            <Chip label="Approved" size="small" color="success" sx={{ fontSize: '0.65rem' }} />
-          </>
+          <Chip label="Approved" size="small" color="success" sx={{ fontSize: '0.5rem', height: 15, '& .MuiChip-label': { px: 0.5 } }} />
         ) : (
-          <Typography variant="caption" color="text.secondary">-</Typography>
+          <Typography sx={{ fontSize: '0.55rem', color: 'text.secondary' }}>-</Typography>
         )}
       </Box>
 
@@ -275,12 +274,14 @@ const DepositCallsPage = () => {
   const [error, setError] = useState(null);
   
   // Filters
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [selectedAM, setSelectedAM] = useState('');
   const [selectedAgent, setSelectedAgent] = useState('');
   const [selectedBroker, setSelectedBroker] = useState('');
   const [selectedClientNetwork, setSelectedClientNetwork] = useState('');
   const [selectedOurNetwork, setSelectedOurNetwork] = useState('');
+  const [selectedMonth, setSelectedMonth] = useState('');
   const [status, setStatus] = useState('active');
   
   // Pagination
@@ -380,6 +381,11 @@ const DepositCallsPage = () => {
       if (selectedBroker) params.clientBrokerId = selectedBroker;
       if (selectedClientNetwork) params.clientNetwork = selectedClientNetwork;
       if (selectedOurNetwork) params.ourNetwork = selectedOurNetwork;
+      if (selectedMonth) {
+        const [year, month] = selectedMonth.split('-').map(Number);
+        params.startDate = new Date(year, month - 1, 1).toISOString();
+        params.endDate = new Date(year, month, 0, 23, 59, 59, 999).toISOString();
+      }
 
       const response = await depositCallsService.getDepositCalls(params);
 
@@ -392,7 +398,7 @@ const DepositCallsPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [page, rowsPerPage, search, selectedAM, selectedAgent, selectedBroker, selectedClientNetwork, selectedOurNetwork, status]);
+  }, [page, rowsPerPage, search, selectedAM, selectedAgent, selectedBroker, selectedClientNetwork, selectedOurNetwork, selectedMonth, status]);
 
   // Fetch calendar events
   const fetchCalendarEvents = useCallback(async () => {
@@ -665,132 +671,37 @@ const DepositCallsPage = () => {
         </Tabs>
       </Paper>
 
-      {/* Filters */}
-      <Paper sx={{ p: 2, mb: 2 }}>
-        <Grid container spacing={2} alignItems="center">
-          <Grid item xs={12} sm={6} md={3}>
-            <TextField
-              fullWidth
-              size="small"
-              placeholder="Search by name, email, phone..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <SearchIcon fontSize="small" />
-                  </InputAdornment>
-                ),
-              }}
-            />
-          </Grid>
-
-          {(isAdmin || isAM) && (
-            <>
-              {isAdmin && (
-                <Grid item xs={12} sm={6} md={2}>
-                  <FormControl fullWidth size="small">
-                    <InputLabel>Account Manager</InputLabel>
-                    <Select
-                      value={selectedAM}
-                      onChange={(e) => setSelectedAM(e.target.value)}
-                      label="Account Manager"
-                    >
-                      <MenuItem value="">All AMs</MenuItem>
-                      {accountManagers.map(am => (
-                        <MenuItem key={am._id} value={am._id}>{am.fullName}</MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                </Grid>
-              )}
-
-              <Grid item xs={12} sm={6} md={2}>
-                <FormControl fullWidth size="small">
-                  <InputLabel>Agent</InputLabel>
-                  <Select
-                    value={selectedAgent}
-                    onChange={(e) => setSelectedAgent(e.target.value)}
-                    label="Agent"
-                  >
-                    <MenuItem value="">All Agents</MenuItem>
-                    {agents.map(agent => (
-                      <MenuItem key={agent._id} value={agent._id}>{agent.fullName}</MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
-
-              <Grid item xs={12} sm={6} md={2}>
-                <FormControl fullWidth size="small">
-                  <InputLabel>Client Broker</InputLabel>
-                  <Select
-                    value={selectedBroker}
-                    onChange={(e) => setSelectedBroker(e.target.value)}
-                    label="Client Broker"
-                  >
-                    <MenuItem value="">All Brokers</MenuItem>
-                    {brokers.map(broker => (
-                      <MenuItem key={broker._id} value={broker._id}>{broker.name}</MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
-
-              <Grid item xs={12} sm={6} md={2}>
-                <FormControl fullWidth size="small">
-                  <InputLabel>Client Network</InputLabel>
-                  <Select
-                    value={selectedClientNetwork}
-                    onChange={(e) => setSelectedClientNetwork(e.target.value)}
-                    label="Client Network"
-                  >
-                    <MenuItem value="">All Client Networks</MenuItem>
-                    {clientNetworks.map(network => (
-                      <MenuItem key={network._id} value={network._id}>{network.name}</MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
-
-              <Grid item xs={12} sm={6} md={2}>
-                <FormControl fullWidth size="small">
-                  <InputLabel>Our Network</InputLabel>
-                  <Select
-                    value={selectedOurNetwork}
-                    onChange={(e) => setSelectedOurNetwork(e.target.value)}
-                    label="Our Network"
-                  >
-                    <MenuItem value="">All Our Networks</MenuItem>
-                    {ourNetworks.map(network => (
-                      <MenuItem key={network._id} value={network._id}>{network.name}</MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
-            </>
-          )}
-
-          <Grid item xs={12} sm={6} md={2}>
-            <FormControl fullWidth size="small">
-              <InputLabel>Status</InputLabel>
-              <Select
-                value={status}
-                onChange={(e) => setStatus(e.target.value)}
-                label="Status"
-              >
-                <MenuItem value="active">Active</MenuItem>
-                <MenuItem value="completed">Completed</MenuItem>
-                <MenuItem value="">All</MenuItem>
-              </Select>
-            </FormControl>
-          </Grid>
-
-          <Grid item xs="auto" sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 1 }}>
+      {/* Toolbar & Collapsible Filters */}
+      <Paper sx={{ mb: 2 }}>
+        <Box sx={{ px: 2, py: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Button
+            size="small"
+            startIcon={<FilterListIcon />}
+            endIcon={<ExpandMoreIcon sx={{ transform: filtersOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: '0.2s' }} />}
+            onClick={() => setFiltersOpen(!filtersOpen)}
+            variant={filtersOpen ? 'contained' : 'outlined'}
+          >
+            Filters
+          </Button>
+          <TextField
+            size="small"
+            placeholder="Search..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon fontSize="small" />
+                </InputAdornment>
+              ),
+            }}
+            sx={{ width: 220 }}
+          />
+          <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 1 }}>
             {(isAdmin || isAM) && pendingCount > 0 && (
               <Chip
                 icon={<ScheduleIcon />}
-                label={`${pendingCount} Pending Approval${pendingCount !== 1 ? 's' : ''}`}
+                label={`${pendingCount} Pending`}
                 color="warning"
                 variant="filled"
                 size="small"
@@ -798,23 +709,142 @@ const DepositCallsPage = () => {
             )}
             {isAdmin && (
               <Tooltip title="Sync confirmed deposits from orders">
-                <IconButton onClick={handleSyncConfirmedDeposits} color="secondary">
+                <IconButton onClick={handleSyncConfirmedDeposits} color="secondary" size="small">
                   <SyncIcon />
                 </IconButton>
               </Tooltip>
             )}
             <Tooltip title="Refresh">
-              <IconButton onClick={() => { fetchDepositCalls(); if (tabValue === 1) fetchCalendarEvents(); }} color="primary">
+              <IconButton onClick={() => { fetchDepositCalls(); if (tabValue === 1) fetchCalendarEvents(); }} color="primary" size="small">
                 <RefreshIcon />
               </IconButton>
             </Tooltip>
-          </Grid>
-        </Grid>
+          </Box>
+        </Box>
+        <Collapse in={filtersOpen}>
+          <Divider />
+          <Box sx={{ px: 2, py: 1.5 }}>
+            <Grid container spacing={1.5} alignItems="center">
+              {(isAdmin || isAM) && (
+                <>
+                  {isAdmin && (
+                    <Grid item xs={6} sm={4} md={2}>
+                      <FormControl fullWidth size="small">
+                        <InputLabel>Account Manager</InputLabel>
+                        <Select
+                          value={selectedAM}
+                          onChange={(e) => setSelectedAM(e.target.value)}
+                          label="Account Manager"
+                        >
+                          <MenuItem value="">All AMs</MenuItem>
+                          {accountManagers.map(am => (
+                            <MenuItem key={am._id} value={am._id}>{am.fullName}</MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
+                    </Grid>
+                  )}
+
+                  <Grid item xs={6} sm={4} md={2}>
+                    <FormControl fullWidth size="small">
+                      <InputLabel>Agent</InputLabel>
+                      <Select
+                        value={selectedAgent}
+                        onChange={(e) => setSelectedAgent(e.target.value)}
+                        label="Agent"
+                      >
+                        <MenuItem value="">All Agents</MenuItem>
+                        {agents.map(agent => (
+                          <MenuItem key={agent._id} value={agent._id}>{agent.fullName}</MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+
+                  <Grid item xs={6} sm={4} md={2}>
+                    <FormControl fullWidth size="small">
+                      <InputLabel>Client Broker</InputLabel>
+                      <Select
+                        value={selectedBroker}
+                        onChange={(e) => setSelectedBroker(e.target.value)}
+                        label="Client Broker"
+                      >
+                        <MenuItem value="">All Brokers</MenuItem>
+                        {brokers.map(broker => (
+                          <MenuItem key={broker._id} value={broker._id}>{broker.name}</MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+
+                  <Grid item xs={6} sm={4} md={2}>
+                    <FormControl fullWidth size="small">
+                      <InputLabel>Client Network</InputLabel>
+                      <Select
+                        value={selectedClientNetwork}
+                        onChange={(e) => setSelectedClientNetwork(e.target.value)}
+                        label="Client Network"
+                      >
+                        <MenuItem value="">All Client Networks</MenuItem>
+                        {clientNetworks.map(network => (
+                          <MenuItem key={network._id} value={network._id}>{network.name}</MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+
+                  <Grid item xs={6} sm={4} md={2}>
+                    <FormControl fullWidth size="small">
+                      <InputLabel>Our Network</InputLabel>
+                      <Select
+                        value={selectedOurNetwork}
+                        onChange={(e) => setSelectedOurNetwork(e.target.value)}
+                        label="Our Network"
+                      >
+                        <MenuItem value="">All Our Networks</MenuItem>
+                        {ourNetworks.map(network => (
+                          <MenuItem key={network._id} value={network._id}>{network.name}</MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                </>
+              )}
+
+              <Grid item xs={6} sm={4} md={2}>
+                <TextField
+                  fullWidth
+                  size="small"
+                  type="month"
+                  label="Month"
+                  value={selectedMonth}
+                  onChange={(e) => setSelectedMonth(e.target.value)}
+                  InputLabelProps={{ shrink: true }}
+                />
+              </Grid>
+
+              <Grid item xs={6} sm={4} md={2}>
+                <FormControl fullWidth size="small">
+                  <InputLabel>Status</InputLabel>
+                  <Select
+                    value={status}
+                    onChange={(e) => setStatus(e.target.value)}
+                    label="Status"
+                  >
+                    <MenuItem value="active">Active</MenuItem>
+                    <MenuItem value="completed">Completed</MenuItem>
+                    <MenuItem value="">All</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+            </Grid>
+          </Box>
+        </Collapse>
       </Paper>
 
       {/* Table View */}
       {tabValue === 0 && (
-        <Paper sx={{ width: '100%', overflow: 'hidden' }}>
+        <Paper sx={{ width: '100%', overflow: 'auto' }}>
           {loading ? (
             <Box display="flex" justifyContent="center" alignItems="center" minHeight={400}>
               <CircularProgress />
@@ -830,21 +860,33 @@ const DepositCallsPage = () => {
             </Box>
           ) : (
             <>
-              <TableContainer sx={{ maxHeight: 'calc(100vh - 400px)' }}>
-                <Table stickyHeader size="small">
+              <TableContainer sx={{ maxHeight: 'calc(100vh - 300px)' }}>
+                <Table stickyHeader size="small" sx={{
+                  borderCollapse: 'collapse',
+                  '& .MuiTableCell-root': {
+                    px: 0.5,
+                    py: 0.25,
+                    fontSize: '0.65rem',
+                    lineHeight: 1.3,
+                    border: '1px solid',
+                    borderColor: 'grey.300',
+                  },
+                }}>
                   <TableHead>
                     <TableRow>
-                      <TableCell sx={{ minWidth: 120, fontWeight: 'bold', bgcolor: 'grey.100' }}>Client Broker</TableCell>
-                      <TableCell sx={{ minWidth: 120, fontWeight: 'bold', bgcolor: 'grey.100' }}>Client Network</TableCell>
-                      <TableCell sx={{ minWidth: 120, fontWeight: 'bold', bgcolor: 'grey.100' }}>Our Network</TableCell>
-                      <TableCell sx={{ minWidth: 120, fontWeight: 'bold', bgcolor: 'grey.100' }}>Account Manager</TableCell>
-                      <TableCell sx={{ minWidth: 140, fontWeight: 'bold', bgcolor: 'grey.100' }}>FTD Name</TableCell>
-                      <TableCell sx={{ minWidth: 160, fontWeight: 'bold', bgcolor: 'grey.100' }}>FTD Email</TableCell>
-                      <TableCell sx={{ minWidth: 120, fontWeight: 'bold', bgcolor: 'grey.100' }}>FTD Phone</TableCell>
-                      <TableCell sx={{ minWidth: 100, fontWeight: 'bold', bgcolor: 'grey.100', textAlign: 'center' }}>Deposit</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', fontSize: '0.6rem' }}>Order</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', fontSize: '0.6rem' }}>Age</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', fontSize: '0.6rem' }}>Broker</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', fontSize: '0.6rem' }}>Client Net</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', fontSize: '0.6rem' }}>Our Net</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', fontSize: '0.6rem' }}>AM</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', fontSize: '0.6rem' }}>FTD Name</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', fontSize: '0.6rem' }}>Email</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', fontSize: '0.6rem' }}>Phone</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', textAlign: 'center', fontSize: '0.6rem' }}>Dep.</TableCell>
                       {[1,2,3,4,5,6,7,8,9,10].map(num => (
-                        <TableCell key={num} sx={{ minWidth: 100, fontWeight: 'bold', bgcolor: 'grey.100', textAlign: 'center' }}>
-                          Call {num}
+                        <TableCell key={num} sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', textAlign: 'center', fontSize: '0.6rem' }}>
+                          C{num}
                         </TableCell>
                       ))}
                     </TableRow>
@@ -852,14 +894,24 @@ const DepositCallsPage = () => {
                   <TableBody>
                     {depositCalls.map((dc) => (
                       <TableRow key={dc._id} hover>
-                        <TableCell>
-                          <Typography variant="body2" fontWeight="medium">
-                            {dc.clientBrokerId?.name || '-'}
+                        <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                          <Typography variant="caption" fontWeight="medium" sx={{ fontFamily: 'monospace' }}>
+                            {dc.orderId?._id ? `...${dc.orderId._id.toString().slice(-6)}` : '-'}
                           </Typography>
                         </TableCell>
-                        <TableCell>
-                          <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-                            <Typography variant="body2" sx={{ whiteSpace: "nowrap", fontSize: "0.75rem" }}>
+                        <TableCell sx={{ whiteSpace: 'nowrap', textAlign: 'center' }}>
+                          <Tooltip title={dc.createdAt ? new Date(dc.createdAt).toLocaleString() : '-'}>
+                            <Typography sx={{ fontSize: '0.6rem', color: 'text.secondary' }}>
+                              {formatRelativeTime(dc.createdAt)}
+                            </Typography>
+                          </Tooltip>
+                        </TableCell>
+                        <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                          <Typography variant="caption">{dc.clientBrokerId?.name || '-'}</Typography>
+                        </TableCell>
+                        <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                          <Box sx={{ display: "flex", alignItems: "center", gap: 0.25 }}>
+                            <Typography variant="caption">
                               {(dc.leadId?.clientNetworkHistory || dc.lead?.clientNetworkHistory)?.length > 0
                                 ? (dc.leadId?.clientNetworkHistory || dc.lead?.clientNetworkHistory)[(dc.leadId?.clientNetworkHistory || dc.lead?.clientNetworkHistory).length - 1]?.clientNetwork?.name || "-"
                                 : "-"}
@@ -874,17 +926,17 @@ const DepositCallsPage = () => {
                                       dc.ftdName || `${dc.leadId?.firstName} ${dc.leadId?.lastName}`
                                     )
                                   }
-                                  sx={{ p: 0.25 }}
+                                  sx={{ p: 0 }}
                                 >
-                                  <ListIcon sx={{ fontSize: 16 }} />
+                                  <ListIcon sx={{ fontSize: 12 }} />
                                 </IconButton>
                               </Tooltip>
                             )}
                           </Box>
                         </TableCell>
-                        <TableCell>
-                          <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-                            <Typography variant="body2" sx={{ whiteSpace: "nowrap", fontSize: "0.75rem" }}>
+                        <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                          <Box sx={{ display: "flex", alignItems: "center", gap: 0.25 }}>
+                            <Typography variant="caption">
                               {(dc.leadId?.ourNetworkHistory || dc.lead?.ourNetworkHistory)?.length > 0
                                 ? (dc.leadId?.ourNetworkHistory || dc.lead?.ourNetworkHistory)[(dc.leadId?.ourNetworkHistory || dc.lead?.ourNetworkHistory).length - 1]?.ourNetwork?.name || "-"
                                 : "-"}
@@ -899,61 +951,46 @@ const DepositCallsPage = () => {
                                       dc.ftdName || `${dc.leadId?.firstName} ${dc.leadId?.lastName}`
                                     )
                                   }
-                                  sx={{ p: 0.25 }}
+                                  sx={{ p: 0 }}
                                 >
-                                  <ListIcon sx={{ fontSize: 16 }} />
+                                  <ListIcon sx={{ fontSize: 12 }} />
                                 </IconButton>
                               </Tooltip>
                             )}
                           </Box>
                         </TableCell>
-                        <TableCell>
-                          <Box display="flex" alignItems="center" gap={0.5}>
-                            <PersonIcon fontSize="small" color="action" />
-                            <Typography variant="body2">
-                              {dc.accountManager?.fullName || '-'}
-                            </Typography>
-                          </Box>
+                        <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                          <Typography variant="caption">{dc.accountManager?.fullName || '-'}</Typography>
                         </TableCell>
-                        <TableCell>
-                          <Typography variant="body2" fontWeight="medium">
+                        <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                          <Typography sx={{ fontSize: '0.6rem', fontWeight: 500 }}>
                             {dc.ftdName || `${dc.leadId?.firstName} ${dc.leadId?.lastName}`}
                           </Typography>
                           {dc.assignedAgent && (
-                            <Typography variant="caption" color="text.secondary" display="block">
-                              Agent: {dc.assignedAgent.fullName}
+                            <Typography sx={{ fontSize: '0.55rem', color: 'text.secondary' }}>
+                              {dc.assignedAgent.fullName}
                             </Typography>
                           )}
                         </TableCell>
-                        <TableCell>
-                          <Box display="flex" alignItems="center" gap={0.5}>
-                            <EmailIcon fontSize="small" color="action" />
-                            <Typography variant="caption">
+                        <TableCell sx={{ whiteSpace: 'nowrap', maxWidth: 100, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          <Tooltip title={dc.ftdEmail || dc.leadId?.newEmail || '-'}>
+                            <Typography sx={{ fontSize: '0.6rem' }}>
                               {dc.ftdEmail || dc.leadId?.newEmail || '-'}
                             </Typography>
-                          </Box>
+                          </Tooltip>
                         </TableCell>
-                        <TableCell>
-                          <Box display="flex" alignItems="center" gap={0.5}>
-                            <PhoneIcon fontSize="small" color="action" />
-                            <Typography variant="caption">
-                              {formatPhoneWithCountryCode(dc.ftdPhone || dc.leadId?.newPhone, dc.leadId?.country || dc.lead?.country) || '-'}
-                            </Typography>
-                          </Box>
+                        <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                          <Typography variant="caption">
+                            {formatPhoneWithCountryCode(dc.ftdPhone || dc.leadId?.newPhone, dc.leadId?.country || dc.lead?.country) || '-'}
+                          </Typography>
                         </TableCell>
-                        <TableCell sx={{ textAlign: 'center' }}>
+                        <TableCell sx={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
                           {dc.depositConfirmed ? (
                             <Tooltip title={dc.depositConfirmedAt ? `Confirmed: ${new Date(dc.depositConfirmedAt).toLocaleString()}` : 'Deposit Confirmed'}>
-                              <Chip
-                                icon={<VerifiedIcon />}
-                                label="Confirmed"
-                                color="success"
-                                size="small"
-                                variant="filled"
-                              />
+                              <VerifiedIcon color="success" sx={{ fontSize: 14 }} />
                             </Tooltip>
                           ) : (
-                            <Chip label="Pending" size="small" variant="outlined" />
+                            <Chip label="Pending" size="small" variant="outlined" sx={{ height: 16, fontSize: '0.55rem' }} />
                           )}
                         </TableCell>
                         {[1,2,3,4,5,6,7,8,9,10].map(num => (
