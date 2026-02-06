@@ -20,12 +20,38 @@ const ChatButton = () => {
   const theme = useTheme();
   const user = useSelector(selectUser);
   const isAuthenticated = useSelector(selectIsAuthenticated);
-  
+
   const [chatOpen, setChatOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
-  
 
   const [isConnected, setIsConnected] = useState(false);
+
+  // Drag state
+  const [position, setPosition] = useState({ bottom: 16, right: 16 });
+  const dragRef = React.useRef(null);
+  const isDragging = React.useRef(false);
+  const dragStart = React.useRef({ x: 0, y: 0, bottom: 0, right: 0 });
+  const hasMoved = React.useRef(false);
+
+  const handlePointerDown = (e) => {
+    isDragging.current = true;
+    hasMoved.current = false;
+    dragStart.current = { x: e.clientX, y: e.clientY, bottom: position.bottom, right: position.right };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+  const handlePointerMove = (e) => {
+    if (!isDragging.current) return;
+    const dx = e.clientX - dragStart.current.x;
+    const dy = e.clientY - dragStart.current.y;
+    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) hasMoved.current = true;
+    setPosition({
+      right: Math.max(0, dragStart.current.right - dx),
+      bottom: Math.max(0, dragStart.current.bottom - dy),
+    });
+  };
+  const handlePointerUp = () => {
+    isDragging.current = false;
+  };
 
   // Initialize chat service when user is authenticated
   useEffect(() => {
@@ -139,10 +165,8 @@ const ChatButton = () => {
   };
 
   const handleChatToggle = () => {
+    if (hasMoved.current) return;
     setChatOpen(!chatOpen);
-    
-    // When opening chat, don't automatically reset unread count
-    // Let the ChatWindow handle marking messages as read
   };
 
   // Don't show chat button if user is not authenticated
@@ -153,11 +177,18 @@ const ChatButton = () => {
   return (
     <>
       <Box
+        ref={dragRef}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
         sx={{
           position: 'fixed',
-          bottom: { xs: 16, sm: 24 },
-          right: { xs: 16, sm: 24 },
+          bottom: position.bottom,
+          right: position.right,
           zIndex: 1000,
+          touchAction: 'none',
+          userSelect: 'none',
+          cursor: isDragging.current ? 'grabbing' : 'grab',
         }}
       >
         <Tooltip
@@ -175,10 +206,9 @@ const ChatButton = () => {
             invisible={unreadCount === 0}
             sx={{
               '& .MuiBadge-badge': {
-                fontSize: '0.75rem',
-                minWidth: '20px',
-                height: '20px',
-                // Make badge more visible
+                fontSize: '0.65rem',
+                minWidth: '16px',
+                height: '16px',
                 backgroundColor: 'error.main',
                 color: 'error.contrastText',
                 fontWeight: 'bold'
@@ -188,33 +218,27 @@ const ChatButton = () => {
             <Fab
               color="primary"
               onClick={handleChatToggle}
+              size="small"
               sx={{
-                width: { xs: 48, sm: 56 },
-                height: { xs: 48, sm: 56 },
-                boxShadow: theme.shadows[6],
+                width: 36,
+                height: 36,
+                minHeight: 36,
+                boxShadow: theme.shadows[4],
                 '&:hover': {
-                  boxShadow: theme.shadows[8],
+                  boxShadow: theme.shadows[6],
                 },
-                // Add a subtle pulse animation when there are unread messages
                 ...(unreadCount > 0 && !chatOpen && {
                   animation: 'pulse 2s infinite',
                   '@keyframes pulse': {
-                    '0%': {
-                      transform: 'scale(1)',
-                    },
-                    '50%': {
-                      transform: 'scale(1.05)',
-                    },
-                    '100%': {
-                      transform: 'scale(1)',
-                    },
+                    '0%': { transform: 'scale(1)' },
+                    '50%': { transform: 'scale(1.05)' },
+                    '100%': { transform: 'scale(1)' },
                   },
                 }),
-                // Show different opacity based on connection status
                 opacity: isConnected ? 1 : 0.7,
               }}
             >
-              {chatOpen ? <CloseIcon /> : <ChatIcon />}
+              {chatOpen ? <CloseIcon sx={{ fontSize: 18 }} /> : <ChatIcon sx={{ fontSize: 18 }} />}
             </Fab>
           </Badge>
         </Tooltip>
@@ -224,10 +248,10 @@ const ChatButton = () => {
           <Box
             sx={{
               position: 'absolute',
-              top: -4,
-              left: -4,
-              width: 12,
-              height: 12,
+              top: -2,
+              left: -2,
+              width: 8,
+              height: 8,
               borderRadius: '50%',
               bgcolor: 'error.main',
               border: '2px solid white',

@@ -361,6 +361,11 @@ const MainLayout = () => {
               icon: <AnnouncementIcon />,
               path: "/announcements",
             },
+            {
+              text: "Verifications",
+              icon: <VerificationIcon />,
+              path: "/verifications",
+            },
           ],
         },
         {

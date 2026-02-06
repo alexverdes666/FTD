@@ -49,6 +49,7 @@ import {
   Menu,
   ListItemIcon,
   ListItemText,
+  Drawer,
 } from "@mui/material";
 import {
   ExpandMore as ExpandMoreIcon,
@@ -89,6 +90,7 @@ import {
   History as HistoryIcon,
   Gavel as GavelIcon,
   Refresh as RefreshIcon,
+  Close as CloseIcon,
 } from "@mui/icons-material";
 import AddLeadForm from "../components/AddLeadForm";
 import DocumentPreview from "../components/DocumentPreview";
@@ -2343,331 +2345,138 @@ const LeadsPage = () => {
         </Paper>
       )}
 
-      {/* Page Header */}
-      <Box sx={{ mb: 3, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
-          <ContactsIcon sx={{ fontSize: 28, color: "primary.main" }} />
-          <Typography variant="h5" fontWeight={700}>Leads</Typography>
-          <Chip label={totalLeads} color="primary" size="small" sx={{ fontWeight: 600 }} />
-        </Box>
-        <Box display="flex" gap={0.5}>
-          {(isLeadManager || user?.role === ROLES.ADMIN) && (
-            <Tooltip title="Add New Lead">
-              <IconButton
-                size="small"
-                onClick={() => setAddLeadDialogOpen(true)}
-                sx={{
-                  color: "primary.main",
-                  "&:hover": { bgcolor: "primary.lighter" },
-                }}
-              >
-                <PersonAddIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-          )}
-          {isAdminOrManager && (
-            <Tooltip title="Import Leads">
-              <IconButton
-                size="small"
-                onClick={() => setImportDialogOpen(true)}
-                sx={{
-                  color: "info.main",
-                  "&:hover": { bgcolor: "info.lighter" },
-                }}
-              >
-                <ImportIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-          )}
-          {canDeleteLeads && (
-            <Tooltip title="Bulk Delete">
-              <IconButton
-                size="small"
-                onClick={() => setBulkDeleteDialogOpen(true)}
-                sx={{
-                  color: "error.main",
-                  "&:hover": { bgcolor: "error.lighter" },
-                }}
-              >
-                <DeleteIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-          )}
-          {user?.role === ROLES.ADMIN && (
-            <Tooltip title="View Archived Leads">
-              <IconButton
-                size="small"
-                onClick={handleOpenArchivedLeadsDialog}
-                sx={{
-                  color: "warning.main",
-                  "&:hover": { bgcolor: "warning.lighter" },
-                }}
-              >
-                <ArchiveIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-          )}
-          {(isAdminOrManager || isLeadManager) && (
-            <Tooltip title="View Lead Changes Audit">
-              <IconButton
-                size="small"
-                onClick={() => setGlobalAuditDialogOpen(true)}
-                sx={{
-                  color: "secondary.main",
-                  "&:hover": { bgcolor: "secondary.lighter" },
-                }}
-              >
-                <HistoryIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-          )}
-        </Box>
-      </Box>
-
-      {/* Stats Cards */}
-      <Grid container spacing={2} sx={{ mb: 3 }}>
-        {[
-          { label: "Total", value: totalLeads, color: "#1976d2", bg: "#e3f2fd" },
-          { label: "FTD", value: leadStats.ftd, color: "#2e7d32", bg: "#e8f5e9" },
-          { label: "Filler", value: leadStats.filler, color: "#ed6c02", bg: "#fff3e0" },
-          { label: "Cold", value: leadStats.cold, color: "#0288d1", bg: "#e1f5fe" },
-        ].map((stat) => (
-          <Grid item xs={6} sm={3} key={stat.label}>
-            <Paper
-              elevation={0}
-              sx={{
-                p: 2,
-                borderRadius: 2,
-                border: "1px solid",
-                borderColor: "divider",
-                bgcolor: stat.bg,
-                textAlign: "center",
-              }}
-            >
-              <Typography variant="h5" fontWeight={700} sx={{ color: stat.color }}>
-                {stat.value}
-              </Typography>
-              <Typography variant="body2" color="text.secondary" fontWeight={500}>
-                {stat.label}
-              </Typography>
-            </Paper>
-          </Grid>
-        ))}
-      </Grid>
-
-      {/* Filters */}
-      <Paper
-        elevation={0}
-        sx={{
-          p: 2,
-          mb: 3,
-          borderRadius: 2,
-          border: "1px solid",
-          borderColor: "divider",
-        }}
+      {/* Sidebar Drawer */}
+      <Drawer
+        anchor="right"
+        open={showFilters}
+        onClose={() => setShowFilters(false)}
+        variant="temporary"
+        PaperProps={{ sx: { width: 340, p: 0 } }}
       >
-        {/* Always-visible search */}
-        <TextField
-          fullWidth
-          size="medium"
-          placeholder="Search by name, email, phone, country, agent..."
-          value={searchInput}
-          onChange={(e) => handleSearchChange(e.target.value)}
-          InputProps={{
-            startAdornment: (
-              <SearchIcon sx={{ mr: 1, color: "text.secondary" }} />
-            ),
-          }}
-          sx={{
-            mb: 2,
-            "& .MuiOutlinedInput-root": {
-              borderRadius: 3,
-              bgcolor: "grey.50",
-              "&:hover": { bgcolor: "grey.100" },
-            },
-          }}
-        />
-        <Box display="flex" alignItems="center" gap={1} mb={showFilters ? 2 : 0}>
-          <Button
-            startIcon={showFilters ? <ExpandLessIcon /> : <FilterIcon />}
-            onClick={() => setShowFilters(!showFilters)}
+        <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", px: 2.5, py: 1.5, borderBottom: 1, borderColor: "divider" }}>
+          <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>Leads Panel</Typography>
+          <IconButton size="small" onClick={() => setShowFilters(false)}>
+            <CloseIcon fontSize="small" />
+          </IconButton>
+        </Box>
+        <Box sx={{ p: 2.5, display: "flex", flexDirection: "column", gap: 2, overflow: "auto", flex: 1 }}>
+          {/* Search */}
+          <TextField
+            fullWidth
             size="small"
-            variant={hasActiveFilters ? "outlined" : "text"}
-            sx={{ borderRadius: 2 }}
-          >
-            {showFilters ? "Hide Filters" : "Filters"}
-            {hasActiveFilters && (
-              <Chip label={activeFilterCount} size="small" color="primary" sx={{ ml: 1, height: 20, minWidth: 20, fontSize: "0.7rem" }} />
+            placeholder="Search by name, email, phone, country, agent..."
+            value={searchInput}
+            onChange={(e) => handleSearchChange(e.target.value)}
+            InputProps={{
+              startAdornment: <SearchIcon sx={{ mr: 1, color: "text.secondary" }} />,
+            }}
+            sx={{ "& .MuiOutlinedInput-root": { borderRadius: 2, bgcolor: "grey.50", "&:hover": { bgcolor: "grey.100" } } }}
+          />
+          {/* Actions */}
+          <Divider />
+          <Typography variant="caption" sx={{ fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px", color: "text.secondary" }}>Actions</Typography>
+          <Box display="flex" gap={0.5} flexWrap="wrap">
+            {(isLeadManager || user?.role === ROLES.ADMIN) && (
+              <Tooltip title="Add New Lead">
+                <IconButton size="small" onClick={() => setAddLeadDialogOpen(true)} sx={{ color: "primary.main", "&:hover": { bgcolor: "primary.lighter" } }}>
+                  <PersonAddIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
             )}
-          </Button>
-          {hasActiveFilters && (
-            <Chip
-              label="Clear Filters"
-              size="small"
-              onDelete={clearFilters}
-              onClick={clearFilters}
-              color="default"
-              variant="outlined"
-              sx={{ height: 24 }}
+            {isAdminOrManager && (
+              <Tooltip title="Import Leads">
+                <IconButton size="small" onClick={() => setImportDialogOpen(true)} sx={{ color: "info.main", "&:hover": { bgcolor: "info.lighter" } }}>
+                  <ImportIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            )}
+            {canDeleteLeads && (
+              <Tooltip title="Bulk Delete">
+                <IconButton size="small" onClick={() => setBulkDeleteDialogOpen(true)} sx={{ color: "error.main", "&:hover": { bgcolor: "error.lighter" } }}>
+                  <DeleteIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            )}
+            {user?.role === ROLES.ADMIN && (
+              <Tooltip title="View Archived Leads">
+                <IconButton size="small" onClick={handleOpenArchivedLeadsDialog} sx={{ color: "warning.main", "&:hover": { bgcolor: "warning.lighter" } }}>
+                  <ArchiveIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            )}
+            {(isAdminOrManager || isLeadManager) && (
+              <Tooltip title="View Lead Changes Audit">
+                <IconButton size="small" onClick={() => setGlobalAuditDialogOpen(true)} sx={{ color: "secondary.main", "&:hover": { bgcolor: "secondary.lighter" } }}>
+                  <HistoryIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            )}
+          </Box>
+          {/* Filters */}
+          <Divider />
+          <Box display="flex" alignItems="center" justifyContent="space-between">
+            <Typography variant="caption" sx={{ fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px", color: "text.secondary" }}>Filters</Typography>
+            {hasActiveFilters && (
+              <Chip label="Clear All" size="small" onDelete={clearFilters} onClick={clearFilters} color="default" variant="outlined" sx={{ height: 22, fontSize: "0.7rem" }} />
+            )}
+          </Box>
+          {isAdminOrManager && (
+            <FormControlLabel
+              control={<Switch checked={filters.includeConverted} onChange={(e) => handleFilterChange("includeConverted", e.target.checked)} color="primary" size="small" />}
+              label={<Typography variant="body2">Include Converted</Typography>}
             />
           )}
+          {isAffiliateManager && (
+            <FormControlLabel
+              control={<Switch checked={filters.assignedToMe} onChange={(e) => handleFilterChange("assignedToMe", e.target.checked)} color="primary" size="small" />}
+              label={<Typography variant="body2">My Assigned Leads</Typography>}
+            />
+          )}
+          <FormControl fullWidth size="small">
+            <InputLabel>Order</InputLabel>
+            <Select value={filters.orderId} label="Order" onChange={(e) => handleFilterChange("orderId", e.target.value)} sx={{ borderRadius: 2 }}>
+              <MenuItem value="">All Orders</MenuItem>
+              {orders.map((order) => (
+                <MenuItem key={order._id} value={order._id}>
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                    <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: order.status === "active" ? "success.main" : order.status === "paused" ? "warning.main" : order.status === "completed" ? "info.main" : "error.main" }} />
+                    Order {order._id.slice(-8)} - {order.priority}
+                  </Box>
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <FormControl fullWidth size="small">
+            <InputLabel>IPQS Type</InputLabel>
+            <Select value={filters.ipqsType} label="IPQS Type" onChange={(e) => { handleFilterChange("ipqsType", e.target.value); if (!e.target.value) handleFilterChange("ipqsResult", ""); }} sx={{ borderRadius: 2 }}>
+              <MenuItem value="">All</MenuItem>
+              <MenuItem value="phone">Phone</MenuItem>
+              <MenuItem value="email">Email</MenuItem>
+              <MenuItem value="both">Both</MenuItem>
+            </Select>
+          </FormControl>
+          {filters.ipqsType && (
+            <FormControl fullWidth size="small">
+              <InputLabel>IPQS Result</InputLabel>
+              <Select value={filters.ipqsResult} label="IPQS Result" onChange={(e) => handleFilterChange("ipqsResult", e.target.value)} sx={{ borderRadius: 2 }}>
+                <MenuItem value="">All</MenuItem>
+                <MenuItem value="clean">Clean</MenuItem>
+                <MenuItem value="low_risk">Low Risk</MenuItem>
+                <MenuItem value="medium_risk">Medium Risk</MenuItem>
+                <MenuItem value="high_risk">High Risk</MenuItem>
+                <MenuItem value="invalid">Invalid</MenuItem>
+              </Select>
+            </FormControl>
+          )}
+          <Divider />
+          <Typography variant="caption" sx={{ fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px", color: "text.secondary" }}>Date Range</Typography>
+          <TextField fullWidth size="small" label="Order Created From" type="date" value={filters.orderCreatedStart} onChange={(e) => handleFilterChange("orderCreatedStart", e.target.value)} InputLabelProps={{ shrink: true }} sx={{ "& .MuiOutlinedInput-root": { borderRadius: 2 } }} />
+          <TextField fullWidth size="small" label="Order Created To" type="date" value={filters.orderCreatedEnd} onChange={(e) => handleFilterChange("orderCreatedEnd", e.target.value)} InputLabelProps={{ shrink: true }} sx={{ "& .MuiOutlinedInput-root": { borderRadius: 2 } }} />
         </Box>
-        <Collapse in={showFilters}>
-          <Grid container spacing={2}>
-            {isAdminOrManager && (
-              <Grid item xs={12} sm={6} md={2}>
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={filters.includeConverted}
-                      onChange={(e) =>
-                        handleFilterChange("includeConverted", e.target.checked)
-                      }
-                      color="primary"
-                    />
-                  }
-                  label="Include Converted Leads"
-                />
-              </Grid>
-            )}
-            {isAffiliateManager && (
-              <Grid item xs={12} sm={6} md={2}>
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={filters.assignedToMe}
-                      onChange={(e) =>
-                        handleFilterChange("assignedToMe", e.target.checked)
-                      }
-                      color="primary"
-                    />
-                  }
-                  label="My Assigned Leads"
-                />
-              </Grid>
-            )}
-            <Grid item xs={12} sm={6} md={2}>
-              <FormControl fullWidth>
-                <InputLabel>Order</InputLabel>
-                <Select
-                  value={filters.orderId}
-                  label="Order"
-                  onChange={(e) =>
-                    handleFilterChange("orderId", e.target.value)
-                  }
-                  sx={{ borderRadius: 2 }}
-                >
-                  <MenuItem value="">All Orders</MenuItem>
-                  {orders.map((order) => (
-                    <MenuItem key={order._id} value={order._id}>
-                      <Box
-                        sx={{ display: "flex", alignItems: "center", gap: 1 }}
-                      >
-                        <Box
-                          sx={{
-                            width: 8,
-                            height: 8,
-                            borderRadius: "50%",
-                            bgcolor:
-                              order.status === "active"
-                                ? "success.main"
-                                : order.status === "paused"
-                                ? "warning.main"
-                                : order.status === "completed"
-                                ? "info.main"
-                                : "error.main",
-                          }}
-                        />
-                        Order {order._id.slice(-8)} - {order.priority}
-                      </Box>
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
-            <Grid item xs={12} sm={6} md={2}>
-              <FormControl fullWidth>
-                <InputLabel>IPQS Type</InputLabel>
-                <Select
-                  value={filters.ipqsType}
-                  label="IPQS Type"
-                  onChange={(e) => {
-                    handleFilterChange("ipqsType", e.target.value);
-                    if (!e.target.value) {
-                      handleFilterChange("ipqsResult", "");
-                    }
-                  }}
-                  sx={{ borderRadius: 2 }}
-                >
-                  <MenuItem value="">All</MenuItem>
-                  <MenuItem value="phone">Phone</MenuItem>
-                  <MenuItem value="email">Email</MenuItem>
-                  <MenuItem value="both">Both</MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
-            {filters.ipqsType && (
-              <Grid item xs={12} sm={6} md={2}>
-                <FormControl fullWidth>
-                  <InputLabel>IPQS Result</InputLabel>
-                  <Select
-                    value={filters.ipqsResult}
-                    label="IPQS Result"
-                    onChange={(e) =>
-                      handleFilterChange("ipqsResult", e.target.value)
-                    }
-                    sx={{ borderRadius: 2 }}
-                  >
-                    <MenuItem value="">All</MenuItem>
-                    <MenuItem value="clean">Clean</MenuItem>
-                    <MenuItem value="low_risk">Low Risk</MenuItem>
-                    <MenuItem value="medium_risk">Medium Risk</MenuItem>
-                    <MenuItem value="high_risk">High Risk</MenuItem>
-                    <MenuItem value="invalid">Invalid</MenuItem>
-                  </Select>
-                </FormControl>
-              </Grid>
-            )}
-            <Grid item xs={12} sm={6} md={2}>
-              <TextField
-                fullWidth
-                label="Order Created From"
-                type="date"
-                value={filters.orderCreatedStart}
-                onChange={(e) =>
-                  handleFilterChange("orderCreatedStart", e.target.value)
-                }
-                InputLabelProps={{ shrink: true }}
-                sx={{
-                  "& .MuiOutlinedInput-root": {
-                    borderRadius: 2,
-                  },
-                }}
-              />
-            </Grid>
-            <Grid item xs={12} sm={6} md={2}>
-              <TextField
-                fullWidth
-                label="Order Created To"
-                type="date"
-                value={filters.orderCreatedEnd}
-                onChange={(e) =>
-                  handleFilterChange("orderCreatedEnd", e.target.value)
-                }
-                InputLabelProps={{ shrink: true }}
-                sx={{
-                  "& .MuiOutlinedInput-root": {
-                    borderRadius: 2,
-                  },
-                }}
-              />
-            </Grid>
-          </Grid>
-        </Collapse>
-      </Paper>
+      </Drawer>
       {}
       <Box sx={{ display: { xs: "none", md: "block" }, width: "100%" }}>
-        <Paper sx={{ width: "100%", position: "relative" }}>
+        <Paper sx={{ width: "100%", position: "relative", borderRadius: 2, overflow: "hidden", border: 1, borderColor: "divider", boxShadow: "0 1px 3px rgba(0,0,0,0.08)" }}>
           {searching && (
             <LinearProgress
               sx={{
@@ -2692,14 +2501,15 @@ const LeadsPage = () => {
                   lineHeight: 1.2,
                 },
                 "& .MuiTableHead-root .MuiTableCell-root": {
-                  padding: "4px 6px",
-                  fontSize: "0.75rem",
+                  padding: "3px 6px",
+                  fontSize: "0.7rem",
                   fontWeight: 700,
-                  background: "linear-gradient(135deg, #f5f7fa 0%, #e4e9f0 100%)",
-                  color: "#1e293b",
+                  background: "linear-gradient(135deg, #1e293b 0%, #334155 100%)",
+                  color: "#fff",
                   textTransform: "uppercase",
                   letterSpacing: "0.5px",
-                  borderBottom: "2px solid #e2e8f0",
+                  borderBottom: "2px solid #3b82f6",
+                  lineHeight: 1.2,
                   position: "sticky",
                   top: 0,
                   zIndex: 2,
@@ -2729,168 +2539,45 @@ const LeadsPage = () => {
               <TableHead>
                 <TableRow>
                   {!isAgent && canSelectLeads && (
-                    <TableCell
-                      padding="checkbox"
-                      sx={{
-                        borderRight: "1px solid rgba(224, 224, 224, 1)",
-                        backgroundColor: "background.paper",
-                        fontSize: "0.875rem",
-                        width: "40px",
-                        maxWidth: "40px",
-                        padding: "0",
-                        textAlign: "center",
-                      }}
-                    >
-                      <div
-                        style={{ display: "flex", justifyContent: "center" }}
-                      >
-                        <Checkbox
-                          indeterminate={
-                            numSelected > 0 && numSelected < leads.length
-                          }
-                          checked={
-                            leads.length > 0 && numSelected === leads.length
-                          }
-                          onChange={handleSelectAll}
-                          sx={{ padding: "4px" }}
-                        />
-                      </div>
+                    <TableCell padding="none" sx={{ width: "36px", maxWidth: "36px", textAlign: "center", borderRight: "1px solid rgba(255,255,255,0.1)" }}>
+                      <Checkbox
+                        indeterminate={numSelected > 0 && numSelected < leads.length}
+                        checked={leads.length > 0 && numSelected === leads.length}
+                        onChange={handleSelectAll}
+                        size="small"
+                        sx={{ padding: "2px", color: "rgba(255,255,255,0.7)", "&.Mui-checked, &.MuiCheckbox-indeterminate": { color: "#fff" } }}
+                      />
                     </TableCell>
                   )}
                   {isAgent && (
-                    <TableCell
-                      padding="checkbox"
-                      sx={{
-                        borderRight: "1px solid rgba(224, 224, 224, 1)",
-                        backgroundColor: "background.paper",
-                        fontSize: "0.875rem",
-                      }}
-                    />
+                    <TableCell padding="none" sx={{ width: "36px", borderRight: "1px solid rgba(255,255,255,0.1)" }} />
                   )}
                   {!isAgent && (
-                    <TableCell
-                      sx={{
-                        borderRight: "1px solid rgba(224, 224, 224, 1)",
-                        backgroundColor: "background.paper",
-                        fontSize: "0.875rem",
-                        py: 1,
-                        textAlign: "center",
-                        width: "70px",
-                        maxWidth: "70px",
-                      }}
-                    >
-                      Type
-                    </TableCell>
+                    <TableCell sx={{ textAlign: "center", width: "70px", maxWidth: "70px", borderRight: "1px solid rgba(255,255,255,0.1)" }}>Type</TableCell>
                   )}
-                  <TableCell
-                    sx={{
-                      borderRight: "1px solid rgba(224, 224, 224, 1)",
-                      backgroundColor: "background.paper",
-                      fontSize: "0.875rem",
-                      py: 1,
-                      textAlign: "left",
-                      width: "25%",
-                    }}
-                  >
-                    Name
-                  </TableCell>
+                  <TableCell sx={{ textAlign: "left", width: "25%", borderRight: "1px solid rgba(255,255,255,0.1)" }}>Name</TableCell>
                   {!isAgent && (
-                    <TableCell
-                      sx={{
-                        borderRight: "1px solid rgba(224, 224, 224, 1)",
-                        backgroundColor: "background.paper",
-                        fontSize: "0.875rem",
-                        py: 1,
-                        textAlign: "center",
-                        width: "25%",
-                      }}
-                    >
-                      Contact
-                    </TableCell>
+                    <TableCell sx={{ textAlign: "center", width: "25%", borderRight: "1px solid rgba(255,255,255,0.1)" }}>Contact</TableCell>
                   )}
-                  <TableCell
-                    sx={{
-                      borderRight: "1px solid rgba(224, 224, 224, 1)",
-                      backgroundColor: "background.paper",
-                      fontSize: "0.875rem",
-                      py: 1,
-                      textAlign: "center",
-                      width: "70px",
-                      maxWidth: "70px",
-                    }}
-                  >
-                    Country
-                  </TableCell>
+                  <TableCell sx={{ textAlign: "center", width: "70px", maxWidth: "70px", borderRight: "1px solid rgba(255,255,255,0.1)" }}>Country</TableCell>
                   {isAgent && (
-                    <TableCell
-                      sx={{
-                        borderRight: "1px solid rgba(224, 224, 224, 1)",
-                        backgroundColor: "background.paper",
-                        fontSize: "0.875rem",
-                        py: 1,
-                        textAlign: "center",
-                        width: "70px",
-                        maxWidth: "70px",
-                      }}
-                    >
-                      Type
-                    </TableCell>
+                    <TableCell sx={{ textAlign: "center", width: "70px", maxWidth: "70px", borderRight: "1px solid rgba(255,255,255,0.1)" }}>Type</TableCell>
                   )}
                   {!isAgent && (
-                    <TableCell
-                      sx={{
-                        borderRight: "1px solid rgba(224, 224, 224, 1)",
-                        backgroundColor: "background.paper",
-                        fontSize: "0.875rem",
-                        py: 1,
-                        textAlign: "center",
-                        width: "70px",
-                        maxWidth: "70px",
-                      }}
-                    >
-                      Gender
-                    </TableCell>
+                    <TableCell sx={{ textAlign: "center", width: "70px", maxWidth: "70px", borderRight: "1px solid rgba(255,255,255,0.1)" }}>Gender</TableCell>
                   )}
                   {isAdminOrManager && !isAgent && (
-                    <TableCell
-                      sx={{
-                        borderRight: "1px solid rgba(224, 224, 224, 1)",
-                        backgroundColor: "background.paper",
-                        fontSize: "0.875rem",
-                        py: 1,
-                        textAlign: "center",
-                        width: "120px",
-                        maxWidth: "120px",
-                      }}
-                    >
-                      Assigned To
-                    </TableCell>
+                    <TableCell sx={{ textAlign: "center", width: "120px", maxWidth: "120px", borderRight: "1px solid rgba(255,255,255,0.1)" }}>Assigned To</TableCell>
                   )}
-                  {/* Status column hidden but still searchable */}
-                  <TableCell
-                    sx={{
-                      borderRight: "1px solid rgba(224, 224, 224, 1)",
-                      backgroundColor: "background.paper",
-                      fontSize: "0.875rem",
-                      py: 1,
-                      textAlign: "center",
-                      width: "70px",
-                      maxWidth: "70px",
-                    }}
-                  >
-                    Cooldown
-                  </TableCell>
-                  <TableCell
-                    sx={{
-                      backgroundColor: "background.paper",
-                      fontSize: "0.875rem",
-                      py: 1,
-                      textAlign: "right",
-                      width: "85px",
-                      maxWidth: "85px",
-                    }}
-                  >
-                    Actions
+                  <TableCell sx={{ textAlign: "center", width: "70px", maxWidth: "70px", borderRight: "1px solid rgba(255,255,255,0.1)" }}>Cooldown</TableCell>
+                  <TableCell sx={{ textAlign: "right", width: "85px", maxWidth: "85px" }}>
+                    <Box sx={{ display: "inline-flex", alignItems: "center", justifyContent: "flex-end", gap: 0.25, lineHeight: 1 }}>
+                      Actions
+                      <FilterIcon
+                        onClick={(e) => { e.stopPropagation(); setShowFilters(true); }}
+                        sx={{ fontSize: 13, color: "rgba(255,255,255,0.6)", cursor: "pointer", "&:hover": { color: "#fff" }, ml: 0.25 }}
+                      />
+                    </Box>
                   </TableCell>
                 </TableRow>
               </TableHead>
