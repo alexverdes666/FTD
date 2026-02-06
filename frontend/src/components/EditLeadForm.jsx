@@ -20,7 +20,10 @@ import {
   Chip,
   Box,
   Autocomplete,
+  IconButton,
 } from "@mui/material";
+import AddIcon from "@mui/icons-material/Add";
+import DeleteIcon from "@mui/icons-material/Delete";
 import api from "../services/api";
 const LEAD_STATUSES = {
   ACTIVE: "active",
@@ -61,7 +64,21 @@ const schema = yup.object().shape({
     instagram: yup.string().nullable().url('Invalid Instagram URL'),
     telegram: yup.string().nullable(),
     whatsapp: yup.string().nullable()
-  })
+  }),
+  documents: yup.array().of(
+    yup.object().shape({
+      url: yup.string().nullable().test('url-validation', 'Invalid document URL', function(value) {
+        if (!value || value.trim() === '') return true;
+        try {
+          new URL(value);
+          return true;
+        } catch {
+          return false;
+        }
+      }),
+      description: yup.string().nullable()
+    })
+  ).nullable().default([]),
 });
 const getDefaultValues = (lead) => {
   let addressValue = "";
@@ -112,7 +129,10 @@ const getDefaultValues = (lead) => {
       instagram: lead?.socialMedia?.instagram ?? "",
       telegram: lead?.socialMedia?.telegram ?? "",
       whatsapp: lead?.socialMedia?.whatsapp ?? "",
-    }
+    },
+    documents: lead?.documents && lead.documents.length > 0
+      ? lead.documents.map(doc => ({ url: doc.url || "", description: doc.description || "" }))
+      : [{ url: "", description: "" }],
   };
   
   return defaultValues;
@@ -294,6 +314,10 @@ const EditLeadForm = ({ open, onClose, lead, onLeadUpdated, sx }) => {
         campaign: Array.isArray(data.campaign) && data.campaign.length > 0 ? data.campaign : [],
         ourNetwork: Array.isArray(data.ourNetwork) && data.ourNetwork.length > 0 ? data.ourNetwork : [],
       };
+      // Include documents - filter out empty ones
+      if (Array.isArray(data.documents)) {
+        updateData.documents = data.documents.filter(doc => doc.url && doc.url.trim() !== '');
+      }
       if (data.leadType === 'ftd' || data.leadType === 'filler') {
         if (data.address) {
           updateData.address = typeof data.address === 'string'
@@ -968,6 +992,75 @@ const EditLeadForm = ({ open, onClose, lead, onLeadUpdated, sx }) => {
                   error={!!errors.socialMedia?.whatsapp}
                   helperText={errors.socialMedia?.whatsapp?.message}
                 />
+              )}
+            />
+          </Grid>
+          {/* Documents Section */}
+          <Grid item xs={12}>
+            <Typography variant="subtitle1" gutterBottom>Documents</Typography>
+          </Grid>
+          <Grid item xs={12}>
+            <Controller
+              name="documents"
+              control={control}
+              render={({ field }) => (
+                <Box>
+                  {(field.value || []).map((doc, index) => (
+                    <Grid container spacing={2} key={index} sx={{ mb: 2 }}>
+                      <Grid item xs={12} sm={5}>
+                        <TextField
+                          fullWidth
+                          label="Document URL"
+                          value={doc.url || ""}
+                          onChange={(e) => {
+                            const newDocs = [...field.value];
+                            newDocs[index] = { ...doc, url: e.target.value };
+                            field.onChange(newDocs);
+                          }}
+                          error={!!errors.documents?.[index]?.url}
+                          helperText={errors.documents?.[index]?.url?.message}
+                        />
+                      </Grid>
+                      <Grid item xs={12} sm={5}>
+                        <TextField
+                          fullWidth
+                          label="Description"
+                          value={doc.description || ""}
+                          onChange={(e) => {
+                            const newDocs = [...field.value];
+                            newDocs[index] = { ...doc, description: e.target.value };
+                            field.onChange(newDocs);
+                          }}
+                        />
+                      </Grid>
+                      <Grid item xs={12} sm={2}>
+                        <Box sx={{ display: 'flex', gap: 1 }}>
+                          {index === field.value.length - 1 && (
+                            <IconButton
+                              color="primary"
+                              onClick={() => {
+                                field.onChange([...field.value, { url: '', description: '' }]);
+                              }}
+                            >
+                              <AddIcon />
+                            </IconButton>
+                          )}
+                          {field.value.length > 1 && (
+                            <IconButton
+                              color="error"
+                              onClick={() => {
+                                const newDocs = field.value.filter((_, i) => i !== index);
+                                field.onChange(newDocs);
+                              }}
+                            >
+                              <DeleteIcon />
+                            </IconButton>
+                          )}
+                        </Box>
+                      </Grid>
+                    </Grid>
+                  ))}
+                </Box>
               )}
             />
           </Grid>
