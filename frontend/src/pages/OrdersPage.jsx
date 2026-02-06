@@ -4709,16 +4709,6 @@ const OrdersPage = () => {
           </Alert>
         </Collapse>
       )}
-      {/* Sidebar Toggle */}
-      <Box sx={{ display: "flex", justifyContent: "flex-end", mb: 0.5, flexShrink: 0 }}>
-        <IconButton
-          onClick={() => setShowFilters(true)}
-          size="small"
-          sx={{ bgcolor: showFilters ? "primary.main" : "grey.100", color: showFilters ? "#fff" : "text.secondary", "&:hover": { bgcolor: showFilters ? "primary.dark" : "grey.200" }, width: 28, height: 28 }}
-        >
-          <FilterListIcon sx={{ fontSize: 16 }} />
-        </IconButton>
-      </Box>
       {/* Sidebar Drawer */}
       <Drawer
         anchor="right"
@@ -4936,7 +4926,13 @@ const OrdersPage = () => {
                   Planned Date
                 </TableCell>
                 <TableCell sx={{ textAlign: "right", width: "11%" }}>
-                  Actions
+                  <Box sx={{ display: "inline-flex", alignItems: "center", justifyContent: "flex-end", gap: 0.25, lineHeight: 1 }}>
+                    Actions
+                    <FilterListIcon
+                      onClick={(e) => { e.stopPropagation(); setShowFilters(true); }}
+                      sx={{ fontSize: 13, color: "rgba(255,255,255,0.6)", cursor: "pointer", "&:hover": { color: "#fff" }, ml: 0.25 }}
+                    />
+                  </Box>
                 </TableCell>
               </TableRow>
             </TableHead>
