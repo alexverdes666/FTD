@@ -87,23 +87,6 @@ const formatDateTime = (date) => {
   });
 };
 
-// Format relative time (e.g. 5m, 2h, 3d, 1mo, 2y)
-const formatRelativeTime = (date) => {
-  if (!date) return '-';
-  const now = new Date();
-  const diff = now - new Date(date);
-  const minutes = Math.floor(diff / 60000);
-  if (minutes < 1) return 'now';
-  if (minutes < 60) return `${minutes}m`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h`;
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `${days}d`;
-  const months = Math.floor(days / 30);
-  if (months < 12) return `${months}mo`;
-  const years = Math.floor(months / 12);
-  return `${years}y`;
-};
 
 // Call Cell Component
 const CallCell = ({ call, callNumber, depositCall, onSchedule, onMarkDone, onApprove, onReject, onMarkAnswered, onMarkRejected, isAdmin, isAM, isAgent }) => {
@@ -164,7 +147,9 @@ const CallCell = ({ call, callNumber, depositCall, onSchedule, onMarkDone, onApp
           </>
         ) : call?.status === 'pending_approval' ? (
           <>
-            <Chip label="Pending" size="small" color="warning" sx={{ fontSize: '0.5rem', height: 15, '& .MuiChip-label': { px: 0.5 } }} />
+            <Tooltip title={`Done: ${formatDateTime(call.doneDate)}`}>
+              <Chip label="Pending" size="small" color="warning" sx={{ fontSize: '0.5rem', height: 15, '& .MuiChip-label': { px: 0.5 } }} />
+            </Tooltip>
             {canApprove && (
               <Box sx={{ display: 'flex', gap: '2px' }}>
                 <Tooltip title="Mark as Answered">
@@ -204,11 +189,17 @@ const CallCell = ({ call, callNumber, depositCall, onSchedule, onMarkDone, onApp
             )}
           </>
         ) : call?.status === 'answered' ? (
-          <Chip label="Answered" size="small" color="success" sx={{ fontSize: '0.5rem', height: 15, '& .MuiChip-label': { px: 0.5 } }} />
+          <Tooltip title={call.approvedAt ? formatDateTime(call.approvedAt) : formatDateTime(call.doneDate)}>
+            <Chip label="Answered" size="small" color="success" sx={{ fontSize: '0.5rem', height: 15, '& .MuiChip-label': { px: 0.5 } }} />
+          </Tooltip>
         ) : call?.status === 'rejected' ? (
-          <Chip label="Rejected" size="small" color="error" sx={{ fontSize: '0.5rem', height: 15, '& .MuiChip-label': { px: 0.5 } }} />
+          <Tooltip title={call.approvedAt ? formatDateTime(call.approvedAt) : formatDateTime(call.doneDate)}>
+            <Chip label="Rejected" size="small" color="error" sx={{ fontSize: '0.5rem', height: 15, '& .MuiChip-label': { px: 0.5 } }} />
+          </Tooltip>
         ) : call?.status === 'completed' ? (
-          <Chip label="Approved" size="small" color="success" sx={{ fontSize: '0.5rem', height: 15, '& .MuiChip-label': { px: 0.5 } }} />
+          <Tooltip title={call.approvedAt ? formatDateTime(call.approvedAt) : formatDateTime(call.doneDate)}>
+            <Chip label="Approved" size="small" color="success" sx={{ fontSize: '0.5rem', height: 15, '& .MuiChip-label': { px: 0.5 } }} />
+          </Tooltip>
         ) : (
           <Typography sx={{ fontSize: '0.55rem', color: 'text.secondary' }}>-</Typography>
         )}
@@ -875,7 +866,7 @@ const DepositCallsPage = () => {
                   <TableHead>
                     <TableRow>
                       <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', fontSize: '0.6rem' }}>Order</TableCell>
-                      <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', fontSize: '0.6rem' }}>Age</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', fontSize: '0.6rem' }}>Order Created</TableCell>
                       <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', fontSize: '0.6rem' }}>Broker</TableCell>
                       <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', fontSize: '0.6rem' }}>Client Net</TableCell>
                       <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', fontSize: '0.6rem' }}>Our Net</TableCell>
@@ -899,19 +890,17 @@ const DepositCallsPage = () => {
                             {dc.orderId?._id ? `...${dc.orderId._id.toString().slice(-6)}` : '-'}
                           </Typography>
                         </TableCell>
-                        <TableCell sx={{ whiteSpace: 'nowrap', textAlign: 'center' }}>
-                          <Tooltip title={dc.createdAt ? new Date(dc.createdAt).toLocaleString() : '-'}>
-                            <Typography sx={{ fontSize: '0.6rem', color: 'text.secondary' }}>
-                              {formatRelativeTime(dc.createdAt)}
-                            </Typography>
-                          </Tooltip>
+                        <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                          <Typography sx={{ fontSize: '0.6rem', color: 'text.secondary' }}>
+                            {dc.orderId?.createdAt ? new Date(dc.orderId.createdAt).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-'}
+                          </Typography>
                         </TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                          <Typography variant="caption">{dc.clientBrokerId?.name || '-'}</Typography>
+                          <Typography sx={{ fontSize: '0.55rem' }}>{dc.clientBrokerId?.name || '-'}</Typography>
                         </TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>
                           <Box sx={{ display: "flex", alignItems: "center", gap: 0.25 }}>
-                            <Typography variant="caption">
+                            <Typography sx={{ fontSize: '0.55rem' }}>
                               {(dc.leadId?.clientNetworkHistory || dc.lead?.clientNetworkHistory)?.length > 0
                                 ? (dc.leadId?.clientNetworkHistory || dc.lead?.clientNetworkHistory)[(dc.leadId?.clientNetworkHistory || dc.lead?.clientNetworkHistory).length - 1]?.clientNetwork?.name || "-"
                                 : "-"}
@@ -936,7 +925,7 @@ const DepositCallsPage = () => {
                         </TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>
                           <Box sx={{ display: "flex", alignItems: "center", gap: 0.25 }}>
-                            <Typography variant="caption">
+                            <Typography sx={{ fontSize: '0.55rem' }}>
                               {(dc.leadId?.ourNetworkHistory || dc.lead?.ourNetworkHistory)?.length > 0
                                 ? (dc.leadId?.ourNetworkHistory || dc.lead?.ourNetworkHistory)[(dc.leadId?.ourNetworkHistory || dc.lead?.ourNetworkHistory).length - 1]?.ourNetwork?.name || "-"
                                 : "-"}
@@ -960,7 +949,7 @@ const DepositCallsPage = () => {
                           </Box>
                         </TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                          <Typography variant="caption">{dc.accountManager?.fullName || '-'}</Typography>
+                          <Typography sx={{ fontSize: '0.55rem' }}>{dc.accountManager?.fullName || '-'}</Typography>
                         </TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>
                           <Typography sx={{ fontSize: '0.6rem', fontWeight: 500 }}>
