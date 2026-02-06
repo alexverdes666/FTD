@@ -913,8 +913,8 @@ const MainLayout = () => {
           display: "flex",
           flexDirection: "column",
           minHeight: "100vh",
-          overflow: location.pathname === "/notes" ? "hidden" : "auto",
-          height: location.pathname === "/notes" ? "100vh" : "auto",
+          overflow: (location.pathname === "/notes" || location.pathname === "/orders") ? "hidden" : "auto",
+          height: (location.pathname === "/notes" || location.pathname === "/orders") ? "100vh" : "auto",
         }}
       >
         <Toolbar />
@@ -922,7 +922,7 @@ const MainLayout = () => {
           component="div"
           sx={{
             flexGrow: 1,
-            overflow: location.pathname === "/notes" ? "hidden" : "auto",
+            overflow: (location.pathname === "/notes" || location.pathname === "/orders") ? "hidden" : "auto",
             display: "flex",
             flexDirection: "column",
           }}
@@ -931,7 +931,7 @@ const MainLayout = () => {
             <Outlet />
           </Force2FASetup>
         </Box>
-        {location.pathname !== "/notes" && <Footer />}
+        {location.pathname !== "/notes" && location.pathname !== "/orders" && <Footer />}
       </Box>
 
       {/* Floating Chat Button */}

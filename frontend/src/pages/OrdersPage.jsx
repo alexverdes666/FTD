@@ -4694,7 +4694,7 @@ const OrdersPage = () => {
     </Typography>
   );
   return (
-    <Box sx={{ width: "100%", typography: "body1" }}>
+    <Box sx={{ width: "100%", typography: "body1", height: "100%", display: "flex", flexDirection: "column", overflow: "hidden" }}>
       {notification.message && (
         <Collapse in={!!notification.message}>
           <Alert
@@ -4706,39 +4706,6 @@ const OrdersPage = () => {
           </Alert>
         </Collapse>
       )}
-      {/* Page Header */}
-      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 3, flexWrap: "wrap", gap: 2 }}>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
-          <ListAltIcon sx={{ fontSize: 32, color: "primary.main" }} />
-          <Box>
-            <Typography variant="h5" sx={{ fontWeight: 700, color: "text.primary", lineHeight: 1.2 }}>Orders</Typography>
-            <Typography variant="body2" sx={{ color: "text.secondary" }}>Manage and track all lead orders</Typography>
-          </Box>
-        </Box>
-        {(user?.role === "admin" || user?.role === "affiliate_manager") && (
-          <Box sx={{ display: "flex", gap: 1, flexDirection: isSmallScreen ? "column" : "row" }}>
-            <Button
-              variant="contained"
-              startIcon={<AddIcon />}
-              onClick={handleOpenCreateDialog}
-              size={isSmallScreen ? "small" : "medium"}
-              sx={{ boxShadow: "0 1px 3px rgba(0,0,0,0.12)" }}
-            >
-              Create Order
-            </Button>
-            {user?.role === "admin" && (
-              <Button
-                variant="outlined"
-                startIcon={<BusinessIcon />}
-                onClick={handleManageBrokers}
-                size={isSmallScreen ? "small" : "medium"}
-              >
-                Manage Brokers
-              </Button>
-            )}
-          </Box>
-        )}
-      </Box>
       {/* Search/Filter Toolbar */}
       <Card sx={{ mb: 3, boxShadow: "none", border: 1, borderColor: "divider" }}>
         <CardContent
@@ -4773,6 +4740,29 @@ const OrdersPage = () => {
                 ),
               }}
             />
+            {(user?.role === "admin" || user?.role === "affiliate_manager") && (
+              <Box sx={{ display: "flex", gap: 1, flexDirection: isSmallScreen ? "column" : "row" }}>
+                <Button
+                  variant="contained"
+                  startIcon={<AddIcon />}
+                  onClick={handleOpenCreateDialog}
+                  size={isSmallScreen ? "small" : "medium"}
+                  sx={{ boxShadow: "0 1px 3px rgba(0,0,0,0.12)" }}
+                >
+                  Create Order
+                </Button>
+                {user?.role === "admin" && (
+                  <Button
+                    variant="outlined"
+                    startIcon={<BusinessIcon />}
+                    onClick={handleManageBrokers}
+                    size={isSmallScreen ? "small" : "medium"}
+                  >
+                    Manage Brokers
+                  </Button>
+                )}
+              </Box>
+            )}
             <Button
               variant={showFilters ? "contained" : "outlined"}
               startIcon={<FilterListIcon />}
@@ -4825,7 +4815,7 @@ const OrdersPage = () => {
         </CardContent>
       </Card>
       {}
-      <Paper sx={{ position: "relative", borderRadius: 2, border: 1, borderColor: "divider", boxShadow: "0 1px 3px rgba(0,0,0,0.08)", overflow: "hidden" }}>
+      <Paper sx={{ position: "relative", borderRadius: 2, border: 1, borderColor: "divider", boxShadow: "0 1px 3px rgba(0,0,0,0.08)", overflow: "hidden", flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
         {searching && (
           <LinearProgress
             sx={{
@@ -4847,7 +4837,7 @@ const OrdersPage = () => {
             }}
           />
         )}
-        <TableContainer sx={{ maxHeight: "calc(100vh - 320px)" }}>
+        <TableContainer sx={{ flex: 1, overflow: "auto" }}>
           <Table size="small" stickyHeader sx={{
             tableLayout: "fixed",
             "& .MuiTableHead-root .MuiTableCell-head": {
