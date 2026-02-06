@@ -224,4 +224,4 @@ const CrmNetworkOrdersTable = ({ networkId }) => {
   );
 };
 
-export default CrmNetworkOrdersTable;
+export default React.memo(CrmNetworkOrdersTable);

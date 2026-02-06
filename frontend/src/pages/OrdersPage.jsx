@@ -91,6 +91,13 @@ import {
   Launch as LaunchIcon,
   Gavel as GavelIcon,
   CreditCard as CreditCardIcon,
+  AccountCircle as AccountCircleIcon,
+  Assignment as AssignmentIcon,
+  Notes as NotesIcon,
+  Language as LanguageIcon,
+  FilterList as FilterListIcon,
+  Inbox as InboxIcon,
+  ListAlt as ListAltIcon,
 } from "@mui/icons-material";
 import { useForm, Controller } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
@@ -246,6 +253,23 @@ const getPriorityColor = (priority) => {
     low: "info",
   };
   return colors[priority] || "default";
+};
+const getStatusChipSx = (status) => {
+  const styles = {
+    fulfilled: { bgcolor: "rgba(46,125,50,0.08)", color: "#2e7d32", borderColor: "#2e7d32" },
+    pending: { bgcolor: "rgba(237,108,2,0.08)", color: "#ed6c02", borderColor: "#ed6c02" },
+    cancelled: { bgcolor: "rgba(211,47,47,0.08)", color: "#d32f2f", borderColor: "#d32f2f" },
+    partial: { bgcolor: "rgba(2,136,209,0.08)", color: "#0288d1", borderColor: "#0288d1" },
+  };
+  return styles[status] || { bgcolor: "rgba(0,0,0,0.04)", color: "text.secondary", borderColor: "grey.400" };
+};
+const getPriorityChipSx = (priority) => {
+  const styles = {
+    high: { bgcolor: "rgba(211,47,47,0.08)", color: "#d32f2f", borderColor: "#d32f2f" },
+    medium: { bgcolor: "rgba(237,108,2,0.08)", color: "#ed6c02", borderColor: "#ed6c02" },
+    low: { bgcolor: "rgba(2,136,209,0.08)", color: "#0288d1", borderColor: "#0288d1" },
+  };
+  return styles[priority] || { bgcolor: "rgba(0,0,0,0.04)", color: "text.secondary", borderColor: "grey.400" };
 };
 // Helper function to get the display lead type (orderedAs takes precedence over leadType)
 const getDisplayLeadType = (lead) => {
@@ -4682,105 +4706,126 @@ const OrdersPage = () => {
           </Alert>
         </Collapse>
       )}
-      <Card sx={{ mb: 3 }}>
+      {/* Page Header */}
+      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 3, flexWrap: "wrap", gap: 2 }}>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+          <ListAltIcon sx={{ fontSize: 32, color: "primary.main" }} />
+          <Box>
+            <Typography variant="h5" sx={{ fontWeight: 700, color: "text.primary", lineHeight: 1.2 }}>Orders</Typography>
+            <Typography variant="body2" sx={{ color: "text.secondary" }}>Manage and track all lead orders</Typography>
+          </Box>
+        </Box>
+        {(user?.role === "admin" || user?.role === "affiliate_manager") && (
+          <Box sx={{ display: "flex", gap: 1, flexDirection: isSmallScreen ? "column" : "row" }}>
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={handleOpenCreateDialog}
+              size={isSmallScreen ? "small" : "medium"}
+              sx={{ boxShadow: "0 1px 3px rgba(0,0,0,0.12)" }}
+            >
+              Create Order
+            </Button>
+            {user?.role === "admin" && (
+              <Button
+                variant="outlined"
+                startIcon={<BusinessIcon />}
+                onClick={handleManageBrokers}
+                size={isSmallScreen ? "small" : "medium"}
+              >
+                Manage Brokers
+              </Button>
+            )}
+          </Box>
+        )}
+      </Box>
+      {/* Search/Filter Toolbar */}
+      <Card sx={{ mb: 3, boxShadow: "none", border: 1, borderColor: "divider" }}>
         <CardContent
           sx={{
             p: isSmallScreen ? 1.5 : 2,
             "&:last-child": { pb: isSmallScreen ? 1.5 : 2 },
           }}
         >
-          <Box
-            display="flex"
-            justifyContent="space-between"
-            alignItems="center"
-            flexWrap="wrap"
-            gap={2}
-          >
-            <Box display="flex" alignItems="center" gap={1} flex={1}>
-              <TextField
-                label="Search by keyword"
-                placeholder="Type to search..."
-                value={filters.search}
-                onChange={handleFilterChange("search")}
-                size="small"
-                sx={{ minWidth: 400, maxWidth: 600 }}
-                InputProps={{
-                  startAdornment: (
-                    <SearchIcon
-                      sx={{ color: "action.active", mr: 1, fontSize: 20 }}
-                    />
-                  ),
-                }}
-              />
-              {(user?.role === "admin" ||
-                user?.role === "affiliate_manager") && (
-                <Box
-                  sx={{
-                    display: "flex",
-                    gap: 1,
-                    flexDirection: isSmallScreen ? "column" : "row",
-                  }}
-                >
-                  <Button
-                    variant="contained"
-                    startIcon={<AddIcon />}
-                    onClick={handleOpenCreateDialog}
-                    size={isSmallScreen ? "small" : "medium"}
-                  >
-                    Create Order
-                  </Button>
-                  {user?.role === "admin" && (
-                    <Button
-                      variant="outlined"
-                      startIcon={<BusinessIcon />}
-                      onClick={handleManageBrokers}
-                      size={isSmallScreen ? "small" : "medium"}
-                    >
-                      Manage Brokers
-                    </Button>
-                  )}
-                </Box>
-              )}
-              <Tooltip title="Configure copy format for leads">
-                <IconButton onClick={() => setCopyPreferencesOpen(true)}>
-                  <SettingsIcon />
-                </IconButton>
-              </Tooltip>
-              <IconButton onClick={() => setShowFilters(!showFilters)}>
-                {showFilters ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+          <Box display="flex" alignItems="center" gap={1.5} flexWrap="wrap">
+            <TextField
+              placeholder="Search orders..."
+              value={filters.search}
+              onChange={handleFilterChange("search")}
+              size="small"
+              sx={{
+                minWidth: 300,
+                maxWidth: 500,
+                flex: 1,
+                "& .MuiOutlinedInput-root": {
+                  borderRadius: 2,
+                  bgcolor: "grey.50",
+                  "&:hover": { bgcolor: "grey.100" },
+                  "&.Mui-focused": {
+                    bgcolor: "background.paper",
+                    boxShadow: (theme) => `0 0 0 2px ${alpha(theme.palette.primary.main, 0.2)}`,
+                  },
+                },
+              }}
+              InputProps={{
+                startAdornment: (
+                  <SearchIcon sx={{ color: "action.active", mr: 1, fontSize: 20 }} />
+                ),
+              }}
+            />
+            <Button
+              variant={showFilters ? "contained" : "outlined"}
+              startIcon={<FilterListIcon />}
+              onClick={() => setShowFilters(!showFilters)}
+              size="small"
+              sx={{ textTransform: "none", borderRadius: 2 }}
+            >
+              Filters
+            </Button>
+            <Tooltip title="Configure copy format for leads">
+              <IconButton
+                onClick={() => setCopyPreferencesOpen(true)}
+                sx={{ border: 1, borderColor: "divider", borderRadius: 1.5 }}
+              >
+                <SettingsIcon fontSize="small" />
               </IconButton>
-            </Box>
+            </Tooltip>
           </Box>
           {showFilters && (
-            <Grid container spacing={2} sx={{ mt: 1 }}>
-              <Grid item xs={12} sm={6} md={4}>
-                <TextField
-                  fullWidth
-                  label="Planned Date (From)"
-                  type="date"
-                  value={filters.startDate}
-                  onChange={handleFilterChange("startDate")}
-                  InputLabelProps={{ shrink: true }}
-                  size="small"
-                />
+            <>
+              <Divider sx={{ my: 2 }} />
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={6} md={4}>
+                  <TextField
+                    fullWidth
+                    label="Planned Date (From)"
+                    type="date"
+                    value={filters.startDate}
+                    onChange={handleFilterChange("startDate")}
+                    InputLabelProps={{ shrink: true }}
+                    size="small"
+                    sx={{ "& .MuiOutlinedInput-root": { borderRadius: 2 } }}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6} md={4}>
+                  <TextField
+                    fullWidth
+                    label="Planned Date (To)"
+                    type="date"
+                    value={filters.endDate}
+                    onChange={handleFilterChange("endDate")}
+                    InputLabelProps={{ shrink: true }}
+                    size="small"
+                    sx={{ "& .MuiOutlinedInput-root": { borderRadius: 2 } }}
+                  />
+                </Grid>
               </Grid>
-              <Grid item xs={12} sm={6} md={4}>
-                <TextField
-                  fullWidth
-                  label="Planned Date (To)"
-                  type="date"
-                  value={filters.endDate}
-                  onChange={handleFilterChange("endDate")}
-                  InputLabelProps={{ shrink: true }}
-                  size="small"
-                />
-              </Grid>
-            </Grid>
+            </>
           )}
         </CardContent>
       </Card>
       {}
-      <Paper sx={{ position: "relative" }}>
+      <Paper sx={{ position: "relative", borderRadius: 2, border: 1, borderColor: "divider", boxShadow: "0 1px 3px rgba(0,0,0,0.08)", overflow: "hidden" }}>
         {searching && (
           <LinearProgress
             sx={{
@@ -4788,128 +4833,71 @@ const OrdersPage = () => {
               top: 0,
               left: 0,
               right: 0,
-              zIndex: 1,
-              height: 3,
+              zIndex: 2,
+              height: 2,
+              "& .MuiLinearProgress-bar": {
+                background: "linear-gradient(90deg, #3b82f6, #8b5cf6, #3b82f6)",
+                backgroundSize: "200% 100%",
+                animation: "shimmer 1.5s infinite",
+              },
+              "@keyframes shimmer": {
+                "0%": { backgroundPosition: "200% 0" },
+                "100%": { backgroundPosition: "-200% 0" },
+              },
             }}
           />
         )}
-        <TableContainer>
-          <Table size="small" sx={{ tableLayout: "fixed" }}>
+        <TableContainer sx={{ maxHeight: "calc(100vh - 320px)" }}>
+          <Table size="small" stickyHeader sx={{
+            tableLayout: "fixed",
+            "& .MuiTableHead-root .MuiTableCell-head": {
+              background: "linear-gradient(135deg, #1e293b 0%, #334155 100%)",
+              color: "#fff",
+              fontWeight: 700,
+              fontSize: "0.75rem",
+              textTransform: "uppercase",
+              letterSpacing: "0.5px",
+              borderBottom: "2px solid #3b82f6",
+              py: 1.5,
+            },
+            "& .MuiTableBody-root .MuiTableRow-root:nth-of-type(even)": {
+              bgcolor: (theme) => alpha(theme.palette.grey[500], 0.02),
+            },
+            "& .MuiTableBody-root .MuiTableRow-root:hover": {
+              bgcolor: (theme) => alpha(theme.palette.primary.main, 0.06),
+              transition: "background-color 0.15s ease",
+            },
+          }}>
             <TableHead>
               <TableRow>
-                <TableCell
-                  sx={{
-                    fontWeight: "bold",
-                    backgroundColor: "grey.200",
-                    width: "10%",
-                    py: 1,
-                  }}
-                >
+                <TableCell sx={{ width: "10%" }}>
                   Order ID
                 </TableCell>
-                <TableCell
-                  sx={{
-                    display: { xs: "none", md: "table-cell" },
-                    fontWeight: "bold",
-                    backgroundColor: "grey.200",
-                    textAlign: "center",
-                    width: "13%",
-                    py: 1,
-                  }}
-                >
+                <TableCell sx={{ display: { xs: "none", md: "table-cell" }, textAlign: "center", width: "13%" }}>
                   Requester
                 </TableCell>
-                <TableCell
-                  sx={{
-                    display: { xs: "none", md: "table-cell" },
-                    fontWeight: "bold",
-                    backgroundColor: "grey.200",
-                    textAlign: "center",
-                    width: "10%",
-                    py: 1,
-                  }}
-                >
+                <TableCell sx={{ display: { xs: "none", md: "table-cell" }, textAlign: "center", width: "10%" }}>
                   CN
                 </TableCell>
-                <TableCell
-                  sx={{
-                    display: { xs: "none", md: "table-cell" },
-                    fontWeight: "bold",
-                    backgroundColor: "grey.200",
-                    textAlign: "center",
-                    width: "10%",
-                    py: 1,
-                  }}
-                >
+                <TableCell sx={{ display: { xs: "none", md: "table-cell" }, textAlign: "center", width: "10%" }}>
                   ON
                 </TableCell>
-                <TableCell
-                  sx={{
-                    fontWeight: "bold",
-                    backgroundColor: "grey.200",
-                    textAlign: "center",
-                    width: "14%",
-                    py: 1,
-                  }}
-                >
+                <TableCell sx={{ textAlign: "center", width: "14%" }}>
                   Fulfilled
                 </TableCell>
-                <TableCell
-                  sx={{
-                    fontWeight: "bold",
-                    backgroundColor: "grey.200",
-                    textAlign: "center",
-                    width: "10%",
-                    py: 1,
-                  }}
-                >
+                <TableCell sx={{ textAlign: "center", width: "10%" }}>
                   Status
                 </TableCell>
-                <TableCell
-                  sx={{
-                    display: { xs: "none", sm: "table-cell" },
-                    fontWeight: "bold",
-                    backgroundColor: "grey.200",
-                    textAlign: "center",
-                    width: "10%",
-                    py: 1,
-                  }}
-                >
+                <TableCell sx={{ display: { xs: "none", sm: "table-cell" }, textAlign: "center", width: "10%" }}>
                   GEO
                 </TableCell>
-                <TableCell
-                  sx={{
-                    display: { xs: "none", sm: "table-cell" },
-                    fontWeight: "bold",
-                    backgroundColor: "grey.200",
-                    textAlign: "center",
-                    width: "10%",
-                    py: 1,
-                  }}
-                >
+                <TableCell sx={{ display: { xs: "none", sm: "table-cell" }, textAlign: "center", width: "10%" }}>
                   Priority
                 </TableCell>
-                <TableCell
-                  sx={{
-                    display: { xs: "none", sm: "table-cell" },
-                    fontWeight: "bold",
-                    backgroundColor: "grey.200",
-                    textAlign: "center",
-                    width: "12%",
-                    py: 1,
-                  }}
-                >
+                <TableCell sx={{ display: { xs: "none", sm: "table-cell" }, textAlign: "center", width: "12%" }}>
                   Planned Date
                 </TableCell>
-                <TableCell
-                  sx={{
-                    fontWeight: "bold",
-                    backgroundColor: "grey.200",
-                    textAlign: "right",
-                    width: "11%",
-                    py: 1,
-                  }}
-                >
+                <TableCell sx={{ textAlign: "right", width: "11%" }}>
                   Actions
                 </TableCell>
               </TableRow>
@@ -4917,14 +4905,21 @@ const OrdersPage = () => {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={10} align="center">
-                    <CircularProgress />
+                  <TableCell colSpan={10} align="center" sx={{ py: 8, borderBottom: "none" }}>
+                    <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 1.5 }}>
+                      <CircularProgress size={36} />
+                      <Typography variant="body2" color="text.secondary">Loading orders...</Typography>
+                    </Box>
                   </TableCell>
                 </TableRow>
               ) : orders.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={10} align="center">
-                    No orders found
+                  <TableCell colSpan={10} align="center" sx={{ py: 8, borderBottom: "none" }}>
+                    <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 1 }}>
+                      <InboxIcon sx={{ fontSize: 48, color: "grey.400" }} />
+                      <Typography variant="h6" color="text.secondary">No orders found</Typography>
+                      <Typography variant="body2" color="text.disabled">Try adjusting your search or filter criteria</Typography>
+                    </Box>
                   </TableCell>
                 </TableRow>
               ) : (
@@ -4936,10 +4931,10 @@ const OrdersPage = () => {
                       <TableRow
                         hover
                         onClick={() => toggleRowExpansion(order._id)}
-                        sx={{ cursor: "pointer", "& td": { py: 0.5 } }}
+                        sx={{ cursor: "pointer", "& td": { py: 0.75, borderColor: "grey.100" } }}
                       >
                         <TableCell>
-                          <Typography variant="body2" noWrap>
+                          <Typography variant="body2" noWrap sx={{ fontFamily: "monospace", color: "primary.dark", fontWeight: 500 }}>
                             {order._id.slice(-8)}
                           </Typography>
                         </TableCell>
@@ -5014,64 +5009,25 @@ const OrdersPage = () => {
                           </Typography>
                         </TableCell>
                         <TableCell align="center">
-                          <Box
-                            sx={{
-                              display: "flex",
-                              justifyContent: "center",
-                              gap: 0.5,
-                            }}
-                          >
+                          <Box sx={{ display: "flex", justifyContent: "center", gap: 0.75 }}>
                             {[
-                              {
-                                fulfilled: order.fulfilled?.ftd || 0,
-                                requested: order.requests?.ftd || 0,
-                              },
-                              {
-                                fulfilled: order.fulfilled?.filler || 0,
-                                requested: order.requests?.filler || 0,
-                              },
-                              {
-                                fulfilled: order.fulfilled?.cold || 0,
-                                requested: order.requests?.cold || 0,
-                              },
+                              { fulfilled: order.fulfilled?.ftd || 0, requested: order.requests?.ftd || 0, label: "FTD", color: "#3b82f6" },
+                              { fulfilled: order.fulfilled?.filler || 0, requested: order.requests?.filler || 0, label: "Filler", color: "#f59e0b" },
+                              { fulfilled: order.fulfilled?.cold || 0, requested: order.requests?.cold || 0, label: "Cold", color: "#8b5cf6" },
                             ].map((item, idx) => {
-                              const isUnfulfilled =
-                                (order.status === "cancelled" ||
-                                  order.status === "partial") &&
-                                item.fulfilled < item.requested;
+                              if (item.requested === 0) return null;
+                              const pct = item.requested > 0 ? Math.min((item.fulfilled / item.requested) * 100, 100) : 0;
                               return (
-                                <React.Fragment key={idx}>
-                                  {idx > 0 && (
-                                    <Typography
-                                      variant="body2"
-                                      component="span"
-                                      sx={{
-                                        color: "primary.main",
-                                        fontWeight: 900,
-                                        mx: 0.5,
-                                      }}
-                                    >
-                                      |
+                                <Tooltip key={idx} title={`${item.label}: ${item.fulfilled}/${item.requested}`} arrow placement="top">
+                                  <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", minWidth: 36 }}>
+                                    <Typography variant="caption" sx={{ fontSize: "0.65rem", fontWeight: 600, color: item.color, lineHeight: 1 }}>
+                                      {item.fulfilled}/{item.requested}
                                     </Typography>
-                                  )}
-                                  <Typography
-                                    variant="caption"
-                                    component="span"
-                                    noWrap
-                                  >
-                                    <Box
-                                      component="span"
-                                      sx={{
-                                        color: isUnfulfilled
-                                          ? "error.main"
-                                          : "inherit",
-                                      }}
-                                    >
-                                      {item.fulfilled}
+                                    <Box sx={{ width: "100%", height: 3, bgcolor: "grey.200", borderRadius: 1, mt: 0.25, overflow: "hidden" }}>
+                                      <Box sx={{ width: `${pct}%`, height: "100%", bgcolor: item.color, borderRadius: 1, transition: "width 0.3s ease" }} />
                                     </Box>
-                                    /{item.requested}
-                                  </Typography>
-                                </React.Fragment>
+                                  </Box>
+                                </Tooltip>
                               );
                             })}
                           </Box>
@@ -5113,8 +5069,9 @@ const OrdersPage = () => {
                           >
                             <Chip
                               label={order.status}
-                              color={getStatusColor(order.status)}
+                              variant="outlined"
                               size="small"
+                              sx={{ textTransform: "capitalize", fontWeight: 600, ...getStatusChipSx(order.status) }}
                             />
                           </Tooltip>
                         </TableCell>
@@ -5132,8 +5089,9 @@ const OrdersPage = () => {
                         >
                           <Chip
                             label={order.priority}
-                            color={getPriorityColor(order.priority)}
+                            variant="outlined"
                             size="small"
+                            sx={{ textTransform: "capitalize", fontWeight: 600, ...getPriorityChipSx(order.priority) }}
                           />
                         </TableCell>
                         <TableCell
@@ -5147,54 +5105,44 @@ const OrdersPage = () => {
                           </Typography>
                         </TableCell>
                         <TableCell align="right">
-                          <Box
-                            display="flex"
-                            flexDirection="row"
-                            gap={0.5}
-                            justifyContent="flex-end"
-                          >
-                            <IconButton
-                              size="small"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handlePreviewOrderLeads(order._id);
-                              }}
-                              title="Preview Leads"
-                            >
-                              <ViewIcon fontSize="small" />
-                            </IconButton>
-                            <IconButton
-                              size="small"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleExportLeads(order._id);
-                              }}
-                              title="Export Leads as CSV"
-                            >
-                              <DownloadIcon fontSize="small" />
-                            </IconButton>
-                            <IconButton
-                              size="small"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleCopyOrderLeadsById(order._id);
-                              }}
-                              title="Copy Leads to Clipboard"
-                            >
-                              <ContentCopyIcon fontSize="small" />
-                            </IconButton>
-
-                            <IconButton
-                              size="small"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleOpenOrderAudit(order);
-                              }}
-                              title="View Audit Log"
-                              color="info"
-                            >
-                              <HistoryIcon fontSize="small" />
-                            </IconButton>
+                          <Box display="flex" flexDirection="row" gap={0.25} justifyContent="flex-end" alignItems="center">
+                            <Tooltip title="Preview Leads" arrow>
+                              <IconButton
+                                size="small"
+                                onClick={(e) => { e.stopPropagation(); handlePreviewOrderLeads(order._id); }}
+                                sx={{ "&:hover": { color: "primary.main", bgcolor: (theme) => alpha(theme.palette.primary.main, 0.08) } }}
+                              >
+                                <ViewIcon sx={{ fontSize: 18 }} />
+                              </IconButton>
+                            </Tooltip>
+                            <Tooltip title="Export Leads as CSV" arrow>
+                              <IconButton
+                                size="small"
+                                onClick={(e) => { e.stopPropagation(); handleExportLeads(order._id); }}
+                                sx={{ "&:hover": { color: "success.main", bgcolor: (theme) => alpha(theme.palette.success.main, 0.08) } }}
+                              >
+                                <DownloadIcon sx={{ fontSize: 18 }} />
+                              </IconButton>
+                            </Tooltip>
+                            <Tooltip title="Copy Leads to Clipboard" arrow>
+                              <IconButton
+                                size="small"
+                                onClick={(e) => { e.stopPropagation(); handleCopyOrderLeadsById(order._id); }}
+                                sx={{ "&:hover": { color: "info.main", bgcolor: (theme) => alpha(theme.palette.info.main, 0.08) } }}
+                              >
+                                <ContentCopyIcon sx={{ fontSize: 18 }} />
+                              </IconButton>
+                            </Tooltip>
+                            <Divider orientation="vertical" flexItem sx={{ mx: 0.25 }} />
+                            <Tooltip title="View Audit Log" arrow>
+                              <IconButton
+                                size="small"
+                                onClick={(e) => { e.stopPropagation(); handleOpenOrderAudit(order); }}
+                                sx={{ "&:hover": { color: "info.main", bgcolor: (theme) => alpha(theme.palette.info.main, 0.08) } }}
+                              >
+                                <HistoryIcon sx={{ fontSize: 18 }} />
+                              </IconButton>
+                            </Tooltip>
                           </Box>
                         </TableCell>
                       </TableRow>
@@ -5209,7 +5157,7 @@ const OrdersPage = () => {
                             timeout={150}
                             unmountOnExit
                           >
-                            <Box sx={{ p: 3, bgcolor: "grey.50" }}>
+                            <Box sx={{ p: 3, bgcolor: (theme) => alpha(theme.palette.primary.main, 0.02), borderTop: (theme) => `2px solid ${theme.palette.primary.main}` }}>
                               {expandedDetails?.loading ? (
                                 <Box
                                   sx={{
@@ -5284,10 +5232,12 @@ const OrdersPage = () => {
                                     <Paper
                                       elevation={0}
                                       sx={{
-                                        p: 2,
+                                        p: 2.5,
                                         borderRadius: 2,
                                         border: 1,
                                         borderColor: "divider",
+                                        transition: "box-shadow 0.2s ease",
+                                        "&:hover": { boxShadow: "0 2px 8px rgba(0,0,0,0.08)" },
                                       }}
                                     >
                                       <Grid container spacing={2}>
@@ -5304,14 +5254,19 @@ const OrdersPage = () => {
                                             <Typography
                                               variant="subtitle2"
                                               sx={{
-                                                fontWeight: 600,
+                                                fontWeight: 700,
                                                 color: "primary.main",
                                                 display: "flex",
                                                 alignItems: "center",
                                                 gap: 0.5,
+                                                textTransform: "uppercase",
+                                                letterSpacing: "0.5px",
+                                                pb: 0.75,
+                                                borderBottom: 1,
+                                                borderColor: "divider",
                                               }}
                                             >
-                                              👤 Account Manager
+                                              <AccountCircleIcon sx={{ fontSize: 18 }} /> Account Manager
                                             </Typography>
                                             {user?.role === "admin" && (
                                               <IconButton
@@ -5434,15 +5389,20 @@ const OrdersPage = () => {
                                           <Typography
                                             variant="subtitle2"
                                             sx={{
-                                              fontWeight: 600,
+                                              fontWeight: 700,
                                               mb: 1.5,
                                               color: "primary.main",
                                               display: "flex",
                                               alignItems: "center",
                                               gap: 0.5,
+                                              textTransform: "uppercase",
+                                              letterSpacing: "0.5px",
+                                              pb: 0.75,
+                                              borderBottom: 1,
+                                              borderColor: "divider",
                                             }}
                                           >
-                                            📋 Order Info & Filters
+                                            <AssignmentIcon sx={{ fontSize: 18 }} /> Order Info & Filters
                                           </Typography>
                                           <Box
                                             sx={{
@@ -5584,25 +5544,33 @@ const OrdersPage = () => {
                                               <Typography
                                                 variant="subtitle2"
                                                 sx={{
-                                                  fontWeight: 600,
+                                                  fontWeight: 700,
                                                   mb: 1.5,
                                                   color: "primary.main",
                                                   display: "flex",
                                                   alignItems: "center",
                                                   gap: 0.5,
+                                                  textTransform: "uppercase",
+                                                  letterSpacing: "0.5px",
+                                                  pb: 0.75,
+                                                  borderBottom: 1,
+                                                  borderColor: "divider",
                                                 }}
                                               >
-                                                📝 Notes
+                                                <NotesIcon sx={{ fontSize: 18 }} /> Notes
                                               </Typography>
                                               <Typography
                                                 variant="body2"
                                                 sx={{
                                                   fontWeight: 400,
+                                                  fontStyle: "italic",
                                                   fontSize: "0.85rem",
                                                   lineHeight: 1.5,
-                                                  bgcolor: "action.hover",
-                                                  p: 1,
+                                                  bgcolor: (theme) => alpha(theme.palette.grey[500], 0.06),
+                                                  p: 1.5,
                                                   borderRadius: 1,
+                                                  borderLeft: 3,
+                                                  borderColor: "primary.light",
                                                 }}
                                               >
                                                 {expandedDetails.notes}
@@ -5619,24 +5587,31 @@ const OrdersPage = () => {
                                     <Paper
                                       elevation={0}
                                       sx={{
-                                        p: 2,
+                                        p: 2.5,
                                         borderRadius: 2,
                                         border: 1,
                                         borderColor: "divider",
+                                        transition: "box-shadow 0.2s ease",
+                                        "&:hover": { boxShadow: "0 2px 8px rgba(0,0,0,0.08)" },
                                       }}
                                     >
                                       <Typography
                                         variant="subtitle2"
                                         sx={{
-                                          fontWeight: 600,
+                                          fontWeight: 700,
                                           mb: 1.5,
                                           color: "primary.main",
                                           display: "flex",
                                           alignItems: "center",
                                           gap: 0.5,
+                                          textTransform: "uppercase",
+                                          letterSpacing: "0.5px",
+                                          pb: 0.75,
+                                          borderBottom: 1,
+                                          borderColor: "divider",
                                         }}
                                       >
-                                        🌐 Network Configuration
+                                        <LanguageIcon sx={{ fontSize: 18 }} /> Network Configuration
                                       </Typography>
                                       <Grid container spacing={2}>
                                         <Grid item xs={12} sm={6} md={3}>
@@ -5898,14 +5873,12 @@ const OrdersPage = () => {
                                                   gap: 2,
                                                 }}
                                               >
-                                                <Typography
-                                                  variant="subtitle1"
-                                                  sx={{ fontWeight: "bold" }}
-                                                >
-                                                  Assigned Leads (
-                                                  {expandedDetails.leads.length}
-                                                  )
-                                                </Typography>
+                                                <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                                                  <Typography variant="subtitle1" sx={{ fontWeight: "bold" }}>
+                                                    Assigned Leads
+                                                  </Typography>
+                                                  <Chip label={expandedDetails.leads.length} size="small" color="primary" sx={{ height: 22, fontSize: "0.75rem", fontWeight: 600 }} />
+                                                </Box>
                                                 <Button
                                                   variant="contained"
                                                   size="small"
@@ -6099,15 +6072,22 @@ const OrdersPage = () => {
             </TableBody>
           </Table>
         </TableContainer>
-        <TablePagination
-          rowsPerPageOptions={[25, 50, 100]}
-          component="div"
-          count={totalOrders}
-          rowsPerPage={rowsPerPage}
-          page={page}
-          onPageChange={handleChangePage}
-          onRowsPerPageChange={handleChangeRowsPerPage}
-        />
+        <Box sx={{ display: "flex", alignItems: "center", borderTop: 1, borderColor: "divider", px: 2 }}>
+          <Typography variant="body2" color="text.secondary" sx={{ fontSize: "0.8rem" }}>
+            Showing {Math.min(page * rowsPerPage + 1, totalOrders)}-{Math.min((page + 1) * rowsPerPage, totalOrders)} of {totalOrders} orders
+          </Typography>
+          <Box sx={{ flex: 1 }} />
+          <TablePagination
+            rowsPerPageOptions={[25, 50, 100]}
+            component="div"
+            count={totalOrders}
+            rowsPerPage={rowsPerPage}
+            page={page}
+            onPageChange={handleChangePage}
+            onRowsPerPageChange={handleChangeRowsPerPage}
+            sx={{ borderBottom: "none", "& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows": { fontSize: "0.8rem" } }}
+          />
+        </Box>
       </Paper>
       {}
       <Dialog

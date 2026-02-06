@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { lazy, Suspense, useState, useEffect } from "react";
 import {
   BrowserRouter as Router,
   Routes,
@@ -10,7 +10,6 @@ import { PersistGate } from "redux-persist/integration/react";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
 import {
   CssBaseline,
-  CircularProgress,
   Box,
   Dialog,
   DialogTitle,
@@ -18,74 +17,70 @@ import {
   DialogActions,
   Button,
   Typography,
+  Skeleton,
 } from "@mui/material";
-import toast, { Toaster } from "react-hot-toast";
+import { Toaster } from "react-hot-toast";
 import { store, persistor } from "./store/store";
-import {
-  selectUser,
-  selectIsAuthenticated,
-  acceptEula,
-  logout,
-} from "./store/slices/authSlice.js";
-import { backgroundSyncService } from "./services/backgroundSyncService.js";
-import chatService from "./services/chatService.js";
-import notificationService from "./services/notificationService.js";
-import inactivityService from "./services/inactivityService.js";
-import activityTrackerService from "./services/activityTrackerService.js";
+import { selectUser, selectIsAuthenticated, acceptEula } from "./store/slices/authSlice.js";
+import { useAppServices } from "./hooks/useAppServices.js";
 import ProtectedRoute from "./components/common/ProtectedRoute.jsx";
 import PublicRoute from "./components/common/PublicRoute.jsx";
 import MainLayout from "./layouts/MainLayout.jsx";
 import DisclaimerModal from "./components/common/DisclaimerModal.jsx";
-import LoginPage from "./pages/LoginPage.jsx";
-import RegisterPage from "./pages/RegisterPage.jsx";
-import LandingPage from "./pages/LandingPage.jsx";
-import DashboardPage from "./pages/DashboardPage.jsx";
-import OrdersPage from "./pages/OrdersPage.jsx";
-import LeadsPage from "./pages/LeadsPage.jsx";
-import DeletedLeadsPage from "./pages/DeletedLeadsPage.jsx";
-import UsersPage from "./pages/UsersPage.jsx";
-import ClientNetworksPage from "./pages/ClientNetworksPage.jsx";
-import OurNetworksPage from "./pages/OurNetworksPage.jsx";
-import ClientBrokersPage from "./pages/ClientBrokersPage.jsx";
-import CampaignsPage from "./pages/CampaignsPage.jsx";
-import ProfilePage from "./pages/ProfilePage.jsx";
-import PayrollPage from "./pages/PayrollPage.jsx";
-import WithdrawalsPage from "./pages/WithdrawalsPage.jsx";
-import PaymentHistoryPage from "./pages/PaymentHistoryPage.jsx";
-import AffiliateManagersPage from "./pages/AffiliateManagersPage.jsx";
-import AffiliateManagerTableView from "./components/AffiliateManagerTableView.jsx";
-import AgentCommentsPage from "./pages/AgentCommentsPage.jsx";
-import RefundsPage from "./pages/RefundsPage.jsx";
-import NotFoundPage from "./pages/NotFoundPage.jsx";
-import DisclaimerPage from "./pages/DisclaimerPage.jsx";
-import VerificationsPage from "./pages/VerificationsPage.jsx";
-import TicketsPage from "./pages/TicketsPage.jsx";
-import NotificationsPage from "./pages/NotificationsPage.jsx";
-import SimCardsPage from "./pages/SimCardsPage.jsx";
-import NumberPage from "./pages/NumberPage.jsx";
-import SMSPage from "./pages/SMSPage.jsx";
-import AccountManagementPage from "./pages/AccountManagementPage.jsx";
-import ClientNetworkProfilePage from "./pages/ClientNetworkProfilePage.jsx";
-import ClientBrokerProfilePage from "./pages/ClientBrokerProfilePage.jsx";
-import PSPProfilePage from "./pages/PSPProfilePage.jsx";
-import ClientPSPsPage from "./pages/ClientPSPsPage.jsx";
-import CardIssuersPage from "./pages/CardIssuersPage.jsx";
-import GatewayManagementPage from "./pages/GatewayManagementPage.jsx";
-import AgentSchedulePage from "./pages/AgentSchedulePage.jsx";
-import AgentCallsCalendarPage from "./pages/AgentCallsCalendarPage.jsx";
-import ApproveAMCallsPage from "./pages/ApproveAMCallsPage.jsx";
-import AnnouncementsPage from "./pages/AnnouncementsPage.jsx";
-import AMTargetsPage from "./pages/AMTargetsPage.jsx";
-import DepositCallsPage from "./pages/DepositCallsPage.jsx";
-import NotesPage from "./pages/NotesPage.jsx";
-import ActivityPage from "./pages/ActivityPage.jsx";
-import MobileApprovalPage from "./pages/MobileApprovalPage.jsx";
-import MobileActionApprovalPage from "./pages/MobileActionApprovalPage.jsx";
-import QRSetupPage from "./pages/QRSetupPage.jsx";
-import SearchResultsPage from "./pages/SearchResultsPage.jsx";
-import SheetsPage from "./pages/SheetsPage.jsx";
-import WorkspacePage from "./pages/WorkspacePage.jsx";
-import CrmPage from "./pages/CrmPage.jsx";
+import ErrorBoundary from "./components/common/ErrorBoundary.jsx";
+import PageLoadingFallback from "./components/common/PageLoadingFallback.jsx";
+
+// --- Lazy-loaded pages (code splitting) ---
+const LoginPage = lazy(() => import("./pages/LoginPage.jsx"));
+const RegisterPage = lazy(() => import("./pages/RegisterPage.jsx"));
+const LandingPage = lazy(() => import("./pages/LandingPage.jsx"));
+const DashboardPage = lazy(() => import("./pages/DashboardPage.jsx"));
+const OrdersPage = lazy(() => import("./pages/OrdersPage.jsx"));
+const LeadsPage = lazy(() => import("./pages/LeadsPage.jsx"));
+const DeletedLeadsPage = lazy(() => import("./pages/DeletedLeadsPage.jsx"));
+const UsersPage = lazy(() => import("./pages/UsersPage.jsx"));
+const ClientNetworksPage = lazy(() => import("./pages/ClientNetworksPage.jsx"));
+const OurNetworksPage = lazy(() => import("./pages/OurNetworksPage.jsx"));
+const ClientBrokersPage = lazy(() => import("./pages/ClientBrokersPage.jsx"));
+const CampaignsPage = lazy(() => import("./pages/CampaignsPage.jsx"));
+const ProfilePage = lazy(() => import("./pages/ProfilePage.jsx"));
+const PayrollPage = lazy(() => import("./pages/PayrollPage.jsx"));
+const WithdrawalsPage = lazy(() => import("./pages/WithdrawalsPage.jsx"));
+const PaymentHistoryPage = lazy(() => import("./pages/PaymentHistoryPage.jsx"));
+const AffiliateManagersPage = lazy(() => import("./pages/AffiliateManagersPage.jsx"));
+const AffiliateManagerTableView = lazy(() => import("./components/AffiliateManagerTableView.jsx"));
+const AgentCommentsPage = lazy(() => import("./pages/AgentCommentsPage.jsx"));
+const RefundsPage = lazy(() => import("./pages/RefundsPage.jsx"));
+const NotFoundPage = lazy(() => import("./pages/NotFoundPage.jsx"));
+const DisclaimerPage = lazy(() => import("./pages/DisclaimerPage.jsx"));
+const VerificationsPage = lazy(() => import("./pages/VerificationsPage.jsx"));
+const TicketsPage = lazy(() => import("./pages/TicketsPage.jsx"));
+const NotificationsPage = lazy(() => import("./pages/NotificationsPage.jsx"));
+const SimCardsPage = lazy(() => import("./pages/SimCardsPage.jsx"));
+const NumberPage = lazy(() => import("./pages/NumberPage.jsx"));
+const SMSPage = lazy(() => import("./pages/SMSPage.jsx"));
+const AccountManagementPage = lazy(() => import("./pages/AccountManagementPage.jsx"));
+const ClientNetworkProfilePage = lazy(() => import("./pages/ClientNetworkProfilePage.jsx"));
+const ClientBrokerProfilePage = lazy(() => import("./pages/ClientBrokerProfilePage.jsx"));
+const PSPProfilePage = lazy(() => import("./pages/PSPProfilePage.jsx"));
+const ClientPSPsPage = lazy(() => import("./pages/ClientPSPsPage.jsx"));
+const CardIssuersPage = lazy(() => import("./pages/CardIssuersPage.jsx"));
+const GatewayManagementPage = lazy(() => import("./pages/GatewayManagementPage.jsx"));
+const AgentSchedulePage = lazy(() => import("./pages/AgentSchedulePage.jsx"));
+const AgentCallsCalendarPage = lazy(() => import("./pages/AgentCallsCalendarPage.jsx"));
+const ApproveAMCallsPage = lazy(() => import("./pages/ApproveAMCallsPage.jsx"));
+const AnnouncementsPage = lazy(() => import("./pages/AnnouncementsPage.jsx"));
+const AMTargetsPage = lazy(() => import("./pages/AMTargetsPage.jsx"));
+const DepositCallsPage = lazy(() => import("./pages/DepositCallsPage.jsx"));
+const NotesPage = lazy(() => import("./pages/NotesPage.jsx"));
+const ActivityPage = lazy(() => import("./pages/ActivityPage.jsx"));
+const MobileApprovalPage = lazy(() => import("./pages/MobileApprovalPage.jsx"));
+const MobileActionApprovalPage = lazy(() => import("./pages/MobileActionApprovalPage.jsx"));
+const QRSetupPage = lazy(() => import("./pages/QRSetupPage.jsx"));
+const SearchResultsPage = lazy(() => import("./pages/SearchResultsPage.jsx"));
+const SheetsPage = lazy(() => import("./pages/SheetsPage.jsx"));
+const WorkspacePage = lazy(() => import("./pages/WorkspacePage.jsx"));
+const CrmPage = lazy(() => import("./pages/CrmPage.jsx"));
 
 // Component to handle role-based default routing
 const RoleBasedRedirect = () => {
@@ -165,172 +160,25 @@ const theme = createTheme({
   },
 });
 
+// Suspense wrapper with ErrorBoundary for lazy routes
+const LazyPage = ({ children }) => (
+  <ErrorBoundary>
+    <Suspense fallback={<PageLoadingFallback />}>{children}</Suspense>
+  </ErrorBoundary>
+);
+
 function AppContent() {
   const dispatch = useDispatch();
   const [disclaimerOpen, setDisclaimerOpen] = useState(false);
-  const [inactivityWarningOpen, setInactivityWarningOpen] = useState(false);
-  const [warningSecondsRemaining, setWarningSecondsRemaining] = useState(60);
   const user = useSelector(selectUser);
   const isAuthenticated = useSelector(selectIsAuthenticated);
 
-  // Initialize background sync service when user is authenticated
-  useEffect(() => {
-    if (isAuthenticated && user) {
-      backgroundSyncService.start();
-    } else {
-      backgroundSyncService.stop();
-    }
-
-    // Cleanup on unmount
-    return () => {
-      backgroundSyncService.stop();
-    };
-  }, [isAuthenticated, user]);
-
-  // Initialize activity tracker service for performance monitoring
-  useEffect(() => {
-    if (isAuthenticated && user) {
-      // Start activity tracking
-      activityTrackerService.start();
-    } else {
-      // Stop activity tracking when logged out
-      activityTrackerService.stop();
-    }
-
-    // Cleanup on unmount
-    return () => {
-      activityTrackerService.stop();
-    };
-  }, [isAuthenticated, user]);
-
-  // Track page navigation for activity tracker
-  useEffect(() => {
-    const handleRouteChange = () => {
-      if (activityTrackerService.isRunning) {
-        activityTrackerService.trackPageVisit(
-          window.location.pathname,
-          document.title
-        );
-      }
-    };
-
-    // Initial page track
-    handleRouteChange();
-
-    // Listen for popstate (back/forward navigation)
-    window.addEventListener("popstate", handleRouteChange);
-
-    return () => {
-      window.removeEventListener("popstate", handleRouteChange);
-    };
-  }, []);
-
-  // Initialize inactivity tracking service for auto-logout
-  useEffect(() => {
-    if (isAuthenticated && user) {
-      // Define logout handler
-      const handleAutoLogout = (reason) => {
-        console.log(`🚪 Auto-logout triggered: ${reason}`);
-        setInactivityWarningOpen(false);
-
-        let message = "You have been logged out.";
-        if (reason === "inactivity") {
-          message = "You have been logged out due to 15 minutes of inactivity.";
-        } else if (reason === "midnight") {
-          message =
-            "Daily automatic logout at midnight (00:00 GMT+2). Please log in again.";
-        }
-
-        toast.error(message, { duration: 5000 });
-        dispatch(logout());
-        chatService.disconnect();
-      };
-
-      // Define warning handler
-      const handleInactivityWarning = (secondsRemaining) => {
-        console.log(
-          `⚠️ Inactivity warning: ${secondsRemaining} seconds until logout`
-        );
-        setWarningSecondsRemaining(secondsRemaining);
-        setInactivityWarningOpen(true);
-      };
-
-      // Start inactivity tracking
-      inactivityService.start(handleAutoLogout, handleInactivityWarning);
-    } else {
-      inactivityService.stop();
-      setInactivityWarningOpen(false);
-    }
-
-    // Cleanup on unmount
-    return () => {
-      inactivityService.stop();
-    };
-  }, [isAuthenticated, user, dispatch]);
-
-  // Handle dismissing inactivity warning
-  const handleDismissInactivityWarning = () => {
-    setInactivityWarningOpen(false);
-    inactivityService.dismissWarning();
-  };
-
-  // Countdown timer for warning dialog
-  useEffect(() => {
-    let countdownInterval;
-    if (inactivityWarningOpen && warningSecondsRemaining > 0) {
-      countdownInterval = setInterval(() => {
-        setWarningSecondsRemaining((prev) => {
-          if (prev <= 1) {
-            clearInterval(countdownInterval);
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    }
-    return () => {
-      if (countdownInterval) {
-        clearInterval(countdownInterval);
-      }
-    };
-  }, [inactivityWarningOpen, warningSecondsRemaining]);
-
-  // Initialize chat service for global notifications
-  useEffect(() => {
-    if (isAuthenticated && user) {
-      // Connect to chat service for global notifications
-      if (!chatService.getConnectionStatus().isConnected) {
-        chatService.connect();
-      }
-
-      // Don't disconnect here - let other components manage their own lifecycle
-    }
-  }, [isAuthenticated, user]);
-
-  // Listen for force logout event (session kicked by admin)
-  useEffect(() => {
-    const handleForceLogout = (data) => {
-      console.log("🚪 Force logout triggered:", data);
-      // Show toast notification
-      toast.error(
-        data?.message ||
-          "Your session has been terminated by an administrator.",
-        {
-          duration: 5000,
-        }
-      );
-      // Dispatch logout action
-      dispatch(logout());
-      // Disconnect chat service
-      chatService.disconnect();
-    };
-
-    chatService.on("auth:force_logout", handleForceLogout);
-
-    return () => {
-      chatService.off("auth:force_logout", handleForceLogout);
-    };
-  }, [dispatch]);
+  // All background services consolidated into a single hook
+  const {
+    inactivityWarningOpen,
+    warningSecondsRemaining,
+    handleDismissInactivityWarning,
+  } = useAppServices(isAuthenticated, user);
 
   useEffect(() => {
     if (isAuthenticated && user && !user.eulaAccepted) {
@@ -351,7 +199,9 @@ function AppContent() {
             path="/login"
             element={
               <PublicRoute>
-                <LoginPage />
+                <LazyPage>
+                  <LoginPage />
+                </LazyPage>
               </PublicRoute>
             }
           />
@@ -359,26 +209,54 @@ function AppContent() {
             path="/register"
             element={
               <PublicRoute>
-                <RegisterPage />
+                <LazyPage>
+                  <RegisterPage />
+                </LazyPage>
               </PublicRoute>
             }
           />
-          <Route path="/landing" element={<LandingPage />} />
-          <Route path="/disclaimer" element={<DisclaimerPage />} />
+          <Route
+            path="/landing"
+            element={
+              <LazyPage>
+                <LandingPage />
+              </LazyPage>
+            }
+          />
+          <Route
+            path="/disclaimer"
+            element={
+              <LazyPage>
+                <DisclaimerPage />
+              </LazyPage>
+            }
+          />
           {/* QR Code Mobile Approval - Public route for phone */}
           <Route
             path="/qr-approve/:sessionToken"
-            element={<MobileApprovalPage />}
+            element={
+              <LazyPage>
+                <MobileApprovalPage />
+              </LazyPage>
+            }
           />
           {/* QR Code Sensitive Action Approval - Public route for phone */}
           <Route
             path="/qr-approve-action/:sessionToken"
-            element={<MobileActionApprovalPage />}
+            element={
+              <LazyPage>
+                <MobileActionApprovalPage />
+              </LazyPage>
+            }
           />
           {/* QR Code Device Setup - Public route for phone */}
           <Route
             path="/qr-setup/:userId/:setupToken"
-            element={<QRSetupPage />}
+            element={
+              <LazyPage>
+                <QRSetupPage />
+              </LazyPage>
+            }
           />
           {}
           <Route
@@ -390,19 +268,19 @@ function AppContent() {
             }
           >
             <Route index element={<RoleBasedRedirect />} />
-            <Route path="dashboard" element={<DashboardPage />} />
-            <Route path="orders" element={<OrdersPage />} />
-            <Route path="leads" element={<LeadsPage />} />
-            <Route path="deleted-leads" element={<DeletedLeadsPage />} />
-            <Route path="users" element={<UsersPage />} />
-            <Route path="client-networks" element={<ClientNetworksPage />} />
-            <Route path="our-networks" element={<OurNetworksPage />} />
-            <Route path="client-brokers" element={<ClientBrokersPage />} />
+            <Route path="dashboard" element={<LazyPage><DashboardPage /></LazyPage>} />
+            <Route path="orders" element={<LazyPage><OrdersPage /></LazyPage>} />
+            <Route path="leads" element={<LazyPage><LeadsPage /></LazyPage>} />
+            <Route path="deleted-leads" element={<LazyPage><DeletedLeadsPage /></LazyPage>} />
+            <Route path="users" element={<LazyPage><UsersPage /></LazyPage>} />
+            <Route path="client-networks" element={<LazyPage><ClientNetworksPage /></LazyPage>} />
+            <Route path="our-networks" element={<LazyPage><OurNetworksPage /></LazyPage>} />
+            <Route path="client-brokers" element={<LazyPage><ClientBrokersPage /></LazyPage>} />
             <Route
               path="client-psps"
               element={
                 <ProtectedRoute allowedRoles={["admin", "affiliate_manager"]}>
-                  <ClientPSPsPage />
+                  <LazyPage><ClientPSPsPage /></LazyPage>
                 </ProtectedRoute>
               }
             />
@@ -410,41 +288,41 @@ function AppContent() {
               path="card-issuers"
               element={
                 <ProtectedRoute allowedRoles={["admin", "affiliate_manager"]}>
-                  <CardIssuersPage />
+                  <LazyPage><CardIssuersPage /></LazyPage>
                 </ProtectedRoute>
               }
             />
-            <Route path="campaigns" element={<CampaignsPage />} />
+            <Route path="campaigns" element={<LazyPage><CampaignsPage /></LazyPage>} />
             <Route
               path="crm"
               element={
                 <ProtectedRoute allowedRoles={["admin", "affiliate_manager"]}>
-                  <CrmPage />
+                  <LazyPage><CrmPage /></LazyPage>
                 </ProtectedRoute>
               }
             />
-            <Route path="payroll" element={<PayrollPage />} />
-            <Route path="withdrawals" element={<WithdrawalsPage />} />
-            <Route path="payment-history" element={<PaymentHistoryPage />} />
+            <Route path="payroll" element={<LazyPage><PayrollPage /></LazyPage>} />
+            <Route path="withdrawals" element={<LazyPage><WithdrawalsPage /></LazyPage>} />
+            <Route path="payment-history" element={<LazyPage><PaymentHistoryPage /></LazyPage>} />
             <Route
               path="affiliate-managers"
-              element={<AffiliateManagersPage />}
+              element={<LazyPage><AffiliateManagersPage /></LazyPage>}
             />
-            <Route path="my-table" element={<AffiliateManagerTableView />} />
+            <Route path="my-table" element={<LazyPage><AffiliateManagerTableView /></LazyPage>} />
             <Route
               path="agent-comments"
               element={
                 <ProtectedRoute allowedRoles={["admin", "affiliate_manager"]}>
-                  <AgentCommentsPage />
+                  <LazyPage><AgentCommentsPage /></LazyPage>
                 </ProtectedRoute>
               }
             />
-            <Route path="profile" element={<ProfilePage />} />
+            <Route path="profile" element={<LazyPage><ProfilePage /></LazyPage>} />
             <Route
               path="refunds"
               element={
                 <ProtectedRoute allowedRoles={["refunds_manager", "admin"]}>
-                  <RefundsPage />
+                  <LazyPage><RefundsPage /></LazyPage>
                 </ProtectedRoute>
               }
             />
@@ -452,7 +330,7 @@ function AppContent() {
               path="verifications"
               element={
                 <ProtectedRoute allowedRoles={["admin", "lead_manager"]}>
-                  <VerificationsPage />
+                  <LazyPage><VerificationsPage /></LazyPage>
                 </ProtectedRoute>
               }
             />
@@ -460,17 +338,17 @@ function AppContent() {
               path="workspace"
               element={
                 <ProtectedRoute allowedRoles={["admin", "lead_manager"]}>
-                  <WorkspacePage />
+                  <LazyPage><WorkspacePage /></LazyPage>
                 </ProtectedRoute>
               }
             />
-            <Route path="tickets" element={<TicketsPage />} />
-            <Route path="notifications" element={<NotificationsPage />} />
+            <Route path="tickets" element={<LazyPage><TicketsPage /></LazyPage>} />
+            <Route path="notifications" element={<LazyPage><NotificationsPage /></LazyPage>} />
             <Route
               path="simcards"
               element={
                 <ProtectedRoute allowedRoles={["inventory_manager", "admin"]}>
-                  <SimCardsPage />
+                  <LazyPage><SimCardsPage /></LazyPage>
                 </ProtectedRoute>
               }
             />
@@ -478,7 +356,7 @@ function AppContent() {
               path="numbers"
               element={
                 <ProtectedRoute allowedRoles={["admin", "lead_manager"]}>
-                  <NumberPage />
+                  <LazyPage><NumberPage /></LazyPage>
                 </ProtectedRoute>
               }
             />
@@ -486,7 +364,7 @@ function AppContent() {
               path="sms"
               element={
                 <ProtectedRoute allowedRoles={["admin"]}>
-                  <SMSPage />
+                  <LazyPage><SMSPage /></LazyPage>
                 </ProtectedRoute>
               }
             />
@@ -494,7 +372,7 @@ function AppContent() {
               path="account-management"
               element={
                 <ProtectedRoute allowedRoles={["admin", "affiliate_manager"]}>
-                  <AccountManagementPage />
+                  <LazyPage><AccountManagementPage /></LazyPage>
                 </ProtectedRoute>
               }
             />
@@ -502,7 +380,7 @@ function AppContent() {
               path="client-network/:id"
               element={
                 <ProtectedRoute allowedRoles={["admin", "affiliate_manager"]}>
-                  <ClientNetworkProfilePage />
+                  <LazyPage><ClientNetworkProfilePage /></LazyPage>
                 </ProtectedRoute>
               }
             />
@@ -510,7 +388,7 @@ function AppContent() {
               path="client-broker/:id"
               element={
                 <ProtectedRoute allowedRoles={["admin", "affiliate_manager"]}>
-                  <ClientBrokerProfilePage />
+                  <LazyPage><ClientBrokerProfilePage /></LazyPage>
                 </ProtectedRoute>
               }
             />
@@ -518,7 +396,7 @@ function AppContent() {
               path="psp/:id"
               element={
                 <ProtectedRoute allowedRoles={["admin", "affiliate_manager"]}>
-                  <PSPProfilePage />
+                  <LazyPage><PSPProfilePage /></LazyPage>
                 </ProtectedRoute>
               }
             />
@@ -526,7 +404,7 @@ function AppContent() {
               path="gateway-devices"
               element={
                 <ProtectedRoute allowedRoles={["inventory_manager", "admin"]}>
-                  <GatewayManagementPage />
+                  <LazyPage><GatewayManagementPage /></LazyPage>
                 </ProtectedRoute>
               }
             />
@@ -536,7 +414,7 @@ function AppContent() {
                 <ProtectedRoute
                   allowedRoles={["agent", "affiliate_manager", "admin"]}
                 >
-                  <AgentSchedulePage />
+                  <LazyPage><AgentSchedulePage /></LazyPage>
                 </ProtectedRoute>
               }
             />
@@ -546,7 +424,7 @@ function AppContent() {
                 <ProtectedRoute
                   allowedRoles={["agent", "affiliate_manager", "admin"]}
                 >
-                  <AgentCallsCalendarPage />
+                  <LazyPage><AgentCallsCalendarPage /></LazyPage>
                 </ProtectedRoute>
               }
             />
@@ -554,7 +432,7 @@ function AppContent() {
               path="approve-am-calls"
               element={
                 <ProtectedRoute allowedRoles={["affiliate_manager", "admin"]}>
-                  <ApproveAMCallsPage />
+                  <LazyPage><ApproveAMCallsPage /></LazyPage>
                 </ProtectedRoute>
               }
             />
@@ -564,7 +442,7 @@ function AppContent() {
                 <ProtectedRoute
                   allowedRoles={["agent", "affiliate_manager", "admin"]}
                 >
-                  <AnnouncementsPage />
+                  <LazyPage><AnnouncementsPage /></LazyPage>
                 </ProtectedRoute>
               }
             />
@@ -574,7 +452,7 @@ function AppContent() {
                 <ProtectedRoute
                   allowedRoles={["affiliate_manager", "admin", "lead_manager"]}
                 >
-                  <AMTargetsPage />
+                  <LazyPage><AMTargetsPage /></LazyPage>
                 </ProtectedRoute>
               }
             />
@@ -584,24 +462,31 @@ function AppContent() {
                 <ProtectedRoute
                   allowedRoles={["agent", "affiliate_manager", "admin"]}
                 >
-                  <DepositCallsPage />
+                  <LazyPage><DepositCallsPage /></LazyPage>
                 </ProtectedRoute>
               }
             />
-            <Route path="notes" element={<NotesPage />} />
+            <Route path="notes" element={<LazyPage><NotesPage /></LazyPage>} />
             <Route
               path="activity"
               element={
                 <ProtectedRoute allowedRoles={["admin"]}>
-                  <ActivityPage />
+                  <LazyPage><ActivityPage /></LazyPage>
                 </ProtectedRoute>
               }
             />
-            <Route path="search" element={<SearchResultsPage />} />
-            <Route path="sheets" element={<SheetsPage />} />
+            <Route path="search" element={<LazyPage><SearchResultsPage /></LazyPage>} />
+            <Route path="sheets" element={<LazyPage><SheetsPage /></LazyPage>} />
           </Route>
           {}
-          <Route path="*" element={<NotFoundPage />} />
+          <Route
+            path="*"
+            element={
+              <LazyPage>
+                <NotFoundPage />
+              </LazyPage>
+            }
+          />
         </Routes>
       </Router>
       {}
@@ -646,7 +531,7 @@ function AppContent() {
             gap: 1,
           }}
         >
-          ⚠️ Session Timeout Warning
+          Session Timeout Warning
         </DialogTitle>
         <DialogContent sx={{ pt: 3, pb: 2 }}>
           <Typography variant="body1" gutterBottom>
@@ -686,22 +571,39 @@ function AppContent() {
   );
 }
 
+// App-level loading skeleton for PersistGate
+function AppLoadingSkeleton() {
+  return (
+    <Box
+      display="flex"
+      flexDirection="column"
+      minHeight="100vh"
+      bgcolor="#f5f5f5"
+    >
+      {/* Top bar skeleton */}
+      <Skeleton variant="rectangular" width="100%" height={64} />
+      {/* Content area */}
+      <Box display="flex" flex={1}>
+        {/* Sidebar skeleton */}
+        <Skeleton
+          variant="rectangular"
+          width={240}
+          sx={{ height: "100%", minHeight: "calc(100vh - 64px)" }}
+        />
+        {/* Main content skeleton */}
+        <Box flex={1} p={3}>
+          <Skeleton variant="text" width={200} height={40} sx={{ mb: 2 }} />
+          <Skeleton variant="rounded" width="100%" height={300} />
+        </Box>
+      </Box>
+    </Box>
+  );
+}
+
 function App() {
   return (
     <Provider store={store}>
-      <PersistGate
-        loading={
-          <Box
-            display="flex"
-            justifyContent="center"
-            alignItems="center"
-            minHeight="100vh"
-          >
-            <CircularProgress />
-          </Box>
-        }
-        persistor={persistor}
-      >
+      <PersistGate loading={<AppLoadingSkeleton />} persistor={persistor}>
         <ThemeProvider theme={theme}>
           <CssBaseline />
           <AppContent />

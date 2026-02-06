@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
+import { SectionSkeleton } from "../components/common/TableSkeleton.jsx";
 import { useSearchParams } from "react-router-dom";
 import { useSelector } from "react-redux";
 import {
@@ -621,11 +622,7 @@ const BrokerManagementTable = ({
   const isAdmin = userRole === "admin";
 
   if (loading) {
-    return (
-      <Box display="flex" justifyContent="center" py={4}>
-        <CircularProgress />
-      </Box>
-    );
+    return <SectionSkeleton rows={8} />;
   }
 
   if (brokers.length === 0) {

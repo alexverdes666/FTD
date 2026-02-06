@@ -336,4 +336,4 @@ const CallDeclarationsTable = ({
   );
 };
 
-export default CallDeclarationsTable;
+export default React.memo(CallDeclarationsTable);

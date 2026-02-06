@@ -1103,6 +1103,7 @@ const VerificationsPage = () => {
               <img
                 src={selectedPhoto.data}
                 alt={selectedPhoto.type}
+                loading="lazy"
                 style={{
                   maxWidth: "100%",
                   maxHeight: "70vh",

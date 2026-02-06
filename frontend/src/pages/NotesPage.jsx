@@ -851,6 +851,7 @@ const StickyNote = ({
             <img
               src={note.imageData}
               alt="Pasted content"
+              loading="lazy"
               style={{
                 width: "100%",
                 height: "100%",

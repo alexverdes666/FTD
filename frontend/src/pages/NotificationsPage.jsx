@@ -61,7 +61,7 @@ import {
   deleteNotification,
   clearError
 } from '../store/slices/notificationSlice';
-import { toast } from 'react-toastify';
+import toast from 'react-hot-toast';
 import { formatDistanceToNow, format } from 'date-fns';
 
 const NotificationsPage = () => {

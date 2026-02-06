@@ -24,7 +24,7 @@ export default defineConfig({
             "@mui/x-date-pickers",
           ],
           redux: ["@reduxjs/toolkit", "react-redux", "redux-persist"],
-          charts: ["chart.js", "react-chartjs-2", "recharts"],
+          charts: ["recharts"],
           utils: ["axios", "dayjs", "date-fns", "lodash.debounce", "yup"],
           ui: [
             "framer-motion",

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { TableSkeleton } from '../components/common/TableSkeleton.jsx';
 import { useSearchParams } from 'react-router-dom';
 import {
   Box,
@@ -370,11 +371,7 @@ const CampaignsPage = () => {
             </TableHead>
             <TableBody>
               {loading ? (
-                <TableRow>
-                  <TableCell colSpan={4} align="center" sx={{ py: 4 }}>
-                    <CircularProgress />
-                  </TableCell>
-                </TableRow>
+                <TableSkeleton rows={5} columns={4} />
               ) : campaigns.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={4} align="center" sx={{ py: 4 }}>

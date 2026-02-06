@@ -1017,4 +1017,4 @@ const GlobalSearch = () => {
   );
 };
 
-export default GlobalSearch;
+export default React.memo(GlobalSearch);

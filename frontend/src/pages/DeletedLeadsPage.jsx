@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { TableSkeleton } from '../components/common/TableSkeleton.jsx';
 import { useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -358,11 +359,7 @@ const DeletedLeadsPage = () => {
             </TableHead>
             <TableBody>
               {loading ? (
-                <TableRow>
-                  <TableCell colSpan={10} align="center" sx={{ py: 4 }}>
-                    <CircularProgress />
-                  </TableCell>
-                </TableRow>
+                <TableSkeleton rows={5} columns={10} />
               ) : deletedLeads.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={10} align="center" sx={{ py: 4 }}>

@@ -334,6 +334,7 @@ const ChatImageMessage = ({
             <img
               src={fullImageUrl}
               alt={attachment.originalName || 'Chat image'}
+              loading="lazy"
               style={{
                 maxWidth: '95vw',
                 maxHeight: '95vh',
@@ -418,4 +419,4 @@ const ChatImageMessage = ({
   );
 };
 
-export default ChatImageMessage; 
+export default React.memo(ChatImageMessage);

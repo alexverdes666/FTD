@@ -270,4 +270,4 @@ const CrmDealsTable = ({ networkId, isAdmin }) => {
   );
 };
 
-export default CrmDealsTable;
+export default React.memo(CrmDealsTable);

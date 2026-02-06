@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { SectionSkeleton } from '../components/common/TableSkeleton.jsx';
 import { useSelector } from 'react-redux';
 import {
   Box,
@@ -184,9 +185,7 @@ const AffiliateManagerTablesPage = () => {
             <Divider sx={{ mb: 2 }} />
             
             {loading ? (
-              <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px">
-                <CircularProgress />
-              </Box>
+              <SectionSkeleton rows={6} />
             ) : (
               <TableContainer component={Paper} sx={{ boxShadow: 0 }}>
                 <Table>

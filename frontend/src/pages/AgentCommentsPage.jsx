@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { TableSkeleton } from "../components/common/TableSkeleton.jsx";
 import { useSelector } from "react-redux";
 import {
   Box,
@@ -828,9 +829,7 @@ const AgentCommentsPage = () => {
       <Card>
         <CardContent>
           {loading ? (
-            <Box sx={{ display: "flex", justifyContent: "center", p: 3 }}>
-              <CircularProgress />
-            </Box>
+            <TableSkeleton rows={5} columns={6} />
           ) : comments.length === 0 ? (
             <Alert severity="info">No comments found</Alert>
           ) : (

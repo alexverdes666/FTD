@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { CalendarSkeleton } from '../components/common/TableSkeleton.jsx';
 import { useSelector } from 'react-redux';
 import {
   Box,
@@ -295,9 +296,7 @@ const AgentSchedulePage = () => {
 
           {/* Calendar */}
           {loading ? (
-            <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
-              <CircularProgress />
-            </Box>
+            <CalendarSkeleton />
           ) : !selectedAgentId ? (
             <Alert severity="info">Please select an agent to view their schedule</Alert>
           ) : schedule ? (

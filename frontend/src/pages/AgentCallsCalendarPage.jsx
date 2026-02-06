@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { CalendarSkeleton } from '../components/common/TableSkeleton.jsx';
 import { useSelector } from 'react-redux';
 import {
   Box,
@@ -403,9 +404,7 @@ const AgentCallsCalendarPage = () => {
 
       {/* Calendar Grid */}
       {loading ? (
-        <Box display="flex" justifyContent="center" alignItems="center" minHeight={400}>
-          <CircularProgress />
-        </Box>
+        <CalendarSkeleton />
       ) : (
         <>
           {/* Day of week headers */}

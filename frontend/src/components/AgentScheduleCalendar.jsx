@@ -220,5 +220,5 @@ const AgentScheduleCalendar = ({
   );
 };
 
-export default AgentScheduleCalendar;
+export default React.memo(AgentScheduleCalendar);
 

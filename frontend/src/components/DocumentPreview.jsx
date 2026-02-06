@@ -371,6 +371,7 @@ const DocumentPreview = ({ url, type, children, forceImage = false }) => {
           key={directUrl} // Force remount when URL changes
           src={directUrl}
           alt={type}
+          loading="lazy"
           style={styles}
           onLoad={handleImageLoad}
           onError={handleImageError}
@@ -463,4 +464,4 @@ const DocumentPreview = ({ url, type, children, forceImage = false }) => {
   );
 };
 
-export default DocumentPreview;
+export default React.memo(DocumentPreview);

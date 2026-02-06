@@ -47,7 +47,7 @@ import {
   updateUnreadCount,
   markNotificationReadLocally
 } from '../store/slices/notificationSlice';
-import { toast } from 'react-toastify';
+import toast from 'react-hot-toast';
 import { formatDistanceToNow } from 'date-fns';
 
 const NotificationBell = ({ onSocketConnect }) => {
@@ -78,13 +78,9 @@ const NotificationBell = ({ onSocketConnect }) => {
           dispatch(addNewNotification(data));
           
           // Show toast notification
-          toast.info(`New notification: ${data.notification.title}`, {
-            position: "top-right",
-            autoClose: 5000,
-            hideProgressBar: false,
-            closeOnClick: true,
-            pauseOnHover: true,
-            draggable: true,
+          toast(`New notification: ${data.notification.title}`, {
+            duration: 5000,
+            icon: 'ℹ️',
           });
         });
 
@@ -411,4 +407,4 @@ const NotificationBell = ({ onSocketConnect }) => {
   );
 };
 
-export default NotificationBell;
+export default React.memo(NotificationBell);
