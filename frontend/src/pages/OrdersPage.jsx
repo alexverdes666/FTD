@@ -50,6 +50,7 @@ import {
   Drawer,
   alpha,
   Link,
+  Badge,
 } from "@mui/material";
 import {
   Add as AddIcon,
@@ -97,6 +98,7 @@ import {
   Notes as NotesIcon,
   Language as LanguageIcon,
   FilterList as FilterListIcon,
+  FilterListOff as FilterListOffIcon,
   Inbox as InboxIcon,
   ListAlt as ListAltIcon,
 } from "@mui/icons-material";
@@ -625,7 +627,7 @@ const OrdersPage = () => {
 
   // Change Requester State
   const [changeRequesterOpen, setChangeRequesterOpen] = useState(false);
-  const [requesterHistoryOpen, setRequesterHistoryOpen] = useState(false);
+
   const [selectedOrderForRequester, setSelectedOrderForRequester] =
     useState(null);
   const [potentialRequesters, setPotentialRequesters] = useState([]);
@@ -759,10 +761,6 @@ const OrdersPage = () => {
     setChangeRequesterOpen(true);
   };
 
-  const handleOpenRequesterHistory = (order) => {
-    setSelectedOrderForRequester(order);
-    setRequesterHistoryOpen(true);
-  };
 
   const handleSubmitChangeRequester = async () => {
     if (!selectedOrderForRequester || !selectedNewRequester) return;
@@ -3518,9 +3516,12 @@ const OrdersPage = () => {
     []
   );
   const clearFilters = useCallback(() => {
-    setFilters({ status: "", priority: "", startDate: "", endDate: "", createdMonth: "", createdYear: "" });
+    setFilters({ search: "", status: "", priority: "", startDate: "", endDate: "", createdMonth: "", createdYear: "" });
     setPage(0);
   }, []);
+  const activeFilterCount = useMemo(() => {
+    return Object.entries(filters).filter(([key, value]) => key !== "search" && value !== "").length;
+  }, [filters]);
 
   // Refunds Manager Assignment Handlers
   const handleOpenRefundsAssignment = useCallback((orderId) => {
@@ -4715,8 +4716,12 @@ const OrdersPage = () => {
         open={showFilters}
         onClose={() => setShowFilters(false)}
         variant="temporary"
+        transitionDuration={0}
         PaperProps={{
           sx: { width: 340, p: 0 },
+        }}
+        slotProps={{
+          backdrop: { sx: { transition: "none" } },
         }}
       >
         <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", px: 2.5, py: 1.5, borderBottom: 1, borderColor: "divider" }}>
@@ -4752,13 +4757,40 @@ const OrdersPage = () => {
               ),
             }}
           />
+          {/* Status & Priority */}
+          <Box sx={{ display: "flex", gap: 1.5 }}>
+            <FormControl size="small" sx={{ flex: 1, "& .MuiOutlinedInput-root": { borderRadius: 2 } }}>
+              <InputLabel>Status</InputLabel>
+              <Select
+                value={filters.status || ""}
+                label="Status"
+                onChange={handleFilterChange("status")}
+              >
+                <MenuItem value="">All</MenuItem>
+                <MenuItem value="pending">Pending</MenuItem>
+                <MenuItem value="partial">Partial</MenuItem>
+                <MenuItem value="fulfilled">Fulfilled</MenuItem>
+                <MenuItem value="cancelled">Cancelled</MenuItem>
+              </Select>
+            </FormControl>
+            <FormControl size="small" sx={{ flex: 1, "& .MuiOutlinedInput-root": { borderRadius: 2 } }}>
+              <InputLabel>Priority</InputLabel>
+              <Select
+                value={filters.priority || ""}
+                label="Priority"
+                onChange={handleFilterChange("priority")}
+              >
+                <MenuItem value="">All</MenuItem>
+                <MenuItem value="high">High</MenuItem>
+                <MenuItem value="medium">Medium</MenuItem>
+                <MenuItem value="low">Low</MenuItem>
+              </Select>
+            </FormControl>
+          </Box>
           {/* Actions */}
           {(user?.role === "admin" || user?.role === "affiliate_manager") && (
             <>
               <Divider />
-              <Typography variant="caption" sx={{ fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px", color: "text.secondary" }}>
-                Actions
-              </Typography>
               <Button
                 fullWidth
                 variant="contained"
@@ -4782,9 +4814,6 @@ const OrdersPage = () => {
           )}
           {/* Created Month/Year Filter */}
           <Divider />
-          <Typography variant="caption" sx={{ fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px", color: "text.secondary" }}>
-            Created Date
-          </Typography>
           <Box sx={{ display: "flex", gap: 1.5 }}>
             <FormControl size="small" sx={{ flex: 1, "& .MuiOutlinedInput-root": { borderRadius: 2 } }}>
               <InputLabel>Month</InputLabel>
@@ -4815,9 +4844,6 @@ const OrdersPage = () => {
           </Box>
           {/* Planned Date Filters */}
           <Divider />
-          <Typography variant="caption" sx={{ fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px", color: "text.secondary" }}>
-            Planned Date
-          </Typography>
           <TextField
             fullWidth
             label="From"
@@ -4849,6 +4875,21 @@ const OrdersPage = () => {
           >
             Copy Format Settings
           </Button>
+          {activeFilterCount > 0 && (
+            <>
+              <Divider />
+              <Button
+                fullWidth
+                variant="outlined"
+                color="error"
+                startIcon={<FilterListOffIcon />}
+                onClick={clearFilters}
+                sx={{ textTransform: "none" }}
+              >
+                Clear All Filters ({activeFilterCount})
+              </Button>
+            </>
+          )}
         </Box>
       </Drawer>
       {}
@@ -4928,10 +4969,12 @@ const OrdersPage = () => {
                 <TableCell sx={{ textAlign: "right", width: "11%" }}>
                   <Box sx={{ display: "inline-flex", alignItems: "center", justifyContent: "flex-end", gap: 0.25, lineHeight: 1 }}>
                     Actions
-                    <FilterListIcon
-                      onClick={(e) => { e.stopPropagation(); setShowFilters(true); }}
-                      sx={{ fontSize: 13, color: "rgba(255,255,255,0.6)", cursor: "pointer", "&:hover": { color: "#fff" }, ml: 0.25 }}
-                    />
+                    <Badge badgeContent={activeFilterCount} color="warning" sx={{ "& .MuiBadge-badge": { fontSize: 9, height: 14, minWidth: 14, p: "0 3px" } }}>
+                      <FilterListIcon
+                        onClick={(e) => { e.stopPropagation(); setShowFilters(true); }}
+                        sx={{ fontSize: 13, color: activeFilterCount > 0 ? "#fff" : "rgba(255,255,255,0.6)", cursor: "pointer", "&:hover": { color: "#fff" }, ml: 0.25 }}
+                      />
+                    </Badge>
                   </Box>
                 </TableCell>
               </TableRow>
@@ -5011,19 +5054,6 @@ const OrdersPage = () => {
                                 <EditIcon sx={{ fontSize: 14 }} />
                               </IconButton>
                             )}
-                            {user?.role === "admin" &&
-                              order.requesterHistory?.length > 0 && (
-                                <IconButton
-                                  size="small"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleOpenRequesterHistory(order);
-                                  }}
-                                  title="Requester History"
-                                >
-                                  <HistoryIcon sx={{ fontSize: 14 }} />
-                                </IconButton>
-                              )}
                           </Box>
                         </TableCell>
                         <TableCell
@@ -5147,15 +5177,6 @@ const OrdersPage = () => {
                                 sx={{ "&:hover": { color: "primary.main", bgcolor: (theme) => alpha(theme.palette.primary.main, 0.08) } }}
                               >
                                 <ViewIcon sx={{ fontSize: 18 }} />
-                              </IconButton>
-                            </Tooltip>
-                            <Tooltip title="Export Leads as CSV" arrow>
-                              <IconButton
-                                size="small"
-                                onClick={(e) => { e.stopPropagation(); handleExportLeads(order._id); }}
-                                sx={{ "&:hover": { color: "success.main", bgcolor: (theme) => alpha(theme.palette.success.main, 0.08) } }}
-                              >
-                                <DownloadIcon sx={{ fontSize: 18 }} />
                               </IconButton>
                             </Tooltip>
                             <Tooltip title="Copy Leads to Clipboard" arrow>
@@ -5317,22 +5338,6 @@ const OrdersPage = () => {
                                                 <EditIcon sx={{ fontSize: 14 }} />
                                               </IconButton>
                                             )}
-                                            {user?.role === "admin" &&
-                                              order.requesterHistory?.length > 0 && (
-                                                <IconButton
-                                                  size="small"
-                                                  onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    handleOpenRequesterHistory(order);
-                                                  }}
-                                                  title="Requester History"
-                                                  sx={{
-                                                    p: 0.25,
-                                                  }}
-                                                >
-                                                  <HistoryIcon sx={{ fontSize: 14 }} />
-                                                </IconButton>
-                                              )}
                                           </Box>
                                           <Box
                                             sx={{
@@ -5947,16 +5952,6 @@ const OrdersPage = () => {
                                                   flexWrap: "wrap",
                                                 }}
                                               >
-                                                <Button
-                                                  size="small"
-                                                  startIcon={<DownloadIcon />}
-                                                  onClick={() =>
-                                                    handleExportLeads(order._id)
-                                                  }
-                                                  variant="outlined"
-                                                >
-                                                  Export CSV
-                                                </Button>
                                                 <Button
                                                   size="small"
                                                   startIcon={
@@ -8316,12 +8311,6 @@ const OrdersPage = () => {
         </DialogActions>
       </Dialog>
 
-      {/* Requester History Dialog */}
-      <RequesterHistoryDialog
-        open={requesterHistoryOpen}
-        onClose={() => setRequesterHistoryOpen(false)}
-        order={selectedOrderForRequester}
-      />
 
       {/* Copy Notification */}
       <Snackbar
@@ -11323,53 +11312,6 @@ const ChangeRequesterDialog = ({
   </Dialog>
 );
 
-// Requester History Dialog Component
-const RequesterHistoryDialog = ({ open, onClose, order }) => (
-  <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-    <DialogTitle>Requester History</DialogTitle>
-    <DialogContent>
-      {order?.requesterHistory && order.requesterHistory.length > 0 ? (
-        <TableContainer component={Paper} variant="outlined">
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>Previous Requester</TableCell>
-                <TableCell>New Requester</TableCell>
-                <TableCell>Changed By</TableCell>
-                <TableCell>Date</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {order.requesterHistory.map((history, index) => (
-                <TableRow key={index}>
-                  <TableCell>
-                    {history.previousRequester?.fullName || "Unknown"}
-                  </TableCell>
-                  <TableCell>
-                    {history.newRequester?.fullName || "Unknown"}
-                  </TableCell>
-                  <TableCell>
-                    {history.changedBy?.fullName || "Unknown"}
-                  </TableCell>
-                  <TableCell>
-                    {new Date(history.changedAt).toLocaleString()}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
-      ) : (
-        <Typography color="textSecondary" align="center" sx={{ py: 3 }}>
-          No history available.
-        </Typography>
-      )}
-    </DialogContent>
-    <DialogActions>
-      <Button onClick={onClose}>Close</Button>
-    </DialogActions>
-  </Dialog>
-);
 
 // Create Broker Form Component
 const CreateBrokerForm = ({ onSubmit, loading, onCancel }) => {
