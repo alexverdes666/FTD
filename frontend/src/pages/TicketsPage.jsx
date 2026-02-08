@@ -400,51 +400,9 @@ const TicketsPage = () => {
 
   return (
     <Box sx={{ width: "100%", typography: "body1" }}>
-      {/* Header */}
-      <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
-        <Box>
-          <Typography variant="h4" component="h1" fontWeight={700}>
-            Support Tickets
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-            Manage and track support requests
-          </Typography>
-        </Box>
-        <Stack direction="row" spacing={1.5} flexWrap="wrap" useFlexGap>
-          <Button
-            startIcon={<FilterIcon />}
-            onClick={() => setShowFilters(!showFilters)}
-            variant={showFilters ? 'contained' : 'outlined'}
-            sx={{
-              borderRadius: 2,
-              textTransform: 'none',
-              px: 2
-            }}
-          >
-            Filters
-          </Button>
-          <Button
-            startIcon={<AddIcon />}
-            onClick={() => setCreateDialogOpen(true)}
-            variant="contained"
-            sx={{
-              borderRadius: 2,
-              textTransform: 'none',
-              px: 2.5,
-              boxShadow: `0 4px 14px ${alpha(theme.palette.primary.main, 0.35)}`,
-              '&:hover': {
-                boxShadow: `0 6px 20px ${alpha(theme.palette.primary.main, 0.4)}`,
-              }
-            }}
-          >
-            Create Ticket
-          </Button>
-        </Stack>
-      </Box>
-
       {/* Stats Cards - Only for Admins */}
       {isAdmin && stats && (
-        <Grid container spacing={2} sx={{ mb: 3 }}>
+        <Grid container spacing={2} sx={{ mb: 2 }}>
           <Grid item xs={6} sm={6} md={3}>
             <Card 
               sx={{ 
@@ -540,6 +498,38 @@ const TicketsPage = () => {
           </Grid>
         </Grid>
       )}
+
+      {/* Action Buttons */}
+      <Stack direction="row" spacing={1.5} sx={{ mb: 2, justifyContent: 'flex-end' }} flexWrap="wrap" useFlexGap>
+        <Button
+          startIcon={<FilterIcon />}
+          onClick={() => setShowFilters(!showFilters)}
+          variant={showFilters ? 'contained' : 'outlined'}
+          sx={{
+            borderRadius: 2,
+            textTransform: 'none',
+            px: 2
+          }}
+        >
+          Filters
+        </Button>
+        <Button
+          startIcon={<AddIcon />}
+          onClick={() => setCreateDialogOpen(true)}
+          variant="contained"
+          sx={{
+            borderRadius: 2,
+            textTransform: 'none',
+            px: 2.5,
+            boxShadow: `0 4px 14px ${alpha(theme.palette.primary.main, 0.35)}`,
+            '&:hover': {
+              boxShadow: `0 6px 20px ${alpha(theme.palette.primary.main, 0.4)}`,
+            }
+          }}
+        >
+          Create Ticket
+        </Button>
+      </Stack>
 
       {/* Filters */}
       <Collapse in={showFilters}>

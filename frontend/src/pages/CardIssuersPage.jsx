@@ -398,10 +398,6 @@ const CardIssuersPage = () => {
 
   return (
     <Box>
-      <Typography variant="h5" sx={{ mb: 2, fontWeight: "bold" }}>
-        Card Issuers
-      </Typography>
-
       {/* Filters */}
       <Paper sx={{ p: 2, mb: 2 }}>
         <Box display="flex" gap={2} flexWrap="wrap" alignItems="center">

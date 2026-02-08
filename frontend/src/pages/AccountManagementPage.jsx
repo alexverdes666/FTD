@@ -72,10 +72,6 @@ const AccountManagementPage = () => {
 
   return (
     <Box sx={{ width: "100%" }}>
-      <Typography variant="h5" sx={{ mb: 2, fontWeight: "bold" }}>
-        Account Management
-      </Typography>
-
       <Paper sx={{ mb: 2 }}>
         <Tabs
           value={tabValue}

@@ -671,10 +671,6 @@ const AgentCommentsPage = () => {
 
   return (
     <Box sx={{ width: "100%", typography: "body1", bgcolor: "grey.50", minHeight: "100vh" }}>
-      <Typography variant="h4" gutterBottom sx={{ fontWeight: 600, mb: 3 }}>
-        Agent Comments
-      </Typography>
-
       {/* Statistics Cards */}
       {!statsLoading && stats && (
         <Grid container spacing={3} sx={{ mb: 3 }}>

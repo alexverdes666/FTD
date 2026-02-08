@@ -135,11 +135,12 @@ const CrmPage = () => {
 
   return (
     <Box>
-      <Paper sx={{ p: 3, mb: 3 }}>
-        <Typography variant="h5" fontWeight="bold" sx={{ mb: 2 }}>
-          Affiliate Managers CRM
-        </Typography>
-        <Box sx={{ display: "flex", gap: 2, alignItems: "center", mb: 2 }}>
+      <Paper sx={{ px: 2, py: 0.5, mb: 2 }}>
+        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <Tabs value={tab} onChange={(e, v) => setTab(v)} sx={{ minHeight: 40, "& .MuiTab-root": { minHeight: 40, py: 0.5, fontSize: "0.85rem" } }}>
+            <Tab icon={<NetworkIcon sx={{ fontSize: 18 }} />} iconPosition="start" label="Client Networks" />
+            <Tab icon={<BrokerIcon sx={{ fontSize: 18 }} />} iconPosition="start" label="Client Brokers" />
+          </Tabs>
           <TextField
             size="small"
             placeholder="Search..."
@@ -149,17 +150,13 @@ const CrmPage = () => {
             InputProps={{
               startAdornment: (
                 <InputAdornment position="start">
-                  <SearchIcon />
+                  <SearchIcon sx={{ fontSize: 18 }} />
                 </InputAdornment>
               ),
             }}
-            sx={{ width: 300 }}
+            sx={{ width: 260, "& .MuiInputBase-root": { height: 34 } }}
           />
         </Box>
-        <Tabs value={tab} onChange={(e, v) => setTab(v)}>
-          <Tab icon={<NetworkIcon />} iconPosition="start" label="Client Networks" />
-          <Tab icon={<BrokerIcon />} iconPosition="start" label="Client Brokers" />
-        </Tabs>
       </Paper>
 
       {/* Client Networks Tab */}

@@ -301,10 +301,6 @@ const ClientPSPsPage = () => {
 
   return (
     <Box>
-      <Typography variant="h5" sx={{ mb: 2, fontWeight: "bold" }}>
-        Client PSPs
-      </Typography>
-
       {/* Filters */}
       <Paper sx={{ p: 2, mb: 2 }}>
         <Box display="flex" gap={2} flexWrap="wrap" alignItems="center">

@@ -53,7 +53,7 @@ const ApproveAMCallsPage = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [processingId, setProcessingId] = useState(null);
   const [viewMode, setViewMode] = useState("table"); // 'table' or 'card'
-  const [pageTab, setPageTab] = useState(0);
+  const [pageTab, setPageTab] = useState(0); // 0 = Call Declarations, 1 = Call Changes
 
   // Call declaration approval state
   const [pendingCallDeclarations, setPendingCallDeclarations] = useState([]);
@@ -385,54 +385,8 @@ const ApproveAMCallsPage = () => {
 
   return (
     <Box>
-      <Box
-        sx={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          mb: 3,
-        }}
-      >
-        <Typography variant="h4" gutterBottom>
-          Approve AM Calls
-        </Typography>
-        <Box sx={{ display: "flex", gap: 2, alignItems: "center" }}>
-          {pageTab === 0 && (
-            <ToggleButtonGroup
-              value={viewMode}
-              exclusive
-              onChange={handleViewModeChange}
-              aria-label="view mode"
-              size="small"
-            >
-              <ToggleButton value="table" aria-label="table view">
-                <Tooltip title="Table View">
-                  <ViewListIcon />
-                </Tooltip>
-              </ToggleButton>
-              <ToggleButton value="card" aria-label="card view">
-                <Tooltip title="Card View">
-                  <ViewModuleIcon />
-                </Tooltip>
-              </ToggleButton>
-            </ToggleButtonGroup>
-          )}
-          <Tooltip title="Refresh">
-            <IconButton
-              onClick={() => {
-                fetchRequests();
-                fetchCallDeclarations();
-              }}
-              color="primary"
-            >
-              <RefreshIcon />
-            </IconButton>
-          </Tooltip>
-        </Box>
-      </Box>
-
       {error && (
-        <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
           {error}
         </Alert>
       )}
@@ -440,43 +394,79 @@ const ApproveAMCallsPage = () => {
       {success && (
         <Alert
           severity="success"
-          sx={{ mb: 3 }}
+          sx={{ mb: 2 }}
           onClose={() => setSuccess(null)}
         >
           {success}
         </Alert>
       )}
 
-      {/* Page Tabs */}
-      <Paper sx={{ mb: 3 }}>
-        <Tabs
-          value={pageTab}
-          onChange={(e, newValue) => setPageTab(newValue)}
-          variant="fullWidth"
-        >
-          <Tab
-            icon={<SwapIcon />}
-            iconPosition="start"
-            label={
-              <Badge badgeContent={requests.length} color="error" max={99}>
-                Call Changes
-              </Badge>
-            }
-          />
-          <Tab
-            icon={<PhoneIcon />}
-            iconPosition="start"
-            label={
-              <Badge badgeContent={pendingCallDeclarations.length} color="error" max={99}>
-                Call Declarations
-              </Badge>
-            }
-          />
-        </Tabs>
+      {/* Page Tabs with action buttons on the right */}
+      <Paper sx={{ mb: 3, px: 2, py: 0.5 }}>
+        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <Tabs
+            value={pageTab}
+            onChange={(e, newValue) => setPageTab(newValue)}
+            sx={{ minHeight: 42, "& .MuiTab-root": { minHeight: 42, py: 0.5 } }}
+          >
+            <Tab
+              icon={<PhoneIcon />}
+              iconPosition="start"
+              label={
+                <Badge badgeContent={pendingCallDeclarations.length} color="error" max={99}>
+                  Call Declarations
+                </Badge>
+              }
+            />
+            <Tab
+              icon={<SwapIcon />}
+              iconPosition="start"
+              label={
+                <Badge badgeContent={requests.length} color="error" max={99}>
+                  Call Changes
+                </Badge>
+              }
+            />
+          </Tabs>
+          {pageTab === 1 && (
+            <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+              <ToggleButtonGroup
+                value={viewMode}
+                exclusive
+                onChange={handleViewModeChange}
+                aria-label="view mode"
+                size="small"
+              >
+                <ToggleButton value="table" aria-label="table view">
+                  <Tooltip title="Table View">
+                    <ViewListIcon />
+                  </Tooltip>
+                </ToggleButton>
+                <ToggleButton value="card" aria-label="card view">
+                  <Tooltip title="Card View">
+                    <ViewModuleIcon />
+                  </Tooltip>
+                </ToggleButton>
+              </ToggleButtonGroup>
+              <Tooltip title="Refresh">
+                <IconButton
+                  onClick={() => {
+                    fetchRequests();
+                    fetchCallDeclarations();
+                  }}
+                  color="primary"
+                  size="small"
+                >
+                  <RefreshIcon />
+                </IconButton>
+              </Tooltip>
+            </Box>
+          )}
+        </Box>
       </Paper>
 
       {/* Call Changes Tab */}
-      {pageTab === 0 && (
+      {pageTab === 1 && (
         <Paper
           sx={{
             p: 3,
@@ -664,7 +654,7 @@ const ApproveAMCallsPage = () => {
       )}
 
       {/* Call Declarations Tab */}
-      {pageTab === 1 && (
+      {pageTab === 0 && (
         <Box>
           <Typography
             variant="body2"
