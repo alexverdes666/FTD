@@ -225,13 +225,24 @@ const NotificationBell = ({ onSocketConnect }) => {
     <>
       <Tooltip title="Notifications">
         <IconButton
-          size="large"
+          size="small"
           color="inherit"
           onClick={handleClick}
-          sx={{ mr: 1 }}
         >
-          <Badge badgeContent={unreadCount} color="error" max={99}>
-            {unreadCount > 0 ? <NotificationIcon /> : <NotificationNoneIcon />}
+          <Badge
+            badgeContent={unreadCount}
+            color="error"
+            max={99}
+            sx={{
+              "& .MuiBadge-badge": {
+                fontSize: "0.65rem",
+                height: 16,
+                minWidth: 16,
+                padding: "0 4px",
+              },
+            }}
+          >
+            {unreadCount > 0 ? <NotificationIcon sx={{ fontSize: 20 }} /> : <NotificationNoneIcon sx={{ fontSize: 20 }} />}
           </Badge>
         </IconButton>
       </Tooltip>

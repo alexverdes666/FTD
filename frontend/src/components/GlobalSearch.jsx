@@ -735,7 +735,7 @@ const GlobalSearch = () => {
           <TextField
             inputRef={inputRef}
             size="small"
-            placeholder="Search everything... (Ctrl+K or /)"
+            placeholder="Search... (Ctrl+K)"
             value={searchQuery}
             onChange={handleInputChange}
             onFocus={handleFocus}
@@ -745,34 +745,40 @@ const GlobalSearch = () => {
               startAdornment: (
                 <InputAdornment position="start">
                   {loading || loadingLead ? (
-                    <CircularProgress size={18} color="inherit" />
+                    <CircularProgress size={16} color="inherit" />
                   ) : (
                     <SearchIcon
-                      fontSize="small"
-                      sx={{ color: focused ? "primary.main" : "action.active" }}
+                      sx={{
+                        fontSize: 18,
+                        color: focused ? "primary.main" : "action.active",
+                      }}
                     />
                   )}
                 </InputAdornment>
               ),
               endAdornment: searchQuery && (
                 <InputAdornment position="end">
-                  <IconButton size="small" onClick={handleClear} edge="end">
-                    <CloseIcon fontSize="small" />
+                  <IconButton size="small" onClick={handleClear} edge="end" sx={{ p: 0.25 }}>
+                    <CloseIcon sx={{ fontSize: 16 }} />
                   </IconButton>
                 </InputAdornment>
               ),
               sx: {
-                borderRadius: 2,
-                bgcolor: "transparent",
-                "&:hover": { bgcolor: "transparent" },
-                "&.Mui-focused": { bgcolor: "transparent" },
+                borderRadius: 1.5,
+                bgcolor: "rgba(255,255,255,0.08)",
+                "&:hover": { bgcolor: "rgba(255,255,255,0.13)" },
+                "&.Mui-focused": { bgcolor: "rgba(255,255,255,0.15)" },
                 "& .MuiOutlinedInput-notchedOutline": { border: "none" },
                 color: "inherit",
+                height: 30,
+                fontSize: "0.8rem",
                 "& input": {
                   color: "inherit",
-                  "&::placeholder": { color: "inherit", opacity: 0.7 },
+                  py: 0,
+                  "&::placeholder": { color: "inherit", opacity: 0.6, fontSize: "0.8rem" },
                 },
-                width: { xs: 320, sm: 400 },
+                width: { xs: 240, sm: 300 },
+                transition: "width 0.2s, background-color 0.2s",
               },
             }}
           />

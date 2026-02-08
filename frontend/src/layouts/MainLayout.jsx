@@ -731,11 +731,11 @@ const MainLayout = () => {
 
   const drawer = (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100%" }}>
-      <Box sx={{ height: 64, display: "flex", alignItems: "center", px: 1, overflow: "hidden" }}>
+      <Box sx={{ height: 42, display: "flex", alignItems: "center", px: 1, overflow: "hidden" }}>
         <img
           src="/leadflow.png"
           alt="LeadFlow"
-          style={{ width: "150%", maxHeight: 85, objectFit: "contain", objectPosition: "left", marginLeft: -17 }}
+          style={{ width: "150%", maxHeight: 70, objectFit: "contain", objectPosition: "left", marginLeft: -17 }}
         />
       </Box>
       <Divider />
@@ -767,6 +767,7 @@ const MainLayout = () => {
       {}
       <AppBar
         position="fixed"
+        elevation={0}
         sx={{
           width: { md: desktopOpen ? `calc(100% - ${drawerWidth}px)` : "100%" },
           ml: { md: desktopOpen ? `${drawerWidth}px` : 0 },
@@ -774,48 +775,67 @@ const MainLayout = () => {
             easing: theme.transitions.easing.sharp,
             duration: theme.transitions.duration.enteringScreen,
           }),
+          borderBottom: "1px solid",
+          borderColor: "rgba(255,255,255,0.12)",
         }}
       >
-        <Toolbar>
+        <Toolbar
+          variant="dense"
+          sx={{ minHeight: 42, height: 42, px: { xs: 1, sm: 1.5 } }}
+        >
           <IconButton
             color="inherit"
             aria-label="open drawer"
             edge="start"
             onClick={handleDrawerToggle}
-            sx={{ mr: 2 }}
+            size="small"
+            sx={{ mr: 1 }}
           >
-            <MenuIcon />
+            <MenuIcon fontSize="small" />
           </IconButton>
-          <Typography variant="h6" noWrap component="div" sx={{ display: { xs: "none", sm: "block" } }}>
+          <Typography
+            variant="subtitle2"
+            noWrap
+            component="div"
+            sx={{
+              display: { xs: "none", sm: "block" },
+              fontWeight: 600,
+              letterSpacing: 0.3,
+              opacity: 0.95,
+            }}
+          >
             {allNavigationPaths.find((item) => item.path === location.pathname)
               ?.text || "Dashboard"}
           </Typography>
-          {/* Global Search Bar */}
-          <Box sx={{ ml: 2, display: { xs: "none", md: "block" } }}>
+          <Box sx={{ ml: 1.5, display: { xs: "none", md: "block" } }}>
             <GlobalSearch />
           </Box>
           <Box sx={{ flexGrow: 1 }} />
-          {}
-          <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
             <UserSwitcher onOpenQuickSwitcher={handleOpenQuickSwitcher} />
             <NotificationBell />
-            <Typography
-              variant="body2"
-              sx={{ mr: 1, display: { xs: "none", sm: "block" } }}
-            >
-              {user?.fullName}
-            </Typography>
-            <IconButton
-              size="large"
-              aria-label="account of current user"
-              aria-controls="menu-appbar"
-              aria-haspopup="true"
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                gap: 0.5,
+                cursor: "pointer",
+                borderRadius: 1,
+                px: 0.5,
+                py: 0.25,
+                "&:hover": { bgcolor: "rgba(255,255,255,0.08)" },
+              }}
               onClick={handleProfileMenuOpen}
-              color="inherit"
             >
               <Box position="relative">
                 <Avatar
-                  sx={{ width: 32, height: 32, bgcolor: "secondary.main" }}
+                  sx={{
+                    width: 26,
+                    height: 26,
+                    bgcolor: "secondary.main",
+                    fontSize: "0.75rem",
+                    fontWeight: 600,
+                  }}
                 >
                   {user?.fullName?.charAt(0)?.toUpperCase()}
                 </Avatar>
@@ -824,16 +844,28 @@ const MainLayout = () => {
                     color="warning"
                     sx={{
                       position: "absolute",
-                      bottom: -4,
-                      right: -4,
-                      fontSize: 16,
+                      bottom: -3,
+                      right: -3,
+                      fontSize: 13,
                       bgcolor: "background.paper",
                       borderRadius: "50%",
                     }}
                   />
                 )}
               </Box>
-            </IconButton>
+              <Typography
+                variant="caption"
+                noWrap
+                sx={{
+                  display: { xs: "none", sm: "block" },
+                  fontWeight: 500,
+                  maxWidth: 120,
+                  opacity: 0.9,
+                }}
+              >
+                {user?.fullName}
+              </Typography>
+            </Box>
           </Box>
         </Toolbar>
       </AppBar>
@@ -923,7 +955,7 @@ const MainLayout = () => {
         component="main"
         sx={{
           flexGrow: 1,
-          p: location.pathname === "/notes" ? 0 : 3,
+          p: location.pathname === "/notes" ? 0 : 2,
           width: { md: desktopOpen ? `calc(100% - ${drawerWidth}px)` : "100%" },
           transition: theme.transitions.create(["width", "margin"], {
             easing: theme.transitions.easing.sharp,
@@ -936,7 +968,7 @@ const MainLayout = () => {
           height: (location.pathname === "/notes" || location.pathname === "/orders") ? "100vh" : "auto",
         }}
       >
-        <Toolbar />
+        <Box sx={{ minHeight: 42 }} />
         <Box
           component="div"
           sx={{
