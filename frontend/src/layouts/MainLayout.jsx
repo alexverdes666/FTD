@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useSelector, useDispatch } from "react-redux";
 import {
@@ -8,7 +8,6 @@ import {
   AppBar,
   Toolbar,
   Typography,
-  List,
   ListItem,
   ListItemIcon,
   ListItemText,
@@ -19,7 +18,6 @@ import {
   Divider,
   useTheme,
   useMediaQuery,
-  Collapse,
 } from "@mui/material";
 import {
   Menu as MenuIcon,
@@ -42,8 +40,6 @@ import {
   SupportAgent as TicketIcon,
   SimCard as SimCardIcon,
   AdminPanelSettings as AdminIcon,
-  ExpandLess,
-  ExpandMore,
   CalendarMonth as CalendarIcon,
   CheckCircle as ApproveIcon,
   Announcement as AnnouncementIcon,
@@ -79,7 +75,59 @@ import AnnouncementPopup from "../components/AnnouncementPopup";
 import FineNotificationPopup from "../components/FineNotificationPopup";
 import TwoFactorVerification from "../components/TwoFactorVerification";
 import QRCodeLogin from "../components/QRCodeLogin";
+import { Reorder, useDragControls } from "framer-motion";
+import debounce from "lodash.debounce";
+import { loadNavOrder, saveNavOrder, applyNavOrder, loadNavOrderFromCache, clearNavOrderCache } from "../utils/sidebarNavOrder";
 const drawerWidth = 240;
+
+const SidebarNavItem = ({ item, isSelected, iconColor, primaryColor, onNavigate }) => {
+  const dragControls = useDragControls();
+
+  return (
+    <Reorder.Item
+      value={item}
+      dragListener={false}
+      dragControls={dragControls}
+      style={{ listStyle: "none", margin: 0, padding: 0 }}
+    >
+      <ListItem
+        button
+        onClick={() => onNavigate(item.path)}
+        selected={isSelected}
+        sx={{
+          "&.Mui-selected": {
+            backgroundColor: primaryColor + "20",
+            borderRight: `3px solid ${primaryColor}`,
+            "& .MuiListItemIcon-root": {
+              color: primaryColor,
+            },
+            "& .MuiListItemText-primary": {
+              color: primaryColor,
+              fontWeight: 600,
+            },
+          },
+        }}
+      >
+        <ListItemIcon
+          sx={{
+            color: isSelected ? primaryColor : iconColor,
+            minWidth: 36,
+            cursor: "grab",
+            "&:active": { cursor: "grabbing" },
+          }}
+          onPointerDown={(e) => {
+            e.preventDefault();
+            dragControls.start(e);
+          }}
+        >
+          {item.icon}
+        </ListItemIcon>
+        <ListItemText primary={item.text} />
+      </ListItem>
+    </Reorder.Item>
+  );
+};
+
 const MainLayout = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
@@ -87,14 +135,8 @@ const MainLayout = () => {
   const [desktopOpen, setDesktopOpen] = useState(true);
   const [anchorEl, setAnchorEl] = useState(null);
   const [quickSwitcherOpen, setQuickSwitcherOpen] = useState(false);
-  const [expandedMenus, setExpandedMenus] = useState({
-    networks: false,
-    leads: false,
-    users: false,
-    payroll: false,
-    schedules: false,
-    erp: false,
-  });
+  const [navOrder, setNavOrder] = useState(() => loadNavOrderFromCache());
+  const [orderedItems, setOrderedItems] = useState([]);
   const navigate = useNavigate();
   const location = useLocation();
   const dispatch = useDispatch();
@@ -187,6 +229,7 @@ const MainLayout = () => {
     setAnchorEl(null);
   };
   const handleLogout = () => {
+    clearNavOrderCache();
     dispatch(logout());
     handleProfileMenuClose();
     navigate("/login");
@@ -227,12 +270,6 @@ const MainLayout = () => {
     }
   };
 
-  const handleMenuToggle = (menuKey) => {
-    setExpandedMenus((prev) => ({
-      ...prev,
-      [menuKey]: !prev[menuKey],
-    }));
-  };
   const getNavigationItems = () => {
     const commonItems = [
       { text: "Dashboard", icon: <DashboardIcon />, path: "/" },
@@ -592,7 +629,7 @@ const MainLayout = () => {
       { text: "Support Tickets", icon: <TicketIcon />, path: "/tickets" },
     ];
   };
-  const navigationItems = getNavigationItems();
+  const rawNavigationItems = getNavigationItems();
 
   const iconColorMap = {
     "/": "#42a5f5",
@@ -630,31 +667,64 @@ const MainLayout = () => {
     "/verifications": "#66bb6a",
     "/lead-management": "#66bb6a",
   };
-  const expandableIconColorMap = {
-    users: "#ab47bc",
-    networks: "#29b6f6",
-    payroll: "#4caf50",
-    erp: "#5c6bc0",
-    schedules: "#26a69a",
-  };
 
-  // Helper function to get all navigation paths (including nested ones) for title display
-  const getAllNavigationPaths = (items) => {
-    const paths = [];
+  // Flatten navigation items: expand all children into a single flat list
+  const flattenNavigationItems = (items) => {
+    const flat = [];
     items.forEach((item) => {
-      if (item.path) {
-        paths.push(item);
-      }
-      if (item.children) {
-        paths.push(...getAllNavigationPaths(item.children));
+      if (item.isExpandable && item.children) {
+        item.children.forEach((child) => flat.push(child));
+      } else if (item.path) {
+        flat.push(item);
       }
     });
-    return paths;
+    return flat;
   };
 
-  const allNavigationPaths = getAllNavigationPaths(navigationItems);
+  const flatNavigationItems = useMemo(
+    () => flattenNavigationItems(rawNavigationItems),
+    [user?.role, user?.permissions?.canManageRefunds]
+  );
+
+  // Load sidebar nav order from API on mount
+  useEffect(() => {
+    const fetchNavOrder = async () => {
+      const order = await loadNavOrder();
+      setNavOrder(order);
+    };
+    fetchNavOrder();
+  }, []);
+
+  // Recompute ordered items when flat items or saved order changes
+  useEffect(() => {
+    setOrderedItems(applyNavOrder(flatNavigationItems, navOrder));
+  }, [flatNavigationItems, navOrder]);
+
+  // Debounced save to API
+  const debouncedSaveNavOrder = useMemo(
+    () => debounce((pathOrder) => saveNavOrder(pathOrder), 1000),
+    []
+  );
+
+  useEffect(() => {
+    return () => debouncedSaveNavOrder.cancel();
+  }, [debouncedSaveNavOrder]);
+
+  const handleReorder = useCallback((newItems) => {
+    setOrderedItems(newItems);
+    const newPathOrder = newItems.map((item) => item.path);
+    setNavOrder(newPathOrder);
+    try {
+      localStorage.setItem("sidebarNavOrder", JSON.stringify(newPathOrder));
+    } catch {}
+    debouncedSaveNavOrder(newPathOrder);
+  }, [debouncedSaveNavOrder]);
+
+  const allNavigationPaths = flatNavigationItems;
+  const primaryColor = theme.palette.primary.main;
+
   const drawer = (
-    <Box>
+    <Box sx={{ display: "flex", flexDirection: "column", height: "100%" }}>
       <Toolbar>
         <Typography
           variant="h6"
@@ -666,85 +736,26 @@ const MainLayout = () => {
         </Typography>
       </Toolbar>
       <Divider />
-      <List>
-        {navigationItems.map((item) => (
-          <React.Fragment key={item.text}>
-            {item.isExpandable ? (
-              <>
-                <ListItem
-                  button
-                  onClick={() => handleMenuToggle(item.key)}
-                  sx={{
-                    "&:hover": {
-                      backgroundColor: theme.palette.action.hover,
-                    },
-                  }}
-                >
-                  <ListItemIcon sx={{ color: expandableIconColorMap[item.key] }}>{item.icon}</ListItemIcon>
-                  <ListItemText primary={item.text} />
-                  {expandedMenus[item.key] ? <ExpandLess /> : <ExpandMore />}
-                </ListItem>
-                <Collapse
-                  in={expandedMenus[item.key]}
-                  timeout="auto"
-                  unmountOnExit
-                >
-                  <List component="div" disablePadding>
-                    {item.children.map((child) => (
-                      <ListItem
-                        button
-                        key={child.text}
-                        onClick={() => handleNavigation(child.path)}
-                        selected={location.pathname === child.path}
-                        sx={{
-                          pl: 4,
-                          "&.Mui-selected": {
-                            backgroundColor: theme.palette.primary.main + "20",
-                            borderRight: `3px solid ${theme.palette.primary.main}`,
-                            "& .MuiListItemIcon-root": {
-                              color: theme.palette.primary.main,
-                            },
-                            "& .MuiListItemText-primary": {
-                              color: theme.palette.primary.main,
-                              fontWeight: 600,
-                            },
-                          },
-                        }}
-                      >
-                        <ListItemIcon sx={{ color: iconColorMap[child.path] }}>{child.icon}</ListItemIcon>
-                        <ListItemText primary={child.text} />
-                      </ListItem>
-                    ))}
-                  </List>
-                </Collapse>
-              </>
-            ) : (
-              <ListItem
-                button
-                key={item.text}
-                onClick={() => handleNavigation(item.path)}
-                selected={location.pathname === item.path}
-                sx={{
-                  "&.Mui-selected": {
-                    backgroundColor: theme.palette.primary.main + "20",
-                    borderRight: `3px solid ${theme.palette.primary.main}`,
-                    "& .MuiListItemIcon-root": {
-                      color: theme.palette.primary.main,
-                    },
-                    "& .MuiListItemText-primary": {
-                      color: theme.palette.primary.main,
-                      fontWeight: 600,
-                    },
-                  },
-                }}
-              >
-                <ListItemIcon sx={{ color: iconColorMap[item.path] }}>{item.icon}</ListItemIcon>
-                <ListItemText primary={item.text} />
-              </ListItem>
-            )}
-          </React.Fragment>
-        ))}
-      </List>
+      <Box sx={{ flex: 1, overflow: "auto" }}>
+        <Reorder.Group
+          axis="y"
+          values={orderedItems}
+          onReorder={handleReorder}
+          style={{ padding: 0, margin: 0 }}
+          as="ul"
+        >
+          {orderedItems.map((item) => (
+            <SidebarNavItem
+              key={item.path}
+              item={item}
+              isSelected={location.pathname === item.path}
+              iconColor={iconColorMap[item.path] || theme.palette.text.secondary}
+              primaryColor={primaryColor}
+              onNavigate={handleNavigation}
+            />
+          ))}
+        </Reorder.Group>
+      </Box>
     </Box>
   );
   return (

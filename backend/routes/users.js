@@ -194,16 +194,14 @@ router.put(
         });
       }
       
-      // Update user preferences - use the full nested object to ensure it's created
+      // Update user preferences - use dot-notation to avoid overwriting sibling preference keys
       const updatedUser = await User.findByIdAndUpdate(
         req.user._id,
         {
           $set: {
-            preferences: {
-              ordersCopyConfig: {
-                fields: fields,
-                separator: separator
-              }
+            "preferences.ordersCopyConfig": {
+              fields: fields,
+              separator: separator
             }
           }
         },
@@ -221,6 +219,56 @@ router.put(
       res.status(500).json({
         success: false,
         message: "Failed to save copy preferences",
+        error: error.message
+      });
+    }
+  }
+);
+
+// Get user's sidebar navigation order
+router.get("/preferences/sidebar-order", protect, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id).select("preferences.sidebarNavOrder");
+    const navOrder = user?.preferences?.sidebarNavOrder || [];
+    res.json({ success: true, data: { navOrder } });
+  } catch (error) {
+    console.error("Get sidebar nav order error:", error);
+    res.status(500).json({ success: false, message: "Failed to get sidebar nav order" });
+  }
+});
+
+// Save user's sidebar navigation order
+router.put(
+  "/preferences/sidebar-order",
+  [
+    protect,
+    body("navOrder")
+      .isArray()
+      .withMessage("navOrder must be an array"),
+    body("navOrder.*")
+      .isString()
+      .withMessage("Each item in navOrder must be a string path"),
+  ],
+  async (req, res) => {
+    try {
+      const { navOrder } = req.body;
+
+      await User.findByIdAndUpdate(
+        req.user._id,
+        { $set: { "preferences.sidebarNavOrder": navOrder } },
+        { new: true, runValidators: true }
+      );
+
+      res.json({
+        success: true,
+        message: "Sidebar nav order saved",
+        data: { navOrder }
+      });
+    } catch (error) {
+      console.error("Save sidebar nav order error:", error);
+      res.status(500).json({
+        success: false,
+        message: "Failed to save sidebar nav order",
         error: error.message
       });
     }

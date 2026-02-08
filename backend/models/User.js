@@ -135,6 +135,11 @@ const userSchema = new mongoose.Schema({
         type: String,
         default: "\t"
       }
+    },
+    // Sidebar navigation item ordering (array of path strings)
+    sidebarNavOrder: {
+      type: [String],
+      default: []
     }
   }
 }, {
