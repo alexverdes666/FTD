@@ -3515,44 +3515,59 @@ const OrdersPage = () => {
           [orderId]: { loading: true },
         }));
 
-        // Fire both requests in parallel, don't await - let state updates flow
-        const lightweightPromise = api.get(`/orders/${orderId}?lightweight=true`);
-        const fullPromise = api.get(`/orders/${orderId}`);
-
-        lightweightPromise.then((lightweightResponse) => {
-          const lightweightData = lightweightResponse.data.data;
-          setExpandedRowData((prev) => ({
-            ...prev,
-            [orderId]: {
-              ...lightweightData,
-              leadsLoading: true,
-            },
-          }));
-          if (lightweightData.fulfilled?.ftd > 0) {
-            fetchRefundAssignmentStatus(orderId);
-          }
-        }).catch(() => {});
-
-        fullPromise.then((fullResponse) => {
-          const fullOrderData = fullResponse.data.data;
-          setExpandedRowData((prev) => ({
-            ...prev,
-            [orderId]: {
-              ...fullOrderData,
-              leadsLoading: false,
-            },
-          }));
-        }).catch((err) => {
-          setExpandedRowData((prev) => {
-            const newData = { ...prev };
-            delete newData[orderId];
-            return newData;
+        // Fire lightweight first for quick data, then full request for leads
+        api
+          .get(`/orders/${orderId}?lightweight=true`)
+          .then((lightweightResponse) => {
+            const lightweightData = lightweightResponse.data.data;
+            setExpandedRowData((prev) => ({
+              ...prev,
+              [orderId]: {
+                ...lightweightData,
+                leadsLoading: true,
+              },
+            }));
+            if (lightweightData.fulfilled?.ftd > 0) {
+              fetchRefundAssignmentStatus(orderId);
+            }
+            // Fire panel request AFTER lightweight completes to avoid resource contention
+            return api.get(`/orders/${orderId}?panel=true`);
+          })
+          .then((fullResponse) => {
+            const fullOrderData = fullResponse.data.data;
+            setExpandedRowData((prev) => ({
+              ...prev,
+              [orderId]: {
+                ...fullOrderData,
+                leadsLoading: false,
+              },
+            }));
+          })
+          .catch((err) => {
+            // Keep lightweight data if available, just stop the leads spinner
+            setExpandedRowData((prev) => {
+              const existing = prev[orderId];
+              if (existing && !existing.loading) {
+                // We have lightweight data - keep it, mark leads as failed
+                return {
+                  ...prev,
+                  [orderId]: {
+                    ...existing,
+                    leadsLoading: false,
+                    leadsError: true,
+                  },
+                };
+              }
+              // No lightweight data either - remove entry
+              const newData = { ...prev };
+              delete newData[orderId];
+              return newData;
+            });
+            setNotification({
+              message: "Could not load order leads.",
+              severity: "error",
+            });
           });
-          setNotification({
-            message: "Could not load order details.",
-            severity: "error",
-          });
-        });
       }
     },
     [expandedRowData, fetchRefundAssignmentStatus]
@@ -5448,12 +5463,53 @@ const OrdersPage = () => {
                       </Paper>
 
                       {/* Leads Section */}
-                      {((expandedDetails.leads && expandedDetails.leads.length > 0) || expandedDetails.leadsLoading) && (
+                      {((expandedDetails.leads && expandedDetails.leads.length > 0) || expandedDetails.leadsLoading || expandedDetails.leadsError) && (
                         <Paper elevation={0} sx={{ p: 2, borderRadius: 2, border: 1, borderColor: "divider" }}>
                           {expandedDetails.leadsLoading ? (
                             <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", p: 4, gap: 2 }}>
                               <CircularProgress />
                               <Typography variant="body2" color="text.secondary">Loading {expandedDetails.leadsCount || 0} leads...</Typography>
+                            </Box>
+                          ) : expandedDetails.leadsError ? (
+                            <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", p: 4, gap: 2 }}>
+                              <ErrorIcon color="error" />
+                              <Typography variant="body2" color="text.secondary">Failed to load leads</Typography>
+                              <Button
+                                size="small" variant="outlined"
+                                startIcon={<RestoreIcon />}
+                                onClick={() => {
+                                  setExpandedRowData((prev) => ({
+                                    ...prev,
+                                    [panelOrder._id]: {
+                                      ...prev[panelOrder._id],
+                                      leadsLoading: true,
+                                      leadsError: false,
+                                    },
+                                  }));
+                                  api.get(`/orders/${panelOrder._id}?panel=true`)
+                                    .then((res) => {
+                                      setExpandedRowData((prev) => ({
+                                        ...prev,
+                                        [panelOrder._id]: {
+                                          ...res.data.data,
+                                          leadsLoading: false,
+                                        },
+                                      }));
+                                    })
+                                    .catch(() => {
+                                      setExpandedRowData((prev) => ({
+                                        ...prev,
+                                        [panelOrder._id]: {
+                                          ...prev[panelOrder._id],
+                                          leadsLoading: false,
+                                          leadsError: true,
+                                        },
+                                      }));
+                                    });
+                                }}
+                              >
+                                Retry
+                              </Button>
                             </Box>
                           ) : (
                             <>

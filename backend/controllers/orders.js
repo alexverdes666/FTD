@@ -3316,7 +3316,22 @@ exports.getOrderById = async (req, res, next) => {
       .populate("removedLeads.removedBy", "fullName email");
 
     // Only populate full lead details if not in lightweight mode
-    if (!lightweight) {
+    const panel = req.query.panel === "true";
+    if (!lightweight && panel) {
+      // Panel mode: optimized for split view - only fields needed for display
+      query = query.populate({
+        path: "leads",
+        select:
+          "_id firstName lastName leadType orderedAs newEmail newPhone country gender dob address depositConfirmed shaved documents clientBroker clientNetwork ourNetwork campaign assignedAgent assignedClientBrokers depositPSP depositConfirmedBy shavedRefundsManager ipqsValidation",
+        populate: [
+          { path: "assignedAgent", select: "fullName" },
+          { path: "assignedClientBrokers", select: "name" },
+          { path: "depositConfirmedBy", select: "fullName" },
+          { path: "depositPSP", select: "name" },
+          { path: "shavedRefundsManager", select: "fullName" },
+        ],
+      });
+    } else if (!lightweight) {
       query = query.populate({
         path: "leads",
         select: "-comments",
