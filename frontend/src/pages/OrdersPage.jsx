@@ -5525,7 +5525,7 @@ const OrdersPage = () => {
                                   <Typography variant="subtitle1" sx={{ fontWeight: "bold" }}>Assigned Leads</Typography>
                                   <Chip label={expandedDetails.leads.length} size="small" color="primary" sx={{ height: 22, fontSize: "0.75rem", fontWeight: 600 }} />
                                 </Box>
-                                <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap" }}>
+                                <Box sx={{ display: "flex", gap: 0.5, flexWrap: "nowrap" }}>
                                   <Button
                                     variant="contained" size="small"
                                     onClick={() => handleOpenAssignedLeadsModal(expandedDetails.leads, panelOrder?._id)}
