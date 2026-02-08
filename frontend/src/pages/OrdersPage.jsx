@@ -5103,8 +5103,14 @@ const OrdersPage = () => {
                   return (
                     <React.Fragment key={order._id}>
                       <TableRow
-                        hover
-                        sx={{ "& td": { py: 0.75, borderColor: "grey.100" } }}
+                        hover={orderPanelId !== order._id}
+                        sx={{
+                          "& td": { py: 0.75, borderColor: "grey.100" },
+                          ...(orderPanelId === order._id && {
+                            bgcolor: (theme) => `${alpha(theme.palette.success.main, 0.18)} !important`,
+                            "&:hover": { bgcolor: (theme) => `${alpha(theme.palette.success.main, 0.25)} !important` },
+                          }),
+                        }}
                       >
                         <TableCell>
                           <Typography variant="body2" noWrap sx={{ fontFamily: "monospace", color: "primary.dark", fontWeight: 500 }}>
