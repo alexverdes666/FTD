@@ -77,7 +77,7 @@ const VerificationsPage = () => {
 
   // Filters and pagination
   const [filters, setFilters] = useState({
-    status: "pending",
+    status: "all",
     page: 1,
     limit: 10,
   });
@@ -386,15 +386,6 @@ const VerificationsPage = () => {
 
   return (
     <Box sx={{ p: 3 }}>
-      {/* Header */}
-      <Typography variant="h4" gutterBottom>
-        Identity Verifications
-      </Typography>
-      <Typography variant="body1" color="textSecondary" sx={{ mb: 3 }}>
-        Review and manage identity verification requests from the temporary
-        database
-      </Typography>
-
       {/* Statistics Cards */}
       <Grid container spacing={3} sx={{ mb: 3 }}>
         <Grid item xs={12} sm={6} md={2}>
