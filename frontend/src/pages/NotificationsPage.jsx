@@ -59,8 +59,11 @@ import {
   markNotificationAsRead,
   markAllNotificationsAsRead,
   deleteNotification,
+  addNewNotification,
+  updateUnreadCount,
   clearError
 } from '../store/slices/notificationSlice';
+import chatService from '../services/chatService';
 import toast from 'react-hot-toast';
 import { formatDistanceToNow, format } from 'date-fns';
 
@@ -116,6 +119,37 @@ const NotificationsPage = () => {
       dispatch(clearError());
     }
   }, [dispatch, error]);
+
+  // Real-time notification updates via socket
+  useEffect(() => {
+    const handleNewNotification = (data) => {
+      dispatch(addNewNotification(data));
+    };
+
+    const handleNotificationRead = (data) => {
+      dispatch(updateUnreadCount(data.unreadCount));
+    };
+
+    const handleAllRead = (data) => {
+      dispatch(updateUnreadCount(data.unreadCount));
+    };
+
+    const handleNotificationDeleted = (data) => {
+      dispatch(updateUnreadCount(data.unreadCount));
+    };
+
+    chatService.on('notification:new', handleNewNotification);
+    chatService.on('notification:read', handleNotificationRead);
+    chatService.on('notification:all_read', handleAllRead);
+    chatService.on('notification:deleted', handleNotificationDeleted);
+
+    return () => {
+      chatService.off('notification:new', handleNewNotification);
+      chatService.off('notification:read', handleNotificationRead);
+      chatService.off('notification:all_read', handleAllRead);
+      chatService.off('notification:deleted', handleNotificationDeleted);
+    };
+  }, [dispatch]);
 
   const handleFilterChange = (field, value) => {
     setFilters(prev => ({

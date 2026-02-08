@@ -1,9 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   IconButton,
   Badge,
   Menu,
-  MenuItem,
   Typography,
   Box,
   List,
@@ -16,13 +15,14 @@ import {
   Chip,
   Tooltip,
   CircularProgress,
+  Snackbar,
   Paper,
+  Slide,
   useTheme
 } from '@mui/material';
 import {
   Notifications as NotificationIcon,
   NotificationsNone as NotificationNoneIcon,
-  Check as CheckIcon,
   CheckCircle as CheckAllIcon,
   Delete as DeleteIcon,
   SupportAgent as TicketIcon,
@@ -30,11 +30,12 @@ import {
   Warning as WarningIcon,
   Error as ErrorIcon,
   Announcement as AnnouncementIcon,
-  SimCard as SimCardIcon
+  SimCard as SimCardIcon,
+  Close as CloseIcon
 } from '@mui/icons-material';
 import { useSelector, useDispatch } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
-import { 
+import {
   selectNotifications,
   selectUnreadCount,
   selectNotificationsLoading,
@@ -45,19 +46,21 @@ import {
   deleteNotification,
   addNewNotification,
   updateUnreadCount,
-  markNotificationReadLocally
 } from '../store/slices/notificationSlice';
+import chatService from '../services/chatService';
+import notificationService from '../services/notificationService';
 import toast from 'react-hot-toast';
 import { formatDistanceToNow } from 'date-fns';
 
-const NotificationBell = ({ onSocketConnect }) => {
+const NotificationBell = () => {
   const theme = useTheme();
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  
+
   const [anchorEl, setAnchorEl] = useState(null);
   const [page, setPage] = useState(1);
-  
+  const [popup, setPopup] = useState(null);
+
   const notifications = useSelector(selectNotifications);
   const unreadCount = useSelector(selectUnreadCount);
   const loading = useSelector(selectNotificationsLoading);
@@ -69,38 +72,56 @@ const NotificationBell = ({ onSocketConnect }) => {
     dispatch(fetchUnreadCount());
   }, [dispatch]);
 
-  // Set up socket listeners for real-time notifications
+  // Set up real-time notification listeners via chatService
   useEffect(() => {
-    if (onSocketConnect && typeof onSocketConnect === 'function') {
-      onSocketConnect((socket) => {
-        // Listen for new notifications
-        socket.on('new_notification', (data) => {
-          dispatch(addNewNotification(data));
-          
-          // Show toast notification
-          toast(`New notification: ${data.notification.title}`, {
-            duration: 5000,
-            icon: 'ℹ️',
-          });
-        });
+    const handleNewNotification = (data) => {
+      dispatch(addNewNotification(data));
 
-        // Listen for notification read updates
-        socket.on('notification_read', (data) => {
-          dispatch(updateUnreadCount(data.unreadCount));
-        });
+      // Play notification sound
+      notificationService.playNotificationSound();
 
-        // Listen for all notifications read
-        socket.on('notifications_all_read', (data) => {
-          dispatch(updateUnreadCount(data.unreadCount));
-        });
-
-        // Listen for notification deletion
-        socket.on('notification_deleted', (data) => {
-          dispatch(updateUnreadCount(data.unreadCount));
-        });
+      // Show disappearing popup
+      const notification = data.notification;
+      setPopup({
+        id: notification._id,
+        title: notification.title,
+        message: notification.message,
+        type: notification.type,
+        priority: notification.priority,
       });
-    }
-  }, [onSocketConnect, dispatch]);
+    };
+
+    const handleNotificationRead = (data) => {
+      dispatch(updateUnreadCount(data.unreadCount));
+    };
+
+    const handleAllRead = (data) => {
+      dispatch(updateUnreadCount(data.unreadCount));
+    };
+
+    const handleNotificationDeleted = (data) => {
+      dispatch(updateUnreadCount(data.unreadCount));
+    };
+
+    chatService.on('notification:new', handleNewNotification);
+    chatService.on('notification:read', handleNotificationRead);
+    chatService.on('notification:all_read', handleAllRead);
+    chatService.on('notification:deleted', handleNotificationDeleted);
+
+    return () => {
+      chatService.off('notification:new', handleNewNotification);
+      chatService.off('notification:read', handleNotificationRead);
+      chatService.off('notification:all_read', handleAllRead);
+      chatService.off('notification:deleted', handleNotificationDeleted);
+    };
+  }, [dispatch]);
+
+  // Auto-dismiss popup after 5 seconds
+  useEffect(() => {
+    if (!popup) return;
+    const timer = setTimeout(() => setPopup(null), 5000);
+    return () => clearTimeout(timer);
+  }, [popup]);
 
   const handleClick = (event) => {
     setAnchorEl(event.currentTarget);
@@ -115,7 +136,6 @@ const NotificationBell = ({ onSocketConnect }) => {
   };
 
   const handleNotificationClick = async (notification) => {
-    // Mark as read if not already read
     if (!notification.isRead) {
       try {
         await dispatch(markNotificationAsRead(notification._id)).unwrap();
@@ -124,9 +144,7 @@ const NotificationBell = ({ onSocketConnect }) => {
       }
     }
 
-    // Navigate to related page
     if (notification.type.startsWith('ticket_')) {
-      // For all ticket-related notifications, navigate to tickets page
       navigate('/tickets');
       handleClose();
     } else if (notification.actionUrl) {
@@ -156,7 +174,7 @@ const NotificationBell = ({ onSocketConnect }) => {
 
   const getNotificationIcon = (type, priority) => {
     const iconProps = { fontSize: 'small' };
-    
+
     switch (type) {
       case 'ticket_created':
       case 'ticket_updated':
@@ -221,6 +239,15 @@ const NotificationBell = ({ onSocketConnect }) => {
     setPage(nextPage);
   };
 
+  const getPopupBorderColor = (priority) => {
+    switch (priority) {
+      case 'urgent': return theme.palette.error.main;
+      case 'high': return theme.palette.warning.main;
+      case 'medium': return theme.palette.info.main;
+      default: return theme.palette.primary.main;
+    }
+  };
+
   return (
     <>
       <Tooltip title="Notifications">
@@ -246,6 +273,77 @@ const NotificationBell = ({ onSocketConnect }) => {
           </Badge>
         </IconButton>
       </Tooltip>
+
+      {/* Notification Popup */}
+      <Snackbar
+        open={Boolean(popup)}
+        onClose={() => setPopup(null)}
+        anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+        TransitionComponent={Slide}
+        TransitionProps={{ direction: 'left' }}
+        sx={{ top: { xs: 56, md: 56 }, maxWidth: 380 }}
+      >
+        <Paper
+          elevation={6}
+          sx={{
+            p: 1.5,
+            borderLeft: `4px solid ${popup ? getPopupBorderColor(popup.priority) : theme.palette.primary.main}`,
+            borderRadius: 1,
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: 1.5,
+            minWidth: 300,
+            maxWidth: 380,
+            cursor: 'pointer',
+          }}
+          onClick={() => {
+            if (popup?.type?.startsWith('ticket_')) {
+              navigate('/tickets');
+            } else {
+              navigate('/notifications');
+            }
+            setPopup(null);
+          }}
+        >
+          <Avatar
+            sx={{
+              bgcolor: popup ? getPopupBorderColor(popup.priority) : theme.palette.primary.main,
+              width: 36,
+              height: 36,
+              mt: 0.25,
+            }}
+          >
+            {popup && getNotificationIcon(popup.type, popup.priority)}
+          </Avatar>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 600, lineHeight: 1.3 }}>
+              {popup?.title}
+            </Typography>
+            <Typography
+              variant="body2"
+              color="text.secondary"
+              sx={{
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                mt: 0.25,
+              }}
+            >
+              {popup?.message}
+            </Typography>
+          </Box>
+          <IconButton
+            size="small"
+            onClick={(e) => {
+              e.stopPropagation();
+              setPopup(null);
+            }}
+            sx={{ mt: -0.5, mr: -0.5 }}
+          >
+            <CloseIcon fontSize="small" />
+          </IconButton>
+        </Paper>
+      </Snackbar>
 
       <Menu
         anchorEl={anchorEl}
@@ -313,8 +411,8 @@ const NotificationBell = ({ onSocketConnect }) => {
                     sx={{
                       backgroundColor: notification.isRead ? 'transparent' : theme.palette.action.hover,
                       '&:hover': {
-                        backgroundColor: notification.isRead 
-                          ? theme.palette.action.hover 
+                        backgroundColor: notification.isRead
+                          ? theme.palette.action.hover
                           : theme.palette.action.selected
                       }
                     }}

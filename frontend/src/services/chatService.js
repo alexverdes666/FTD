@@ -245,6 +245,23 @@ class ChatService {
       console.log('📝 Lead updated received:', data.lead?._id);
       this.emit('leads:updated', data);
     });
+
+    // Notification events (for real-time notification bell updates)
+    this.socket.on('new_notification', (data) => {
+      this.emit('notification:new', data);
+    });
+
+    this.socket.on('notification_read', (data) => {
+      this.emit('notification:read', data);
+    });
+
+    this.socket.on('notifications_all_read', (data) => {
+      this.emit('notification:all_read', data);
+    });
+
+    this.socket.on('notification_deleted', (data) => {
+      this.emit('notification:deleted', data);
+    });
   }
 
   // Handle reconnection logic
