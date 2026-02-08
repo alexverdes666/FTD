@@ -78,7 +78,7 @@ import QRCodeLogin from "../components/QRCodeLogin";
 import { Reorder, useDragControls } from "framer-motion";
 import debounce from "lodash.debounce";
 import { loadNavOrder, saveNavOrder, applyNavOrder, loadNavOrderFromCache, clearNavOrderCache } from "../utils/sidebarNavOrder";
-const drawerWidth = 240;
+const drawerWidth = 150;
 
 const SidebarNavItem = ({ item, isSelected, iconColor, primaryColor, onNavigate }) => {
   const dragControls = useDragControls();
@@ -88,13 +88,18 @@ const SidebarNavItem = ({ item, isSelected, iconColor, primaryColor, onNavigate 
       value={item}
       dragListener={false}
       dragControls={dragControls}
-      style={{ listStyle: "none", margin: 0, padding: 0 }}
+      style={{ listStyle: "none", margin: 0, padding: 0, paddingInlineStart: 0, width: "100%", boxSizing: "border-box" }}
     >
       <ListItem
         button
         onClick={() => onNavigate(item.path)}
         selected={isSelected}
         sx={{
+          py: 0.4,
+          px: 1,
+          minHeight: 32,
+          width: "100%",
+          boxSizing: "border-box",
           "&.Mui-selected": {
             backgroundColor: primaryColor + "20",
             borderRight: `3px solid ${primaryColor}`,
@@ -111,9 +116,10 @@ const SidebarNavItem = ({ item, isSelected, iconColor, primaryColor, onNavigate 
         <ListItemIcon
           sx={{
             color: isSelected ? primaryColor : iconColor,
-            minWidth: 36,
+            minWidth: 28,
             cursor: "grab",
             "&:active": { cursor: "grabbing" },
+            "& .MuiSvgIcon-root": { fontSize: 18 },
           }}
           onPointerDown={(e) => {
             e.preventDefault();
@@ -122,7 +128,7 @@ const SidebarNavItem = ({ item, isSelected, iconColor, primaryColor, onNavigate 
         >
           {item.icon}
         </ListItemIcon>
-        <ListItemText primary={item.text} />
+        <ListItemText primary={item.text} sx={{ flex: 1, minWidth: 0 }} primaryTypographyProps={{ fontSize: 13, noWrap: true }} />
       </ListItem>
     </Reorder.Item>
   );
@@ -294,7 +300,7 @@ const MainLayout = () => {
               path: "/users",
             },
             {
-              text: "Account Management",
+              text: "Accounts",
               icon: <AdminIcon />,
               path: "/account-management",
             },
@@ -312,27 +318,27 @@ const MainLayout = () => {
           key: "networks",
           children: [
             {
-              text: "Client Networks",
+              text: "Client Nets",
               icon: <NetworkIcon />,
               path: "/client-networks",
             },
             {
-              text: "Our Networks",
+              text: "Our Nets",
               icon: <NetworkIcon />,
               path: "/our-networks",
             },
             {
-              text: "Client Brokers",
+              text: "Brokers",
               icon: <BusinessIcon />,
               path: "/client-brokers",
             },
             {
-              text: "Client PSPs",
+              text: "PSPs",
               icon: <PSPIcon />,
               path: "/client-psps",
             },
             {
-              text: "Card Issuers",
+              text: "Issuers",
               icon: <CardIssuerIcon />,
               path: "/card-issuers",
             },
@@ -355,18 +361,18 @@ const MainLayout = () => {
               path: "/payroll",
             },
             {
-              text: "Affiliate Managers",
+              text: "AM Payroll",
               icon: <TableIcon />,
               path: "/affiliate-managers",
             },
             {
-              text: "Withdrawals",
+              text: "Withdraw",
               icon: <WithdrawIcon />,
               path: "/withdrawals",
             },
           ],
         },
-        { text: "Refunds Management", icon: <RefundsIcon />, path: "/refunds" },
+        { text: "Refunds", icon: <RefundsIcon />, path: "/refunds" },
         {
           text: "ERP",
           icon: <BusinessIcon />,
@@ -374,7 +380,7 @@ const MainLayout = () => {
           key: "erp",
           children: [
             {
-              text: "SIM Cards",
+              text: "SIMs",
               icon: <SimCardIcon />,
               path: "/simcards",
             },
@@ -389,17 +395,17 @@ const MainLayout = () => {
               path: "/sms",
             },
             {
-              text: "AMs Targets",
+              text: "Targets",
               icon: <TargetIcon />,
               path: "/am-targets",
             },
             {
-              text: "Announcements",
+              text: "Announce",
               icon: <AnnouncementIcon />,
               path: "/announcements",
             },
             {
-              text: "Verifications",
+              text: "Verify",
               icon: <VerificationIcon />,
               path: "/verifications",
             },
@@ -412,33 +418,33 @@ const MainLayout = () => {
           key: "schedules",
           children: [
             {
-              text: "Agent Schedules",
+              text: "Schedules",
               icon: <CalendarIcon />,
               path: "/agent-schedule",
             },
             {
-              text: "AM Calls Calendar",
+              text: "AM Calendar",
               icon: <CalendarIcon />,
               path: "/agent-call-calendar",
             },
             {
-              text: "Approve AM Calls",
+              text: "Approve Calls",
               icon: <ApproveIcon />,
               path: "/approve-am-calls",
             },
             {
-              text: "Deposit Calls",
+              text: "Dep. Calls",
               icon: <DepositCallIcon />,
               path: "/deposit-calls",
             },
             {
-              text: "Agent Comments",
+              text: "Comments",
               icon: <CommentIcon />,
               path: "/agent-comments",
             },
           ],
         },
-        { text: "Support Tickets", icon: <TicketIcon />, path: "/tickets" },
+        { text: "Tickets", icon: <TicketIcon />, path: "/tickets" },
         { text: "Sheets", icon: <SheetsIcon />, path: "/sheets" },
       ];
     } else if (user?.role === "affiliate_manager") {
@@ -446,10 +452,10 @@ const MainLayout = () => {
         ...commonItems,
         { text: "Orders", icon: <OrdersIcon />, path: "/orders" },
         { text: "Leads", icon: <LeadsIcon />, path: "/leads" },
-        { text: "Our Networks", icon: <NetworkIcon />, path: "/our-networks" },
+        { text: "Our Nets", icon: <NetworkIcon />, path: "/our-networks" },
         { text: "CRM", icon: <CrmIcon />, path: "/crm" },
         { text: "My Table", icon: <TableIcon />, path: "/my-table" },
-        { text: "My Targets", icon: <TargetIcon />, path: "/am-targets" },
+        { text: "Targets", icon: <TargetIcon />, path: "/am-targets" },
         {
           text: "Payroll",
           icon: <PaymentIcon />,
@@ -462,7 +468,7 @@ const MainLayout = () => {
               path: "/payroll",
             },
             {
-              text: "Payment History",
+              text: "Pay History",
               icon: <HistoryIcon />,
               path: "/payment-history",
             },
@@ -475,45 +481,45 @@ const MainLayout = () => {
           key: "schedules",
           children: [
             {
-              text: "Agent Schedules",
+              text: "Schedules",
               icon: <CalendarIcon />,
               path: "/agent-schedule",
             },
             {
-              text: "AM Calls Calendar",
+              text: "AM Calendar",
               icon: <CalendarIcon />,
               path: "/agent-call-calendar",
             },
             {
-              text: "Approve AM Calls",
+              text: "Approve Calls",
               icon: <ApproveIcon />,
               path: "/approve-am-calls",
             },
             {
-              text: "Deposit Calls",
+              text: "Dep. Calls",
               icon: <DepositCallIcon />,
               path: "/deposit-calls",
             },
             {
-              text: "Agent Comments",
+              text: "Comments",
               icon: <CommentIcon />,
               path: "/agent-comments",
             },
           ],
         },
         {
-          text: "Announcements",
+          text: "Announce",
           icon: <AnnouncementIcon />,
           path: "/announcements",
         },
-        { text: "Support Tickets", icon: <TicketIcon />, path: "/tickets" },
+        { text: "Tickets", icon: <TicketIcon />, path: "/tickets" },
         { text: "Sheets", icon: <SheetsIcon />, path: "/sheets" },
       ];
 
       // Add refunds management if user has permission
       if (user?.permissions?.canManageRefunds) {
         affiliateManagerItems.splice(-2, 0, {
-          text: "Refunds Management",
+          text: "Refunds",
           icon: <RefundsIcon />,
           path: "/refunds",
         });
@@ -531,17 +537,17 @@ const MainLayout = () => {
           key: "schedules",
           children: [
             {
-              text: "My Schedule",
+              text: "Schedule",
               icon: <CalendarIcon />,
               path: "/agent-schedule",
             },
             {
-              text: "AM Calls Calendar",
+              text: "AM Calendar",
               icon: <CalendarIcon />,
               path: "/agent-call-calendar",
             },
             {
-              text: "Deposit Calls",
+              text: "Dep. Calls",
               icon: <DepositCallIcon />,
               path: "/deposit-calls",
             },
@@ -559,28 +565,28 @@ const MainLayout = () => {
               path: "/payroll",
             },
             {
-              text: "Payment History",
+              text: "Pay History",
               icon: <HistoryIcon />,
               path: "/payment-history",
             },
           ],
         },
         {
-          text: "Announcements",
+          text: "Announce",
           icon: <AnnouncementIcon />,
           path: "/announcements",
         },
-        { text: "Support Tickets", icon: <TicketIcon />, path: "/tickets" },
+        { text: "Tickets", icon: <TicketIcon />, path: "/tickets" },
         { text: "Sheets", icon: <SheetsIcon />, path: "/sheets" },
       ];
     } else if (user?.role === "lead_manager") {
       return [
         ...commonItems,
         { text: "Orders", icon: <OrdersIcon />, path: "/orders" },
-        { text: "Lead Management", icon: <LeadsIcon />, path: "/leads" },
+        { text: "Leads", icon: <LeadsIcon />, path: "/leads" },
         // { text: "Workspace", icon: <WorkspaceIcon />, path: "/workspace" }, // Temporarily hidden
         {
-          text: "Verifications",
+          text: "Verify",
           icon: <VerificationIcon />,
           path: "/verifications",
         },
@@ -597,13 +603,13 @@ const MainLayout = () => {
             },
           ],
         },
-        { text: "Support Tickets", icon: <TicketIcon />, path: "/tickets" },
+        { text: "Tickets", icon: <TicketIcon />, path: "/tickets" },
       ];
     } else if (user?.role === "refunds_manager") {
       return [
         ...commonItems,
-        { text: "Refunds Management", icon: <RefundsIcon />, path: "/refunds" },
-        { text: "Support Tickets", icon: <TicketIcon />, path: "/tickets" },
+        { text: "Refunds", icon: <RefundsIcon />, path: "/refunds" },
+        { text: "Tickets", icon: <TicketIcon />, path: "/tickets" },
       ];
     } else if (user?.role === "inventory_manager") {
       return [
@@ -615,13 +621,13 @@ const MainLayout = () => {
           key: "erp",
           children: [
             {
-              text: "SIM Cards",
+              text: "SIMs",
               icon: <SimCardIcon />,
               path: "/simcards",
             },
           ],
         },
-        { text: "Support Tickets", icon: <TicketIcon />, path: "/tickets" },
+        { text: "Tickets", icon: <TicketIcon />, path: "/tickets" },
       ];
     }
     return [
@@ -725,23 +731,20 @@ const MainLayout = () => {
 
   const drawer = (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100%" }}>
-      <Toolbar>
-        <Typography
-          variant="h6"
-          noWrap
-          component="div"
-          sx={{ fontWeight: 600 }}
-        >
-          Lead Management
-        </Typography>
-      </Toolbar>
+      <Box sx={{ height: 64, display: "flex", alignItems: "center", px: 1, overflow: "hidden" }}>
+        <img
+          src="/leadflow.png"
+          alt="LeadFlow"
+          style={{ width: "150%", maxHeight: 85, objectFit: "contain", objectPosition: "left", marginLeft: -17 }}
+        />
+      </Box>
       <Divider />
-      <Box sx={{ flex: 1, overflow: "auto" }}>
+      <Box sx={{ flex: 1, overflow: "auto", width: "100%" }}>
         <Reorder.Group
           axis="y"
           values={orderedItems}
           onReorder={handleReorder}
-          style={{ padding: 0, margin: 0 }}
+          style={{ padding: 0, paddingInlineStart: 0, margin: 0, width: "100%", listStyleType: "none", boxSizing: "border-box" }}
           as="ul"
         >
           {orderedItems.map((item) => (
