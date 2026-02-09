@@ -39,10 +39,8 @@ const addLeadSchema = yup.object({
         then: () => yup.string().required('SIN is required for FTD leads'),
         otherwise: () => yup.string().nullable()
     }),
-    dob: yup.date().nullable().when('leadType', {
-        is: (val) => val === 'ftd' || val === 'filler',
-        then: () => yup.date().nullable(),
-        otherwise: () => yup.date().nullable()
+    dob: yup.string().nullable().transform((value, originalValue) => {
+        return originalValue === "" ? null : originalValue;
     }),
     address: yup.string().nullable().typeError('Address must be a string type'),
     'socialMedia.facebook': yup.string().nullable().url('Invalid Facebook URL'),

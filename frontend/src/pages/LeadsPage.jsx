@@ -1080,6 +1080,8 @@ const LeadsPage = () => {
     pages: 0,
   });
   const [archivedLeadsSearch, setArchivedLeadsSearch] = useState("");
+  const [deleteDialog, setDeleteDialog] = useState({ open: false, leadId: null });
+  const [deleteReason, setDeleteReason] = useState("");
   const [bulkDeleteFilters, setBulkDeleteFilters] = useState({
     leadType: "",
     country: "",
@@ -1628,16 +1630,38 @@ const LeadsPage = () => {
   );
 
   const handleDeleteLead = useCallback(
-    async (leadId) => {
+    async (leadId, reason) => {
       try {
-        await api.delete(`/leads/${leadId}`);
+        await api.delete(`/leads/${leadId}`, { data: { reason } });
         setSuccess("Lead deleted successfully");
+        setDeleteDialog({ open: false, leadId: null });
+        setDeleteReason("");
         fetchLeads();
       } catch (err) {
         setError(err.response?.data?.message || "Failed to delete lead");
       }
     },
     [fetchLeads, setSuccess, setError]
+  );
+
+  const handleBulkArchive = useCallback(
+    async () => {
+      if (selectedLeads.size === 0) return;
+      try {
+        setError(null);
+        let archived = 0;
+        for (const leadId of selectedLeads) {
+          await api.put(`/leads/${leadId}/archive`);
+          archived++;
+        }
+        setSuccess(`${archived} lead(s) archived successfully`);
+        setSelectedLeads(new Set());
+        fetchLeads();
+      } catch (err) {
+        setError(err.response?.data?.message || "Failed to archive leads");
+      }
+    },
+    [selectedLeads, fetchLeads, setSuccess, setError]
   );
   const handleBulkDelete = async () => {
     try {
@@ -2284,6 +2308,30 @@ const LeadsPage = () => {
               {ipqsValidating ? "..." : `Recheck (${numIPQSValidatedSelected})`}
             </Button>
           )}
+          {isAdminOrManager && numSelected > 0 && (
+            <Button
+              variant="contained"
+              color="warning"
+              size="small"
+              startIcon={<ArchiveIcon />}
+              onClick={() => {
+                if (window.confirm(`Archive ${numSelected} selected lead(s)?`)) {
+                  handleBulkArchive();
+                }
+              }}
+              sx={{
+                borderRadius: 2,
+                px: 2,
+                transition: "all 0.2s",
+                "&:hover": {
+                  transform: "translateY(-1px)",
+                  boxShadow: 4,
+                },
+              }}
+            >
+              Archive ({numSelected})
+            </Button>
+          )}
         </Paper>
       ) : null}
       {success && (
@@ -2650,7 +2698,7 @@ const LeadsPage = () => {
                         onFilterByOrder={(orderId) =>
                           handleFilterChange("orderId", orderId)
                         }
-                        onDeleteLead={handleDeleteLead}
+                        onDeleteLead={(leadId) => setDeleteDialog({ open: true, leadId })}
                         onArchiveLead={handleArchiveLead}
                         onUnarchiveLead={handleUnarchiveLeadFromTable}
                         handleEditLead={handleEditLead}
@@ -3157,6 +3205,46 @@ const LeadsPage = () => {
           />
         </DialogContent>
       </Dialog>
+
+      {/* Delete Lead with Reason Dialog */}
+      <Dialog
+        open={deleteDialog.open}
+        onClose={() => { setDeleteDialog({ open: false, leadId: null }); setDeleteReason(""); }}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>Delete Lead</DialogTitle>
+        <DialogContent>
+          <DialogContentText sx={{ mb: 2 }}>
+            Please provide a reason for deleting this lead (minimum 10 characters).
+          </DialogContentText>
+          <TextField
+            autoFocus
+            fullWidth
+            label="Deletion Reason"
+            value={deleteReason}
+            onChange={(e) => setDeleteReason(e.target.value)}
+            error={deleteReason.length > 0 && deleteReason.trim().length < 10}
+            helperText={deleteReason.length > 0 && deleteReason.trim().length < 10 ? `${deleteReason.trim().length}/10 characters` : ""}
+            multiline
+            rows={2}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => { setDeleteDialog({ open: false, leadId: null }); setDeleteReason(""); }}>
+            Cancel
+          </Button>
+          <Button
+            onClick={() => handleDeleteLead(deleteDialog.leadId, deleteReason.trim())}
+            color="error"
+            variant="contained"
+            disabled={deleteReason.trim().length < 10}
+          >
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       <Dialog
         open={bulkDeleteDialogOpen}
         onClose={() => setBulkDeleteDialogOpen(false)}
@@ -4800,13 +4888,7 @@ const LeadRow = React.memo(
                     onClick={(e) => {
                       e.stopPropagation();
                       handleMenuClose();
-                      if (
-                        window.confirm(
-                          "Are you sure you want to delete this lead?"
-                        )
-                      ) {
-                        onDeleteLead(lead._id);
-                      }
+                      onDeleteLead(lead._id);
                     }}
                     sx={{ fontSize: "0.75rem", py: 0.75, color: "error.main" }}
                   >
@@ -5082,13 +5164,7 @@ const LeadCard = React.memo(
                         onClick={(e) => {
                           e.stopPropagation();
                           handleMenuClose();
-                          if (
-                            window.confirm(
-                              "Are you sure you want to delete this lead?"
-                            )
-                          ) {
-                            onDeleteLead(lead._id);
-                          }
+                          onDeleteLead(lead._id);
                         }}
                         sx={{ color: "error.main" }}
                       >
