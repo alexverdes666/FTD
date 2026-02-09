@@ -1659,7 +1659,7 @@ exports.updateLead = async (req, res, next) => {
       const oldDob = lead.dob ? new Date(lead.dob).toISOString().split('T')[0] : "";
       if (newDob !== oldDob) {
         trackChange("dob", lead.dob, dob, oldDob, newDob);
-        lead.dob = dob ? new Date(dob + "T12:00:00.000Z") : null;
+        lead.dob = dob ? new Date(String(dob).split('T')[0] + "T12:00:00.000Z") : null;
       }
     }
     if (
@@ -1993,7 +1993,7 @@ exports.createLead = async (req, res, next) => {
       leadType,
       socialMedia,
       sin,
-      dob: dob ? new Date(dob + "T12:00:00.000Z") : undefined,
+      dob: dob ? new Date(String(dob).split('T')[0] + "T12:00:00.000Z") : undefined,
       address,
       gender,
       createdBy: req.user.id,
