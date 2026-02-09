@@ -141,19 +141,23 @@ const reverseDepositCallUpdate = async (declaration) => {
   const callField = `call${callNumber}`;
   const currentStatus = depositCall[callField].status;
 
-  // Only reset if it was set to "completed" by the approval process
-  if (currentStatus !== "completed") return false;
+  // Only reset if it's in a non-pending state (completed, scheduled, pending_approval, answered, rejected)
+  if (currentStatus === "pending") return false;
 
   if (!dryRun) {
     depositCall[callField].status = "pending";
+    depositCall[callField].expectedDate = null;
     depositCall[callField].doneDate = null;
+    depositCall[callField].markedBy = null;
+    depositCall[callField].markedAt = null;
     depositCall[callField].approvedBy = null;
     depositCall[callField].approvedAt = null;
+    depositCall[callField].notes = "";
     await depositCall.save();
   }
 
   console.log(
-    `  DepositCall [${depositCall._id}] call${callNumber}: completed -> pending`
+    `  DepositCall [${depositCall._id}] call${callNumber}: ${currentStatus} -> pending`
   );
   return true;
 };

@@ -5685,7 +5685,7 @@ const OrdersPage = () => {
                                                 {lead.dob && (
                                                   <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                                                     <Typography variant="caption" color="text.secondary" sx={{ minWidth: 55 }}>DOB:</Typography>
-                                                    <Typography variant="body2" sx={{ fontWeight: 500 }}>{new Date(lead.dob).toLocaleDateString()}</Typography>
+                                                    <Typography variant="body2" sx={{ fontWeight: 500 }}>{new Intl.DateTimeFormat('en-US', { timeZone: 'UTC' }).format(new Date(lead.dob))}</Typography>
                                                   </Box>
                                                 )}
                                               </Box>

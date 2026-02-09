@@ -50,7 +50,9 @@ const LeadDetailCard = ({ lead, onLeadUpdate }) => {
   const [selectedClientBrokerValue, setSelectedClientBrokerValue] = useState("");
   const [updatingClientBroker, setUpdatingClientBroker] = useState(false);
   const formatDate = (date) => {
-    return date ? new Date(date).toLocaleDateString() : "N/A";
+    if (!date) return "N/A";
+    const d = new Date(date);
+    return new Intl.DateTimeFormat('en-US', { timeZone: 'UTC' }).format(d);
   };
   const formatDateTime = (date) => {
     return date ? new Date(date).toLocaleString() : "N/A";

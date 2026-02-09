@@ -488,7 +488,7 @@ const formatDate = (date) => {
   if (!date) return "";
   try {
     const d = new Date(date);
-    return d.toLocaleDateString();
+    return new Intl.DateTimeFormat('en-US', { timeZone: 'UTC' }).format(d);
   } catch {
     return "";
   }

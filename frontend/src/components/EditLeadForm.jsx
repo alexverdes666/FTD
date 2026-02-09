@@ -95,13 +95,8 @@ const getDefaultValues = (lead) => {
   
   let dobValue = "";
   if (lead?.dob) {
-    if (typeof lead.dob === 'string') {
-      dobValue = lead.dob.split('T')[0];
-    } else if (lead.dob instanceof Date) {
-      dobValue = lead.dob.toISOString().split('T')[0];
-    } else {
-      dobValue = new Date(lead.dob).toISOString().split('T')[0];
-    }
+    const d = new Date(lead.dob);
+    dobValue = d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0') + '-' + String(d.getUTCDate()).padStart(2, '0');
   }
   
   const defaultValues = {
@@ -834,13 +829,13 @@ const EditLeadForm = ({ open, onClose, lead, onLeadUpdated, sx }) => {
               name="dob"
               control={control}
               render={({ field: { onChange, value, ...rest } }) => {
-                // Format the date value for display in the input
                 let displayValue = "";
                 if (value) {
-                  if (typeof value === 'string') {
+                  if (typeof value === 'string' && value.includes('T')) {
+                    const d = new Date(value);
+                    displayValue = d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0') + '-' + String(d.getUTCDate()).padStart(2, '0');
+                  } else if (typeof value === 'string') {
                     displayValue = value.split('T')[0];
-                  } else if (value instanceof Date) {
-                    displayValue = value.toISOString().split('T')[0];
                   } else {
                     displayValue = value;
                   }

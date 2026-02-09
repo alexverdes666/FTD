@@ -575,7 +575,7 @@ const LeadDetails = React.memo(({ lead }) => (
                   DOB:
                 </Typography>
                 <Typography variant="caption">
-                  {new Date(lead.dob).toLocaleDateString()}
+                  {new Intl.DateTimeFormat('en-US', { timeZone: 'UTC' }).format(new Date(lead.dob))}
                 </Typography>
               </Box>
             )}

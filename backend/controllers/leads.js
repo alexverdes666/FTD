@@ -1655,11 +1655,11 @@ exports.updateLead = async (req, res, next) => {
       lead.gender = gender;
     }
     if (dob !== undefined) {
-      const newDob = dob ? new Date(dob).toISOString().split('T')[0] : "";
+      const newDob = dob ? dob.split('T')[0] : "";
       const oldDob = lead.dob ? new Date(lead.dob).toISOString().split('T')[0] : "";
       if (newDob !== oldDob) {
         trackChange("dob", lead.dob, dob, oldDob, newDob);
-        lead.dob = dob;
+        lead.dob = dob ? new Date(dob + "T12:00:00.000Z") : null;
       }
     }
     if (
@@ -1993,7 +1993,7 @@ exports.createLead = async (req, res, next) => {
       leadType,
       socialMedia,
       sin,
-      dob,
+      dob: dob ? new Date(dob + "T12:00:00.000Z") : undefined,
       address,
       gender,
       createdBy: req.user.id,
@@ -2173,14 +2173,15 @@ exports.importLeads = async (req, res, next) => {
       const parts = dateString.split("/");
       if (parts.length === 3) {
         const day = parseInt(parts[0]);
-        const month = parseInt(parts[1]) - 1;
+        const month = parseInt(parts[1]);
         const year = parseInt(parts[2]);
         if (!isNaN(day) && !isNaN(month) && !isNaN(year)) {
-          return new Date(year, month, day);
+          return new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
         }
       }
       const parsed = new Date(dateString);
-      return isNaN(parsed.getTime()) ? null : parsed;
+      if (isNaN(parsed.getTime())) return null;
+      return new Date(Date.UTC(parsed.getUTCFullYear(), parsed.getUTCMonth(), parsed.getUTCDate(), 12, 0, 0));
     };
     const normalizeGender = (gender) => {
       if (!gender) return "not_defined";

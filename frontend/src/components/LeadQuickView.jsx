@@ -74,7 +74,9 @@ const LeadQuickView = ({
   const [suggestion, setSuggestion] = useState("");
 
   const formatDate = (date) => {
-    return date ? new Date(date).toLocaleDateString() : "N/A";
+    if (!date) return "N/A";
+    const d = new Date(date);
+    return new Intl.DateTimeFormat('en-US', { timeZone: 'UTC' }).format(d);
   };
 
   const getStatusColor = (status) => {
