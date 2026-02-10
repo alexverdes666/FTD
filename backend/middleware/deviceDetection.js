@@ -1,30 +1,24 @@
 /**
  * Device Detection Middleware
  *
- * This middleware integrates with the get_info service to capture comprehensive
+ * Uses the UserDetector module directly (no HTTP call) to capture comprehensive
  * device information for all POST, PUT, PATCH, and DELETE operations.
  *
- * The get_info service provides:
+ * Detection includes:
  * - Detailed IP analysis with proxy/VPN detection
  * - Anti-detect browser detection (Dolphin Anty, Multilogin, etc.)
- * - Device system information (hostname, username, specs)
+ * - Client device info from headers/client hints
+ * - Server system information
  * - Geolocation data
  * - Client hints and fingerprinting
  *
  * This data is stored in MongoDB for security auditing and compliance.
  */
 
-const axios = require("axios");
+const UserDetector = require("../get_info/src/services/detector");
 const DeviceDetectionLog = require("../models/DeviceDetectionLog");
 const { computeChanges } = require("./changeTracker");
 const { getBasePath, getActionType } = require("./activityLogger");
-
-// Get get_info service URL from environment
-const GET_INFO_URL =
-  process.env.GET_INFO_URL || "http://localhost:3000/api/detect";
-
-// Timeout for get_info service call (don't slow down requests too much)
-const GET_INFO_TIMEOUT = 3000; // 3 seconds
 
 // Routes to skip detection logging
 const SKIP_ROUTES = [
@@ -85,102 +79,18 @@ const redactSensitiveData = (obj, depth = 0) => {
 };
 
 /**
- * Call the get_info service to get device detection data
- * This forwards the request headers to get_info so it can analyze them
+ * Run device detection directly using the UserDetector module.
+ * No HTTP call needed — runs in-process, bypasses Cloudflare entirely.
  */
-const callGetInfoService = async (req) => {
+const runDetection = (req) => {
   try {
-    // Build headers object - only include headers that actually exist
-    // Sending empty strings (e.g. origin: "") causes Cloudflare to reject with 403
-    const headersToForward = [
-      "user-agent",
-      "x-forwarded-for",
-      "x-real-ip",
-      "cf-connecting-ip",
-      "true-client-ip",
-      "accept",
-      "accept-language",
-      "accept-encoding",
-      "origin",
-      "referer",
-      // Client Hints
-      "sec-ch-ua",
-      "sec-ch-ua-mobile",
-      "sec-ch-ua-platform",
-      "sec-ch-ua-platform-version",
-      "sec-ch-ua-arch",
-      "sec-ch-ua-bitness",
-      "sec-ch-ua-model",
-      "sec-ch-ua-full-version-list",
-      "device-memory",
-      "dpr",
-      "viewport-width",
-      "ect",
-      "rtt",
-      "downlink",
-      // Security headers
-      "dnt",
-      "sec-gpc",
-      "sec-fetch-site",
-      "sec-fetch-mode",
-      "sec-fetch-dest",
-      "sec-fetch-user",
-      // Client-side detection headers
-      "x-client-local-ips",
-      "x-device-id",
-      "x-device-fingerprint",
-    ];
-
-    const forwardedHeaders = {};
-    for (const header of headersToForward) {
-      if (req.headers[header]) {
-        forwardedHeaders[header] = req.headers[header];
-      }
-    }
-
-    // Ensure user-agent is always present (Cloudflare blocks requests without it)
-    if (!forwardedHeaders["user-agent"]) {
-      forwardedHeaders["user-agent"] = "FTD-Backend/1.0";
-    }
-
-    const response = await axios.get(GET_INFO_URL, {
-      timeout: GET_INFO_TIMEOUT,
-      headers: forwardedHeaders,
-    });
-
-    return response.data;
+    const detector = new UserDetector(req);
+    return detector.getFullDetection();
   } catch (error) {
-    // Log detailed error information for debugging
-    if (error.response) {
-      // The request was made and the server responded with a status code
-      // that falls out of the range of 2xx
-      console.log(
-        `[DeviceDetection] ⚠️  get_info service error: ${error.message} (Status: ${error.response.status})`
-      );
-      if (error.response.status === 403) {
-        console.log(
-          "[DeviceDetection] 🚨 403 Forbidden - Check CORS configuration and service permissions"
-        );
-        console.log(`[DeviceDetection] Service URL: ${GET_INFO_URL}`);
-      }
-    } else if (error.request) {
-      // The request was made but no response was received
-      console.log(
-        "[DeviceDetection] ⚠️  get_info service no response:",
-        error.message
-      );
-    } else if (error.code === "ECONNREFUSED" || error.code === "ENOTFOUND") {
-      console.log(
-        "[DeviceDetection] ⚠️  get_info service not available, using fallback"
-      );
-    } else {
-      // Something happened in setting up the request that triggered an Error
-      console.log(
-        "[DeviceDetection] ⚠️  get_info service error:",
-        error.message
-      );
-    }
-
+    console.error(
+      "[DeviceDetection] ⚠️  Detection error:",
+      error.message
+    );
     return null;
   }
 };
@@ -288,8 +198,8 @@ const deviceDetectionMiddleware = () => {
       try {
         const duration = Date.now() - startTime;
 
-        // Call get_info service to get device detection data
-        const detectionData = await callGetInfoService(req);
+        // Run device detection directly (no HTTP call)
+        const detectionData = runDetection(req);
 
         // Build the log entry
         const logEntry = {
@@ -464,6 +374,6 @@ const deviceDetectionMiddleware = () => {
 
 module.exports = {
   deviceDetectionMiddleware,
-  callGetInfoService,
+  runDetection,
   redactSensitiveData,
 };
