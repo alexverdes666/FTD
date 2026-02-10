@@ -1,0 +1,4 @@
+{
+  "backendUrl": "https://ftd-backend.onrender.com/api",
+  "intervalMinutes": 5
+}

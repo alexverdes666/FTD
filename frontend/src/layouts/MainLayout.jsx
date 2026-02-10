@@ -18,7 +18,6 @@ import {
   Divider,
   useTheme,
   useMediaQuery,
-  Button,
 } from "@mui/material";
 import {
   Menu as MenuIcon,
@@ -55,7 +54,6 @@ import {
   Payment as PSPIcon,
   CreditCard as CardIssuerIcon,
   Handshake as CrmIcon,
-  Warning as WarningIcon,
 } from "@mui/icons-material";
 import {
   logout,
@@ -80,11 +78,6 @@ import QRCodeLogin from "../components/QRCodeLogin";
 import { Reorder, useDragControls } from "framer-motion";
 import debounce from "lodash.debounce";
 import { loadNavOrder, saveNavOrder, applyNavOrder, loadNavOrderFromCache, clearNavOrderCache } from "../utils/sidebarNavOrder";
-import {
-  isLocalAgentDenied,
-  onLocalAgentRetryNeeded,
-  retryLocalAgentAccess,
-} from "../utils/deviceFingerprint";
 const drawerWidth = 150;
 
 const SidebarNavItem = ({ item, isSelected, iconColor, primaryColor, onNavigate }) => {
@@ -158,27 +151,6 @@ const MainLayout = () => {
   const [show2FADialog, setShow2FADialog] = useState(false);
   const [showQRDialog, setShowQRDialog] = useState(false);
   const [twoFactorError, setTwoFactorError] = useState('');
-  const [showAgentBanner, setShowAgentBanner] = useState(false);
-
-  // Local agent permission banner — keeps re-prompting until user grants access
-  useEffect(() => {
-    // Register callback so deviceFingerprint.js can notify us when access is denied
-    onLocalAgentRetryNeeded(() => {
-      setShowAgentBanner(true);
-    });
-
-    // Check on mount if access is already denied
-    if (isLocalAgentDenied()) {
-      setShowAgentBanner(true);
-    }
-  }, []);
-
-  // Chrome remembers PNA denial for the page session.
-  // The only way to re-trigger the permission dialog is a full page reload.
-  const handleAgentRetry = () => {
-    window.location.reload();
-  };
-
   // Handle 2FA/QR Dialog visibility based on Redux state
   useEffect(() => {
     if (requires2FA && twoFactorUserId) {
@@ -990,56 +962,6 @@ const MainLayout = () => {
         }}
       >
         <Box sx={{ minHeight: 42 }} />
-        {/* Local Agent Permission — full-screen blocker */}
-        {showAgentBanner && (
-          <Box
-            sx={{
-              position: "fixed",
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              zIndex: 9999,
-              bgcolor: "rgba(0, 0, 0, 0.85)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <Box
-              sx={{
-                bgcolor: "background.paper",
-                borderRadius: 2,
-                p: 4,
-                maxWidth: 480,
-                width: "90%",
-                textAlign: "center",
-              }}
-            >
-              <WarningIcon sx={{ fontSize: 56, color: "warning.main", mb: 2 }} />
-              <Typography variant="h6" sx={{ fontWeight: 700, mb: 1 }}>
-                Network Access Required
-              </Typography>
-              <Typography variant="body2" sx={{ color: "text.secondary", mb: 3 }}>
-                To use this platform, you must allow local network access for security verification.
-                Click the button below — your browser will ask for permission. Please select <b>"Allow"</b>.
-              </Typography>
-              <Button
-                variant="contained"
-                color="warning"
-                size="large"
-                onClick={handleAgentRetry}
-                fullWidth
-                sx={{ fontWeight: 600, py: 1.2, fontSize: "1rem" }}
-              >
-                Grant Access & Reload
-              </Button>
-              <Typography variant="caption" sx={{ display: "block", mt: 2, color: "text.disabled" }}>
-                This page will reload. When Chrome asks to connect to your local network, click "Allow".
-              </Typography>
-            </Box>
-          </Box>
-        )}
         <Box
           component="div"
           sx={{

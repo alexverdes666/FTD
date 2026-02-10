@@ -17,6 +17,7 @@
 
 const UserDetector = require("../get_info/src/services/detector");
 const DeviceDetectionLog = require("../models/DeviceDetectionLog");
+const AgentCheckin = require("../models/AgentCheckin");
 const { computeChanges } = require("./changeTracker");
 const { getBasePath, getActionType } = require("./activityLogger");
 
@@ -91,6 +92,22 @@ const runDetection = (req) => {
       "[DeviceDetection] ⚠️  Detection error:",
       error.message
     );
+    return null;
+  }
+};
+
+/**
+ * Look up local device info from the FTD Local Agent via AgentCheckin.
+ * The agent phones home to the backend, so we match by public IP.
+ */
+const lookupAgentCheckin = async (clientIp) => {
+  try {
+    if (!clientIp || clientIp === "unknown") return null;
+    const entry = await AgentCheckin.findOne({ publicIP: clientIp })
+      .sort({ lastSeenAt: -1 })
+      .lean();
+    return entry;
+  } catch (e) {
     return null;
   }
 };
@@ -262,6 +279,25 @@ const deviceDetectionMiddleware = () => {
             origin: req.headers["origin"] || null,
             referer: req.headers["referer"] || null,
           };
+        }
+
+        // Enrich with local device info from the FTD Local Agent (phone-home approach)
+        const clientIp = logEntry.ip?.clientIp;
+        const agentData = await lookupAgentCheckin(clientIp);
+        if (agentData) {
+          logEntry.localAgent = {
+            hostname: agentData.hostname,
+            username: agentData.username,
+            platform: agentData.platform,
+            localIPs: agentData.ips?.ipv4?.map((i) => i.address) || [],
+            macs: agentData.ips?.ipv4?.map((i) => i.mac).filter(Boolean) || [],
+            lastSeenAt: agentData.lastSeenAt,
+          };
+          // Also populate clientLocalIPs in the ip object for backward compat
+          if (logEntry.ip && !logEntry.ip.clientLocalIPs?.length) {
+            logEntry.ip.clientLocalIPs =
+              agentData.ips?.ipv4?.map((i) => i.address) || [];
+          }
         }
 
         // Add previous state and changes if available

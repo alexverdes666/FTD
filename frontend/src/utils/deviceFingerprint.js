@@ -137,93 +137,16 @@ const getLocalIPs = async () => {
   }
 };
 
-// Local agent port — must match local-agent.js
-const LOCAL_AGENT_PORT = 9876;
-const LOCAL_AGENT_URL = `http://localhost:${LOCAL_AGENT_PORT}`;
-
-// Track local agent access state
-let localAgentAccessDenied = false;
-let localAgentRetryCallback = null;
-
-/**
- * Try to fetch local network info from the FTD Local Agent.
- * The agent is a tiny Node.js server running on the user's machine
- * that exposes hostname, username, and local IPs.
- * Returns null if the agent is not running or access is denied.
- */
-const fetchFromLocalAgent = async () => {
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 1500);
-
-    const res = await fetch(LOCAL_AGENT_URL, {
-      signal: controller.signal,
-    });
-    clearTimeout(timeout);
-
-    if (!res.ok) return null;
-    const data = await res.json();
-
-    // Access was granted — clear denial state
-    localAgentAccessDenied = false;
-    return data;
-  } catch (e) {
-    // Check if this looks like a Private Network Access denial
-    // (Chrome blocks the request entirely, resulting in a TypeError)
-    if (e.name === "TypeError" || e.message?.includes("Failed to fetch")) {
-      localAgentAccessDenied = true;
-    }
-    return null;
-  }
-};
-
-/**
- * Check if local agent access was denied by the browser.
- */
-export const isLocalAgentDenied = () => localAgentAccessDenied;
-
-/**
- * Register a callback that fires when a retry of local agent access is needed.
- * The UI component (e.g., MainLayout) calls this to show a permission banner.
- */
-export const onLocalAgentRetryNeeded = (callback) => {
-  localAgentRetryCallback = callback;
-};
-
-/**
- * Retry fetching from local agent. Call this when the user clicks "Allow" or "Retry".
- * This triggers a new fetch which will prompt Chrome's Private Network Access dialog.
- */
-export const retryLocalAgentAccess = async () => {
-  // Clear cached data so it re-fetches
-  cachedLocalIPs = null;
-  cachedLocalAgentData = null;
-  try {
-    sessionStorage.removeItem(LOCAL_IPS_KEY);
-    sessionStorage.removeItem("ftd_local_agent");
-  } catch (e) { /* ignore */ }
-
-  // Re-attempt detection
-  const ips = await getClientLocalIPs();
-
-  if (ips && ips.length > 0) {
-    localAgentAccessDenied = false;
-    return true; // Success
-  }
-  return false; // Still denied or agent not running
-};
-
-// Cache local IPs and agent data since detection is async
+// Cache local IPs since detection is async
 let cachedLocalIPs = null;
-let cachedLocalAgentData = null;
 
 /**
- * Get cached local IPs or detect them.
+ * Get cached local IPs or detect them via WebRTC.
  *
- * Strategy:
- * 1. Try FTD Local Agent (most reliable — gives real local IPs + hostname)
- * 2. Fall back to WebRTC (blocked by modern Chrome mDNS obfuscation)
- * 3. Cache result in sessionStorage
+ * Note: The FTD Local Agent now phones home directly to the backend,
+ * so local IP detection from the browser is best-effort only (WebRTC).
+ * Modern Chrome blocks local IPs via mDNS obfuscation, but the agent
+ * handles this server-side.
  */
 const getClientLocalIPs = async () => {
   if (cachedLocalIPs) return cachedLocalIPs;
@@ -240,23 +163,7 @@ const getClientLocalIPs = async () => {
     }
   } catch (e) { /* ignore */ }
 
-  // Strategy 1: Try local agent (gives real local IPs)
-  const agentData = await fetchFromLocalAgent();
-  if (agentData && agentData.ips) {
-    cachedLocalAgentData = agentData;
-    const ips = agentData.ips.ipv4?.map((i) => i.address) || [];
-    if (ips.length > 0) {
-      cachedLocalIPs = ips;
-      try {
-        sessionStorage.setItem(LOCAL_IPS_KEY, JSON.stringify(cachedLocalIPs));
-        // Also store full agent data for the fingerprint
-        sessionStorage.setItem("ftd_local_agent", JSON.stringify(agentData));
-      } catch (e) { /* ignore */ }
-      return cachedLocalIPs;
-    }
-  }
-
-  // Strategy 2: Fall back to WebRTC (usually blocked by Chrome mDNS)
+  // WebRTC detection (best-effort — usually blocked by Chrome mDNS)
   cachedLocalIPs = await getLocalIPs();
 
   // Cache in sessionStorage
@@ -264,37 +171,7 @@ const getClientLocalIPs = async () => {
     sessionStorage.setItem(LOCAL_IPS_KEY, JSON.stringify(cachedLocalIPs));
   } catch (e) { /* ignore */ }
 
-  // If we still have no local IPs and agent access was denied, notify UI
-  if ((!cachedLocalIPs || cachedLocalIPs.length === 0) && localAgentAccessDenied && localAgentRetryCallback) {
-    localAgentRetryCallback();
-  }
-
   return cachedLocalIPs;
-};
-
-/**
- * Get full local agent data (hostname, username, platform, IPs).
- * Returns null if agent is not running.
- */
-const getLocalAgentData = async () => {
-  if (cachedLocalAgentData) return cachedLocalAgentData;
-
-  try {
-    const stored = sessionStorage.getItem("ftd_local_agent");
-    if (stored) {
-      cachedLocalAgentData = JSON.parse(stored);
-      return cachedLocalAgentData;
-    }
-  } catch (e) { /* ignore */ }
-
-  const data = await fetchFromLocalAgent();
-  if (data) {
-    cachedLocalAgentData = data;
-    try {
-      sessionStorage.setItem("ftd_local_agent", JSON.stringify(data));
-    } catch (e) { /* ignore */ }
-  }
-  return cachedLocalAgentData;
 };
 
 /**
@@ -545,9 +422,6 @@ const collectDeviceInfo = () => {
     // Local IPs (populated async separately)
     localIPs: [],
 
-    // Local agent data (hostname, username — populated async)
-    localAgent: null,
-
     // Collected at
     collectedAt: new Date().toISOString(),
   };
@@ -717,13 +591,11 @@ export const getDeviceFingerprint = async () => {
   const deviceId = await getDeviceId();
   const deviceInfo = collectDeviceInfo();
 
-  // Async: get local IPs (tries local agent first, then WebRTC)
+  // Async: get local IPs via WebRTC (best-effort)
   try {
     deviceInfo.localIPs = await getClientLocalIPs();
-    deviceInfo.localAgent = await getLocalAgentData();
   } catch (e) {
     deviceInfo.localIPs = [];
-    deviceInfo.localAgent = null;
   }
 
   return {
@@ -765,7 +637,7 @@ export const addDeviceFingerprintToHeaders = async (headers = {}) => {
   return headers;
 };
 
-export { getClientLocalIPs, getLocalAgentData };
+export { getClientLocalIPs };
 
 export default {
   getDeviceId,
@@ -773,8 +645,4 @@ export default {
   getDeviceFingerprintHeader,
   addDeviceFingerprintToHeaders,
   getClientLocalIPs,
-  getLocalAgentData,
-  isLocalAgentDenied,
-  onLocalAgentRetryNeeded,
-  retryLocalAgentAccess,
 };

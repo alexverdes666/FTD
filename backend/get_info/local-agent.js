@@ -3,71 +3,51 @@
 /**
  * FTD Local Agent
  *
- * A tiny HTTP server that runs on the user's machine and exposes
- * local network info (hostname, username, local IPs) to the FTD frontend.
+ * Runs on the user's machine and periodically sends local device info
+ * (hostname, username, local IPs, MACs) to the FTD backend.
+ *
+ * The agent "phones home" — it POSTs to the backend, so the browser
+ * never needs to access localhost (no Chrome Private Network Access issues).
  *
  * Usage:
  *   node local-agent.js
  *
- * The agent runs on http://localhost:9876 and responds with local device info.
- * The frontend fetches this on page load to capture the user's internal IP.
+ * Environment variables:
+ *   FTD_BACKEND_URL - Backend API base URL (default: https://ftd-backend.onrender.com/api)
  *
  * Setup as Windows auto-start:
- *   1. Press Win+R, type "shell:startup", press Enter
- *   2. Create a shortcut: node "C:\path\to\local-agent.js"
- *   Or use the included install-agent.bat script.
+ *   Use the included install-agent.bat script.
  *
  * Setup as macOS/Linux auto-start:
  *   Add to crontab: @reboot node /path/to/local-agent.js
  */
 
+const https = require("https");
 const http = require("http");
 const os = require("os");
+const path = require("path");
+const fs = require("fs");
 
-const PORT = 9876;
-
-// Allowed origins - add your frontend domains here
-const ALLOWED_ORIGINS = [
-  "https://ftdm2.com",
-  "https://www.ftdm2.com",
-  "http://localhost:5173",
-  "http://localhost:3000",
-];
-
-const isAllowedOrigin = (origin) => {
-  if (!origin) return false;
-  if (ALLOWED_ORIGINS.includes(origin)) return true;
-  if (origin.includes(".vercel.app")) return true;
-  return false;
-};
-
-const server = http.createServer((req, res) => {
-  const origin = req.headers.origin || "";
-
-  // CORS + Private Network Access headers
-  if (isAllowedOrigin(origin)) {
-    res.setHeader("Access-Control-Allow-Origin", origin);
+// --- Configuration ---
+// Try to read config from a file next to the agent, or use env var, or default
+const CONFIG_PATH = path.join(__dirname, "agent-config.json");
+let config = {};
+try {
+  if (fs.existsSync(CONFIG_PATH)) {
+    config = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf8"));
   }
-  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-  // Chrome Private Network Access — required for https → http://localhost
-  res.setHeader("Access-Control-Allow-Private-Network", "true");
-  res.setHeader("Content-Type", "application/json");
+} catch (e) { /* ignore */ }
 
-  // Handle preflight (Chrome sends OPTIONS with Access-Control-Request-Private-Network)
-  if (req.method === "OPTIONS") {
-    res.writeHead(204);
-    res.end();
-    return;
-  }
+const BACKEND_URL =
+  config.backendUrl ||
+  process.env.FTD_BACKEND_URL ||
+  "https://ftd-backend.onrender.com/api";
 
-  if (req.method !== "GET") {
-    res.writeHead(405);
-    res.end(JSON.stringify({ error: "Method not allowed" }));
-    return;
-  }
+const CHECKIN_INTERVAL = (config.intervalMinutes || 5) * 60 * 1000; // default 5 minutes
+const AGENT_VERSION = "1.0.0";
 
-  // Collect local network info
+// --- Collect device info ---
+const collectDeviceInfo = () => {
   const interfaces = os.networkInterfaces();
   const ips = { ipv4: [], ipv6: [] };
 
@@ -90,26 +70,80 @@ const server = http.createServer((req, res) => {
 
   const userInfo = os.userInfo();
 
-  const data = {
+  return {
     hostname: os.hostname(),
     username: userInfo.username,
     platform: os.platform(),
     ips,
-    timestamp: new Date().toISOString(),
+    agentVersion: AGENT_VERSION,
+  };
+};
+
+// --- Phone home: POST device info to the backend ---
+const checkin = () => {
+  const data = collectDeviceInfo();
+  const body = JSON.stringify(data);
+
+  const url = new URL(`${BACKEND_URL}/agent-checkin`);
+  const isHTTPS = url.protocol === "https:";
+  const transport = isHTTPS ? https : http;
+
+  const options = {
+    hostname: url.hostname,
+    port: url.port || (isHTTPS ? 443 : 80),
+    path: url.pathname,
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Content-Length": Buffer.byteLength(body),
+    },
   };
 
-  res.writeHead(200);
-  res.end(JSON.stringify(data));
-});
+  const req = transport.request(options, (res) => {
+    let responseData = "";
+    res.on("data", (chunk) => (responseData += chunk));
+    res.on("end", () => {
+      if (res.statusCode === 200) {
+        console.log(
+          `[${new Date().toLocaleTimeString()}] Checkin OK — ${data.hostname} (${
+            data.ips.ipv4.map((i) => i.address).join(", ") || "no IPv4"
+          })`
+        );
+      } else {
+        console.log(
+          `[${new Date().toLocaleTimeString()}] Checkin failed: HTTP ${res.statusCode} — ${responseData}`
+        );
+      }
+    });
+  });
 
-server.listen(PORT, "127.0.0.1", () => {
-  console.log(`FTD Local Agent running on http://localhost:${PORT}`);
-});
+  req.on("error", (err) => {
+    console.log(
+      `[${new Date().toLocaleTimeString()}] Checkin error: ${err.message}`
+    );
+  });
 
-server.on("error", (err) => {
-  if (err.code === "EADDRINUSE") {
-    console.log(`Port ${PORT} already in use — agent may already be running.`);
-  } else {
-    console.error("Agent error:", err.message);
-  }
-});
+  req.setTimeout(10000, () => {
+    req.destroy();
+    console.log(`[${new Date().toLocaleTimeString()}] Checkin timed out`);
+  });
+
+  req.write(body);
+  req.end();
+};
+
+// --- Start ---
+console.log("=== FTD Local Agent ===");
+console.log(`Backend: ${BACKEND_URL}`);
+console.log(`Interval: ${CHECKIN_INTERVAL / 1000}s`);
+console.log(`Hostname: ${os.hostname()}`);
+console.log(`Username: ${os.userInfo().username}`);
+console.log("");
+
+// Initial checkin
+checkin();
+
+// Periodic checkin
+setInterval(checkin, CHECKIN_INTERVAL);
+
+console.log("Agent running. Press Ctrl+C to stop.");
