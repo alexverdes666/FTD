@@ -90,40 +90,62 @@ const redactSensitiveData = (obj, depth = 0) => {
  */
 const callGetInfoService = async (req) => {
   try {
-    // Forward all headers from the original request
+    // Build headers object - only include headers that actually exist
+    // Sending empty strings (e.g. origin: "") causes Cloudflare to reject with 403
+    const headersToForward = [
+      "user-agent",
+      "x-forwarded-for",
+      "x-real-ip",
+      "cf-connecting-ip",
+      "true-client-ip",
+      "accept",
+      "accept-language",
+      "accept-encoding",
+      "origin",
+      "referer",
+      // Client Hints
+      "sec-ch-ua",
+      "sec-ch-ua-mobile",
+      "sec-ch-ua-platform",
+      "sec-ch-ua-platform-version",
+      "sec-ch-ua-arch",
+      "sec-ch-ua-bitness",
+      "sec-ch-ua-model",
+      "sec-ch-ua-full-version-list",
+      "device-memory",
+      "dpr",
+      "viewport-width",
+      "ect",
+      "rtt",
+      "downlink",
+      // Security headers
+      "dnt",
+      "sec-gpc",
+      "sec-fetch-site",
+      "sec-fetch-mode",
+      "sec-fetch-dest",
+      "sec-fetch-user",
+      // Client-side detection headers
+      "x-client-local-ips",
+      "x-device-id",
+      "x-device-fingerprint",
+    ];
+
+    const forwardedHeaders = {};
+    for (const header of headersToForward) {
+      if (req.headers[header]) {
+        forwardedHeaders[header] = req.headers[header];
+      }
+    }
+
+    // Ensure user-agent is always present (Cloudflare blocks requests without it)
+    if (!forwardedHeaders["user-agent"]) {
+      forwardedHeaders["user-agent"] = "FTD-Backend/1.0";
+    }
+
     const response = await axios.get(GET_INFO_URL, {
       timeout: GET_INFO_TIMEOUT,
-      headers: {
-        // Forward important headers for detection
-        "user-agent": req.headers["user-agent"] || "",
-        "x-forwarded-for": req.headers["x-forwarded-for"] || "",
-        "x-real-ip": req.headers["x-real-ip"] || "",
-        "cf-connecting-ip": req.headers["cf-connecting-ip"] || "",
-        accept: req.headers["accept"] || "",
-        "accept-language": req.headers["accept-language"] || "",
-        "accept-encoding": req.headers["accept-encoding"] || "",
-        origin: req.headers["origin"] || "",
-        referer: req.headers["referer"] || "",
-        // Client Hints
-        "sec-ch-ua": req.headers["sec-ch-ua"] || "",
-        "sec-ch-ua-mobile": req.headers["sec-ch-ua-mobile"] || "",
-        "sec-ch-ua-platform": req.headers["sec-ch-ua-platform"] || "",
-        "sec-ch-ua-platform-version":
-          req.headers["sec-ch-ua-platform-version"] || "",
-        "sec-ch-ua-arch": req.headers["sec-ch-ua-arch"] || "",
-        "sec-ch-ua-bitness": req.headers["sec-ch-ua-bitness"] || "",
-        "sec-ch-ua-model": req.headers["sec-ch-ua-model"] || "",
-        // Security headers
-        dnt: req.headers["dnt"] || "",
-        "sec-gpc": req.headers["sec-gpc"] || "",
-        "sec-fetch-site": req.headers["sec-fetch-site"] || "",
-        "sec-fetch-mode": req.headers["sec-fetch-mode"] || "",
-        "sec-fetch-dest": req.headers["sec-fetch-dest"] || "",
-        // Client-side detection headers
-        "x-client-local-ips": req.headers["x-client-local-ips"] || "",
-        "x-device-id": req.headers["x-device-id"] || "",
-        "x-device-fingerprint": req.headers["x-device-fingerprint"] || "",
-      },
+      headers: forwardedHeaders,
     });
 
     return response.data;
