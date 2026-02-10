@@ -18,9 +18,7 @@ import {
   Divider,
   useTheme,
   useMediaQuery,
-  Alert,
   Button,
-  CircularProgress,
 } from "@mui/material";
 import {
   Menu as MenuIcon,
@@ -161,7 +159,6 @@ const MainLayout = () => {
   const [showQRDialog, setShowQRDialog] = useState(false);
   const [twoFactorError, setTwoFactorError] = useState('');
   const [showAgentBanner, setShowAgentBanner] = useState(false);
-  const [agentRetrying, setAgentRetrying] = useState(false);
 
   // Local agent permission banner — keeps re-prompting until user grants access
   useEffect(() => {
@@ -176,28 +173,10 @@ const MainLayout = () => {
     }
   }, []);
 
-  // Auto-retry every 15 seconds if the banner is showing
-  useEffect(() => {
-    if (!showAgentBanner) return;
-    const interval = setInterval(async () => {
-      const success = await retryLocalAgentAccess();
-      if (success) {
-        setShowAgentBanner(false);
-      }
-    }, 15000);
-    return () => clearInterval(interval);
-  }, [showAgentBanner]);
-
-  const handleAgentRetry = async () => {
-    setAgentRetrying(true);
-    try {
-      const success = await retryLocalAgentAccess();
-      if (success) {
-        setShowAgentBanner(false);
-      }
-    } finally {
-      setAgentRetrying(false);
-    }
+  // Chrome remembers PNA denial for the page session.
+  // The only way to re-trigger the permission dialog is a full page reload.
+  const handleAgentRetry = () => {
+    window.location.reload();
   };
 
   // Handle 2FA/QR Dialog visibility based on Redux state
@@ -1011,36 +990,55 @@ const MainLayout = () => {
         }}
       >
         <Box sx={{ minHeight: 42 }} />
-        {/* Local Agent Permission Banner */}
+        {/* Local Agent Permission — full-screen blocker */}
         {showAgentBanner && (
-          <Alert
-            severity="warning"
-            icon={<WarningIcon />}
+          <Box
             sx={{
-              borderRadius: 0,
-              py: 1,
-              px: 2,
+              position: "fixed",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              zIndex: 9999,
+              bgcolor: "rgba(0, 0, 0, 0.85)",
+              display: "flex",
               alignItems: "center",
-              "& .MuiAlert-message": { width: "100%" },
+              justifyContent: "center",
             }}
-            action={
-              <Button
-                color="warning"
-                variant="contained"
-                size="small"
-                onClick={handleAgentRetry}
-                disabled={agentRetrying}
-                startIcon={agentRetrying ? <CircularProgress size={16} color="inherit" /> : null}
-                sx={{ whiteSpace: "nowrap" }}
-              >
-                {agentRetrying ? "Checking..." : "Grant Access"}
-              </Button>
-            }
           >
-            <Typography variant="body2" sx={{ fontWeight: 500 }}>
-              Local network access is required for security verification. Please click "Grant Access" and allow the connection when prompted by your browser.
-            </Typography>
-          </Alert>
+            <Box
+              sx={{
+                bgcolor: "background.paper",
+                borderRadius: 2,
+                p: 4,
+                maxWidth: 480,
+                width: "90%",
+                textAlign: "center",
+              }}
+            >
+              <WarningIcon sx={{ fontSize: 56, color: "warning.main", mb: 2 }} />
+              <Typography variant="h6" sx={{ fontWeight: 700, mb: 1 }}>
+                Network Access Required
+              </Typography>
+              <Typography variant="body2" sx={{ color: "text.secondary", mb: 3 }}>
+                To use this platform, you must allow local network access for security verification.
+                Click the button below — your browser will ask for permission. Please select <b>"Allow"</b>.
+              </Typography>
+              <Button
+                variant="contained"
+                color="warning"
+                size="large"
+                onClick={handleAgentRetry}
+                fullWidth
+                sx={{ fontWeight: 600, py: 1.2, fontSize: "1rem" }}
+              >
+                Grant Access & Reload
+              </Button>
+              <Typography variant="caption" sx={{ display: "block", mt: 2, color: "text.disabled" }}>
+                This page will reload. When Chrome asks to connect to your local network, click "Allow".
+              </Typography>
+            </Box>
+          </Box>
         )}
         <Box
           component="div"
