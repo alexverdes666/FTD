@@ -187,13 +187,10 @@ const getCooldownStatus = (lead) => {
 
   const lastUsedDate = new Date(lead.lastUsedInOrder);
   const now = new Date();
-  const daysSinceUsed = Math.floor(
-    (now - lastUsedDate) / (1000 * 60 * 60 * 24)
-  );
-  const cooldownPeriod = 10; // 10 days
+  const cooldownEnd = new Date(lastUsedDate.getTime() + 10 * 24 * 60 * 60 * 1000);
 
-  if (daysSinceUsed < cooldownPeriod) {
-    const daysRemaining = cooldownPeriod - daysSinceUsed;
+  if (now < cooldownEnd) {
+    const daysRemaining = Math.ceil((cooldownEnd - now) / (1000 * 60 * 60 * 24));
     return {
       hasCooldown: true,
       inCooldown: true,

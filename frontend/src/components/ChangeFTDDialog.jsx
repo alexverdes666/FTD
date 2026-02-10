@@ -316,17 +316,16 @@ const ChangeFTDDialog = ({
               if (lead.lastUsedInOrder) {
                 const lastUsedDate = new Date(lead.lastUsedInOrder);
                 const now = new Date();
-                const daysSinceUsed = Math.floor((now - lastUsedDate) / (1000 * 60 * 60 * 24));
-                const cooldownPeriod = 10;
-                
-                if (daysSinceUsed < cooldownPeriod) {
-                  const daysRemaining = cooldownPeriod - daysSinceUsed;
+                const cooldownEnd = new Date(lastUsedDate.getTime() + 10 * 24 * 60 * 60 * 1000);
+
+                if (now < cooldownEnd) {
+                  const daysRemaining = Math.ceil((cooldownEnd - now) / (1000 * 60 * 60 * 24));
                   return (
                     <Chip
                       label={`Cooldown: ${daysRemaining} day${daysRemaining !== 1 ? 's' : ''} remaining`}
                       color="error"
                       variant="filled"
-                      title={`This lead was last used on ${lastUsedDate.toLocaleDateString()}. It will be available again on ${new Date(lastUsedDate.getTime() + cooldownPeriod * 24 * 60 * 60 * 1000).toLocaleDateString()}`}
+                      title={`This lead was last used on ${lastUsedDate.toLocaleDateString()}. It will be available again on ${cooldownEnd.toLocaleDateString()}`}
                     />
                   );
                 }

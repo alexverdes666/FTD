@@ -77,7 +77,7 @@ exports.getAgentsWithLeadStats = async (req, res, next) => {
               $cond: [
                 { $and: [
                   { $ne: ["$lastUsedInOrder", null] },
-                  { $gte: ["$lastUsedInOrder", tenDaysAgo] }
+                  { $gt: ["$lastUsedInOrder", tenDaysAgo] }
                 ]},
                 1,
                 0
@@ -228,7 +228,7 @@ exports.getAgentsWithFilteredLeadStats = async (req, res, next) => {
       stats.totalMatching++;
 
       // Check if lead is on cooldown (within last 10 days)
-      if (lead.lastUsedInOrder && lead.lastUsedInOrder >= tenDaysAgo) {
+      if (lead.lastUsedInOrder && lead.lastUsedInOrder > tenDaysAgo) {
         stats.onCooldown++;
       }
     });
@@ -273,7 +273,7 @@ exports.getAgentsWithFilteredLeadStats = async (req, res, next) => {
     let unassignedOnCooldown = 0;
     filteredUnassignedLeads.forEach((lead) => {
       unassignedTotal++;
-      if (lead.lastUsedInOrder && lead.lastUsedInOrder >= tenDaysAgo) {
+      if (lead.lastUsedInOrder && lead.lastUsedInOrder > tenDaysAgo) {
         unassignedOnCooldown++;
       }
     });

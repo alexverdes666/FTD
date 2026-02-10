@@ -1437,10 +1437,9 @@ exports.createOrder = async (req, res, next) => {
       let availableLeads;
 
       if (agentId) {
-        // When agent is specified, prioritize UNASSIGNED leads first, then agent-assigned
-        // This ensures unassigned leads are used first before falling back to assigned leads
+        // When agent is specified, prioritize AGENT-ASSIGNED leads first
+        // Only include unassigned leads as fallback if allowUnassignedFallback is true
         const agentQuery = { ...query, assignedAgent: agentId };
-        const unassignedQuery = { ...query, assignedAgent: null };
 
         // Debug: Log the queries being used
         console.log(
@@ -1448,33 +1447,48 @@ exports.createOrder = async (req, res, next) => {
           JSON.stringify(agentQuery)
         );
         console.log(
-          `[${leadType.toUpperCase()}-QUERY-DEBUG] Unassigned query:`,
-          JSON.stringify(unassignedQuery)
+          `[${leadType.toUpperCase()}-QUERY-DEBUG] Total matching base criteria: ${totalAvailableCount} (no fetch limit)`
         );
         console.log(
-          `[${leadType.toUpperCase()}-QUERY-DEBUG] Total matching base criteria: ${totalAvailableCount} (no fetch limit)`
+          `[${leadType.toUpperCase()}-QUERY-DEBUG] allowUnassignedFallback: ${allowUnassignedFallback}`
         );
 
         const agentLeads = await Lead.find(agentQuery);
-        const unassignedLeads = await Lead.find(unassignedQuery);
 
-        // Debug: Log IDs of unassigned leads fetched
-        console.log(
-          `[${leadType.toUpperCase()}-QUERY-DEBUG] Unassigned lead IDs fetched: ${unassignedLeads
-            .map((l) => l._id)
-            .join(", ")}`
-        );
+        if (allowUnassignedFallback) {
+          const unassignedQuery = { ...query, assignedAgent: null };
+          console.log(
+            `[${leadType.toUpperCase()}-QUERY-DEBUG] Unassigned query:`,
+            JSON.stringify(unassignedQuery)
+          );
+          const unassignedLeads = await Lead.find(unassignedQuery);
 
-        // Combine UNASSIGNED leads first (priority 1), then agent-assigned leads (priority 2)
-        availableLeads = [...unassignedLeads, ...agentLeads];
+          console.log(
+            `[${leadType.toUpperCase()}-QUERY-DEBUG] Unassigned lead IDs fetched: ${unassignedLeads
+              .map((l) => l._id)
+              .join(", ")}`
+          );
 
-        console.log(
-          `[${leadType.toUpperCase()}] Fetched ${
-            unassignedLeads.length
-          } unassigned leads (priority 1) + ${
-            agentLeads.length
-          } agent-assigned leads (priority 2) for agent ${agentId}`
-        );
+          // Agent-assigned leads FIRST (priority 1), then unassigned as fallback (priority 2)
+          availableLeads = [...agentLeads, ...unassignedLeads];
+
+          console.log(
+            `[${leadType.toUpperCase()}] Fetched ${
+              agentLeads.length
+            } agent-assigned leads (priority 1) + ${
+              unassignedLeads.length
+            } unassigned leads as fallback (priority 2) for agent ${agentId}`
+          );
+        } else {
+          // No fallback - only return leads assigned to this specific agent
+          availableLeads = agentLeads;
+
+          console.log(
+            `[${leadType.toUpperCase()}] Fetched ${
+              agentLeads.length
+            } agent-assigned leads (no unassigned fallback) for agent ${agentId}`
+          );
+        }
       } else {
         // No agent specified, fetch all matching leads (no limit)
         availableLeads = await Lead.find(query);
@@ -1495,7 +1509,7 @@ exports.createOrder = async (req, res, next) => {
         const recentlyUsedLeads = await Lead.find({
           newPhone: { $in: leadPhones },
           leadType: { $in: ["ftd", "filler"] },
-          lastUsedInOrder: { $gte: tenDaysAgo },
+          lastUsedInOrder: { $gt: tenDaysAgo },
         }).select("newPhone");
 
         const recentlyUsedPhones = new Set(
@@ -1510,7 +1524,7 @@ exports.createOrder = async (req, res, next) => {
         );
         availableLeads.forEach((lead, idx) => {
           const inCooldown =
-            lead.lastUsedInOrder && lead.lastUsedInOrder >= tenDaysAgo;
+            lead.lastUsedInOrder && lead.lastUsedInOrder > tenDaysAgo;
           const isDuplicateUsed = recentlyUsedPhones.has(lead.newPhone);
           console.log(
             `[${leadType.toUpperCase()}-COOLDOWN-DEBUG] Lead ${idx}: ID=${
@@ -1525,7 +1539,7 @@ exports.createOrder = async (req, res, next) => {
 
         availableLeads = availableLeads.filter((lead) => {
           const inCooldown =
-            lead.lastUsedInOrder && lead.lastUsedInOrder >= tenDaysAgo;
+            lead.lastUsedInOrder && lead.lastUsedInOrder > tenDaysAgo;
           const isDuplicateUsed = recentlyUsedPhones.has(lead.newPhone);
           return !inCooldown && !isDuplicateUsed;
         });
@@ -1556,53 +1570,87 @@ exports.createOrder = async (req, res, next) => {
         );
       }
 
-      // Filter by agent assignment - Priority: UNASSIGNED first, then ASSIGNED
+      // Filter by agent assignment
       if (agentId) {
-        // Get unassigned leads (Priority 1)
-        const unassignedLeads = availableLeads.filter(
-          (lead) => !lead.assignedAgent
-        );
-
-        // Get leads assigned to this agent (Priority 2)
+        // Get leads assigned to this specific agent (Priority 1)
         const agentAssignedLeads = availableLeads.filter(
           (lead) =>
             lead.assignedAgent &&
             lead.assignedAgent.toString() === agentId.toString()
         );
 
-        console.log(
-          `[${leadType.toUpperCase()}] Agent ${agentId}: ${
-            unassignedLeads.length
-          } unassigned leads (priority 1) + ${
-            agentAssignedLeads.length
-          } assigned leads (priority 2) found (need ${count}) - ${
-            availableLeads.length
-          } leads passed previous filters`
-        );
+        if (allowUnassignedFallback) {
+          // Get unassigned leads as fallback (Priority 2)
+          const unassignedLeads = availableLeads.filter(
+            (lead) => !lead.assignedAgent
+          );
 
-        if (unassignedLeads.length === 0 && agentAssignedLeads.length === 0 && totalAvailableCount > 0) {
           console.log(
-            `[${leadType.toUpperCase()}] WARNING: ${totalAvailableCount} leads in database but 0 after filtering. Possible reasons:`,
-            {
-              clientNetworkFiltered: selectedClientNetwork ? "YES" : "NO",
-              clientBrokersFiltered:
-                selectedClientBrokers && selectedClientBrokers.length > 0
-                  ? "YES"
-                  : "NO",
-              selectedClientNetwork: selectedClientNetwork || "none",
-              selectedClientBrokers: selectedClientBrokers || [],
-            }
+            `[${leadType.toUpperCase()}] Agent ${agentId}: ${
+              agentAssignedLeads.length
+            } agent-assigned leads (priority 1) + ${
+              unassignedLeads.length
+            } unassigned fallback leads (priority 2) found (need ${count}) - ${
+              availableLeads.length
+            } leads passed previous filters`
+          );
+
+          if (unassignedLeads.length === 0 && agentAssignedLeads.length === 0 && totalAvailableCount > 0) {
+            console.log(
+              `[${leadType.toUpperCase()}] WARNING: ${totalAvailableCount} leads in database but 0 after filtering. Possible reasons:`,
+              {
+                clientNetworkFiltered: selectedClientNetwork ? "YES" : "NO",
+                clientBrokersFiltered:
+                  selectedClientBrokers && selectedClientBrokers.length > 0
+                    ? "YES"
+                    : "NO",
+                selectedClientNetwork: selectedClientNetwork || "none",
+                selectedClientBrokers: selectedClientBrokers || [],
+              }
+            );
+          }
+
+          // Agent-assigned FIRST (priority 1), then unassigned fallback (priority 2)
+          availableLeads = [...agentAssignedLeads, ...unassignedLeads];
+
+          console.log(
+            `[${leadType.toUpperCase()}] Agent ${agentId}: Using ${
+              agentAssignedLeads.length
+            } agent-assigned + ${unassignedLeads.length} unassigned fallback leads`
+          );
+        } else {
+          // No fallback - only agent-assigned leads
+          console.log(
+            `[${leadType.toUpperCase()}] Agent ${agentId}: ${
+              agentAssignedLeads.length
+            } agent-assigned leads found (no unassigned fallback) (need ${count}) - ${
+              availableLeads.length
+            } leads passed previous filters`
+          );
+
+          if (agentAssignedLeads.length === 0 && totalAvailableCount > 0) {
+            console.log(
+              `[${leadType.toUpperCase()}] WARNING: ${totalAvailableCount} leads in database but 0 agent-assigned after filtering. Possible reasons:`,
+              {
+                clientNetworkFiltered: selectedClientNetwork ? "YES" : "NO",
+                clientBrokersFiltered:
+                  selectedClientBrokers && selectedClientBrokers.length > 0
+                    ? "YES"
+                    : "NO",
+                selectedClientNetwork: selectedClientNetwork || "none",
+                selectedClientBrokers: selectedClientBrokers || [],
+              }
+            );
+          }
+
+          availableLeads = agentAssignedLeads;
+
+          console.log(
+            `[${leadType.toUpperCase()}] Agent ${agentId}: Using ${
+              agentAssignedLeads.length
+            } agent-assigned leads only`
           );
         }
-
-        // Combine: UNASSIGNED first (priority 1), then agent-assigned (priority 2)
-        availableLeads = [...unassignedLeads, ...agentAssignedLeads];
-
-        console.log(
-          `[${leadType.toUpperCase()}] Agent ${agentId}: Using ${
-            unassignedLeads.length
-          } unassigned + ${agentAssignedLeads.length} assigned leads`
-        );
       } else {
         // No agent specified - Priority: UNASSIGNED first, then ANY assigned leads
         const unassignedLeads = availableLeads.filter((lead) => !lead.assignedAgent);
@@ -1744,7 +1792,7 @@ exports.createOrder = async (req, res, next) => {
         const recentlyUsedLeads = await Lead.find({
           newPhone: { $in: leadPhones },
           leadType: { $in: ["ftd", "filler"] },
-          lastUsedInOrder: { $gte: tenDaysAgo },
+          lastUsedInOrder: { $gt: tenDaysAgo },
         }).select("newPhone");
 
         const recentlyUsedPhones = new Set(
@@ -1753,7 +1801,7 @@ exports.createOrder = async (req, res, next) => {
 
         availableLeads = availableLeads.filter((lead) => {
           const inCooldown =
-            lead.lastUsedInOrder && lead.lastUsedInOrder >= tenDaysAgo;
+            lead.lastUsedInOrder && lead.lastUsedInOrder > tenDaysAgo;
           const isDuplicateUsed = recentlyUsedPhones.has(lead.newPhone);
           return !inCooldown && !isDuplicateUsed;
         });
@@ -1801,15 +1849,15 @@ exports.createOrder = async (req, res, next) => {
           agentLeadsInsufficient[leadType] = true;
         }
 
-        // Priority: UNASSIGNED first (priority 1), then agent-assigned (priority 2)
-        availableLeads = [...unassignedLeads, ...agentAssignedLeads];
+        // Priority: AGENT-ASSIGNED first (priority 1), then unassigned as fallback (priority 2)
+        availableLeads = [...agentAssignedLeads, ...unassignedLeads];
 
         console.log(
           `[${leadType.toUpperCase()}-DEBUG] Agent filter - combined ${
-            unassignedLeads.length
-          } unassigned (priority 1) + ${
             agentAssignedLeads.length
-          } assigned (priority 2)`
+          } agent-assigned (priority 1) + ${
+            unassignedLeads.length
+          } unassigned fallback (priority 2)`
         );
       } else if (
         (leadType === "ftd" || leadType === "filler") &&
@@ -2133,7 +2181,7 @@ exports.createOrder = async (req, res, next) => {
         const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
         const beforeCooldownFilter = filteredFTDLeads.length;
         filteredFTDLeads = filteredFTDLeads.filter(
-          (lead) => !lead.lastUsedInOrder || lead.lastUsedInOrder < tenDaysAgo
+          (lead) => !lead.lastUsedInOrder || lead.lastUsedInOrder <= tenDaysAgo
         );
         console.log(
           `[FTD-DEBUG] Cooldown filtering: ${
@@ -2549,7 +2597,7 @@ exports.createOrder = async (req, res, next) => {
         const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
         const beforeCooldownFilter = filteredFillerLeads.length;
         filteredFillerLeads = filteredFillerLeads.filter(
-          (lead) => !lead.lastUsedInOrder || lead.lastUsedInOrder < tenDaysAgo
+          (lead) => !lead.lastUsedInOrder || lead.lastUsedInOrder <= tenDaysAgo
         );
         console.log(
           `[FILLER-DEBUG] Cooldown filtering: ${
@@ -4742,7 +4790,7 @@ exports.changeFTDInOrder = async (req, res, next) => {
       const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
       const beforeCooldownFilter = filteredFTDLeads.length;
       filteredFTDLeads = filteredFTDLeads.filter(
-        (lead) => !lead.lastUsedInOrder || lead.lastUsedInOrder < tenDaysAgo
+        (lead) => !lead.lastUsedInOrder || lead.lastUsedInOrder <= tenDaysAgo
       );
       console.log(
         `[CHANGE-FTD-DEBUG] Cooldown filtering: ${
@@ -5430,7 +5478,7 @@ exports.checkOrderFulfillment = async (req, res, next) => {
         const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
         baseQuery.$or = [
           { lastUsedInOrder: null },
-          { lastUsedInOrder: { $lt: tenDaysAgo } },
+          { lastUsedInOrder: { $lte: tenDaysAgo } },
         ];
       }
 
@@ -6123,7 +6171,7 @@ exports.getAvailableLeadsForReplacement = async (req, res, next) => {
       baseQuery.$or = [
         { lastUsedInOrder: null },
         { lastUsedInOrder: { $exists: false } },
-        { lastUsedInOrder: { $lt: tenDaysAgo } },
+        { lastUsedInOrder: { $lte: tenDaysAgo } },
       ];
     } else if (orderedAs === "cold") {
       baseQuery.leadType = "cold";
@@ -6163,7 +6211,7 @@ exports.getAvailableLeadsForReplacement = async (req, res, next) => {
     // Add cooldown info to each lead
     const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
     const leadsWithCooldownInfo = leads.map((lead) => {
-      const isOnCooldown = lead.lastUsedInOrder && lead.lastUsedInOrder >= tenDaysAgo;
+      const isOnCooldown = lead.lastUsedInOrder && lead.lastUsedInOrder > tenDaysAgo;
       let cooldownDaysRemaining = 0;
       if (isOnCooldown) {
         const cooldownEnd = new Date(lead.lastUsedInOrder.getTime() + 10 * 24 * 60 * 60 * 1000);
@@ -6323,7 +6371,7 @@ exports.replaceLeadInOrder = async (req, res, next) => {
     // Check cooldown for FTD/Filler leads
     if (orderedAs === "ftd" || orderedAs === "filler") {
       const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
-      if (newLead.lastUsedInOrder && newLead.lastUsedInOrder >= tenDaysAgo) {
+      if (newLead.lastUsedInOrder && newLead.lastUsedInOrder > tenDaysAgo) {
         const cooldownEnd = new Date(newLead.lastUsedInOrder.getTime() + 10 * 24 * 60 * 60 * 1000);
         const daysRemaining = Math.ceil((cooldownEnd - new Date()) / (24 * 60 * 60 * 1000));
         return res.status(400).json({

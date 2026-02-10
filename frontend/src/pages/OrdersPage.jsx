@@ -47,10 +47,8 @@ import {
   ToggleButton,
   ToggleButtonGroup,
   Divider,
-  Drawer,
   alpha,
   Link,
-  Badge,
 } from "@mui/material";
 import {
   Add as AddIcon,
@@ -291,13 +289,10 @@ const getFTDCooldownStatus = (lead) => {
 
   const lastUsedDate = new Date(lead.lastUsedInOrder);
   const now = new Date();
-  const daysSinceUsed = Math.floor(
-    (now - lastUsedDate) / (1000 * 60 * 60 * 24)
-  );
-  const cooldownPeriod = 10; // 10 days
+  const cooldownEnd = new Date(lastUsedDate.getTime() + 10 * 24 * 60 * 60 * 1000);
 
-  if (daysSinceUsed < cooldownPeriod) {
-    const daysRemaining = cooldownPeriod - daysSinceUsed;
+  if (now < cooldownEnd) {
+    const daysRemaining = Math.ceil((cooldownEnd - now) / (1000 * 60 * 60 * 24));
     return {
       inCooldown: true,
       daysRemaining: daysRemaining,
@@ -459,7 +454,6 @@ const OrdersPage = () => {
     }
   }, []);
   const debouncedFilters = useDebounce(filters, 150);
-  const [showFilters, setShowFilters] = useState(false);
   const [expandedRowData, setExpandedRowData] = useState({});
   const [orderPanelId, setOrderPanelId] = useState(null);
   const [expandedLeadId, setExpandedLeadId] = useState(null);
@@ -4805,190 +4799,215 @@ const OrdersPage = () => {
           </Alert>
         </Collapse>
       )}
-      {/* Sidebar Drawer */}
-      <Drawer
-        anchor="right"
-        open={showFilters}
-        onClose={() => setShowFilters(false)}
-        variant="temporary"
-        transitionDuration={0}
-        PaperProps={{
-          sx: { width: 340, p: 0 },
-        }}
-        slotProps={{
-          backdrop: { sx: { transition: "none" } },
-        }}
-      >
-        <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", px: 2.5, py: 1.5, borderBottom: 1, borderColor: "divider" }}>
-          <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-            Orders Panel
-          </Typography>
-          <IconButton size="small" onClick={() => setShowFilters(false)}>
-            <CloseIcon fontSize="small" />
-          </IconButton>
-        </Box>
-        <Box sx={{ p: 2.5, display: "flex", flexDirection: "column", gap: 2.5, overflow: "auto", flex: 1 }}>
+      <Paper sx={{ position: "relative", borderRadius: 2, border: 1, borderColor: "divider", boxShadow: "0 1px 3px rgba(0,0,0,0.08)", overflow: "hidden", flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
+        {/* Compact Top Filter Bar */}
+        <Box
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            gap: 0.75,
+            px: 1,
+            py: 0.5,
+            background: (theme) => `linear-gradient(135deg, ${alpha(theme.palette.grey[100], 0.7)} 0%, ${alpha(theme.palette.grey[50], 0.5)} 100%)`,
+            borderBottom: "1px solid",
+            borderColor: (theme) => alpha(theme.palette.divider, 0.6),
+            minHeight: 36,
+          }}
+        >
           {/* Search */}
           <TextField
-            fullWidth
             placeholder="Search orders..."
             value={filters.search}
             onChange={handleFilterChange("search")}
             size="small"
             sx={{
+              width: 180,
               "& .MuiOutlinedInput-root": {
-                borderRadius: 2,
-                bgcolor: "grey.50",
-                "&:hover": { bgcolor: "grey.100" },
-                "&.Mui-focused": {
-                  bgcolor: "background.paper",
-                  boxShadow: (theme) => `0 0 0 2px ${alpha(theme.palette.primary.main, 0.2)}`,
-                },
+                height: 28,
+                borderRadius: 6,
+                fontSize: "0.78rem",
+                bgcolor: "background.paper",
+                border: "none",
+                boxShadow: (theme) => `0 1px 2px ${alpha(theme.palette.grey[400], 0.15)}`,
+                "& fieldset": { border: "1px solid", borderColor: (theme) => alpha(theme.palette.grey[300], 0.7) },
+                "&:hover fieldset": { borderColor: (theme) => alpha(theme.palette.primary.main, 0.3) },
+                "&.Mui-focused fieldset": { borderColor: "primary.main", borderWidth: 1.5, boxShadow: (theme) => `0 0 0 2px ${alpha(theme.palette.primary.main, 0.1)}` },
               },
+              "& input::placeholder": { fontSize: "0.75rem", opacity: 0.6 },
             }}
             InputProps={{
-              startAdornment: (
-                <SearchIcon sx={{ color: "action.active", mr: 1, fontSize: 20 }} />
-              ),
+              startAdornment: <SearchIcon sx={{ color: "action.active", mr: 0.5, fontSize: 15 }} />,
             }}
           />
-          {/* Status & Priority */}
-          <Box sx={{ display: "flex", gap: 1.5 }}>
-            <FormControl size="small" sx={{ flex: 1, "& .MuiOutlinedInput-root": { borderRadius: 2 } }}>
-              <InputLabel>Status</InputLabel>
-              <Select
-                value={filters.status || ""}
-                label="Status"
-                onChange={handleFilterChange("status")}
-              >
-                <MenuItem value="">All</MenuItem>
-                <MenuItem value="pending">Pending</MenuItem>
-                <MenuItem value="partial">Partial</MenuItem>
-                <MenuItem value="fulfilled">Fulfilled</MenuItem>
-                <MenuItem value="cancelled">Cancelled</MenuItem>
-              </Select>
-            </FormControl>
-            <FormControl size="small" sx={{ flex: 1, "& .MuiOutlinedInput-root": { borderRadius: 2 } }}>
-              <InputLabel>Priority</InputLabel>
-              <Select
-                value={filters.priority || ""}
-                label="Priority"
-                onChange={handleFilterChange("priority")}
-              >
-                <MenuItem value="">All</MenuItem>
-                <MenuItem value="high">High</MenuItem>
-                <MenuItem value="medium">Medium</MenuItem>
-                <MenuItem value="low">Low</MenuItem>
-              </Select>
-            </FormControl>
-          </Box>
-          {/* Actions */}
-          {(user?.role === "admin" || user?.role === "affiliate_manager") && (
-            <>
-              <Divider />
-              <Button
-                fullWidth
-                variant="contained"
-                startIcon={<AddIcon />}
-                onClick={handleOpenCreateDialog}
-                sx={{ boxShadow: "0 1px 3px rgba(0,0,0,0.12)" }}
-              >
-                Create Order
-              </Button>
-              {user?.role === "admin" && (
-                <Button
-                  fullWidth
-                  variant="outlined"
-                  startIcon={<BusinessIcon />}
-                  onClick={handleManageBrokers}
-                >
-                  Manage Brokers
-                </Button>
-              )}
-            </>
-          )}
-          {/* Created Month/Year Filter */}
-          <Divider />
-          <Box sx={{ display: "flex", gap: 1.5 }}>
-            <FormControl size="small" sx={{ flex: 1, "& .MuiOutlinedInput-root": { borderRadius: 2 } }}>
-              <InputLabel>Month</InputLabel>
-              <Select
-                value={filters.createdMonth}
-                label="Month"
-                onChange={handleFilterChange("createdMonth")}
-              >
-                <MenuItem value="">All</MenuItem>
-                {["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"].map((m, i) => (
-                  <MenuItem key={i + 1} value={String(i + 1)}>{m}</MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-            <FormControl size="small" sx={{ width: 100, "& .MuiOutlinedInput-root": { borderRadius: 2 } }}>
-              <InputLabel>Year</InputLabel>
-              <Select
-                value={filters.createdYear}
-                label="Year"
-                onChange={handleFilterChange("createdYear")}
-              >
-                <MenuItem value="">All</MenuItem>
-                {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i).map((y) => (
-                  <MenuItem key={y} value={String(y)}>{y}</MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-          </Box>
-          {/* Planned Date Filters */}
-          <Divider />
-          <TextField
-            fullWidth
-            label="From"
-            type="date"
-            value={filters.startDate}
-            onChange={handleFilterChange("startDate")}
-            InputLabelProps={{ shrink: true }}
-            size="small"
-            sx={{ "& .MuiOutlinedInput-root": { borderRadius: 2 } }}
-          />
-          <TextField
-            fullWidth
-            label="To"
-            type="date"
-            value={filters.endDate}
-            onChange={handleFilterChange("endDate")}
-            InputLabelProps={{ shrink: true }}
-            size="small"
-            sx={{ "& .MuiOutlinedInput-root": { borderRadius: 2 } }}
-          />
-          {/* Settings */}
-          <Divider />
-          <Button
-            fullWidth
-            variant="outlined"
-            startIcon={<SettingsIcon />}
-            onClick={() => { setCopyPreferencesOpen(true); setShowFilters(false); }}
-            sx={{ textTransform: "none" }}
-          >
-            Copy Format Settings
-          </Button>
+          <Divider orientation="vertical" flexItem sx={{ my: 0.5, borderColor: (theme) => alpha(theme.palette.grey[300], 0.6) }} />
+          {/* Status */}
+          <FormControl size="small" sx={{ minWidth: 92, "& .MuiOutlinedInput-root": { height: 28, borderRadius: 6, fontSize: "0.75rem", bgcolor: "background.paper", boxShadow: (theme) => `0 1px 2px ${alpha(theme.palette.grey[400], 0.15)}`, "& fieldset": { borderColor: (theme) => alpha(theme.palette.grey[300], 0.7) }, "&:hover fieldset": { borderColor: (theme) => alpha(theme.palette.primary.main, 0.3) } } }}>
+            <Select
+              value={filters.status || ""}
+              onChange={handleFilterChange("status")}
+              displayEmpty
+              renderValue={(v) => v ? v.charAt(0).toUpperCase() + v.slice(1) : "Status"}
+              sx={{
+                "& .MuiSelect-select": { py: 0, pl: 1, pr: "24px !important", display: "flex", alignItems: "center" },
+                "& .MuiSelect-icon": { right: 2, fontSize: 18 },
+                color: filters.status ? "text.primary" : "text.disabled",
+                fontWeight: filters.status ? 600 : 400,
+              }}
+            >
+              <MenuItem value="" sx={{ fontSize: "0.8rem" }}>All Statuses</MenuItem>
+              <MenuItem value="pending" sx={{ fontSize: "0.8rem" }}>Pending</MenuItem>
+              <MenuItem value="partial" sx={{ fontSize: "0.8rem" }}>Partial</MenuItem>
+              <MenuItem value="fulfilled" sx={{ fontSize: "0.8rem" }}>Fulfilled</MenuItem>
+              <MenuItem value="cancelled" sx={{ fontSize: "0.8rem" }}>Cancelled</MenuItem>
+            </Select>
+          </FormControl>
+          {/* Month */}
+          <FormControl size="small" sx={{ minWidth: 78, "& .MuiOutlinedInput-root": { height: 28, borderRadius: 6, fontSize: "0.75rem", bgcolor: "background.paper", boxShadow: (theme) => `0 1px 2px ${alpha(theme.palette.grey[400], 0.15)}`, "& fieldset": { borderColor: (theme) => alpha(theme.palette.grey[300], 0.7) }, "&:hover fieldset": { borderColor: (theme) => alpha(theme.palette.primary.main, 0.3) } } }}>
+            <Select
+              value={filters.createdMonth}
+              onChange={handleFilterChange("createdMonth")}
+              displayEmpty
+              renderValue={(v) => {
+                if (!v) return "Month";
+                const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+                return months[parseInt(v) - 1] || "Month";
+              }}
+              sx={{
+                "& .MuiSelect-select": { py: 0, pl: 1, pr: "24px !important", display: "flex", alignItems: "center" },
+                "& .MuiSelect-icon": { right: 2, fontSize: 18 },
+                color: filters.createdMonth ? "text.primary" : "text.disabled",
+                fontWeight: filters.createdMonth ? 600 : 400,
+              }}
+            >
+              <MenuItem value="" sx={{ fontSize: "0.8rem" }}>All Months</MenuItem>
+              {["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"].map((m, i) => (
+                <MenuItem key={i + 1} value={String(i + 1)} sx={{ fontSize: "0.8rem" }}>{m}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          {/* Year */}
+          <FormControl size="small" sx={{ minWidth: 68, "& .MuiOutlinedInput-root": { height: 28, borderRadius: 6, fontSize: "0.75rem", bgcolor: "background.paper", boxShadow: (theme) => `0 1px 2px ${alpha(theme.palette.grey[400], 0.15)}`, "& fieldset": { borderColor: (theme) => alpha(theme.palette.grey[300], 0.7) }, "&:hover fieldset": { borderColor: (theme) => alpha(theme.palette.primary.main, 0.3) } } }}>
+            <Select
+              value={filters.createdYear}
+              onChange={handleFilterChange("createdYear")}
+              displayEmpty
+              renderValue={(v) => v || "Year"}
+              sx={{
+                "& .MuiSelect-select": { py: 0, pl: 1, pr: "24px !important", display: "flex", alignItems: "center" },
+                "& .MuiSelect-icon": { right: 2, fontSize: 18 },
+                color: filters.createdYear ? "text.primary" : "text.disabled",
+                fontWeight: filters.createdYear ? 600 : 400,
+              }}
+            >
+              <MenuItem value="" sx={{ fontSize: "0.8rem" }}>All Years</MenuItem>
+              {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i).map((y) => (
+                <MenuItem key={y} value={String(y)} sx={{ fontSize: "0.8rem" }}>{y}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          {/* Clear filters */}
           {activeFilterCount > 0 && (
             <>
-              <Divider />
-              <Button
-                fullWidth
-                variant="outlined"
-                color="error"
-                startIcon={<FilterListOffIcon />}
+              <Divider orientation="vertical" flexItem sx={{ my: 0.5, borderColor: (theme) => alpha(theme.palette.grey[300], 0.6) }} />
+              <Chip
+                label={`Clear (${activeFilterCount})`}
+                size="small"
+                onDelete={clearFilters}
+                deleteIcon={<FilterListOffIcon sx={{ fontSize: "14px !important" }} />}
                 onClick={clearFilters}
-                sx={{ textTransform: "none" }}
-              >
-                Clear All Filters ({activeFilterCount})
-              </Button>
+                sx={{
+                  height: 24,
+                  fontSize: "0.7rem",
+                  fontWeight: 600,
+                  bgcolor: (theme) => alpha(theme.palette.error.main, 0.08),
+                  color: "error.dark",
+                  border: "1px solid",
+                  borderColor: (theme) => alpha(theme.palette.error.main, 0.2),
+                  "& .MuiChip-deleteIcon": { color: "error.main", "&:hover": { color: "error.dark" } },
+                  "&:hover": { bgcolor: (theme) => alpha(theme.palette.error.main, 0.14) },
+                }}
+              />
             </>
           )}
+          {/* Spacer */}
+          <Box sx={{ flex: 1 }} />
+          {/* Action buttons */}
+          {(user?.role === "admin" || user?.role === "affiliate_manager") && (
+            <Box sx={{ display: "flex", gap: 0.5, alignItems: "center" }}>
+              <Button
+                variant="contained"
+                size="small"
+                startIcon={<AddIcon sx={{ fontSize: "15px !important" }} />}
+                onClick={handleOpenCreateDialog}
+                sx={{
+                  height: 26,
+                  textTransform: "none",
+                  fontSize: "0.72rem",
+                  fontWeight: 600,
+                  borderRadius: 6,
+                  px: 1.25,
+                  boxShadow: "none",
+                  background: (theme) => `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`,
+                  "&:hover": { boxShadow: (theme) => `0 2px 6px ${alpha(theme.palette.primary.main, 0.35)}` },
+                }}
+              >
+                New Order
+              </Button>
+              {user?.role === "admin" && (
+                <Tooltip title="Manage Brokers" arrow>
+                  <IconButton
+                    size="small"
+                    onClick={handleManageBrokers}
+                    sx={{
+                      width: 26,
+                      height: 26,
+                      borderRadius: 6,
+                      bgcolor: (theme) => alpha(theme.palette.primary.main, 0.08),
+                      color: "primary.main",
+                      "&:hover": { bgcolor: (theme) => alpha(theme.palette.primary.main, 0.16) },
+                    }}
+                  >
+                    <BusinessIcon sx={{ fontSize: 15 }} />
+                  </IconButton>
+                </Tooltip>
+              )}
+              <Tooltip title="Copy Format Settings" arrow>
+                <IconButton
+                  size="small"
+                  onClick={() => setCopyPreferencesOpen(true)}
+                  sx={{
+                    width: 26,
+                    height: 26,
+                    borderRadius: 6,
+                    bgcolor: (theme) => alpha(theme.palette.grey[500], 0.08),
+                    color: "text.secondary",
+                    "&:hover": { bgcolor: (theme) => alpha(theme.palette.grey[500], 0.16) },
+                  }}
+                >
+                  <SettingsIcon sx={{ fontSize: 15 }} />
+                </IconButton>
+              </Tooltip>
+            </Box>
+          )}
+          {!(user?.role === "admin" || user?.role === "affiliate_manager") && (
+            <Tooltip title="Copy Format Settings" arrow>
+              <IconButton
+                size="small"
+                onClick={() => setCopyPreferencesOpen(true)}
+                sx={{
+                  width: 26,
+                  height: 26,
+                  borderRadius: 6,
+                  bgcolor: (theme) => alpha(theme.palette.grey[500], 0.08),
+                  color: "text.secondary",
+                  "&:hover": { bgcolor: (theme) => alpha(theme.palette.grey[500], 0.16) },
+                }}
+              >
+                <SettingsIcon sx={{ fontSize: 15 }} />
+              </IconButton>
+            </Tooltip>
+          )}
         </Box>
-      </Drawer>
-      {}
-      <Paper sx={{ position: "relative", borderRadius: 2, border: 1, borderColor: "divider", boxShadow: "0 1px 3px rgba(0,0,0,0.08)", overflow: "hidden", flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
         <Box sx={{ display: "flex", flex: 1, minHeight: 0 }}>
           {/* Left side: Orders Table */}
           <Box sx={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
@@ -5021,12 +5040,19 @@ const OrdersPage = () => {
               background: "linear-gradient(135deg, #1e293b 0%, #334155 100%)",
               color: "#fff",
               fontWeight: 700,
-              fontSize: "0.7rem",
+              fontSize: "0.65rem",
               textTransform: "uppercase",
               letterSpacing: "0.5px",
               borderBottom: "2px solid #3b82f6",
-              py: 0.75,
-              lineHeight: 1.2,
+              py: 0.4,
+              px: 1,
+              lineHeight: 1.1,
+            },
+            "& .MuiTableBody-root .MuiTableCell-root": {
+              py: 0.25,
+              px: 1,
+              fontSize: "0.78rem",
+              lineHeight: 1.3,
             },
             "& .MuiTableBody-root .MuiTableRow-root:nth-of-type(even)": {
               bgcolor: (theme) => alpha(theme.palette.grey[500], 0.02),
@@ -5066,15 +5092,7 @@ const OrdersPage = () => {
                   Planned Date
                 </TableCell>
                 <TableCell sx={{ textAlign: "right", width: orderPanelId ? "20%" : "11%" }}>
-                  <Box sx={{ display: "inline-flex", alignItems: "center", justifyContent: "flex-end", gap: 0.25, lineHeight: 1 }}>
-                    Actions
-                    <Badge badgeContent={activeFilterCount} color="warning" sx={{ "& .MuiBadge-badge": { fontSize: 9, height: 14, minWidth: 14, p: "0 3px" } }}>
-                      <FilterListIcon
-                        onClick={(e) => { e.stopPropagation(); setShowFilters(true); }}
-                        sx={{ fontSize: 13, color: activeFilterCount > 0 ? "#fff" : "rgba(255,255,255,0.6)", cursor: "pointer", "&:hover": { color: "#fff" }, ml: 0.25 }}
-                      />
-                    </Badge>
-                  </Box>
+                  Actions
                 </TableCell>
               </TableRow>
             </TableHead>
@@ -5105,7 +5123,7 @@ const OrdersPage = () => {
                       <TableRow
                         hover={orderPanelId !== order._id}
                         sx={{
-                          "& td": { py: 0.75, borderColor: "grey.100" },
+                          "& td": { borderColor: "grey.100" },
                           ...(orderPanelId === order._id && {
                             bgcolor: (theme) => `${alpha(theme.palette.success.main, 0.18)} !important`,
                             "&:hover": { bgcolor: (theme) => `${alpha(theme.palette.success.main, 0.25)} !important` },
@@ -5113,7 +5131,7 @@ const OrdersPage = () => {
                         }}
                       >
                         <TableCell>
-                          <Typography variant="body2" noWrap sx={{ fontFamily: "monospace", color: "primary.dark", fontWeight: 500 }}>
+                          <Typography noWrap sx={{ fontFamily: "monospace", color: "primary.dark", fontWeight: 500, fontSize: "0.75rem" }}>
                             {order._id.slice(-8)}
                           </Typography>
                         </TableCell>
@@ -5133,9 +5151,8 @@ const OrdersPage = () => {
                             }}
                           >
                             <Typography
-                              variant="body2"
                               noWrap
-                              sx={{ maxWidth: "100%" }}
+                              sx={{ maxWidth: "100%", fontSize: "0.75rem" }}
                             >
                               {order.requester?.fullName}
                             </Typography>
@@ -5151,9 +5168,10 @@ const OrdersPage = () => {
                                 sx={{
                                   opacity: 0,
                                   transition: "opacity 0.2s",
+                                  p: 0.25,
                                 }}
                               >
-                                <EditIcon sx={{ fontSize: 14 }} />
+                                <EditIcon sx={{ fontSize: 13 }} />
                               </IconButton>
                             )}
                           </Box>
@@ -5162,7 +5180,7 @@ const OrdersPage = () => {
                           align="center"
                           sx={{ display: { xs: "none", md: "table-cell" } }}
                         >
-                          <Typography variant="body2" noWrap>
+                          <Typography noWrap sx={{ fontSize: "0.75rem" }}>
                             {order.selectedClientNetwork?.name || "-"}
                           </Typography>
                         </TableCell>
@@ -5170,12 +5188,12 @@ const OrdersPage = () => {
                           align="center"
                           sx={{ display: { xs: "none", md: "table-cell" } }}
                         >
-                          <Typography variant="body2" noWrap>
+                          <Typography noWrap sx={{ fontSize: "0.75rem" }}>
                             {order.selectedOurNetwork?.name || "-"}
                           </Typography>
                         </TableCell>
                         <TableCell align="center">
-                          <Box sx={{ display: "flex", justifyContent: "center", gap: 0.75 }}>
+                          <Box sx={{ display: "flex", justifyContent: "center", gap: 0.5 }}>
                             {[
                               { fulfilled: order.fulfilled?.ftd || 0, requested: order.requests?.ftd || 0, label: "FTD", color: "#3b82f6" },
                               { fulfilled: order.fulfilled?.filler || 0, requested: order.requests?.filler || 0, label: "Filler", color: "#f59e0b" },
@@ -5185,11 +5203,11 @@ const OrdersPage = () => {
                               const pct = item.requested > 0 ? Math.min((item.fulfilled / item.requested) * 100, 100) : 0;
                               return (
                                 <Tooltip key={idx} title={`${item.label}: ${item.fulfilled}/${item.requested}`} arrow placement="top">
-                                  <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", minWidth: 36 }}>
-                                    <Typography variant="caption" sx={{ fontSize: "0.65rem", fontWeight: 600, color: item.color, lineHeight: 1 }}>
+                                  <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", minWidth: 32 }}>
+                                    <Typography variant="caption" sx={{ fontSize: "0.6rem", fontWeight: 600, color: item.color, lineHeight: 1 }}>
                                       {item.fulfilled}/{item.requested}
                                     </Typography>
-                                    <Box sx={{ width: "100%", height: 3, bgcolor: "grey.200", borderRadius: 1, mt: 0.25, overflow: "hidden" }}>
+                                    <Box sx={{ width: "100%", height: 2.5, bgcolor: "grey.200", borderRadius: 1, mt: 0.2, overflow: "hidden" }}>
                                       <Box sx={{ width: `${pct}%`, height: "100%", bgcolor: item.color, borderRadius: 1, transition: "width 0.3s ease" }} />
                                     </Box>
                                   </Box>
@@ -5237,7 +5255,7 @@ const OrdersPage = () => {
                               label={order.status}
                               variant="outlined"
                               size="small"
-                              sx={{ textTransform: "capitalize", fontWeight: 600, ...getStatusChipSx(order.status) }}
+                              sx={{ textTransform: "capitalize", fontWeight: 600, height: 20, fontSize: "0.68rem", "& .MuiChip-label": { px: 0.75 }, ...getStatusChipSx(order.status) }}
                             />
                           </Tooltip>
                         </TableCell>
@@ -5245,7 +5263,7 @@ const OrdersPage = () => {
                           align="center"
                           sx={{ display: { xs: "none", sm: "table-cell" } }}
                         >
-                          <Typography variant="body2" noWrap>
+                          <Typography noWrap sx={{ fontSize: "0.75rem" }}>
                             {order.countryFilter || "Any"}
                           </Typography>
                         </TableCell>
@@ -5257,57 +5275,57 @@ const OrdersPage = () => {
                             label={order.priority}
                             variant="outlined"
                             size="small"
-                            sx={{ textTransform: "capitalize", fontWeight: 600, ...getPriorityChipSx(order.priority) }}
+                            sx={{ textTransform: "capitalize", fontWeight: 600, height: 20, fontSize: "0.68rem", "& .MuiChip-label": { px: 0.75 }, ...getPriorityChipSx(order.priority) }}
                           />
                         </TableCell>
                         <TableCell
                           align="center"
                           sx={{ display: { xs: "none", sm: "table-cell" } }}
                         >
-                          <Typography variant="body2" noWrap>
+                          <Typography noWrap sx={{ fontSize: "0.75rem" }}>
                             {order.plannedDate
                               ? new Date(order.plannedDate).toLocaleDateString()
                               : "N/A"}
                           </Typography>
                         </TableCell>
                         <TableCell align="right">
-                          <Box display="flex" flexDirection="row" gap={0.25} justifyContent="flex-end" alignItems="center">
+                          <Box display="flex" flexDirection="row" gap={0} justifyContent="flex-end" alignItems="center">
                             <Tooltip title="Preview Leads" arrow>
                               <IconButton
                                 size="small"
                                 onClick={(e) => { e.stopPropagation(); handlePreviewOrderLeads(order._id); }}
-                                sx={{ "&:hover": { color: "primary.main", bgcolor: (theme) => alpha(theme.palette.primary.main, 0.08) } }}
+                                sx={{ p: 0.35, "&:hover": { color: "primary.main", bgcolor: (theme) => alpha(theme.palette.primary.main, 0.08) } }}
                               >
-                                <ViewIcon sx={{ fontSize: 18 }} />
+                                <ViewIcon sx={{ fontSize: 16 }} />
                               </IconButton>
                             </Tooltip>
                             <Tooltip title="Copy Leads to Clipboard" arrow>
                               <IconButton
                                 size="small"
                                 onClick={(e) => { e.stopPropagation(); handleCopyOrderLeadsById(order._id); }}
-                                sx={{ "&:hover": { color: "info.main", bgcolor: (theme) => alpha(theme.palette.info.main, 0.08) } }}
+                                sx={{ p: 0.35, "&:hover": { color: "info.main", bgcolor: (theme) => alpha(theme.palette.info.main, 0.08) } }}
                               >
-                                <ContentCopyIcon sx={{ fontSize: 18 }} />
+                                <ContentCopyIcon sx={{ fontSize: 16 }} />
                               </IconButton>
                             </Tooltip>
-                            <Divider orientation="vertical" flexItem sx={{ mx: 0.25 }} />
+                            <Divider orientation="vertical" flexItem sx={{ mx: 0.15, my: 0.5 }} />
                             <Tooltip title="View Audit Log" arrow>
                               <IconButton
                                 size="small"
                                 onClick={(e) => { e.stopPropagation(); handleOpenOrderAudit(order); }}
-                                sx={{ "&:hover": { color: "info.main", bgcolor: (theme) => alpha(theme.palette.info.main, 0.08) } }}
+                                sx={{ p: 0.35, "&:hover": { color: "info.main", bgcolor: (theme) => alpha(theme.palette.info.main, 0.08) } }}
                               >
-                                <HistoryIcon sx={{ fontSize: 18 }} />
+                                <HistoryIcon sx={{ fontSize: 16 }} />
                               </IconButton>
                             </Tooltip>
-                            <Divider orientation="vertical" flexItem sx={{ mx: 0.25 }} />
+                            <Divider orientation="vertical" flexItem sx={{ mx: 0.15, my: 0.5 }} />
                             <Tooltip title="View Order Details" arrow>
                               <IconButton
                                 size="small"
                                 onClick={(e) => { e.stopPropagation(); handleOpenOrderPanel(order._id); }}
-                                sx={{ "&:hover": { color: "primary.main", bgcolor: (theme) => alpha(theme.palette.primary.main, 0.08) } }}
+                                sx={{ p: 0.35, "&:hover": { color: "primary.main", bgcolor: (theme) => alpha(theme.palette.primary.main, 0.08) } }}
                               >
-                                <ChevronRightIcon sx={{ fontSize: 20 }} />
+                                <ChevronRightIcon sx={{ fontSize: 18 }} />
                               </IconButton>
                             </Tooltip>
                           </Box>
@@ -5321,9 +5339,9 @@ const OrdersPage = () => {
             </TableBody>
           </Table>
         </TableContainer>
-        <Box sx={{ display: "flex", alignItems: "center", borderTop: 1, borderColor: "divider", px: 2 }}>
-          <Typography variant="body2" color="text.secondary" sx={{ fontSize: "0.8rem" }}>
-            Showing {Math.min(page * rowsPerPage + 1, totalOrders)}-{Math.min((page + 1) * rowsPerPage, totalOrders)} of {totalOrders} orders
+        <Box sx={{ display: "flex", alignItems: "center", borderTop: 1, borderColor: "divider", px: 1.5, minHeight: 32 }}>
+          <Typography color="text.secondary" sx={{ fontSize: "0.72rem" }}>
+            {Math.min(page * rowsPerPage + 1, totalOrders)}–{Math.min((page + 1) * rowsPerPage, totalOrders)} of {totalOrders}
           </Typography>
           <Box sx={{ flex: 1 }} />
           <TablePagination
@@ -5334,7 +5352,13 @@ const OrdersPage = () => {
             page={page}
             onPageChange={handleChangePage}
             onRowsPerPageChange={handleChangeRowsPerPage}
-            sx={{ borderBottom: "none", "& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows": { fontSize: "0.8rem" } }}
+            sx={{
+              borderBottom: "none",
+              "& .MuiTablePagination-toolbar": { minHeight: 32, pl: 0 },
+              "& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows": { fontSize: "0.72rem" },
+              "& .MuiTablePagination-select": { fontSize: "0.72rem" },
+              "& .MuiTablePagination-actions button": { p: 0.25 },
+            }}
           />
         </Box>
           </Box>
@@ -5757,7 +5781,7 @@ const OrdersPage = () => {
                                           )}
 
                                           {/* Documents */}
-                                          {lead.documents && lead.documents.length > 0 && (
+                                          {Array.isArray(lead.documents) && lead.documents.length > 0 && (
                                             <Box sx={{ mt: 0.5 }}>
                                               <Typography variant="caption" sx={{ fontWeight: 700, color: "primary.main", textTransform: "uppercase", letterSpacing: "0.5px", display: "block", mb: 0.5 }}>
                                                 Documents ({lead.documents.length})
@@ -9299,7 +9323,7 @@ const OrdersPage = () => {
             : "this agent"
         }
         insufficientTypes={insufficientAgentLeads || {}}
-        agents={agents}
+        agents={filteredAgents}
       />
 
       {/* Lead Quick View Popover */}
@@ -9994,7 +10018,7 @@ const OrdersPage = () => {
                     const lead = getLeadWithOrderMetadata(originalLead, leadsPreviewModal.order);
                     const leadType = getDisplayLeadType(lead);
                     // Extract document URLs from documents array
-                    const documents = lead.documents || [];
+                    const documents = Array.isArray(lead.documents) ? lead.documents : [];
                     const idFrontDoc = documents.find(
                       (doc) =>
                         doc.description?.toLowerCase().includes("id front") &&
