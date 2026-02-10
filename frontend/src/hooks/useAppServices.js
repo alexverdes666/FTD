@@ -6,46 +6,27 @@ import { backgroundSyncService } from "../services/backgroundSyncService.js";
 import chatService from "../services/chatService.js";
 import notificationService from "../services/notificationService.js";
 import inactivityService from "../services/inactivityService.js";
-import activityTrackerService from "../services/activityTrackerService.js";
 
 /**
- * Manages all background services (sync, activity, inactivity, chat, force-logout).
- * Extracts 8 useEffects from AppContent into a single hook.
+ * Manages all background services (sync, inactivity, chat, force-logout).
+ * Extracts useEffects from AppContent into a single hook.
  */
 export function useAppServices(isAuthenticated, user) {
   const dispatch = useDispatch();
   const [inactivityWarningOpen, setInactivityWarningOpen] = useState(false);
   const [warningSecondsRemaining, setWarningSecondsRemaining] = useState(60);
 
-  // Background sync + activity tracker lifecycle
+  // Background sync lifecycle
   useEffect(() => {
     if (isAuthenticated && user) {
       backgroundSyncService.start();
-      activityTrackerService.start();
     } else {
       backgroundSyncService.stop();
-      activityTrackerService.stop();
     }
     return () => {
       backgroundSyncService.stop();
-      activityTrackerService.stop();
     };
   }, [isAuthenticated, user]);
-
-  // Page navigation tracking
-  useEffect(() => {
-    const handleRouteChange = () => {
-      if (activityTrackerService.isRunning) {
-        activityTrackerService.trackPageVisit(
-          window.location.pathname,
-          document.title
-        );
-      }
-    };
-    handleRouteChange();
-    window.addEventListener("popstate", handleRouteChange);
-    return () => window.removeEventListener("popstate", handleRouteChange);
-  }, []);
 
   // Inactivity tracking
   useEffect(() => {

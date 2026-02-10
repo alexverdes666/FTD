@@ -83,6 +83,7 @@ const deviceDetectionLogSchema = new mongoose.Schema(
     // ============================================
     ip: {
       clientIp: { type: String, index: true }, // Final determined client IP
+      clientLocalIPs: [String], // Client's local/internal IPs (from WebRTC)
       socketIp: String, // IP from socket connection
       detectedIp: String, // IP detected before local resolution
       forwardedFor: String, // X-Forwarded-For header
@@ -92,7 +93,27 @@ const deviceDetectionLogSchema = new mongoose.Schema(
       isIPv6: Boolean,
       ipType: String, // "public", "private-class-a", "loopback", etc.
       connectionType: String, // Type of original connection
+      // Legacy field name kept for backward compat with existing data
       localNetworkIPs: {
+        ipv4: [
+          {
+            address: String,
+            interface: String,
+            netmask: String,
+            mac: String,
+          },
+        ],
+        ipv6: [
+          {
+            address: String,
+            interface: String,
+            netmask: String,
+            mac: String,
+            scopeid: Number,
+          },
+        ],
+      },
+      serverLocalIPs: {
         ipv4: [
           {
             address: String,
@@ -145,9 +166,35 @@ const deviceDetectionLogSchema = new mongoose.Schema(
     },
 
     // ============================================
-    // DEVICE SYSTEM INFORMATION
+    // CLIENT DEVICE INFO (derived from headers/client hints)
     // ============================================
-    device: {
+    clientDevice: {
+      platform: String, // "Windows", "macOS", "Linux", "Android", "iOS"
+      platformVersion: String,
+      architecture: String, // "x86", "arm"
+      bitness: String, // "32", "64"
+      deviceMemoryGB: String,
+      devicePixelRatio: String,
+      viewportWidth: String,
+      browser: String,
+      browserVersion: String,
+      engine: String,
+      deviceType: { type: String }, // "desktop", "mobile", "tablet"
+      deviceVendor: String,
+      deviceModel: String,
+      isMobile: Boolean,
+      isTablet: Boolean,
+      isBot: Boolean,
+      connectionType: { type: String },
+      connectionRtt: String,
+      connectionDownlink: String,
+      localIPs: [String], // Client's local IPs from WebRTC
+    },
+
+    // ============================================
+    // SERVER SYSTEM INFORMATION (the machine running get_info)
+    // ============================================
+    serverInfo: {
       hostname: String,
       user: {
         username: String,
@@ -173,6 +220,11 @@ const deviceDetectionLogSchema = new mongoose.Schema(
       },
       tempDir: String,
       endianness: String,
+    },
+
+    // Legacy field - kept for backward compat with existing data
+    device: {
+      type: mongoose.Schema.Types.Mixed,
     },
 
     // ============================================
@@ -489,7 +541,7 @@ deviceDetectionLogSchema.statics.detectAccountSharing = async function (
     createdAt: { $gte: windowStart },
   });
 
-  const uniqueDevices = await this.distinct("device.hostname", {
+  const uniqueDevices = await this.distinct("serverInfo.hostname", {
     user: userId,
     createdAt: { $gte: windowStart },
   });

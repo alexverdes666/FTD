@@ -63,12 +63,11 @@ const depositCallsRoutes = require("./routes/depositCalls");
 const agentCallDeclarationRoutes = require("./routes/agentCallDeclarations");
 const securityAuditRoutes = require("./routes/securityAudit");
 const activityLogRoutes = require("./routes/activityLogs");
-const deviceDetectionRoutes = require("./routes/deviceDetection");
-const userActivityRoutes = require("./routes/userActivity");
 const globalSearchRoutes = require("./routes/globalSearch");
 const crmDealRoutes = require("./routes/crmDeals");
 const errorHandler = require("./middleware/errorHandler");
 const { changeTracker } = require("./middleware/changeTracker");
+const { activityLogger } = require("./middleware/activityLogger");
 const { deviceDetectionMiddleware } = require("./middleware/deviceDetection");
 const SessionCleanupService = require("./services/sessionCleanupService");
 const AgentScraperService = require("./services/agentScraperService");
@@ -178,6 +177,7 @@ const corsOptions = {
     "X-QR-Verification-Token", // For QR auth sensitive action verification
     "X-Device-ID", // For device fingerprinting/audit trail
     "X-Device-Fingerprint", // For full device fingerprint data
+    "X-Client-Local-IPs", // For client internal IP detection (WebRTC)
     "X-Unlock-Token", // For lead profile credential unlock verification
   ],
   credentials: true,
@@ -553,17 +553,12 @@ app.use((req, res, next) => {
 });
 
 // Change Tracker - Fetches previous state before modifications
-// This must come BEFORE device detection so previousState is available
 app.use(changeTracker);
 
-// Device Detection Middleware - Calls get_info service for comprehensive device detection
-// Logs all POST, PUT, PATCH, DELETE operations with detailed device/security information
-// Replaces the old activityLogger with enhanced detection capabilities:
-// - Anti-detect browser detection (Dolphin Anty, Multilogin, etc.)
-// - Proxy/VPN detection
-// - Device system information (hostname, username, specs)
-// - Geolocation data
-// - Security risk scoring
+// Activity Logger - Logs POST/PUT/PATCH/DELETE operations to ActivityLog collection
+app.use(activityLogger({ saveToDatabase: true, consoleLog: process.env.NODE_ENV !== 'production' }));
+
+// Device Detection - Calls get_info service for POST/PUT/PATCH/DELETE and logs to DeviceDetectionLog
 app.use(deviceDetectionMiddleware());
 
 // Define routes AFTER Socket.IO setup so req.io is available
@@ -627,8 +622,6 @@ app.use("/api/sheets", require("./routes/sheets"));
 app.use("/api/system-config", systemConfigurationRoutes);
 app.use("/api/security-audit", securityAuditRoutes);
 app.use("/api/activity-logs", activityLogRoutes);
-app.use("/api/device-detection", deviceDetectionRoutes);
-app.use("/api/user-activity", userActivityRoutes);
 app.use("/api/global-search", globalSearchRoutes);
 app.use("/api/crm-deals", crmDealRoutes);
 const exportRoutes = require("./routes/export");

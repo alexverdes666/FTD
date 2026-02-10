@@ -325,11 +325,8 @@ activityLogSchema.index({ riskScore: -1, timestamp: -1 }); // High-risk activity
 activityLogSchema.index({ deviceId: 1, timestamp: -1 }); // Device activity tracking
 activityLogSchema.index({ user: 1, deviceId: 1, timestamp: -1 }); // User+Device activity
 
-// TTL index - auto-delete logs after 90 days (configurable)
-activityLogSchema.index(
-  { createdAt: 1 },
-  { expireAfterSeconds: 90 * 24 * 60 * 60 }
-);
+// Keep createdAt indexed for queries (no auto-delete)
+activityLogSchema.index({ createdAt: 1 });
 
 // ==================== VIRTUALS ====================
 activityLogSchema.virtual("isError").get(function () {

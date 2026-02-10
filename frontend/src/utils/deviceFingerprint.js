@@ -19,6 +19,109 @@
 
 const DEVICE_ID_KEY = "ftd_device_id";
 const DEVICE_INFO_KEY = "ftd_device_info";
+const LOCAL_IPS_KEY = "ftd_local_ips";
+
+/**
+ * Detect client's local/internal IPs using WebRTC ICE candidates.
+ * This works by creating a peer connection and observing the ICE candidates
+ * which reveal local network addresses.
+ *
+ * Note: Modern browsers may restrict this (mDNS obfuscation).
+ * Works best in Chrome with certain flags or in less restrictive environments.
+ */
+const getLocalIPs = () => {
+  return new Promise((resolve) => {
+    const ips = new Set();
+    const timeout = setTimeout(() => {
+      try { pc.close(); } catch (e) { /* ignore */ }
+      resolve([...ips]);
+    }, 3000);
+
+    try {
+      if (!window.RTCPeerConnection) {
+        clearTimeout(timeout);
+        resolve([]);
+        return;
+      }
+
+      const pc = new RTCPeerConnection({
+        iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+      });
+
+      pc.createDataChannel("");
+
+      pc.onicecandidate = (event) => {
+        if (!event.candidate) {
+          clearTimeout(timeout);
+          pc.close();
+          resolve([...ips]);
+          return;
+        }
+
+        const candidate = event.candidate.candidate;
+        // Extract IPv4 addresses from ICE candidates
+        const ipMatch = candidate.match(
+          /(?:[\d]{1,3}\.){3}[\d]{1,3}/
+        );
+        if (ipMatch) {
+          const ip = ipMatch[0];
+          // Filter out 0.0.0.0 and obvious non-local IPs
+          if (ip !== "0.0.0.0") {
+            ips.add(ip);
+          }
+        }
+
+        // Also try to extract IPv6 addresses
+        const ipv6Match = candidate.match(
+          /([a-f0-9]{1,4}(:[a-f0-9]{1,4}){7})/i
+        );
+        if (ipv6Match) {
+          ips.add(ipv6Match[0]);
+        }
+      };
+
+      pc.createOffer()
+        .then((offer) => pc.setLocalDescription(offer))
+        .catch(() => {
+          clearTimeout(timeout);
+          try { pc.close(); } catch (e) { /* ignore */ }
+          resolve([...ips]);
+        });
+    } catch (e) {
+      clearTimeout(timeout);
+      resolve([]);
+    }
+  });
+};
+
+// Cache local IPs since WebRTC detection is async
+let cachedLocalIPs = null;
+
+/**
+ * Get cached local IPs or detect them
+ */
+const getClientLocalIPs = async () => {
+  if (cachedLocalIPs) return cachedLocalIPs;
+
+  // Try from sessionStorage first
+  try {
+    const stored = sessionStorage.getItem(LOCAL_IPS_KEY);
+    if (stored) {
+      cachedLocalIPs = JSON.parse(stored);
+      return cachedLocalIPs;
+    }
+  } catch (e) { /* ignore */ }
+
+  // Detect via WebRTC
+  cachedLocalIPs = await getLocalIPs();
+
+  // Cache in sessionStorage
+  try {
+    sessionStorage.setItem(LOCAL_IPS_KEY, JSON.stringify(cachedLocalIPs));
+  } catch (e) { /* ignore */ }
+
+  return cachedLocalIPs;
+};
 
 /**
  * Generate a unique device ID
@@ -265,6 +368,9 @@ const collectDeviceInfo = () => {
     batteryCharging: null,
     batteryLevel: null,
 
+    // Local IPs (populated async separately)
+    localIPs: [],
+
     // Collected at
     collectedAt: new Date().toISOString(),
   };
@@ -434,6 +540,13 @@ export const getDeviceFingerprint = async () => {
   const deviceId = await getDeviceId();
   const deviceInfo = collectDeviceInfo();
 
+  // Async: get local IPs via WebRTC
+  try {
+    deviceInfo.localIPs = await getClientLocalIPs();
+  } catch (e) {
+    deviceInfo.localIPs = [];
+  }
+
   return {
     deviceId,
     ...deviceInfo,
@@ -473,9 +586,12 @@ export const addDeviceFingerprintToHeaders = async (headers = {}) => {
   return headers;
 };
 
+export { getClientLocalIPs };
+
 export default {
   getDeviceId,
   getDeviceFingerprint,
   getDeviceFingerprintHeader,
   addDeviceFingerprintToHeaders,
+  getClientLocalIPs,
 };

@@ -34,6 +34,9 @@ const corsOptions = {
     "Sec-Fetch-Site",
     "Sec-Fetch-Mode",
     "Sec-Fetch-Dest",
+    "X-Client-Local-IPs",
+    "X-Device-ID",
+    "X-Device-Fingerprint",
   ],
 };
 

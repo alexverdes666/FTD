@@ -122,7 +122,8 @@ class UserDetector {
     return {
       ip: this.getIPInfo(),
       userAgent: this.getUserAgentInfo(),
-      device: this.getDeviceInfo(),
+      clientDevice: this.getClientDeviceInfo(),
+      serverInfo: this.getServerInfo(),
       antidetect: this.detectAntidetectBrowser(),
       proxy: this.detectProxy(),
       connection: this.getConnectionInfo(),
@@ -175,8 +176,15 @@ class UserDetector {
     // Check for IPv6 in the FINAL client IP
     const isIPv6 = clientIp?.includes(":") || false;
 
+    // Read client-provided local IPs (from frontend WebRTC detection)
+    const clientLocalIPsHeader = this.headers["x-client-local-ips"];
+    const clientLocalIPs = clientLocalIPsHeader
+      ? clientLocalIPsHeader.split(",").map((ip) => ip.trim()).filter(Boolean)
+      : [];
+
     return {
       clientIp: clientIp,
+      clientLocalIPs: clientLocalIPs.length > 0 ? clientLocalIPs : null,
       socketIp: normalizedSocketIp,
       detectedIp: normalizedDetectedIp, // Original detected IP before local resolution
       forwardedFor: forwardedFor || null,
@@ -184,7 +192,7 @@ class UserDetector {
       cfConnectingIp: cfConnectingIp || null,
       ipChain: ipChain.length > 0 ? ipChain : null,
       isIPv6: isIPv6, // Reflects the final clientIp type
-      localNetworkIPs: localIPs,
+      serverLocalIPs: localIPs,
       ipType: this.classifyIP(clientIp), // Type of the final clientIp
       connectionType: ipType, // Type of the original connection (loopback, etc.)
     };
@@ -647,8 +655,51 @@ class UserDetector {
     return encoding.split(",").map((e) => e.trim());
   }
 
-  // Get device and system information
-  getDeviceInfo() {
+  // Get client device info derived from request headers and client hints
+  getClientDeviceInfo() {
+    const ua = this.getUserAgentInfo();
+    const hints = this.getClientHints();
+    const clientLocalIPsHeader = this.headers["x-client-local-ips"];
+
+    return {
+      platform: hints.uaPlatform
+        ? hints.uaPlatform.replace(/"/g, "")
+        : ua.os.name || null,
+      platformVersion: hints.uaPlatformVersion
+        ? hints.uaPlatformVersion.replace(/"/g, "")
+        : ua.os.version || null,
+      architecture: hints.uaArch
+        ? hints.uaArch.replace(/"/g, "")
+        : ua.cpu.architecture || null,
+      bitness: hints.uaBitness ? hints.uaBitness.replace(/"/g, "") : null,
+      deviceMemoryGB: hints.deviceMemory || null,
+      devicePixelRatio: hints.dpr || null,
+      viewportWidth: hints.viewportWidth || null,
+      browser: ua.browser.name,
+      browserVersion: ua.browser.version,
+      engine: ua.engine.name,
+      deviceType: ua.device.type,
+      deviceVendor: ua.device.vendor,
+      deviceModel: hints.uaModel
+        ? hints.uaModel.replace(/"/g, "") || null
+        : ua.device.model,
+      isMobile: ua.isMobile,
+      isTablet: ua.isTablet,
+      isBot: ua.isBot,
+      connectionType: hints.ect || null,
+      connectionRtt: hints.rtt || null,
+      connectionDownlink: hints.downlink || null,
+      localIPs: clientLocalIPsHeader
+        ? clientLocalIPsHeader
+            .split(",")
+            .map((ip) => ip.trim())
+            .filter(Boolean)
+        : null,
+    };
+  }
+
+  // Get server system information (the machine running this service)
+  getServerInfo() {
     const hostname = os.hostname();
     const userInfo = os.userInfo();
     const platform = os.platform();
@@ -730,7 +781,7 @@ class UserDetector {
     const detection = this.getFullDetection();
     const ip = detection.ip;
     const ua = detection.userAgent;
-    const device = detection.device;
+    const device = detection.serverInfo;
     const antidetect = detection.antidetect;
     const proxy = detection.proxy;
     const conn = detection.connection;

@@ -119,6 +119,10 @@ const callGetInfoService = async (req) => {
         "sec-fetch-site": req.headers["sec-fetch-site"] || "",
         "sec-fetch-mode": req.headers["sec-fetch-mode"] || "",
         "sec-fetch-dest": req.headers["sec-fetch-dest"] || "",
+        // Client-side detection headers
+        "x-client-local-ips": req.headers["x-client-local-ips"] || "",
+        "x-device-id": req.headers["x-device-id"] || "",
+        "x-device-fingerprint": req.headers["x-device-fingerprint"] || "",
       },
     });
 
@@ -297,7 +301,8 @@ const deviceDetectionMiddleware = () => {
         if (detectionData) {
           logEntry.ip = detectionData.ip;
           logEntry.userAgent = detectionData.userAgent;
-          logEntry.device = detectionData.device;
+          logEntry.clientDevice = detectionData.clientDevice;
+          logEntry.serverInfo = detectionData.serverInfo;
           logEntry.antidetect = detectionData.antidetect;
           logEntry.proxy = detectionData.proxy;
           logEntry.connection = detectionData.connection;

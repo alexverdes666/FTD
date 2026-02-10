@@ -4,17 +4,20 @@ import { logout } from "../store/slices/authSlice";
 import {
   getDeviceId,
   getDeviceFingerprintHeader,
+  getClientLocalIPs,
 } from "../utils/deviceFingerprint";
 
-// Cache the device ID and fingerprint to avoid async issues in interceptors
+// Cache the device ID, fingerprint, and local IPs to avoid async issues in interceptors
 let cachedDeviceId = null;
 let cachedFingerprint = null;
+let cachedLocalIPs = null;
 
-// Initialize device ID and fingerprint on module load
+// Initialize device ID, fingerprint, and local IPs on module load
 (async () => {
   try {
     cachedDeviceId = await getDeviceId();
     cachedFingerprint = await getDeviceFingerprintHeader();
+    cachedLocalIPs = await getClientLocalIPs();
   } catch (e) {
     console.warn("Failed to get device fingerprint:", e);
   }
@@ -67,6 +70,9 @@ backendAPI.interceptors.request.use(
     }
     if (cachedFingerprint) {
       config.headers["X-Device-Fingerprint"] = cachedFingerprint;
+    }
+    if (cachedLocalIPs && cachedLocalIPs.length > 0) {
+      config.headers["X-Client-Local-IPs"] = cachedLocalIPs.join(",");
     }
 
     return config;

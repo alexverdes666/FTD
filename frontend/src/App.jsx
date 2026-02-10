@@ -73,7 +73,6 @@ const AnnouncementsPage = lazy(() => import("./pages/AnnouncementsPage.jsx"));
 const AMTargetsPage = lazy(() => import("./pages/AMTargetsPage.jsx"));
 const DepositCallsPage = lazy(() => import("./pages/DepositCallsPage.jsx"));
 const NotesPage = lazy(() => import("./pages/NotesPage.jsx"));
-const ActivityPage = lazy(() => import("./pages/ActivityPage.jsx"));
 const MobileApprovalPage = lazy(() => import("./pages/MobileApprovalPage.jsx"));
 const MobileActionApprovalPage = lazy(() => import("./pages/MobileActionApprovalPage.jsx"));
 const QRSetupPage = lazy(() => import("./pages/QRSetupPage.jsx"));
@@ -467,14 +466,6 @@ function AppContent() {
               }
             />
             <Route path="notes" element={<LazyPage><NotesPage /></LazyPage>} />
-            <Route
-              path="activity"
-              element={
-                <ProtectedRoute allowedRoles={["admin"]}>
-                  <LazyPage><ActivityPage /></LazyPage>
-                </ProtectedRoute>
-              }
-            />
             <Route path="search" element={<LazyPage><SearchResultsPage /></LazyPage>} />
             <Route path="sheets" element={<LazyPage><SheetsPage /></LazyPage>} />
           </Route>

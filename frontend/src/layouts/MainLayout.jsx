@@ -304,11 +304,6 @@ const MainLayout = () => {
               icon: <AdminIcon />,
               path: "/account-management",
             },
-            {
-              text: "Activity",
-              icon: <PerformanceIcon />,
-              path: "/activity",
-            },
           ],
         },
         {
@@ -644,7 +639,6 @@ const MainLayout = () => {
     "/crm": "#ec407a",
     "/users": "#ab47bc",
     "/account-management": "#7e57c2",
-    "/activity": "#26a69a",
     "/client-networks": "#29b6f6",
     "/our-networks": "#29b6f6",
     "/client-brokers": "#8d6e63",
