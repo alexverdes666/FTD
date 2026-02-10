@@ -22,20 +22,38 @@ const DEVICE_INFO_KEY = "ftd_device_info";
 const LOCAL_IPS_KEY = "ftd_local_ips";
 
 /**
- * Detect client's local/internal IPs using WebRTC ICE candidates.
- * This works by creating a peer connection and observing the ICE candidates
- * which reveal local network addresses.
- *
- * Note: Modern browsers may restrict this (mDNS obfuscation).
- * Works best in Chrome with certain flags or in less restrictive environments.
+ * Check if an IP is a private/internal address (RFC 1918 + link-local).
  */
-const getLocalIPs = () => {
+const isPrivateIP = (ip) => {
+  return (
+    ip.startsWith("10.") ||
+    ip.startsWith("172.16.") || ip.startsWith("172.17.") || ip.startsWith("172.18.") ||
+    ip.startsWith("172.19.") || ip.startsWith("172.20.") || ip.startsWith("172.21.") ||
+    ip.startsWith("172.22.") || ip.startsWith("172.23.") || ip.startsWith("172.24.") ||
+    ip.startsWith("172.25.") || ip.startsWith("172.26.") || ip.startsWith("172.27.") ||
+    ip.startsWith("172.28.") || ip.startsWith("172.29.") || ip.startsWith("172.30.") ||
+    ip.startsWith("172.31.") ||
+    ip.startsWith("192.168.") ||
+    ip.startsWith("169.254.") ||
+    ip === "127.0.0.1"
+  );
+};
+
+/**
+ * Run a single WebRTC probe to discover IPs from ICE candidates.
+ * @param {Array} iceServers - ICE server config (empty = no STUN, local candidates only)
+ */
+const probeWebRTC = (iceServers) => {
   return new Promise((resolve) => {
     const ips = new Set();
-    const timeout = setTimeout(() => {
+    let pc;
+
+    const finish = () => {
       try { pc.close(); } catch (e) { /* ignore */ }
       resolve([...ips]);
-    }, 3000);
+    };
+
+    const timeout = setTimeout(finish, 2000);
 
     try {
       if (!window.RTCPeerConnection) {
@@ -44,37 +62,26 @@ const getLocalIPs = () => {
         return;
       }
 
-      const pc = new RTCPeerConnection({
-        iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
-      });
-
+      pc = new RTCPeerConnection({ iceServers });
       pc.createDataChannel("");
 
       pc.onicecandidate = (event) => {
         if (!event.candidate) {
           clearTimeout(timeout);
-          pc.close();
-          resolve([...ips]);
+          finish();
           return;
         }
 
         const candidate = event.candidate.candidate;
-        // Extract IPv4 addresses from ICE candidates
-        const ipMatch = candidate.match(
-          /(?:[\d]{1,3}\.){3}[\d]{1,3}/
-        );
-        if (ipMatch) {
-          const ip = ipMatch[0];
-          // Filter out 0.0.0.0 and obvious non-local IPs
-          if (ip !== "0.0.0.0") {
-            ips.add(ip);
-          }
+
+        // Extract IPv4 addresses
+        const ipMatch = candidate.match(/(?:[\d]{1,3}\.){3}[\d]{1,3}/);
+        if (ipMatch && ipMatch[0] !== "0.0.0.0") {
+          ips.add(ipMatch[0]);
         }
 
-        // Also try to extract IPv6 addresses
-        const ipv6Match = candidate.match(
-          /([a-f0-9]{1,4}(:[a-f0-9]{1,4}){7})/i
-        );
+        // Extract IPv6 addresses
+        const ipv6Match = candidate.match(/([a-f0-9]{1,4}(:[a-f0-9]{1,4}){7})/i);
         if (ipv6Match) {
           ips.add(ipv6Match[0]);
         }
@@ -84,8 +91,7 @@ const getLocalIPs = () => {
         .then((offer) => pc.setLocalDescription(offer))
         .catch(() => {
           clearTimeout(timeout);
-          try { pc.close(); } catch (e) { /* ignore */ }
-          resolve([...ips]);
+          finish();
         });
     } catch (e) {
       clearTimeout(timeout);
@@ -94,11 +100,130 @@ const getLocalIPs = () => {
   });
 };
 
-// Cache local IPs since WebRTC detection is async
-let cachedLocalIPs = null;
+/**
+ * Detect client's local/internal IPs using WebRTC ICE candidates.
+ *
+ * Strategy:
+ * 1. First probe WITHOUT STUN server → gets "host" candidates (local IPs)
+ *    Modern Chrome uses mDNS for these, so they may not contain real IPs.
+ * 2. Then probe WITH STUN server → gets "srflx" candidates (public IP)
+ * 3. Filter: only keep private/internal IPs (192.168.x.x, 10.x.x.x, etc.)
+ *    Discard any public IPs since those are already detected via HTTP headers.
+ *
+ * Note: Modern Chrome (76+) hides local IPs with mDNS obfuscation.
+ * This will only return real local IPs if the browser allows it.
+ */
+const getLocalIPs = async () => {
+  try {
+    if (!window.RTCPeerConnection) return [];
+
+    // Probe 1: No STUN — gets host candidates (best chance for local IPs)
+    const noStunIPs = await probeWebRTC([]);
+
+    // Probe 2: With STUN — gets additional candidates
+    const stunIPs = await probeWebRTC([
+      { urls: "stun:stun.l.google.com:19302" },
+    ]);
+
+    // Merge all discovered IPs
+    const allIPs = new Set([...noStunIPs, ...stunIPs]);
+
+    // Only keep private/internal IPs — public IPs are already detected via headers
+    const privateIPs = [...allIPs].filter(isPrivateIP);
+
+    return privateIPs;
+  } catch (e) {
+    return [];
+  }
+};
+
+// Local agent port — must match local-agent.js
+const LOCAL_AGENT_PORT = 9876;
+const LOCAL_AGENT_URL = `http://localhost:${LOCAL_AGENT_PORT}`;
+
+// Track local agent access state
+let localAgentAccessDenied = false;
+let localAgentRetryCallback = null;
 
 /**
- * Get cached local IPs or detect them
+ * Try to fetch local network info from the FTD Local Agent.
+ * The agent is a tiny Node.js server running on the user's machine
+ * that exposes hostname, username, and local IPs.
+ * Returns null if the agent is not running or access is denied.
+ */
+const fetchFromLocalAgent = async () => {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 1500);
+
+    const res = await fetch(LOCAL_AGENT_URL, {
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+
+    if (!res.ok) return null;
+    const data = await res.json();
+
+    // Access was granted — clear denial state
+    localAgentAccessDenied = false;
+    return data;
+  } catch (e) {
+    // Check if this looks like a Private Network Access denial
+    // (Chrome blocks the request entirely, resulting in a TypeError)
+    if (e.name === "TypeError" || e.message?.includes("Failed to fetch")) {
+      localAgentAccessDenied = true;
+    }
+    return null;
+  }
+};
+
+/**
+ * Check if local agent access was denied by the browser.
+ */
+export const isLocalAgentDenied = () => localAgentAccessDenied;
+
+/**
+ * Register a callback that fires when a retry of local agent access is needed.
+ * The UI component (e.g., MainLayout) calls this to show a permission banner.
+ */
+export const onLocalAgentRetryNeeded = (callback) => {
+  localAgentRetryCallback = callback;
+};
+
+/**
+ * Retry fetching from local agent. Call this when the user clicks "Allow" or "Retry".
+ * This triggers a new fetch which will prompt Chrome's Private Network Access dialog.
+ */
+export const retryLocalAgentAccess = async () => {
+  // Clear cached data so it re-fetches
+  cachedLocalIPs = null;
+  cachedLocalAgentData = null;
+  try {
+    sessionStorage.removeItem(LOCAL_IPS_KEY);
+    sessionStorage.removeItem("ftd_local_agent");
+  } catch (e) { /* ignore */ }
+
+  // Re-attempt detection
+  const ips = await getClientLocalIPs();
+
+  if (ips && ips.length > 0) {
+    localAgentAccessDenied = false;
+    return true; // Success
+  }
+  return false; // Still denied or agent not running
+};
+
+// Cache local IPs and agent data since detection is async
+let cachedLocalIPs = null;
+let cachedLocalAgentData = null;
+
+/**
+ * Get cached local IPs or detect them.
+ *
+ * Strategy:
+ * 1. Try FTD Local Agent (most reliable — gives real local IPs + hostname)
+ * 2. Fall back to WebRTC (blocked by modern Chrome mDNS obfuscation)
+ * 3. Cache result in sessionStorage
  */
 const getClientLocalIPs = async () => {
   if (cachedLocalIPs) return cachedLocalIPs;
@@ -107,12 +232,31 @@ const getClientLocalIPs = async () => {
   try {
     const stored = sessionStorage.getItem(LOCAL_IPS_KEY);
     if (stored) {
-      cachedLocalIPs = JSON.parse(stored);
-      return cachedLocalIPs;
+      const parsed = JSON.parse(stored);
+      if (parsed && parsed.length > 0) {
+        cachedLocalIPs = parsed;
+        return cachedLocalIPs;
+      }
     }
   } catch (e) { /* ignore */ }
 
-  // Detect via WebRTC
+  // Strategy 1: Try local agent (gives real local IPs)
+  const agentData = await fetchFromLocalAgent();
+  if (agentData && agentData.ips) {
+    cachedLocalAgentData = agentData;
+    const ips = agentData.ips.ipv4?.map((i) => i.address) || [];
+    if (ips.length > 0) {
+      cachedLocalIPs = ips;
+      try {
+        sessionStorage.setItem(LOCAL_IPS_KEY, JSON.stringify(cachedLocalIPs));
+        // Also store full agent data for the fingerprint
+        sessionStorage.setItem("ftd_local_agent", JSON.stringify(agentData));
+      } catch (e) { /* ignore */ }
+      return cachedLocalIPs;
+    }
+  }
+
+  // Strategy 2: Fall back to WebRTC (usually blocked by Chrome mDNS)
   cachedLocalIPs = await getLocalIPs();
 
   // Cache in sessionStorage
@@ -120,7 +264,37 @@ const getClientLocalIPs = async () => {
     sessionStorage.setItem(LOCAL_IPS_KEY, JSON.stringify(cachedLocalIPs));
   } catch (e) { /* ignore */ }
 
+  // If we still have no local IPs and agent access was denied, notify UI
+  if ((!cachedLocalIPs || cachedLocalIPs.length === 0) && localAgentAccessDenied && localAgentRetryCallback) {
+    localAgentRetryCallback();
+  }
+
   return cachedLocalIPs;
+};
+
+/**
+ * Get full local agent data (hostname, username, platform, IPs).
+ * Returns null if agent is not running.
+ */
+const getLocalAgentData = async () => {
+  if (cachedLocalAgentData) return cachedLocalAgentData;
+
+  try {
+    const stored = sessionStorage.getItem("ftd_local_agent");
+    if (stored) {
+      cachedLocalAgentData = JSON.parse(stored);
+      return cachedLocalAgentData;
+    }
+  } catch (e) { /* ignore */ }
+
+  const data = await fetchFromLocalAgent();
+  if (data) {
+    cachedLocalAgentData = data;
+    try {
+      sessionStorage.setItem("ftd_local_agent", JSON.stringify(data));
+    } catch (e) { /* ignore */ }
+  }
+  return cachedLocalAgentData;
 };
 
 /**
@@ -371,6 +545,9 @@ const collectDeviceInfo = () => {
     // Local IPs (populated async separately)
     localIPs: [],
 
+    // Local agent data (hostname, username — populated async)
+    localAgent: null,
+
     // Collected at
     collectedAt: new Date().toISOString(),
   };
@@ -540,11 +717,13 @@ export const getDeviceFingerprint = async () => {
   const deviceId = await getDeviceId();
   const deviceInfo = collectDeviceInfo();
 
-  // Async: get local IPs via WebRTC
+  // Async: get local IPs (tries local agent first, then WebRTC)
   try {
     deviceInfo.localIPs = await getClientLocalIPs();
+    deviceInfo.localAgent = await getLocalAgentData();
   } catch (e) {
     deviceInfo.localIPs = [];
+    deviceInfo.localAgent = null;
   }
 
   return {
@@ -586,7 +765,7 @@ export const addDeviceFingerprintToHeaders = async (headers = {}) => {
   return headers;
 };
 
-export { getClientLocalIPs };
+export { getClientLocalIPs, getLocalAgentData };
 
 export default {
   getDeviceId,
@@ -594,4 +773,8 @@ export default {
   getDeviceFingerprintHeader,
   addDeviceFingerprintToHeaders,
   getClientLocalIPs,
+  getLocalAgentData,
+  isLocalAgentDenied,
+  onLocalAgentRetryNeeded,
+  retryLocalAgentAccess,
 };

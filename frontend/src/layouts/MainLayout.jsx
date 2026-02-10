@@ -18,6 +18,9 @@ import {
   Divider,
   useTheme,
   useMediaQuery,
+  Alert,
+  Button,
+  CircularProgress,
 } from "@mui/material";
 import {
   Menu as MenuIcon,
@@ -54,6 +57,7 @@ import {
   Payment as PSPIcon,
   CreditCard as CardIssuerIcon,
   Handshake as CrmIcon,
+  Warning as WarningIcon,
 } from "@mui/icons-material";
 import {
   logout,
@@ -78,6 +82,11 @@ import QRCodeLogin from "../components/QRCodeLogin";
 import { Reorder, useDragControls } from "framer-motion";
 import debounce from "lodash.debounce";
 import { loadNavOrder, saveNavOrder, applyNavOrder, loadNavOrderFromCache, clearNavOrderCache } from "../utils/sidebarNavOrder";
+import {
+  isLocalAgentDenied,
+  onLocalAgentRetryNeeded,
+  retryLocalAgentAccess,
+} from "../utils/deviceFingerprint";
 const drawerWidth = 150;
 
 const SidebarNavItem = ({ item, isSelected, iconColor, primaryColor, onNavigate }) => {
@@ -151,6 +160,45 @@ const MainLayout = () => {
   const [show2FADialog, setShow2FADialog] = useState(false);
   const [showQRDialog, setShowQRDialog] = useState(false);
   const [twoFactorError, setTwoFactorError] = useState('');
+  const [showAgentBanner, setShowAgentBanner] = useState(false);
+  const [agentRetrying, setAgentRetrying] = useState(false);
+
+  // Local agent permission banner — keeps re-prompting until user grants access
+  useEffect(() => {
+    // Register callback so deviceFingerprint.js can notify us when access is denied
+    onLocalAgentRetryNeeded(() => {
+      setShowAgentBanner(true);
+    });
+
+    // Check on mount if access is already denied
+    if (isLocalAgentDenied()) {
+      setShowAgentBanner(true);
+    }
+  }, []);
+
+  // Auto-retry every 15 seconds if the banner is showing
+  useEffect(() => {
+    if (!showAgentBanner) return;
+    const interval = setInterval(async () => {
+      const success = await retryLocalAgentAccess();
+      if (success) {
+        setShowAgentBanner(false);
+      }
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [showAgentBanner]);
+
+  const handleAgentRetry = async () => {
+    setAgentRetrying(true);
+    try {
+      const success = await retryLocalAgentAccess();
+      if (success) {
+        setShowAgentBanner(false);
+      }
+    } finally {
+      setAgentRetrying(false);
+    }
+  };
 
   // Handle 2FA/QR Dialog visibility based on Redux state
   useEffect(() => {
@@ -963,6 +1011,37 @@ const MainLayout = () => {
         }}
       >
         <Box sx={{ minHeight: 42 }} />
+        {/* Local Agent Permission Banner */}
+        {showAgentBanner && (
+          <Alert
+            severity="warning"
+            icon={<WarningIcon />}
+            sx={{
+              borderRadius: 0,
+              py: 1,
+              px: 2,
+              alignItems: "center",
+              "& .MuiAlert-message": { width: "100%" },
+            }}
+            action={
+              <Button
+                color="warning"
+                variant="contained"
+                size="small"
+                onClick={handleAgentRetry}
+                disabled={agentRetrying}
+                startIcon={agentRetrying ? <CircularProgress size={16} color="inherit" /> : null}
+                sx={{ whiteSpace: "nowrap" }}
+              >
+                {agentRetrying ? "Checking..." : "Grant Access"}
+              </Button>
+            }
+          >
+            <Typography variant="body2" sx={{ fontWeight: 500 }}>
+              Local network access is required for security verification. Please click "Grant Access" and allow the connection when prompted by your browser.
+            </Typography>
+          </Alert>
+        )}
         <Box
           component="div"
           sx={{
