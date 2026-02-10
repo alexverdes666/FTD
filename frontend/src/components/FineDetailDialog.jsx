@@ -193,29 +193,29 @@ const FineDetailDialog = ({ open, onClose, fine, onFineUpdated }) => {
     setError(null);
   };
 
-  const handleAdminApprove = async () => {
+  const handleApproveDispute = async () => {
     setLoading(true);
     setError(null);
     try {
-      const updatedFine = await adminDecideFine(fine._id, 'approved', adminNotes);
+      const updatedFine = await adminDecideFine(fine._id, 'approve_dispute', adminNotes);
       onFineUpdated(updatedFine);
       onClose();
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to approve disputed fine');
+      setError(err.response?.data?.message || 'Failed to approve dispute');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleAdminReject = async () => {
+  const handleRejectDispute = async () => {
     setLoading(true);
     setError(null);
     try {
-      const updatedFine = await adminDecideFine(fine._id, 'rejected', adminNotes);
+      const updatedFine = await adminDecideFine(fine._id, 'reject_dispute', adminNotes);
       onFineUpdated(updatedFine);
       onClose();
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to reject disputed fine');
+      setError(err.response?.data?.message || 'Failed to reject dispute');
     } finally {
       setLoading(false);
     }
@@ -480,8 +480,15 @@ const FineDetailDialog = ({ open, onClose, fine, onFineUpdated }) => {
                 <Grid item xs={12} md={6}>
                   <Typography variant="subtitle2" color="text.secondary">Decision</Typography>
                   <Chip
-                    label={fine.adminDecision.action === 'approved' ? 'Approved' : 'Rejected'}
-                    color={fine.adminDecision.action === 'approved' ? 'success' : 'default'}
+                    label={
+                      fine.adminDecision.action === 'approve_dispute' ? 'Dispute Approved (Fine Dropped)' :
+                      fine.adminDecision.action === 'reject_dispute' ? 'Dispute Rejected (Fine Stands)' :
+                      fine.adminDecision.action === 'rejected' ? 'Dispute Approved (Fine Dropped)' :
+                      'Dispute Rejected (Fine Stands)'
+                    }
+                    color={
+                      ['approve_dispute', 'rejected'].includes(fine.adminDecision.action) ? 'success' : 'error'
+                    }
                     size="small"
                   />
                 </Grid>
@@ -668,20 +675,20 @@ const FineDetailDialog = ({ open, onClose, fine, onFineUpdated }) => {
                   <Button
                     variant="contained"
                     color="success"
-                    onClick={handleAdminApprove}
+                    onClick={handleApproveDispute}
                     disabled={loading}
                     startIcon={loading ? <CircularProgress size={16} /> : <CheckIcon />}
                   >
-                    Approve Fine
+                    Approve Dispute (Drop Fine)
                   </Button>
                   <Button
                     variant="contained"
                     color="error"
-                    onClick={handleAdminReject}
+                    onClick={handleRejectDispute}
                     disabled={loading}
                     startIcon={loading ? <CircularProgress size={16} /> : <CloseIcon />}
                   >
-                    Reject Fine
+                    Reject Dispute (Keep Fine)
                   </Button>
                   <Button
                     variant="outlined"

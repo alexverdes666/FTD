@@ -62,7 +62,7 @@ const agentFineSchema = new mongoose.Schema(
     adminDecision: {
       action: {
         type: String,
-        enum: ["approved", "rejected"]
+        enum: ["approved", "rejected", "approve_dispute", "reject_dispute"]
       },
       notes: {
         type: String,

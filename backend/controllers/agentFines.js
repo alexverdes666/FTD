@@ -531,10 +531,10 @@ const adminDecideFine = async (req, res) => {
     }
 
     // Validate action
-    if (!["approved", "rejected"].includes(action)) {
+    if (!["approve_dispute", "reject_dispute"].includes(action)) {
       return res.status(400).json({
         success: false,
-        message: "Invalid action. Must be 'approved' or 'rejected'",
+        message: "Invalid action. Must be 'approve_dispute' or 'reject_dispute'",
       });
     }
 
@@ -546,8 +546,9 @@ const adminDecideFine = async (req, res) => {
       decidedAt: new Date(),
     };
 
-    // Update status based on admin decision
-    fine.status = action === "approved" ? "admin_approved" : "admin_rejected";
+    // approve_dispute = agent was right, fine is dropped (admin_rejected)
+    // reject_dispute = agent was wrong, fine stands (admin_approved)
+    fine.status = action === "reject_dispute" ? "admin_approved" : "admin_rejected";
 
     await fine.save();
 
@@ -559,9 +560,9 @@ const adminDecideFine = async (req, res) => {
 
     res.json({
       success: true,
-      message: action === "approved"
-        ? "Disputed fine approved by admin"
-        : "Disputed fine rejected by admin",
+      message: action === "approve_dispute"
+        ? "Dispute approved - fine has been dropped"
+        : "Dispute rejected - fine still stands",
       data: fine,
     });
   } catch (error) {

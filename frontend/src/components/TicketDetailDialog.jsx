@@ -298,9 +298,7 @@ const TicketDetailDialog = ({
 
     try {
       setDecidingFine(true);
-      // "approve" the dispute = reject the fine (fine is dropped)
-      // "reject" the dispute = approve the fine (fine stands)
-      const apiAction = decision === 'approve' ? 'rejected' : 'approved';
+      const apiAction = decision === 'approve' ? 'approve_dispute' : 'reject_dispute';
       await adminDecideFine(ticket.relatedFine._id, apiAction, decisionNotes || null);
 
       toast.success(
@@ -662,7 +660,7 @@ const TicketDetailDialog = ({
                             onClick={() => setShowDecisionNotes('approve')}
                             sx={{ textTransform: 'none', borderRadius: 1.5, fontSize: '0.75rem', py: 0.5, flex: 1 }}
                           >
-                            Approve Dispute
+                            Approve Dispute (Drop Fine)
                           </Button>
                           <Button
                             variant="contained"
@@ -672,7 +670,7 @@ const TicketDetailDialog = ({
                             onClick={() => setShowDecisionNotes('reject')}
                             sx={{ textTransform: 'none', borderRadius: 1.5, fontSize: '0.75rem', py: 0.5, flex: 1 }}
                           >
-                            Reject Dispute
+                            Reject Dispute (Keep Fine)
                           </Button>
                         </Stack>
                       )}
