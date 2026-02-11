@@ -383,6 +383,180 @@ const buildIPQSTooltip = (validation, type) => {
   }
 };
 
+// ── Hoisted sx constants (stable references, no re-creation per render) ──
+const ROW_CELL_HIDDEN_MD = { display: { xs: "none", md: "table-cell" } };
+const ROW_CELL_HIDDEN_SM = { display: { xs: "none", sm: "table-cell" } };
+const CELL_FONT_SMALL = { fontSize: "0.75rem" };
+const CELL_FONT_TINY = { fontSize: "0.6rem" };
+const ID_CELL_SX = { fontFamily: "monospace", color: "primary.dark", fontWeight: 500, fontSize: "0.75rem" };
+const REQUESTER_BOX_SX = { display: "flex", alignItems: "center", justifyContent: "center", gap: 0.5, "&:hover .edit-requester-icon": { opacity: 1 } };
+const REQUESTER_NAME_SX = { maxWidth: "100%", fontSize: "0.75rem" };
+const EDIT_REQUESTER_BTN_SX = { opacity: 0, transition: "opacity 0.2s", p: 0.25 };
+const EDIT_ICON_SX = { fontSize: 13 };
+const FULFILLMENT_BOX_SX = { display: "flex", justifyContent: "center", gap: 0.5 };
+const FULFILLMENT_ITEM_SX = { display: "flex", flexDirection: "column", alignItems: "center", minWidth: 32 };
+const PROGRESS_BAR_BG_SX = { width: "100%", height: 2.5, bgcolor: "grey.200", borderRadius: 1, mt: 0.2, overflow: "hidden" };
+const CHIP_BASE_SX = { textTransform: "capitalize", fontWeight: 600, height: 20, fontSize: "0.68rem", "& .MuiChip-label": { px: 0.75 } };
+const TOOLTIP_WIDE_SX = { tooltip: { sx: { maxWidth: 400, fontSize: "0.875rem" } } };
+const ACTION_BTN_PRIMARY_SX = { p: 0.35, "&:hover": { color: "primary.main", bgcolor: (theme) => alpha(theme.palette.primary.main, 0.08) } };
+const ACTION_BTN_INFO_SX = { p: 0.35, "&:hover": { color: "info.main", bgcolor: (theme) => alpha(theme.palette.info.main, 0.08) } };
+const ICON_16_SX = { fontSize: 16 };
+const ICON_18_SX = { fontSize: 18 };
+const ACTIONS_BOX_SX = { display: "flex", flexDirection: "row", gap: 0, justifyContent: "flex-end", alignItems: "center" };
+const DIVIDER_SX = { mx: 0.15, my: 0.5 };
+const ROW_BORDER_SX = { "& td": { borderColor: "grey.100" } };
+
+// ── Memoized OrderRow component ──
+const OrderRow = React.memo(({
+  order,
+  orderPanelId,
+  user,
+  onPreviewLeads,
+  onCopyLeads,
+  onOpenAudit,
+  onOpenPanel,
+  onChangeRequester,
+}) => {
+  const isSelected = orderPanelId === order._id;
+
+  const rowSx = useMemo(() => isSelected ? {
+    ...ROW_BORDER_SX,
+    bgcolor: (theme) => `${alpha(theme.palette.success.main, 0.18)} !important`,
+    "&:hover": { bgcolor: (theme) => `${alpha(theme.palette.success.main, 0.25)} !important` },
+  } : ROW_BORDER_SX, [isSelected]);
+
+  const fulfillmentItems = useMemo(() => [
+    { fulfilled: order.fulfilled?.ftd || 0, requested: order.requests?.ftd || 0, label: "FTD", color: "#3b82f6" },
+    { fulfilled: order.fulfilled?.filler || 0, requested: order.requests?.filler || 0, label: "Filler", color: "#f59e0b" },
+    { fulfilled: order.fulfilled?.cold || 0, requested: order.requests?.cold || 0, label: "Cold", color: "#8b5cf6" },
+  ].filter(item => item.requested > 0), [order.fulfilled, order.requests]);
+
+  const statusTooltip = useMemo(() => {
+    if (order.status === "cancelled" && order.cancellationReason) {
+      const parts = order.cancellationReason.split(" | ");
+      return `Cancellation Details: ${parts.length > 1 ? parts.length + " issues found" : order.cancellationReason}`;
+    }
+    if (order.status === "partial" && order.partialFulfillmentReason) {
+      const parts = order.partialFulfillmentReason.split(" | ");
+      return `Partial Fulfillment: ${parts.length > 1 ? parts.length + " lead types affected" : order.partialFulfillmentReason}`;
+    }
+    return "";
+  }, [order.status, order.cancellationReason, order.partialFulfillmentReason]);
+
+  return (
+    <React.Fragment>
+      <TableRow hover={!isSelected} sx={rowSx}>
+        <TableCell>
+          <Typography noWrap sx={ID_CELL_SX}>
+            {order._id.slice(-8)}
+          </Typography>
+        </TableCell>
+        <TableCell align="center" sx={ROW_CELL_HIDDEN_MD}>
+          <Box sx={REQUESTER_BOX_SX}>
+            <Typography noWrap sx={REQUESTER_NAME_SX}>
+              {order.requester?.fullName}
+            </Typography>
+            {user?.role === "admin" && (
+              <IconButton
+                className="edit-requester-icon"
+                size="small"
+                onClick={(e) => { e.stopPropagation(); onChangeRequester(order); }}
+                title="Change Requester"
+                sx={EDIT_REQUESTER_BTN_SX}
+              >
+                <EditIcon sx={EDIT_ICON_SX} />
+              </IconButton>
+            )}
+          </Box>
+        </TableCell>
+        <TableCell align="center" sx={ROW_CELL_HIDDEN_MD}>
+          <Typography noWrap sx={CELL_FONT_SMALL}>
+            {order.selectedClientNetwork?.name || "-"}
+          </Typography>
+        </TableCell>
+        <TableCell align="center" sx={ROW_CELL_HIDDEN_MD}>
+          <Typography noWrap sx={CELL_FONT_SMALL}>
+            {order.selectedOurNetwork?.name || "-"}
+          </Typography>
+        </TableCell>
+        <TableCell align="center">
+          <Box sx={FULFILLMENT_BOX_SX}>
+            {fulfillmentItems.map((item, idx) => {
+              const pct = Math.min((item.fulfilled / item.requested) * 100, 100);
+              return (
+                <Tooltip key={idx} title={`${item.label}: ${item.fulfilled}/${item.requested}`} arrow placement="top">
+                  <Box sx={FULFILLMENT_ITEM_SX}>
+                    <Typography variant="caption" sx={{ ...CELL_FONT_TINY, fontWeight: 600, color: item.color, lineHeight: 1 }}>
+                      {item.fulfilled}/{item.requested}
+                    </Typography>
+                    <Box sx={PROGRESS_BAR_BG_SX}>
+                      <Box sx={{ width: `${pct}%`, height: "100%", bgcolor: item.color, borderRadius: 1, transition: "width 0.3s ease" }} />
+                    </Box>
+                  </Box>
+                </Tooltip>
+              );
+            })}
+          </Box>
+        </TableCell>
+        <TableCell align="center">
+          <Tooltip title={statusTooltip} placement="top" arrow componentsProps={TOOLTIP_WIDE_SX}>
+            <Chip
+              label={order.status}
+              variant="outlined"
+              size="small"
+              sx={{ ...CHIP_BASE_SX, ...getStatusChipSx(order.status) }}
+            />
+          </Tooltip>
+        </TableCell>
+        <TableCell align="center" sx={ROW_CELL_HIDDEN_SM}>
+          <Typography noWrap sx={CELL_FONT_SMALL}>
+            {order.countryFilter || "Any"}
+          </Typography>
+        </TableCell>
+        <TableCell align="center" sx={ROW_CELL_HIDDEN_SM}>
+          <Chip
+            label={order.priority}
+            variant="outlined"
+            size="small"
+            sx={{ ...CHIP_BASE_SX, ...getPriorityChipSx(order.priority) }}
+          />
+        </TableCell>
+        <TableCell align="center" sx={ROW_CELL_HIDDEN_SM}>
+          <Typography noWrap sx={CELL_FONT_SMALL}>
+            {order.plannedDate ? new Date(order.plannedDate).toLocaleDateString() : "N/A"}
+          </Typography>
+        </TableCell>
+        <TableCell align="right">
+          <Box sx={ACTIONS_BOX_SX}>
+            <Tooltip title="Preview Leads" arrow>
+              <IconButton size="small" onClick={(e) => { e.stopPropagation(); onPreviewLeads(order._id); }} sx={ACTION_BTN_PRIMARY_SX}>
+                <ViewIcon sx={ICON_16_SX} />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Copy Leads to Clipboard" arrow>
+              <IconButton size="small" onClick={(e) => { e.stopPropagation(); onCopyLeads(order._id); }} sx={ACTION_BTN_INFO_SX}>
+                <ContentCopyIcon sx={ICON_16_SX} />
+              </IconButton>
+            </Tooltip>
+            <Divider orientation="vertical" flexItem sx={DIVIDER_SX} />
+            <Tooltip title="View Audit Log" arrow>
+              <IconButton size="small" onClick={(e) => { e.stopPropagation(); onOpenAudit(order); }} sx={ACTION_BTN_INFO_SX}>
+                <HistoryIcon sx={ICON_16_SX} />
+              </IconButton>
+            </Tooltip>
+            <Divider orientation="vertical" flexItem sx={DIVIDER_SX} />
+            <Tooltip title="View Order Details" arrow>
+              <IconButton size="small" onClick={(e) => { e.stopPropagation(); onOpenPanel(order._id); }} sx={ACTION_BTN_PRIMARY_SX}>
+                <ChevronRightIcon sx={ICON_18_SX} />
+              </IconButton>
+            </Tooltip>
+          </Box>
+        </TableCell>
+      </TableRow>
+    </React.Fragment>
+  );
+});
+
 const OrdersPage = () => {
   const user = useSelector(selectUser);
   const theme = useTheme();
@@ -486,6 +660,8 @@ const OrdersPage = () => {
     leads: [],
     orderId: null,
     order: null,
+    loading: false,
+    enriching: false,
   });
 
   // IPQS validation success state (tracks leadIds that were just successfully validated)
@@ -755,11 +931,11 @@ const OrdersPage = () => {
     });
   }, []);
 
-  const handleOpenChangeRequester = (order) => {
+  const handleOpenChangeRequester = useCallback((order) => {
     setSelectedOrderForRequester(order);
     setSelectedNewRequester(null);
     setChangeRequesterOpen(true);
-  };
+  }, []);
 
 
   const handleSubmitChangeRequester = async () => {
@@ -2442,11 +2618,13 @@ const OrdersPage = () => {
       leads: leads || [],
       orderId: orderId,
       order: order || null,
+      loading: false,
+      enriching: false,
     });
   }, []);
 
   const handleCloseLeadsPreviewModal = useCallback(() => {
-    setLeadsPreviewModal({ open: false, leads: [], orderId: null, order: null });
+    setLeadsPreviewModal({ open: false, leads: [], orderId: null, order: null, loading: false, enriching: false });
     setPreviewActionsMenu({ anchorEl: null, lead: null });
     setLeadRemovalMode(false);
     setSelectedLeadsForRemoval([]);
@@ -3029,18 +3207,46 @@ const OrdersPage = () => {
 
   const handlePreviewOrderLeads = useCallback(
     async (orderId) => {
+      // Phase 1: Open modal instantly with data already in memory
+      const existingOrder = orders.find((o) => o._id === orderId);
+      setLeadsPreviewModal({
+        open: true,
+        leads: existingOrder?.leads || [],
+        orderId: orderId,
+        order: existingOrder || null,
+        loading: !existingOrder,
+        enriching: true,
+      });
+
+      // Phase 2: Fetch full data in background (includes documents, IPQS, networks, etc.)
       try {
         const response = await api.get(`/orders/${orderId}`);
         const orderData = response.data.data;
-        handleOpenLeadsPreviewModal(orderData.leads || [], orderId, orderData);
-      } catch (err) {
-        setNotification({
-          message: "Could not load order leads for preview.",
-          severity: "error",
+        setLeadsPreviewModal((prev) => {
+          if (!prev.open || prev.orderId !== orderId) return prev;
+          return {
+            ...prev,
+            leads: orderData.leads || [],
+            order: orderData,
+            loading: false,
+            enriching: false,
+          };
         });
+      } catch (err) {
+        setLeadsPreviewModal((prev) => {
+          if (!prev.open || prev.orderId !== orderId) return prev;
+          return { ...prev, loading: false, enriching: false };
+        });
+        if (!existingOrder) {
+          setLeadsPreviewModal((prev) => ({ ...prev, open: false }));
+          setNotification({
+            message: "Could not load order leads for preview.",
+            severity: "error",
+          });
+        }
       }
     },
-    [handleOpenLeadsPreviewModal]
+    [orders]
   );
 
   // Open leads preview when navigated from external page (e.g., broker profile)
@@ -5135,224 +5341,19 @@ const OrdersPage = () => {
                   </TableCell>
                 </TableRow>
               ) : (
-                orders.map((order) => {
-                  return (
-                    <React.Fragment key={order._id}>
-                      <TableRow
-                        hover={orderPanelId !== order._id}
-                        sx={{
-                          "& td": { borderColor: "grey.100" },
-                          ...(orderPanelId === order._id && {
-                            bgcolor: (theme) => `${alpha(theme.palette.success.main, 0.18)} !important`,
-                            "&:hover": { bgcolor: (theme) => `${alpha(theme.palette.success.main, 0.25)} !important` },
-                          }),
-                        }}
-                      >
-                        <TableCell>
-                          <Typography noWrap sx={{ fontFamily: "monospace", color: "primary.dark", fontWeight: 500, fontSize: "0.75rem" }}>
-                            {order._id.slice(-8)}
-                          </Typography>
-                        </TableCell>
-                        <TableCell
-                          align="center"
-                          sx={{ display: { xs: "none", md: "table-cell" } }}
-                        >
-                          <Box
-                            sx={{
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              gap: 0.5,
-                              "&:hover .edit-requester-icon": {
-                                opacity: 1,
-                              },
-                            }}
-                          >
-                            <Typography
-                              noWrap
-                              sx={{ maxWidth: "100%", fontSize: "0.75rem" }}
-                            >
-                              {order.requester?.fullName}
-                            </Typography>
-                            {user?.role === "admin" && (
-                              <IconButton
-                                className="edit-requester-icon"
-                                size="small"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleOpenChangeRequester(order);
-                                }}
-                                title="Change Requester"
-                                sx={{
-                                  opacity: 0,
-                                  transition: "opacity 0.2s",
-                                  p: 0.25,
-                                }}
-                              >
-                                <EditIcon sx={{ fontSize: 13 }} />
-                              </IconButton>
-                            )}
-                          </Box>
-                        </TableCell>
-                        <TableCell
-                          align="center"
-                          sx={{ display: { xs: "none", md: "table-cell" } }}
-                        >
-                          <Typography noWrap sx={{ fontSize: "0.75rem" }}>
-                            {order.selectedClientNetwork?.name || "-"}
-                          </Typography>
-                        </TableCell>
-                        <TableCell
-                          align="center"
-                          sx={{ display: { xs: "none", md: "table-cell" } }}
-                        >
-                          <Typography noWrap sx={{ fontSize: "0.75rem" }}>
-                            {order.selectedOurNetwork?.name || "-"}
-                          </Typography>
-                        </TableCell>
-                        <TableCell align="center">
-                          <Box sx={{ display: "flex", justifyContent: "center", gap: 0.5 }}>
-                            {[
-                              { fulfilled: order.fulfilled?.ftd || 0, requested: order.requests?.ftd || 0, label: "FTD", color: "#3b82f6" },
-                              { fulfilled: order.fulfilled?.filler || 0, requested: order.requests?.filler || 0, label: "Filler", color: "#f59e0b" },
-                              { fulfilled: order.fulfilled?.cold || 0, requested: order.requests?.cold || 0, label: "Cold", color: "#8b5cf6" },
-                            ].map((item, idx) => {
-                              if (item.requested === 0) return null;
-                              const pct = item.requested > 0 ? Math.min((item.fulfilled / item.requested) * 100, 100) : 0;
-                              return (
-                                <Tooltip key={idx} title={`${item.label}: ${item.fulfilled}/${item.requested}`} arrow placement="top">
-                                  <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", minWidth: 32 }}>
-                                    <Typography variant="caption" sx={{ fontSize: "0.6rem", fontWeight: 600, color: item.color, lineHeight: 1 }}>
-                                      {item.fulfilled}/{item.requested}
-                                    </Typography>
-                                    <Box sx={{ width: "100%", height: 2.5, bgcolor: "grey.200", borderRadius: 1, mt: 0.2, overflow: "hidden" }}>
-                                      <Box sx={{ width: `${pct}%`, height: "100%", bgcolor: item.color, borderRadius: 1, transition: "width 0.3s ease" }} />
-                                    </Box>
-                                  </Box>
-                                </Tooltip>
-                              );
-                            })}
-                          </Box>
-                        </TableCell>
-                        <TableCell align="center">
-                          <Tooltip
-                            title={
-                              order.status === "cancelled" &&
-                              order.cancellationReason
-                                ? `Cancellation Details: ${
-                                    order.cancellationReason.split(" | ")
-                                      .length > 1
-                                      ? order.cancellationReason.split(" | ")
-                                          .length + " issues found"
-                                      : order.cancellationReason
-                                  }`
-                                : order.status === "partial" &&
-                                  order.partialFulfillmentReason
-                                ? `Partial Fulfillment: ${
-                                    order.partialFulfillmentReason.split(" | ")
-                                      .length > 1
-                                      ? order.partialFulfillmentReason.split(
-                                          " | "
-                                        ).length + " lead types affected"
-                                      : order.partialFulfillmentReason
-                                  }`
-                                : ""
-                            }
-                            placement="top"
-                            arrow
-                            componentsProps={{
-                              tooltip: {
-                                sx: {
-                                  maxWidth: 400,
-                                  fontSize: "0.875rem",
-                                },
-                              },
-                            }}
-                          >
-                            <Chip
-                              label={order.status}
-                              variant="outlined"
-                              size="small"
-                              sx={{ textTransform: "capitalize", fontWeight: 600, height: 20, fontSize: "0.68rem", "& .MuiChip-label": { px: 0.75 }, ...getStatusChipSx(order.status) }}
-                            />
-                          </Tooltip>
-                        </TableCell>
-                        <TableCell
-                          align="center"
-                          sx={{ display: { xs: "none", sm: "table-cell" } }}
-                        >
-                          <Typography noWrap sx={{ fontSize: "0.75rem" }}>
-                            {order.countryFilter || "Any"}
-                          </Typography>
-                        </TableCell>
-                        <TableCell
-                          align="center"
-                          sx={{ display: { xs: "none", sm: "table-cell" } }}
-                        >
-                          <Chip
-                            label={order.priority}
-                            variant="outlined"
-                            size="small"
-                            sx={{ textTransform: "capitalize", fontWeight: 600, height: 20, fontSize: "0.68rem", "& .MuiChip-label": { px: 0.75 }, ...getPriorityChipSx(order.priority) }}
-                          />
-                        </TableCell>
-                        <TableCell
-                          align="center"
-                          sx={{ display: { xs: "none", sm: "table-cell" } }}
-                        >
-                          <Typography noWrap sx={{ fontSize: "0.75rem" }}>
-                            {order.plannedDate
-                              ? new Date(order.plannedDate).toLocaleDateString()
-                              : "N/A"}
-                          </Typography>
-                        </TableCell>
-                        <TableCell align="right">
-                          <Box display="flex" flexDirection="row" gap={0} justifyContent="flex-end" alignItems="center">
-                            <Tooltip title="Preview Leads" arrow>
-                              <IconButton
-                                size="small"
-                                onClick={(e) => { e.stopPropagation(); handlePreviewOrderLeads(order._id); }}
-                                sx={{ p: 0.35, "&:hover": { color: "primary.main", bgcolor: (theme) => alpha(theme.palette.primary.main, 0.08) } }}
-                              >
-                                <ViewIcon sx={{ fontSize: 16 }} />
-                              </IconButton>
-                            </Tooltip>
-                            <Tooltip title="Copy Leads to Clipboard" arrow>
-                              <IconButton
-                                size="small"
-                                onClick={(e) => { e.stopPropagation(); handleCopyOrderLeadsById(order._id); }}
-                                sx={{ p: 0.35, "&:hover": { color: "info.main", bgcolor: (theme) => alpha(theme.palette.info.main, 0.08) } }}
-                              >
-                                <ContentCopyIcon sx={{ fontSize: 16 }} />
-                              </IconButton>
-                            </Tooltip>
-                            <Divider orientation="vertical" flexItem sx={{ mx: 0.15, my: 0.5 }} />
-                            <Tooltip title="View Audit Log" arrow>
-                              <IconButton
-                                size="small"
-                                onClick={(e) => { e.stopPropagation(); handleOpenOrderAudit(order); }}
-                                sx={{ p: 0.35, "&:hover": { color: "info.main", bgcolor: (theme) => alpha(theme.palette.info.main, 0.08) } }}
-                              >
-                                <HistoryIcon sx={{ fontSize: 16 }} />
-                              </IconButton>
-                            </Tooltip>
-                            <Divider orientation="vertical" flexItem sx={{ mx: 0.15, my: 0.5 }} />
-                            <Tooltip title="View Order Details" arrow>
-                              <IconButton
-                                size="small"
-                                onClick={(e) => { e.stopPropagation(); handleOpenOrderPanel(order._id); }}
-                                sx={{ p: 0.35, "&:hover": { color: "primary.main", bgcolor: (theme) => alpha(theme.palette.primary.main, 0.08) } }}
-                              >
-                                <ChevronRightIcon sx={{ fontSize: 18 }} />
-                              </IconButton>
-                            </Tooltip>
-                          </Box>
-                        </TableCell>
-                      </TableRow>
-                      {/* Order details shown in split-view panel */}
-                    </React.Fragment>
-                  );
-                })
+                orders.map((order) => (
+                    <OrderRow
+                      key={order._id}
+                      order={order}
+                      orderPanelId={orderPanelId}
+                      user={user}
+                      onPreviewLeads={handlePreviewOrderLeads}
+                      onCopyLeads={handleCopyOrderLeadsById}
+                      onOpenAudit={handleOpenOrderAudit}
+                      onOpenPanel={handleOpenOrderPanel}
+                      onChangeRequester={handleOpenChangeRequester}
+                    />
+                  ))
               )}
             </TableBody>
           </Table>
@@ -5958,8 +5959,9 @@ const OrdersPage = () => {
         </Box>
       </Paper>
       {}
+      {createDialogOpen && (
       <Dialog
-        open={createDialogOpen}
+        open
         onClose={() => {
           setCreateDialogOpen(false);
           setFilteredAgents([]);
@@ -7467,245 +7469,45 @@ const OrdersPage = () => {
           </DialogActions>
         </form>
       </Dialog>
-
-      {/* Create New Broker Dialog */}
-      <Dialog
-        open={createBrokerDialog.open}
-        onClose={handleCloseCreateBrokerDialog}
-        maxWidth="sm"
-        fullWidth
-        disableEscapeKeyDown={createBrokerDialog.loading}
-      >
-        <DialogTitle>
-          <Box display="flex" alignItems="center" gap={1}>
-            <AddIcon color="primary" />
-            <Typography variant="h6">Create New Client Broker</Typography>
-          </Box>
-        </DialogTitle>
-        <DialogContent>
-          <CreateBrokerForm
-            onSubmit={handleSubmitNewBroker}
-            loading={createBrokerDialog.loading}
-            onCancel={handleCloseCreateBrokerDialog}
-          />
-        </DialogContent>
-      </Dialog>
-
-      {/* Manage Brokers Dialog */}
-      <Dialog
-        open={manageBrokersDialog.open}
-        onClose={handleCloseManageBrokersDialog}
-        maxWidth="xl"
-        fullWidth
-      >
-        <DialogTitle>
-          <Box
-            display="flex"
-            justifyContent="space-between"
-            alignments="center"
-          >
-            <Box display="flex" alignItems="center" gap={1}>
-              <BusinessIcon color="primary" />
-              <Typography variant="h6">
-                {user?.role === "admin"
-                  ? "Manage Client Brokers"
-                  : "View Client Brokers"}
-              </Typography>
-            </Box>
-            {user?.role === "admin" && (
-              <Button
-                variant="contained"
-                startIcon={<AddIcon />}
-                onClick={handleCreateNewBroker}
-                size="small"
-              >
-                Create New
-              </Button>
-            )}
-          </Box>
-        </DialogTitle>
-        <DialogContent>
-          <BrokerManagementTable
-            brokers={clientBrokers}
-            loading={loadingClientBrokers}
-            onRefresh={fetchClientBrokers}
-            onDelete={handleDeleteBroker}
-            onEdit={handleEditBroker}
-            userRole={user?.role}
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseManageBrokersDialog}>Close</Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Delete Broker Confirmation Dialog */}
-      <Dialog
-        open={deleteBrokerDialog.open}
-        onClose={handleCloseDeleteBrokerDialog}
-        maxWidth="sm"
-        fullWidth
-        disableEscapeKeyDown={deleteBrokerDialog.loading}
-      >
-        <DialogTitle>
-          <Box display="flex" alignItems="center" gap={1}>
-            <DeleteIcon color="error" />
-            <Typography variant="h6">Delete Client Broker</Typography>
-          </Box>
-        </DialogTitle>
-        <DialogContent>
-          {deleteBrokerDialog.broker && (
-            <>
-              <Alert severity="warning" sx={{ mb: 2 }}>
-                <Typography variant="body2">
-                  <strong>Warning:</strong> This action cannot be undone. All
-                  data associated with this broker will be permanently deleted.
-                </Typography>
-              </Alert>
-              <Typography variant="body1" sx={{ mb: 2 }}>
-                Are you sure you want to delete the client broker:
-              </Typography>
-              <Box sx={{ p: 2, bgcolor: "grey.100", borderRadius: 1 }}>
-                <Typography variant="body2" sx={{ fontWeight: "bold" }}>
-                  {deleteBrokerDialog.broker.name}
-                </Typography>
-                {deleteBrokerDialog.broker.domain && (
-                  <Typography variant="body2" color="text.secondary">
-                    Domain: {deleteBrokerDialog.broker.domain}
-                  </Typography>
-                )}
-                <Typography variant="body2" color="text.secondary">
-                  Created:{" "}
-                  {new Date(
-                    deleteBrokerDialog.broker.createdAt
-                  ).toLocaleDateString()}
-                </Typography>
-              </Box>
-            </>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button
-            onClick={handleCloseDeleteBrokerDialog}
-            disabled={deleteBrokerDialog.loading}
-          >
-            Cancel
-          </Button>
-          <Button
-            onClick={handleConfirmDeleteBroker}
-            variant="contained"
-            color="error"
-            startIcon={
-              deleteBrokerDialog.loading ? (
-                <CircularProgress size={16} />
-              ) : (
-                <DeleteIcon />
-              )
-            }
-            disabled={deleteBrokerDialog.loading}
-          >
-            {deleteBrokerDialog.loading ? "Deleting..." : "Delete Broker"}
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Edit Broker Dialog */}
-      <Dialog
-        open={editBrokerDialog.open}
-        onClose={handleCloseEditBrokerDialog}
-        maxWidth="sm"
-        fullWidth
-        disableEscapeKeyDown={editBrokerDialog.loading}
-      >
-        <DialogTitle>
-          <Box display="flex" alignItems="center" gap={1}>
-            <EditIcon color="primary" />
-            <Typography variant="h6">Edit Client Broker</Typography>
-          </Box>
-        </DialogTitle>
-        <DialogContent>
-          <EditBrokerForm
-            broker={editBrokerDialog.broker}
-            onSubmit={handleSubmitEditBroker}
-            loading={editBrokerDialog.loading}
-            onCancel={handleCloseEditBrokerDialog}
-          />
-        </DialogContent>
-      </Dialog>
-
-      {/* Refunds Manager Assignment Modal */}
-      <AssignToRefundsManagerModal
-        open={refundsAssignmentDialog.open}
-        onClose={handleCloseRefundsAssignment}
-        orderId={refundsAssignmentDialog.orderId}
-        onSuccess={handleRefundsAssignmentSuccess}
-      />
-
-      {/* Mark Shaved Dialog */}
-      <MarkShavedDialog
-        open={markShavedDialog.open}
-        lead={markShavedDialog.lead}
-        userRole={user?.role}
-        onClose={handleCloseMarkShavedDialog}
-        onConfirm={handleConfirmMarkAsShaved}
-        loading={markShavedDialog.loading}
-      />
-
-      {/* Client Broker Management Dialog */}
-      <ClientBrokerManagementDialog
-        open={clientBrokerManagementOpen}
-        onClose={handleCloseClientBrokerManagement}
-        order={selectedOrderForManagement}
-        onUpdate={handleClientBrokerManagementUpdate}
-      />
-
-      {/* Change FTD Dialog */}
-      <ChangeFTDDialog
-        open={changeFTDDialog.open}
-        onClose={handleCloseChangeFTDDialog}
-        order={changeFTDDialog.order}
-        lead={changeFTDDialog.lead}
-        onSuccess={handleChangeFTDSuccess}
-      />
-
-      {/* Assign Lead to Agent Dialog */}
-      <AssignLeadToAgentDialog
-        open={assignLeadDialog.open}
-        onClose={handleCloseAssignLeadDialog}
-        lead={assignLeadDialog.lead}
-        onSuccess={handleAssignLeadSuccess}
-      />
+      )}
 
       {/* Replace Lead Dialog */}
+      {replaceLeadDialog.open && (
       <ReplaceLeadDialog
-        open={replaceLeadDialog.open}
+        open
         onClose={handleCloseReplaceLeadDialog}
         order={replaceLeadDialog.order}
         lead={replaceLeadDialog.lead}
         onSuccess={handleReplaceLeadSuccess}
       />
+      )}
 
 
       {/* Remote Browser Dialog */}
+      {browserDialog.open && (
       <RemoteBrowserDialog
-        open={browserDialog.open}
+        open
         onClose={() => setBrowserDialog({ open: false, lead: null })}
         lead={browserDialog.lead}
       />
+      )}
 
       {/* Apply Agent Fine Dialog */}
+      {applyFineDialog.open && (
       <ApplyAgentFineDialog
-        open={applyFineDialog.open}
+        open
         onClose={handleCloseApplyFineDialog}
         onSuccess={handleApplyFineSuccess}
         agent={applyFineDialog.agent}
         lead={applyFineDialog.lead}
         orderId={applyFineDialog.orderId}
       />
+      )}
 
       {/* PSP Deposit Confirmation Dialog - 2 Step (Card Issuer -> PSP) */}
+      {pspDepositDialog.open && (
       <Dialog
-        open={pspDepositDialog.open}
+        open
         onClose={handleClosePspDepositDialog}
         maxWidth="sm"
         fullWidth
@@ -7958,19 +7760,23 @@ const OrdersPage = () => {
           )}
         </DialogActions>
       </Dialog>
+      )}
 
       {/* Gender Fallback Modal */}
+      {genderFallbackModalOpen && (
       <GenderFallbackModal
-        open={genderFallbackModalOpen}
+        open
         onClose={() => setGenderFallbackModalOpen(false)}
         agentAssignmentInsufficient={insufficientAgentLeads}
         orderData={pendingOrderData}
         onConfirm={handleGenderFallbackSelect}
       />
+      )}
 
       {/* Change Requester Dialog */}
+      {changeRequesterOpen && (
       <ChangeRequesterDialog
-        open={changeRequesterOpen}
+        open
         onClose={() => setChangeRequesterOpen(false)}
         onSubmit={handleSubmitChangeRequester}
         requesters={potentialRequesters}
@@ -7978,10 +7784,12 @@ const OrdersPage = () => {
         selectedRequester={selectedNewRequester}
         onSelectRequester={setSelectedNewRequester}
       />
+      )}
 
       {/* Edit Planned Date Dialog */}
+      {editPlannedDateDialog.open && (
       <Dialog
-        open={editPlannedDateDialog.open}
+        open
         onClose={handleCloseEditPlannedDate}
         maxWidth="xs"
         fullWidth
@@ -8023,10 +7831,12 @@ const OrdersPage = () => {
           </Button>
         </DialogActions>
       </Dialog>
+      )}
 
       {/* Edit Network Configuration Dialog (Admin Only) */}
+      {editNetworkConfigDialog.open && (
       <Dialog
-        open={editNetworkConfigDialog.open}
+        open
         onClose={handleCloseEditNetworkConfig}
         maxWidth="sm"
         fullWidth
@@ -8149,6 +7959,7 @@ const OrdersPage = () => {
           </Button>
         </DialogActions>
       </Dialog>
+      )}
 
 
       {/* Copy Notification */}
@@ -8204,8 +8015,9 @@ const OrdersPage = () => {
       </Snackbar>
 
       {/* Lead Removal Reason Dialog */}
+      {removalReasonDialog.open && (
       <Dialog
-        open={removalReasonDialog.open}
+        open
         onClose={handleCloseRemovalReasonDialog}
         maxWidth="sm"
         fullWidth
@@ -8281,10 +8093,12 @@ const OrdersPage = () => {
           </Button>
         </DialogActions>
       </Dialog>
+      )}
 
       {/* Create New Broker Dialog */}
+      {createBrokerDialog.open && (
       <Dialog
-        open={createBrokerDialog.open}
+        open
         onClose={handleCloseCreateBrokerDialog}
         maxWidth="sm"
         fullWidth
@@ -8304,10 +8118,12 @@ const OrdersPage = () => {
           />
         </DialogContent>
       </Dialog>
+      )}
 
       {/* Manage Brokers Dialog */}
+      {manageBrokersDialog.open && (
       <Dialog
-        open={manageBrokersDialog.open}
+        open
         onClose={handleCloseManageBrokersDialog}
         maxWidth="xl"
         fullWidth
@@ -8352,10 +8168,12 @@ const OrdersPage = () => {
           <Button onClick={handleCloseManageBrokersDialog}>Close</Button>
         </DialogActions>
       </Dialog>
+      )}
 
       {/* Delete Broker Confirmation Dialog */}
+      {deleteBrokerDialog.open && (
       <Dialog
-        open={deleteBrokerDialog.open}
+        open
         onClose={handleCloseDeleteBrokerDialog}
         maxWidth="sm"
         fullWidth
@@ -8422,10 +8240,12 @@ const OrdersPage = () => {
           </Button>
         </DialogActions>
       </Dialog>
+      )}
 
       {/* Edit Broker Dialog */}
+      {editBrokerDialog.open && (
       <Dialog
-        open={editBrokerDialog.open}
+        open
         onClose={handleCloseEditBrokerDialog}
         maxWidth="sm"
         fullWidth
@@ -8446,53 +8266,65 @@ const OrdersPage = () => {
           />
         </DialogContent>
       </Dialog>
+      )}
 
       {/* Refunds Manager Assignment Modal */}
+      {refundsAssignmentDialog.open && (
       <AssignToRefundsManagerModal
-        open={refundsAssignmentDialog.open}
+        open
         onClose={handleCloseRefundsAssignment}
         orderId={refundsAssignmentDialog.orderId}
         onSuccess={handleRefundsAssignmentSuccess}
       />
+      )}
 
       {/* Mark Shaved Dialog */}
+      {markShavedDialog.open && (
       <MarkShavedDialog
-        open={markShavedDialog.open}
+        open
         lead={markShavedDialog.lead}
         userRole={user?.role}
         onClose={handleCloseMarkShavedDialog}
         onConfirm={handleConfirmMarkAsShaved}
         loading={markShavedDialog.loading}
       />
+      )}
 
       {/* Client Broker Management Dialog */}
+      {clientBrokerManagementOpen && (
       <ClientBrokerManagementDialog
-        open={clientBrokerManagementOpen}
+        open
         onClose={handleCloseClientBrokerManagement}
         order={selectedOrderForManagement}
         onUpdate={handleClientBrokerManagementUpdate}
       />
+      )}
 
       {/* Change FTD Dialog */}
+      {changeFTDDialog.open && (
       <ChangeFTDDialog
-        open={changeFTDDialog.open}
+        open
         onClose={handleCloseChangeFTDDialog}
         order={changeFTDDialog.order}
         lead={changeFTDDialog.lead}
         onSuccess={handleChangeFTDSuccess}
       />
+      )}
 
       {/* Assign Lead to Agent Dialog */}
+      {assignLeadDialog.open && (
       <AssignLeadToAgentDialog
-        open={assignLeadDialog.open}
+        open
         onClose={handleCloseAssignLeadDialog}
         lead={assignLeadDialog.lead}
         onSuccess={handleAssignLeadSuccess}
       />
+      )}
 
       {/* Add Leads to Order Dialog (Admin only) */}
+      {addLeadsDialog.open && (
       <Dialog
-        open={addLeadsDialog.open}
+        open
         onClose={handleCloseAddLeadsDialog}
         maxWidth="md"
         fullWidth
@@ -8708,10 +8540,12 @@ const OrdersPage = () => {
           </Button>
         </DialogActions>
       </Dialog>
+      )}
 
       {/* Add Leads Confirmation Dialog (Reason Selection) */}
+      {addLeadsConfirmDialog.open && (
       <Dialog
-        open={addLeadsConfirmDialog.open}
+        open
         onClose={handleCloseAddLeadsConfirmDialog}
         maxWidth="sm"
         fullWidth
@@ -8834,10 +8668,12 @@ const OrdersPage = () => {
           </Button>
         </DialogActions>
       </Dialog>
+      )}
 
       {/* Delete Order Confirmation Dialog */}
+      {deleteOrderDialog.open && (
       <Dialog
-        open={deleteOrderDialog.open}
+        open
         onClose={handleDeleteOrderCancel}
         maxWidth="sm"
         fullWidth
@@ -8962,10 +8798,12 @@ const OrdersPage = () => {
           </Button>
         </DialogActions>
       </Dialog>
+      )}
 
       {/* Remove Lead from Order Dialog */}
+      {removeLeadDialog.open && (
       <Dialog
-        open={removeLeadDialog.open}
+        open
         onClose={handleCloseRemoveLeadDialog}
         maxWidth="sm"
         fullWidth
@@ -9088,10 +8926,12 @@ const OrdersPage = () => {
           </Button>
         </DialogActions>
       </Dialog>
+      )}
 
       {/* Order Audit Log Dialog */}
+      {orderAuditDialog.open && (
       <Dialog
-        open={orderAuditDialog.open}
+        open
         onClose={handleCloseOrderAudit}
         maxWidth="md"
         fullWidth
@@ -9328,10 +9168,12 @@ const OrdersPage = () => {
           <Button onClick={handleCloseOrderAudit}>Close</Button>
         </DialogActions>
       </Dialog>
+      )}
 
       {/* Gender Fallback Modal for Agent Lead Assignment */}
+      {genderFallbackModalOpen && (
       <GenderFallbackModal
-        open={genderFallbackModalOpen}
+        open
         onClose={handleGenderFallbackClose}
         onSelectGender={handleGenderFallbackSelect}
         agentName={
@@ -9343,6 +9185,7 @@ const OrdersPage = () => {
         insufficientTypes={insufficientAgentLeads || {}}
         agents={filteredAgents}
       />
+      )}
 
       {/* Lead Quick View Popover */}
       <Popper
@@ -9442,8 +9285,9 @@ const OrdersPage = () => {
       </Popper>
 
       {/* Assigned Leads Modal */}
+      {assignedLeadsModal.open && (
       <Dialog
-        open={assignedLeadsModal.open}
+        open
         onClose={handleCloseAssignedLeadsModal}
         maxWidth="lg"
         fullWidth
@@ -9708,10 +9552,12 @@ const OrdersPage = () => {
           </Box>
         </DialogContent>
       </Dialog>
+      )}
 
       {/* Leads Preview Modal */}
+      {leadsPreviewModal.open && (
       <Dialog
-        open={leadsPreviewModal.open}
+        open
         onClose={handleCloseLeadsPreviewModal}
         maxWidth="xl"
         fullWidth
@@ -9728,7 +9574,12 @@ const OrdersPage = () => {
             }}
           >
             <Typography variant="h6">
-              Leads Preview ({leadsPreviewModal.leads.length} leads)
+              Leads Preview {leadsPreviewModal.loading ? "" : `(${leadsPreviewModal.leads.length} leads)`}
+              {leadsPreviewModal.enriching && !leadsPreviewModal.loading && (
+                <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 1 }}>
+                  Loading details...
+                </Typography>
+              )}
             </Typography>
             <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
               {leadRemovalMode ? (
@@ -9769,7 +9620,7 @@ const OrdersPage = () => {
                             onClick={() => handleDirectIPQSValidation(leadsPreviewModal.orderId, true)}
                             size="small"
                             color="info"
-                            disabled={isValidating || allLeadsValidated}
+                            disabled={isValidating || allLeadsValidated || leadsPreviewModal.enriching}
                           >
                             {isValidating ? (
                               <CircularProgress size={20} color="inherit" />
@@ -9782,27 +9633,33 @@ const OrdersPage = () => {
                     );
                   })()}
                   {["admin", "affiliate_manager", "lead_manager"].includes(user?.role) && leadsPreviewModal.order && leadsPreviewModal.leads.length > 0 && (
-                    <Tooltip title="Remove leads from this order">
+                    <Tooltip title={leadsPreviewModal.enriching ? "Loading details..." : "Remove leads from this order"}>
+                      <span>
                       <IconButton
                         aria-label="remove leads"
                         onClick={handleToggleLeadRemovalMode}
                         size="small"
+                        disabled={leadsPreviewModal.enriching}
                         color="error"
                       >
                         <DeleteIcon />
                       </IconButton>
+                      </span>
                     </Tooltip>
                   )}
                   {["admin", "affiliate_manager"].includes(user?.role) && leadsPreviewModal.order && (
-                    <Tooltip title="Add leads to this order">
+                    <Tooltip title={leadsPreviewModal.enriching ? "Loading details..." : "Add leads to this order"}>
+                      <span>
                       <IconButton
                         aria-label="add leads"
                         onClick={() => handleOpenAddLeadsDialog(leadsPreviewModal.order)}
                         size="small"
                         color="primary"
+                        disabled={leadsPreviewModal.enriching}
                       >
                         <AddIcon />
                       </IconButton>
+                      </span>
                     </Tooltip>
                   )}
                 </>
@@ -9818,6 +9675,11 @@ const OrdersPage = () => {
           </Box>
         </DialogTitle>
         <DialogContent dividers sx={{ p: 1, overflow: "auto" }}>
+          {leadsPreviewModal.loading ? (
+            <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: 200 }}>
+              <CircularProgress />
+            </Box>
+          ) : (
           <TableContainer
             sx={{ maxHeight: "calc(90vh - 180px)", overflow: "auto" }}
           >
@@ -10582,6 +10444,7 @@ const OrdersPage = () => {
               </TableBody>
             </Table>
           </TableContainer>
+          )}
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseLeadsPreviewModal} variant="outlined">
@@ -10858,10 +10721,12 @@ const OrdersPage = () => {
           })()}
         </Menu>
       </Dialog>
+      )}
 
       {/* Client Brokers Display Dialog */}
+      {clientBrokersDialog.open && (
       <Dialog
-        open={clientBrokersDialog.open}
+        open
         onClose={handleCloseClientBrokersDialog}
         maxWidth="sm"
         fullWidth
@@ -10914,10 +10779,12 @@ const OrdersPage = () => {
           </Button>
         </DialogActions>
       </Dialog>
+      )}
 
       {/* Client Networks Display Dialog */}
+      {clientNetworksDialog.open && (
       <Dialog
-        open={clientNetworksDialog.open}
+        open
         onClose={handleCloseClientNetworksDialog}
         maxWidth="sm"
         fullWidth
@@ -10972,10 +10839,12 @@ const OrdersPage = () => {
           </Button>
         </DialogActions>
       </Dialog>
+      )}
 
       {/* Our Networks Display Dialog */}
+      {ourNetworksDialog.open && (
       <Dialog
-        open={ourNetworksDialog.open}
+        open
         onClose={handleCloseOurNetworksDialog}
         maxWidth="sm"
         fullWidth
@@ -11030,10 +10899,12 @@ const OrdersPage = () => {
           </Button>
         </DialogActions>
       </Dialog>
+      )}
 
       {/* Campaigns Display Dialog */}
+      {campaignsDialog.open && (
       <Dialog
-        open={campaignsDialog.open}
+        open
         onClose={handleCloseCampaignsDialog}
         maxWidth="sm"
         fullWidth
@@ -11088,10 +10959,12 @@ const OrdersPage = () => {
           </Button>
         </DialogActions>
       </Dialog>
+      )}
 
       {/* Copy Preferences Dialog */}
+      {copyPreferencesOpen && (
       <CopyPreferencesDialog
-        open={copyPreferencesOpen}
+        open
         onClose={() => setCopyPreferencesOpen(false)}
         onSave={() => {
           setNotification({
@@ -11100,6 +10973,7 @@ const OrdersPage = () => {
           });
         }}
       />
+      )}
     </Box>
   );
 };
