@@ -14,6 +14,7 @@ const {
     addPSP,
     removePSP,
     getBrokerAuditLogs,
+    getBrokerOrdersWithLeads,
 } = require("../controllers/clientBrokers");
 const { protect, isAdmin, authorize } = require("../middleware/auth");
 const router = express.Router();
@@ -23,6 +24,7 @@ router.get("/stats", protect, getBrokerStats);
 // Profile and audit log routes (must be before /:id)
 router.get("/:id/profile", protect, getClientBrokerProfile);
 router.get("/:id/audit-logs", protect, isAdmin, getBrokerAuditLogs);
+router.get("/:id/orders-leads", protect, getBrokerOrdersWithLeads);
 
 // PSP management routes
 router.post(

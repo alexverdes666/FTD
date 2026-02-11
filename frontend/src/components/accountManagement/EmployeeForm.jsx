@@ -13,6 +13,7 @@ import {
   FormHelperText,
   Box,
   CircularProgress,
+  InputAdornment,
 } from "@mui/material";
 import { useForm, Controller } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
@@ -43,7 +44,7 @@ const employeeSchema = yup.object({
     ),
 });
 
-const EmployeeForm = ({ open, onClose, onSubmit, employee = null, loading = false }) => {
+const EmployeeForm = ({ open, onClose, onSubmit, employee = null, loading = false, defaultTelegramUsername = "" }) => {
   const {
     control,
     handleSubmit,
@@ -62,11 +63,11 @@ const EmployeeForm = ({ open, onClose, onSubmit, employee = null, loading = fals
     if (open) {
       reset({
         name: employee?.name || "",
-        telegramUsername: employee?.telegramUsername || "",
+        telegramUsername: employee?.telegramUsername || defaultTelegramUsername || "",
         position: employee?.position || "",
       });
     }
-  }, [open, employee, reset]);
+  }, [open, employee, reset, defaultTelegramUsername]);
 
   const handleFormSubmit = (data) => {
     onSubmit(data);
@@ -99,9 +100,17 @@ const EmployeeForm = ({ open, onClose, onSubmit, employee = null, loading = fals
               render={({ field }) => (
                 <TextField
                   {...field}
+                  onChange={(e) => field.onChange(e.target.value.replace(/^@+/, ""))}
                   label="Telegram Username"
                   fullWidth
-                  placeholder="@username"
+                  placeholder="username"
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start" sx={{ mr: 0 }}>
+                        <span style={{ fontWeight: 700, color: "#1976d2" }}>@</span>
+                      </InputAdornment>
+                    ),
+                  }}
                   error={!!errors.telegramUsername}
                   helperText={errors.telegramUsername?.message}
                 />

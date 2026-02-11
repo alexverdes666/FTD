@@ -140,6 +140,10 @@ router.put(
       .optional()
       .isBoolean()
       .withMessage("isActive must be a boolean"),
+    body("dealType")
+      .optional({ nullable: true })
+      .isIn(["buy", "sell", "both", null])
+      .withMessage("dealType must be buy, sell, both, or null"),
   ],
   updateClientNetwork
 );

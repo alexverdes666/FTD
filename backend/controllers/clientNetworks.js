@@ -130,7 +130,7 @@ exports.updateClientNetwork = async (req, res, next) => {
       });
     }
 
-    const { name, description, isActive } = req.body;
+    const { name, description, isActive, dealType } = req.body;
 
     const clientNetwork = await ClientNetwork.findById(req.params.id);
     if (!clientNetwork) {
@@ -145,12 +145,14 @@ exports.updateClientNetwork = async (req, res, next) => {
       name: clientNetwork.name,
       description: clientNetwork.description,
       isActive: clientNetwork.isActive,
+      dealType: clientNetwork.dealType,
     };
 
     // Apply updates
     if (name !== undefined) clientNetwork.name = name;
     if (description !== undefined) clientNetwork.description = description;
     if (isActive !== undefined) clientNetwork.isActive = isActive;
+    if (dealType !== undefined) clientNetwork.dealType = dealType;
 
     await clientNetwork.save();
     await clientNetwork.populate([
@@ -162,6 +164,7 @@ exports.updateClientNetwork = async (req, res, next) => {
       name: name !== undefined ? name : undefined,
       description: description !== undefined ? description : undefined,
       isActive: isActive !== undefined ? isActive : undefined,
+      dealType: dealType !== undefined ? dealType : undefined,
     };
 
     // Log the update with detailed changes - logs for all users
@@ -236,6 +239,47 @@ exports.getClientNetworkProfile = async (req, res, next) => {
       });
     }
 
+    // Get networks that reference this one ("referenced by")
+    const referencedByNetworks = await ClientNetwork.find({
+      "references.clientNetwork": clientNetwork._id,
+    }).select("name description isActive references");
+
+    // Extract the relevant reference entries pointing to this network
+    const referencedBy = referencedByNetworks.map((net) => {
+      const refEntry = net.references.find(
+        (r) => r.clientNetwork.toString() === clientNetwork._id.toString()
+      );
+      return {
+        _id: refEntry?._id,
+        clientNetwork: {
+          _id: net._id,
+          name: net.name,
+          description: net.description,
+          isActive: net.isActive,
+        },
+        notes: refEntry?.notes,
+        addedBy: refEntry?.addedBy,
+        addedAt: refEntry?.addedAt,
+      };
+    });
+
+    // Populate addedBy for referencedBy entries
+    const addedByIds = referencedBy
+      .map((r) => r.addedBy)
+      .filter(Boolean);
+    const addedByUsers = await User.find({ _id: { $in: addedByIds } }).select(
+      "fullName email"
+    );
+    const usersMap = {};
+    addedByUsers.forEach((u) => {
+      usersMap[u._id.toString()] = u;
+    });
+    referencedBy.forEach((r) => {
+      if (r.addedBy) {
+        r.addedBy = usersMap[r.addedBy.toString()] || r.addedBy;
+      }
+    });
+
     // Get comments for this network grouped by ourNetwork
     const comments = await AgentComment.find({
       targetType: "client_network",
@@ -290,6 +334,7 @@ exports.getClientNetworkProfile = async (req, res, next) => {
       success: true,
       data: {
         ...clientNetwork.toObject(),
+        referencedBy,
         comments,
         commentsCount: comments.length,
         unresolvedCommentsCount: comments.filter((c) => !c.isResolved).length,

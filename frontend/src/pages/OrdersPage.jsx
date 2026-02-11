@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useSelector } from "react-redux";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useLocation } from "react-router-dom";
 import {
   Box,
   Typography,
@@ -386,6 +386,7 @@ const buildIPQSTooltip = (validation, type) => {
 const OrdersPage = () => {
   const user = useSelector(selectUser);
   const theme = useTheme();
+  const location = useLocation();
   const isSmallScreen = useMediaQuery(theme.breakpoints.down("sm"));
   const [searchParams, setSearchParams] = useSearchParams();
   const [orders, setOrders] = useState([]);
@@ -491,6 +492,9 @@ const OrdersPage = () => {
   const [ipqsValidationSuccess, setIpqsValidationSuccess] = useState([]);
   // IPQS validation in progress state (tracks orderIds being validated)
   const [ipqsValidatingOrders, setIpqsValidatingOrders] = useState([]);
+
+  // Highlight lead ID from external navigation (e.g., broker profile)
+  const [highlightLeadId, setHighlightLeadId] = useState(location.state?.highlightLeadId || null);
 
   // Lead removal selection state for leads preview modal
   const [leadRemovalMode, setLeadRemovalMode] = useState(false);
@@ -2446,6 +2450,7 @@ const OrdersPage = () => {
     setPreviewActionsMenu({ anchorEl: null, lead: null });
     setLeadRemovalMode(false);
     setSelectedLeadsForRemoval([]);
+    setHighlightLeadId(null);
   }, []);
 
   // Handler for manual IPQS recheck of a single lead
@@ -3037,6 +3042,19 @@ const OrdersPage = () => {
     },
     [handleOpenLeadsPreviewModal]
   );
+
+  // Open leads preview when navigated from external page (e.g., broker profile)
+  useEffect(() => {
+    const highlightOrderId = location.state?.highlightOrderId;
+    if (highlightOrderId) {
+      // Filter to show only this order
+      setFilters((prev) => ({ ...prev, search: highlightOrderId }));
+      // Open leads preview modal for this order
+      handlePreviewOrderLeads(highlightOrderId);
+      // Clear navigation state to avoid re-triggering
+      window.history.replaceState({}, document.title);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Copy leads for a specific order by fetching them first
   const handleCopyOrderLeadsById = useCallback(async (orderId) => {
@@ -10063,6 +10081,10 @@ const OrdersPage = () => {
                           hover={!isRemoved}
                           sx={{
                             "& td": { py: 0.5 },
+                            ...(highlightLeadId && lead._id === highlightLeadId && !isRemoved && {
+                              backgroundColor: (theme) => alpha(theme.palette.warning.main, 0.15),
+                              "&:hover": { backgroundColor: (theme) => `${alpha(theme.palette.warning.main, 0.22)} !important` },
+                            }),
                             ...(isRemoved && {
                               backgroundColor: "action.disabledBackground",
                               opacity: 0.6,

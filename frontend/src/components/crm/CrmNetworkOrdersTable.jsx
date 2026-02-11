@@ -66,7 +66,7 @@ const CrmNetworkOrdersTable = ({ networkId }) => {
     return (
       <Tooltip title={id}>
         <Typography variant="body2" sx={{ fontFamily: "monospace" }}>
-          ...{short}
+          {short}
         </Typography>
       </Tooltip>
     );

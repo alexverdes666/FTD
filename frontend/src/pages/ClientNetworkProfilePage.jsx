@@ -26,6 +26,10 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  Menu,
+  MenuItem,
+  Divider,
+  Tooltip,
 } from "@mui/material";
 import {
   ArrowBack as BackIcon,
@@ -70,12 +74,15 @@ const ClientNetworkProfilePage = () => {
   const [editLoading, setEditLoading] = useState(false);
 
   const [activeTab, setActiveTab] = useState(0);
+  const [pastedTelegram, setPastedTelegram] = useState("");
 
   // Comment form states
   const [showCommentForm, setShowCommentForm] = useState(false);
   const [commentText, setCommentText] = useState("");
   const [commentImages, setCommentImages] = useState([]);
   const [commentLoading, setCommentLoading] = useState(false);
+
+  const [dealTypeAnchor, setDealTypeAnchor] = useState(null);
 
   const isAdmin = user?.role === "admin";
   const canManageCrm = ["admin", "affiliate_manager"].includes(user?.role);
@@ -100,8 +107,30 @@ const ClientNetworkProfilePage = () => {
     fetchProfile();
   }, [fetchProfile]);
 
+  // Paste handler: Ctrl+V on Employees tab opens Add dialog with clipboard as telegram username
+  useEffect(() => {
+    const handlePaste = async (e) => {
+      // Only on Employees tab (tab 0), and not when a dialog or input is focused
+      if (activeTab !== 0) return;
+      const tag = document.activeElement?.tagName?.toLowerCase();
+      if (tag === "input" || tag === "textarea" || document.activeElement?.isContentEditable) return;
+      if (employeeDialogOpen) return;
+
+      const text = e.clipboardData?.getData("text")?.trim()?.replace(/^@+/, "");
+      if (text) {
+        setPastedTelegram(text);
+        setEditingEmployee(null);
+        setEmployeeDialogOpen(true);
+      }
+    };
+
+    document.addEventListener("paste", handlePaste);
+    return () => document.removeEventListener("paste", handlePaste);
+  }, [activeTab, employeeDialogOpen]);
+
   // Employee handlers
   const handleAddEmployee = () => {
+    setPastedTelegram("");
     setEditingEmployee(null);
     setEmployeeDialogOpen(true);
   };
@@ -238,6 +267,28 @@ const ClientNetworkProfilePage = () => {
     }
   };
 
+  // Deal type handler
+  const handleDealTypeChange = async (value) => {
+    setDealTypeAnchor(null);
+    try {
+      await api.put(`/client-networks/${id}`, { dealType: value });
+      toast.success("Deal type updated");
+      fetchProfile();
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to update deal type");
+    }
+  };
+
+  const getDealTypeLabel = (type) => {
+    const labels = { buy: "Buy", sell: "Sell", both: "Both" };
+    return labels[type] || "-";
+  };
+
+  const getDealTypeColor = (type) => {
+    const colors = { buy: "success", sell: "error", both: "info" };
+    return colors[type] || "default";
+  };
+
   const handleCancelComment = () => {
     setCommentText("");
     commentImages.forEach((img) => URL.revokeObjectURL(img.preview));
@@ -271,14 +322,37 @@ const ClientNetworkProfilePage = () => {
       {/* Header */}
       <Paper sx={{ p: 3, mb: 3 }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 2 }}>
-          <IconButton onClick={() => navigate(-1)}>
+          <IconButton onClick={() => navigate("/crm", { state: { tab: 0 } })}>
             <BackIcon />
           </IconButton>
           <NetworkIcon sx={{ fontSize: 40, color: "primary.main" }} />
           <Box sx={{ flexGrow: 1 }}>
-            <Typography variant="h5" fontWeight="bold">
-              {profile.name}
-            </Typography>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+              <Typography variant="h5" fontWeight="bold">
+                {profile.name}
+              </Typography>
+              <Tooltip title={canManageCrm ? "Click to change deal type" : "Deal type"}>
+                <Chip
+                  label={getDealTypeLabel(profile.dealType)}
+                  color={getDealTypeColor(profile.dealType)}
+                  size="small"
+                  variant={profile.dealType ? "filled" : "outlined"}
+                  onClick={canManageCrm ? (e) => setDealTypeAnchor(e.currentTarget) : undefined}
+                  sx={canManageCrm ? { cursor: "pointer" } : {}}
+                />
+              </Tooltip>
+              <Menu
+                anchorEl={dealTypeAnchor}
+                open={Boolean(dealTypeAnchor)}
+                onClose={() => setDealTypeAnchor(null)}
+              >
+                <MenuItem onClick={() => handleDealTypeChange("buy")}>Buy</MenuItem>
+                <MenuItem onClick={() => handleDealTypeChange("sell")}>Sell</MenuItem>
+                <MenuItem onClick={() => handleDealTypeChange("both")}>Both</MenuItem>
+                <Divider />
+                <MenuItem onClick={() => handleDealTypeChange(null)}>- (Not defined)</MenuItem>
+              </Menu>
+            </Box>
             <Typography variant="body2" color="text.secondary">
               {profile.description || "No description"}
             </Typography>
@@ -316,7 +390,7 @@ const ClientNetworkProfilePage = () => {
             <Card variant="outlined">
               <CardContent sx={{ textAlign: "center", py: 1 }}>
                 <Typography variant="h4" color="primary.main">
-                  {profile.references?.length || 0}
+                  {(profile.references?.length || 0) + (profile.referencedBy?.length || 0)}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
                   References
@@ -328,7 +402,7 @@ const ClientNetworkProfilePage = () => {
             <Card variant="outlined">
               <CardContent sx={{ textAlign: "center", py: 1 }}>
                 <Typography variant="h4" color="primary.main">
-                  {profile.crmDealsSummary?.totalDeals || 0}
+                  {profile.dealsSummary?.totalOrders || 0}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
                   Total Deals
@@ -358,9 +432,9 @@ const ClientNetworkProfilePage = () => {
           variant="fullWidth"
         >
           <Tab icon={<PersonIcon />} iconPosition="start" label={`Employees (${profile.employees?.length || 0})`} />
-          <Tab icon={<LinkIcon />} iconPosition="start" label={`References (${profile.references?.length || 0})`} />
+          <Tab icon={<LinkIcon />} iconPosition="start" label={`References (${(profile.references?.length || 0) + (profile.referencedBy?.length || 0)})`} />
           <Tab icon={<CommentIcon />} iconPosition="start" label={`Comments (${profile.unresolvedCommentsCount || 0})`} />
-          <Tab icon={<DealsIcon />} iconPosition="start" label="CRM Deals" />
+          <Tab icon={<DealsIcon />} iconPosition="start" label={`CRM Deals (${profile.dealsSummary?.totalOrders || 0})`} />
         </Tabs>
       </Paper>
 
@@ -393,7 +467,7 @@ const ClientNetworkProfilePage = () => {
                       <TableCell>
                         <Chip label={getPositionLabel(emp.position)} size="small" />
                       </TableCell>
-                      <TableCell>{emp.telegramUsername || "-"}</TableCell>
+                      <TableCell>{emp.telegramUsername ? `@${emp.telegramUsername}` : "-"}</TableCell>
                       {canManageCrm && (
                         <TableCell align="right">
                           <IconButton size="small" onClick={() => handleEditEmployee(emp)}>
@@ -434,44 +508,94 @@ const ClientNetworkProfilePage = () => {
               </Button>
             )}
           </Box>
-          {profile.references?.length ? (
-            <Stack spacing={1}>
-              {profile.references.map((ref) => (
-                <Box
-                  key={ref._id}
-                  sx={{
-                    p: 1.5,
-                    border: 1,
-                    borderColor: "divider",
-                    borderRadius: 1,
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                  }}
-                >
-                  <Box>
-                    <Typography fontWeight="medium">
-                      {ref.clientNetwork?.name || "Unknown"}
-                    </Typography>
-                    {ref.notes && (
-                      <Typography variant="body2" color="text.secondary">
-                        {ref.notes}
+
+          {/* Added by this network */}
+          {profile.references?.length > 0 && (
+            <>
+              <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
+                Added as reference ({profile.references.length})
+              </Typography>
+              <Stack spacing={1} sx={{ mb: 2 }}>
+                {profile.references.map((ref) => (
+                  <Box
+                    key={ref._id}
+                    sx={{
+                      p: 1.5,
+                      border: 1,
+                      borderColor: "divider",
+                      borderRadius: 1,
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                    }}
+                  >
+                    <Box>
+                      <Typography fontWeight="medium">
+                        {ref.clientNetwork?.name || "Unknown"}
                       </Typography>
+                      {ref.notes && (
+                        <Typography variant="body2" color="text.secondary">
+                          {ref.notes}
+                        </Typography>
+                      )}
+                    </Box>
+                    {canManageCrm && (
+                      <IconButton
+                        size="small"
+                        color="error"
+                        onClick={() => handleDeleteReference(ref._id)}
+                      >
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
                     )}
                   </Box>
-                  {canManageCrm && (
-                    <IconButton
-                      size="small"
-                      color="error"
-                      onClick={() => handleDeleteReference(ref._id)}
-                    >
-                      <DeleteIcon fontSize="small" />
-                    </IconButton>
-                  )}
-                </Box>
-              ))}
-            </Stack>
-          ) : (
+                ))}
+              </Stack>
+            </>
+          )}
+
+          {/* Referenced by other networks */}
+          {profile.referencedBy?.length > 0 && (
+            <>
+              {profile.references?.length > 0 && <Divider sx={{ my: 2 }} />}
+              <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
+                Referenced by ({profile.referencedBy.length})
+              </Typography>
+              <Stack spacing={1}>
+                {profile.referencedBy.map((ref) => (
+                  <Box
+                    key={ref._id}
+                    sx={{
+                      p: 1.5,
+                      border: 1,
+                      borderColor: "info.light",
+                      borderRadius: 1,
+                      backgroundColor: "rgba(33, 150, 243, 0.04)",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                    }}
+                  >
+                    <Box>
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                        <Typography fontWeight="medium">
+                          {ref.clientNetwork?.name || "Unknown"}
+                        </Typography>
+                        <Chip label="Referenced by" size="small" variant="outlined" color="info" />
+                      </Box>
+                      {ref.notes && (
+                        <Typography variant="body2" color="text.secondary">
+                          {ref.notes}
+                        </Typography>
+                      )}
+                    </Box>
+                  </Box>
+                ))}
+              </Stack>
+            </>
+          )}
+
+          {!profile.references?.length && !profile.referencedBy?.length && (
             <Typography color="text.secondary" align="center" sx={{ py: 3 }}>
               No references
             </Typography>
@@ -575,10 +699,11 @@ const ClientNetworkProfilePage = () => {
       {/* Employee Dialog */}
       <EmployeeForm
         open={employeeDialogOpen}
-        onClose={() => setEmployeeDialogOpen(false)}
+        onClose={() => { setEmployeeDialogOpen(false); setPastedTelegram(""); }}
         onSubmit={handleEmployeeSubmit}
         employee={editingEmployee}
         loading={employeeLoading}
+        defaultTelegramUsername={pastedTelegram}
       />
 
       {/* Reference Dialog */}

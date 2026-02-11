@@ -521,6 +521,20 @@ exports.getClientBrokerProfile = async (req, res, next) => {
       })
       .sort({ createdAt: -1 });
 
+    // Get orders that include this broker and count leads
+    const orderStats = await Order.aggregate([
+      { $match: { selectedClientBrokers: clientBroker._id } },
+      {
+        $group: {
+          _id: null,
+          totalOrders: { $sum: 1 },
+          totalLeads: { $sum: { $size: { $ifNull: ["$leads", []] } } },
+        },
+      },
+    ]);
+
+    const stats = orderStats[0] || { totalOrders: 0, totalLeads: 0 };
+
     res.status(200).json({
       success: true,
       data: {
@@ -528,7 +542,79 @@ exports.getClientBrokerProfile = async (req, res, next) => {
         comments,
         commentsCount: comments.length,
         unresolvedCommentsCount: comments.filter((c) => !c.isResolved).length,
+        totalOrders: stats.totalOrders,
+        totalLeadsFromOrders: stats.totalLeads,
       },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Get orders and leads for a client broker
+ */
+exports.getBrokerOrdersWithLeads = async (req, res, next) => {
+  try {
+    const { page = 1, limit = 50 } = req.query;
+
+    const clientBroker = await ClientBroker.findById(req.params.id);
+    if (!clientBroker) {
+      return res.status(404).json({
+        success: false,
+        message: "Client broker not found",
+      });
+    }
+
+    const filter = { selectedClientBrokers: clientBroker._id };
+    const skip = (page - 1) * limit;
+
+    const [orders, total] = await Promise.all([
+      Order.find(filter)
+        .populate({
+          path: "leads",
+          select: "firstName lastName newEmail leadType",
+        })
+        .select("leads leadsMetadata createdAt")
+        .skip(skip)
+        .limit(parseInt(limit))
+        .sort({ createdAt: -1 }),
+      Order.countDocuments(filter),
+    ]);
+
+    // Flatten into lead rows with order context
+    const rows = [];
+    for (const order of orders) {
+      const metadataMap = {};
+      if (order.leadsMetadata) {
+        for (const m of order.leadsMetadata) {
+          if (m.lead) metadataMap[m.lead.toString()] = m;
+        }
+      }
+      for (const lead of (order.leads || [])) {
+        if (!lead || !lead._id) continue;
+        const meta = metadataMap[lead._id.toString()];
+        rows.push({
+          orderId: order._id,
+          orderDate: order.createdAt,
+          leadId: lead._id,
+          name: `${lead.firstName} ${lead.lastName}`.trim(),
+          email: lead.newEmail,
+          leadType: meta?.orderedAs || lead.leadType,
+        });
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      data: rows,
+      pagination: {
+        current: parseInt(page),
+        pages: Math.ceil(total / limit),
+        total,
+        limit: parseInt(limit),
+      },
+      totalLeads: rows.length,
     });
   } catch (error) {
     next(error);

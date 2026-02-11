@@ -80,6 +80,11 @@ const clientNetworkSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    dealType: {
+      type: String,
+      enum: ["buy", "sell", "both", null],
+      default: null,
+    },
     employees: [employeeSchema],
     references: [referenceSchema],
   },

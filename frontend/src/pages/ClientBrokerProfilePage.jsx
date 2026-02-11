@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+
 import {
   Box,
   Paper,
@@ -25,6 +26,8 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  TablePagination,
+  Tooltip,
 } from "@mui/material";
 import {
   ArrowBack as BackIcon,
@@ -34,6 +37,7 @@ import {
   Business as BrokerIcon,
   Payment as PSPIcon,
   Language as WebIcon,
+  ChevronRight as ChevronRightIcon,
 } from "@mui/icons-material";
 import { useSelector } from "react-redux";
 import { selectUser } from "../store/slices/authSlice";
@@ -41,6 +45,44 @@ import api from "../services/api";
 import toast from "react-hot-toast";
 import PSPSelector from "../components/accountManagement/PSPSelector";
 import CommentButton from "../components/CommentButton";
+
+const leadsTableSx = {
+  tableLayout: "fixed",
+  "& .MuiTableHead-root .MuiTableCell-head": {
+    background: "linear-gradient(135deg, #1e293b 0%, #334155 100%)",
+    color: "#fff",
+    fontWeight: 700,
+    fontSize: "0.65rem",
+    textTransform: "uppercase",
+    letterSpacing: "0.5px",
+    borderBottom: "2px solid #3b82f6",
+    py: 0.4,
+    px: 1,
+    lineHeight: 1.1,
+  },
+  "& .MuiTableBody-root .MuiTableCell-root": {
+    py: 0.25,
+    px: 1,
+    fontSize: "0.78rem",
+    lineHeight: 1.3,
+  },
+  "& .MuiTableBody-root .MuiTableRow-root:nth-of-type(even)": {
+    bgcolor: "rgba(0, 0, 0, 0.015)",
+  },
+  "& .MuiTableBody-root .MuiTableRow-root:hover": {
+    bgcolor: "rgba(25, 118, 210, 0.06) !important",
+    transition: "background-color 0.15s ease",
+  },
+  "& .MuiChip-root": {
+    height: "18px",
+    fontSize: "0.65rem",
+  },
+};
+
+const getLeadTypeColor = (type) => {
+  const colors = { ftd: "error", filler: "info", cold: "default" };
+  return colors[type] || "default";
+};
 
 const ClientBrokerProfilePage = () => {
   const { id } = useParams();
@@ -57,6 +99,16 @@ const ClientBrokerProfilePage = () => {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editData, setEditData] = useState({ name: "", domain: "", description: "" });
   const [editLoading, setEditLoading] = useState(false);
+
+  // Orders/leads state
+  const [orderLeads, setOrderLeads] = useState([]);
+  const [orderLeadsLoading, setOrderLeadsLoading] = useState(false);
+  const [orderLeadsPagination, setOrderLeadsPagination] = useState({
+    current: 1,
+    pages: 1,
+    total: 0,
+    limit: 50,
+  });
 
   const isAdmin = user?.role === "admin";
 
@@ -77,9 +129,28 @@ const ClientBrokerProfilePage = () => {
     }
   }, [id]);
 
+  const fetchOrderLeads = useCallback(
+    async (page = 1) => {
+      try {
+        setOrderLeadsLoading(true);
+        const response = await api.get(`/client-brokers/${id}/orders-leads`, {
+          params: { page, limit: 50 },
+        });
+        setOrderLeads(response.data.data);
+        setOrderLeadsPagination(response.data.pagination);
+      } catch (error) {
+        console.error("Failed to load order leads", error);
+      } finally {
+        setOrderLeadsLoading(false);
+      }
+    },
+    [id]
+  );
+
   useEffect(() => {
     fetchProfile();
-  }, [fetchProfile]);
+    fetchOrderLeads();
+  }, [fetchProfile, fetchOrderLeads]);
 
   // PSP handlers
   const handleAddPSP = async (pspId) => {
@@ -145,7 +216,7 @@ const ClientBrokerProfilePage = () => {
       {/* Header */}
       <Paper sx={{ p: 3, mb: 3 }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 2 }}>
-          <IconButton onClick={() => navigate(-1)}>
+          <IconButton onClick={() => navigate("/crm", { state: { tab: 1 } })}>
             <BackIcon />
           </IconButton>
           <BrokerIcon sx={{ fontSize: 40, color: "primary.main" }} />
@@ -208,10 +279,10 @@ const ClientBrokerProfilePage = () => {
             <Card variant="outlined">
               <CardContent sx={{ textAlign: "center", py: 1 }}>
                 <Typography variant="h4" color="primary.main">
-                  {profile.totalLeadsAssigned || 0}
+                  {profile.totalOrders || 0}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Total Leads
+                  Total Orders
                 </Typography>
               </CardContent>
             </Card>
@@ -220,10 +291,10 @@ const ClientBrokerProfilePage = () => {
             <Card variant="outlined">
               <CardContent sx={{ textAlign: "center", py: 1 }}>
                 <Typography variant="h4" color="primary.main">
-                  {profile.assignedLeads?.length || 0}
+                  {profile.totalLeadsFromOrders || 0}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Current Leads
+                  Total Leads
                 </Typography>
               </CardContent>
             </Card>
@@ -241,6 +312,101 @@ const ClientBrokerProfilePage = () => {
             </Card>
           </Grid>
         </Grid>
+      </Paper>
+
+      {/* Orders / Leads Table */}
+      <Paper sx={{ borderRadius: 2, border: 1, borderColor: "divider", boxShadow: "0 1px 3px rgba(0,0,0,0.08)", overflow: "hidden", mb: 3 }}>
+        <Box sx={{ px: 2, py: 1, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <Typography variant="subtitle2">
+            Leads from Orders ({profile.totalLeadsFromOrders || 0})
+          </Typography>
+        </Box>
+        <TableContainer sx={{ maxHeight: 400 }}>
+          <Table size="small" stickyHeader sx={leadsTableSx}>
+            <TableHead>
+              <TableRow>
+                <TableCell sx={{ width: "14%" }}>Order ID</TableCell>
+                <TableCell sx={{ width: "11%" }}>Order Date</TableCell>
+                <TableCell sx={{ width: "21%" }}>Lead Name</TableCell>
+                <TableCell sx={{ width: "27%" }}>Email</TableCell>
+                <TableCell sx={{ textAlign: "center", width: "12%" }}>Type</TableCell>
+                <TableCell sx={{ width: "5%" }} />
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {orderLeadsLoading ? (
+                <TableRow>
+                  <TableCell colSpan={6} align="center" sx={{ py: 3 }}>
+                    <CircularProgress size={22} />
+                  </TableCell>
+                </TableRow>
+              ) : orderLeads.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} align="center" sx={{ py: 3 }}>
+                    <Typography variant="caption" color="text.secondary">
+                      No leads found
+                    </Typography>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                orderLeads.map((row, idx) => (
+                  <TableRow key={`${row.orderId}-${row.leadId}-${idx}`} hover>
+                    <TableCell>
+                      <Tooltip title={row.orderId}>
+                        <Typography noWrap sx={{ fontFamily: "monospace", fontSize: "0.75rem", color: "primary.dark", fontWeight: 500 }}>
+                          {row.orderId.slice(-8)}
+                        </Typography>
+                      </Tooltip>
+                    </TableCell>
+                    <TableCell>
+                      <Typography noWrap sx={{ fontSize: "0.75rem", color: "text.secondary" }}>
+                        {row.orderDate ? new Date(row.orderDate).toLocaleDateString() : "-"}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>
+                      <Typography noWrap sx={{ fontSize: "0.78rem" }}>
+                        {row.name || "-"}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>
+                      <Typography noWrap sx={{ fontSize: "0.75rem", color: "text.secondary" }}>
+                        {row.email || "-"}
+                      </Typography>
+                    </TableCell>
+                    <TableCell sx={{ textAlign: "center" }}>
+                      <Chip
+                        label={row.leadType?.toUpperCase() || "-"}
+                        color={getLeadTypeColor(row.leadType)}
+                        size="small"
+                        variant="outlined"
+                      />
+                    </TableCell>
+                    <TableCell sx={{ textAlign: "center", px: 0 }}>
+                      <IconButton
+                        size="small"
+                        onClick={() => navigate("/orders", { state: { highlightOrderId: row.orderId, highlightLeadId: row.leadId } })}
+                        sx={{ p: 0.25 }}
+                      >
+                        <ChevronRightIcon sx={{ fontSize: 18, color: "text.secondary" }} />
+                      </IconButton>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
+        {orderLeadsPagination.total > 0 && (
+          <TablePagination
+            component="div"
+            count={orderLeadsPagination.total}
+            page={orderLeadsPagination.current - 1}
+            onPageChange={(e, p) => fetchOrderLeads(p + 1)}
+            rowsPerPage={orderLeadsPagination.limit}
+            rowsPerPageOptions={[orderLeadsPagination.limit]}
+            sx={{ borderTop: 1, borderColor: "divider", "& .MuiTablePagination-toolbar": { minHeight: 36 }, "& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows": { fontSize: "0.75rem" } }}
+          />
+        )}
       </Paper>
 
       <Grid container spacing={3}>

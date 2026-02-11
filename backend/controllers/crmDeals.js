@@ -3,6 +3,7 @@ const mongoose = require("mongoose");
 const CrmDeal = require("../models/CrmDeal");
 const ClientNetwork = require("../models/ClientNetwork");
 const AgentComment = require("../models/AgentComment");
+const Order = require("../models/Order");
 
 exports.getCrmDeals = async (req, res, next) => {
   try {
@@ -244,10 +245,30 @@ exports.getCrmDashboardStats = async (req, res, next) => {
       },
     ]);
 
-    // Create a map of network stats
+    // Get order counts per client network
+    const orderStats = await Order.aggregate([
+      {
+        $match: { selectedClientNetwork: { $ne: null } },
+      },
+      {
+        $group: {
+          _id: "$selectedClientNetwork",
+          ordersCount: { $sum: 1 },
+        },
+      },
+    ]);
+
+    // Create a map of network stats, merging CRM deals and orders
     const networkStatsMap = {};
     networkStats.forEach((stat) => {
       networkStatsMap[stat._id.toString()] = stat;
+    });
+    orderStats.forEach((stat) => {
+      const key = stat._id.toString();
+      if (!networkStatsMap[key]) {
+        networkStatsMap[key] = { _id: stat._id, dealsCount: 0 };
+      }
+      networkStatsMap[key].ordersCount = stat.ordersCount;
     });
 
     // Get unresolved comments count per client network
@@ -272,11 +293,29 @@ exports.getCrmDashboardStats = async (req, res, next) => {
       commentStatsMap[stat._id.toString()] = stat.unresolvedCount;
     });
 
+    // Get leads count per client broker from orders
+    const brokerStats = await Order.aggregate([
+      { $unwind: "$selectedClientBrokers" },
+      {
+        $group: {
+          _id: "$selectedClientBrokers",
+          ordersCount: { $sum: 1 },
+          totalLeads: { $sum: { $size: { $ifNull: ["$leads", []] } } },
+        },
+      },
+    ]);
+
+    const brokerStatsMap = {};
+    brokerStats.forEach((stat) => {
+      brokerStatsMap[stat._id.toString()] = stat;
+    });
+
     res.status(200).json({
       success: true,
       data: {
         networkStats: networkStatsMap,
         commentStats: commentStatsMap,
+        brokerStats: brokerStatsMap,
       },
     });
   } catch (error) {
