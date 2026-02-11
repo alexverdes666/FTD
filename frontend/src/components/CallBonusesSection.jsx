@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Box,
   Typography,
@@ -49,17 +50,12 @@ const CallBonusesSection = ({ leads: passedLeads = [] }) => {
 
   // CDR calls data (all calls with declaration status)
   const [cdrCalls, setCdrCalls] = useState([]);
-  const [cdrLoading, setCdrLoading] = useState(false);
-  const [cdrError, setCdrError] = useState(null);
 
   // Declarations data
   const [myDeclarations, setMyDeclarations] = useState([]);
-  const [declarationsLoading, setDeclarationsLoading] = useState(false);
-  const [declarationsError, setDeclarationsError] = useState(null);
 
   // Pending declarations for managers
   const [pendingDeclarations, setPendingDeclarations] = useState([]);
-  const [pendingLoading, setPendingLoading] = useState(false);
 
   // Monthly totals
   const [monthlyTotals, setMonthlyTotals] = useState(null);
@@ -87,89 +83,65 @@ const CallBonusesSection = ({ leads: passedLeads = [] }) => {
     return options;
   };
 
-  // Fetch CDR calls
-  const loadCDRCalls = useCallback(async () => {
-    if (!isAgent) return;
+  const queryClient = useQueryClient();
+  const [year, month] = useMemo(() => selectedMonth.split('-'), [selectedMonth]);
 
-    setCdrLoading(true);
-    setCdrError(null);
-    try {
-      const data = await fetchCDRCalls(3);
-      setCdrCalls(data.calls || []);
-    } catch (err) {
-      setCdrError(err.response?.data?.message || 'Failed to load CDR calls');
-    } finally {
-      setCdrLoading(false);
-    }
-  }, [isAgent]);
-
-  // Fetch declarations
-  const loadDeclarations = useCallback(async () => {
-    const [year, month] = selectedMonth.split('-');
-    setDeclarationsLoading(true);
-    setDeclarationsError(null);
-    try {
-      const data = await getDeclarations({
-        year,
-        month,
-      });
-      setMyDeclarations(data || []);
-    } catch (err) {
-      setDeclarationsError(err.response?.data?.message || 'Failed to load declarations');
-    } finally {
-      setDeclarationsLoading(false);
-    }
-  }, [selectedMonth]);
-
-  // Fetch pending declarations for managers
-  const loadPendingDeclarations = useCallback(async () => {
-    if (!isManager) return;
-
-    setPendingLoading(true);
-    try {
-      const data = await getPendingDeclarations();
-      setPendingDeclarations(data || []);
-    } catch (err) {
-      console.error('Failed to load pending declarations:', err);
-    } finally {
-      setPendingLoading(false);
-    }
-  }, [isManager]);
-
-  // Fetch monthly totals
-  const loadMonthlyTotals = useCallback(async () => {
-    if (!isAgent) return;
-
-    const [year, month] = selectedMonth.split('-');
-    try {
-      const data = await getMonthlyTotals(user._id || user.id, parseInt(year), parseInt(month));
-      setMonthlyTotals(data);
-    } catch (err) {
-      console.error('Failed to load monthly totals:', err);
-    }
-  }, [isAgent, selectedMonth, user]);
-
-  // Initial load and auto-refresh
+  // React Query: CDR calls (agents only)
+  const { data: cdrData, isLoading: cdrLoading, error: cdrQueryError } = useQuery({
+    queryKey: ['callBonuses', 'cdrCalls'],
+    queryFn: () => fetchCDRCalls(3),
+    enabled: isAgent,
+    refetchInterval: 30000,
+  });
   useEffect(() => {
-    const loadData = () => {
-      if (isAgent) {
-        loadCDRCalls();
-        loadMonthlyTotals();
-      }
-      loadDeclarations();
-      if (isManager) {
-        loadPendingDeclarations();
-      }
-    };
+    if (cdrData) setCdrCalls(cdrData.calls || []);
+  }, [cdrData]);
+  const cdrError = cdrQueryError?.response?.data?.message || cdrQueryError?.message || null;
 
-    // Initial load
-    loadData();
+  // React Query: declarations
+  const { data: declarationsData, isLoading: declarationsLoading, error: declQueryError } = useQuery({
+    queryKey: ['callBonuses', 'declarations', year, month],
+    queryFn: () => getDeclarations({ year, month }),
+    refetchInterval: 30000,
+  });
+  useEffect(() => {
+    if (declarationsData) setMyDeclarations(declarationsData || []);
+  }, [declarationsData]);
+  const declarationsError = declQueryError?.response?.data?.message || declQueryError?.message || null;
 
-    // Auto-refresh every 30 seconds
-    const intervalId = setInterval(loadData, 30000);
+  // React Query: pending declarations (managers only)
+  const { data: pendingData, isLoading: pendingLoading } = useQuery({
+    queryKey: ['callBonuses', 'pendingDeclarations'],
+    queryFn: getPendingDeclarations,
+    enabled: isManager,
+    refetchInterval: 30000,
+  });
+  useEffect(() => {
+    if (pendingData) setPendingDeclarations(pendingData || []);
+  }, [pendingData]);
 
-    return () => clearInterval(intervalId);
-  }, [isAgent, isManager, loadCDRCalls, loadDeclarations, loadPendingDeclarations, loadMonthlyTotals]);
+  // React Query: monthly totals (agents only)
+  useQuery({
+    queryKey: ['callBonuses', 'monthlyTotals', user?._id || user?.id, year, month],
+    queryFn: () => getMonthlyTotals(user._id || user.id, parseInt(year), parseInt(month)),
+    enabled: isAgent,
+    refetchInterval: 30000,
+    onSuccess: (data) => setMonthlyTotals(data),
+  });
+
+  // Refetch helpers for backward compat
+  const loadCDRCalls = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['callBonuses', 'cdrCalls'] });
+  }, [queryClient]);
+  const loadDeclarations = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['callBonuses', 'declarations'] });
+  }, [queryClient]);
+  const loadPendingDeclarations = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['callBonuses', 'pendingDeclarations'] });
+  }, [queryClient]);
+  const loadMonthlyTotals = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['callBonuses', 'monthlyTotals'] });
+  }, [queryClient]);
 
   // Handle declaration created
   const handleDeclarationCreated = (newDeclaration) => {

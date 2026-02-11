@@ -32,85 +32,55 @@ import {
   AccountBalance as BalanceIcon,
   Router as RouterIcon
 } from '@mui/icons-material';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '../services/api';
 import gatewayDeviceService from '../services/gatewayDeviceService';
 import toast from 'react-hot-toast';
 
 const LiveGatewayStatusTab = () => {
-  const [gateways, setGateways] = useState([]);
+  const queryClient = useQueryClient();
   const [selectedGateway, setSelectedGateway] = useState('');
-  const [gatewayStatus, setGatewayStatus] = useState(null);
-  const [loading, setLoading] = useState(true);
   const [autoRefresh, setAutoRefresh] = useState(true);
-  const [lastUpdate, setLastUpdate] = useState(null);
-  const [error, setError] = useState(null);
 
-  // Fetch available gateways on component mount
-  useEffect(() => {
-    fetchGateways();
-  }, []);
-
-  // Fetch status when gateway is selected
-  useEffect(() => {
-    if (selectedGateway) {
-      fetchLiveStatus();
-      
-      // Auto-refresh every 15 seconds
-      let interval;
-      if (autoRefresh) {
-        interval = setInterval(() => {
-          fetchLiveStatus(true);
-        }, 15000);
-      }
-      
-      return () => {
-        if (interval) clearInterval(interval);
-      };
-    }
-  }, [selectedGateway, autoRefresh]);
-
-  const fetchGateways = async () => {
-    try {
+  // Fetch available gateways
+  const { data: gateways = [] } = useQuery({
+    queryKey: ['gateway', 'devices'],
+    queryFn: async () => {
       const response = await gatewayDeviceService.getGatewayDevices(false);
-      const activeGateways = response.data || [];
-      setGateways(activeGateways);
-      
-      // Auto-select first gateway if available
-      if (activeGateways.length > 0 && !selectedGateway) {
-        setSelectedGateway(activeGateways[0]._id);
-      }
-    } catch (error) {
-      console.error('Error fetching gateways:', error);
-      toast.error('Failed to load gateway devices');
-    }
-  };
+      return response.data || [];
+    },
+  });
 
-  const fetchLiveStatus = async (silent = false) => {
-    if (!selectedGateway) return;
-    
-    try {
-      if (!silent) {
-        setLoading(true);
-        setError(null);
-      }
-      
-      const response = await gatewayDeviceService.getGatewayLiveStatus(selectedGateway);
-      
-      if (response.success) {
-        console.log('Gateway Response:', response.data);
-        setGatewayStatus(response.data);
-        setLastUpdate(new Date());
-        setError(null);
-      }
-    } catch (err) {
-      console.error('Error fetching live gateway status:', err);
-      setError(err.response?.data?.message || 'Failed to connect to gateway');
-      if (!silent) {
-        toast.error('Failed to fetch gateway status');
-      }
-    } finally {
-      setLoading(false);
+  // Auto-select first gateway when gateways load
+  useEffect(() => {
+    if (gateways.length > 0 && !selectedGateway) {
+      setSelectedGateway(gateways[0]._id);
     }
+  }, [gateways, selectedGateway]);
+
+  // React Query for live status polling (replaces setInterval)
+  const {
+    data: gatewayStatus,
+    isLoading: loading,
+    error: queryError,
+    dataUpdatedAt,
+  } = useQuery({
+    queryKey: ['gateway', 'liveStatus', selectedGateway],
+    queryFn: async () => {
+      const response = await gatewayDeviceService.getGatewayLiveStatus(selectedGateway);
+      if (response.success) return response.data;
+      throw new Error('Failed to fetch gateway status');
+    },
+    enabled: !!selectedGateway,
+    refetchInterval: autoRefresh ? 15000 : false,
+    retry: 1,
+  });
+
+  const lastUpdate = dataUpdatedAt ? new Date(dataUpdatedAt) : null;
+  const error = queryError?.response?.data?.message || queryError?.message || null;
+
+  const fetchLiveStatus = () => {
+    queryClient.invalidateQueries({ queryKey: ['gateway', 'liveStatus', selectedGateway] });
   };
 
   const parseGatewayResponse = () => {

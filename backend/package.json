@@ -40,6 +40,7 @@
     "http-proxy-middleware": "^3.0.0",
     "https-proxy-agent": "^7.0.6",
     "jsonwebtoken": "^9.0.2",
+    "lru-cache": "^11.2.6",
     "mongoose": "^7.5.0",
     "mongoose-paginate-v2": "^1.9.1",
     "morgan": "^1.10.0",

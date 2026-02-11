@@ -4,6 +4,7 @@ const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 const Lead = require("../models/Lead");
 const AgentPerformance = require("../models/AgentPerformance");
+const { invalidateUserCache } = require("../middleware/auth");
 const externalAgentPerformanceService = require("../services/externalAgentPerformanceService");
 exports.getUsers = async (req, res, next) => {
   try {
@@ -383,6 +384,7 @@ exports.approveUser = async (req, res, next) => {
       user.fourDigitCode = code;
     }
     const updatedUser = await user.save();
+    invalidateUserCache(userId);
     res.status(200).json({
       success: true,
       message: "User approved and activated successfully",
@@ -518,6 +520,7 @@ exports.updateUser = async (req, res, next) => {
       updateData,
       { new: true, runValidators: true }
     );
+    invalidateUserCache(req.params.id);
     res.status(200).json({
       success: true,
       message: "User updated successfully",
@@ -584,6 +587,7 @@ exports.updateUserPermissions = async (req, res, next) => {
         message: "User not found",
       });
     }
+    invalidateUserCache(req.params.id);
     res.status(200).json({
       success: true,
       message: "User permissions updated successfully",
@@ -606,6 +610,7 @@ exports.deleteUser = async (req, res, next) => {
         message: "User not found",
       });
     }
+    invalidateUserCache(req.params.id);
     res.status(200).json({
       success: true,
       message: "User deactivated successfully",
@@ -639,6 +644,7 @@ exports.permanentDeleteUser = async (req, res, next) => {
 
     // Permanently delete the user from the database
     await User.findByIdAndDelete(userId);
+    invalidateUserCache(userId);
 
     res.status(200).json({
       success: true,
@@ -926,6 +932,7 @@ exports.assignAsLeadManager = async (req, res, next) => {
       user.permissions.canManageLeads = false;
     }
     const updatedUser = await user.save();
+    invalidateUserCache(userId);
     res.status(200).json({
       success: true,
       message: assignAsLeadManager
@@ -976,6 +983,7 @@ exports.approveLeadManager = async (req, res, next) => {
       }
     }
     const updatedUser = await user.save();
+    invalidateUserCache(userId);
     res.status(200).json({
       success: true,
       message: approved
@@ -1024,6 +1032,7 @@ exports.kickUserSession = async (req, res, next) => {
     // Any tokens issued before this time will be rejected
     user.tokenInvalidatedAt = new Date();
     await user.save({ validateBeforeSave: false });
+    invalidateUserCache(userId);
 
     // Emit force_logout event to the user's socket room
     if (req.io) {

@@ -1,5 +1,6 @@
 const { validationResult } = require("express-validator");
 const User = require("../models/User");
+const { invalidateUserCache } = require("../middleware/auth");
 
 // Get all users with their linked accounts
 exports.getUsersWithLinkedAccounts = async (req, res, next) => {
@@ -155,6 +156,7 @@ exports.linkAccounts = async (req, res, next) => {
         linkedAccounts: mergedLinkedAccounts,
         primaryAccount: accountId === primaryAccountId ? null : primaryAccountId
       });
+      invalidateUserCache(accountId);
     }
 
     const updatedPrimaryAccount = await User.findById(primaryAccountId)

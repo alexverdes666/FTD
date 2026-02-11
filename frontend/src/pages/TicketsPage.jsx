@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useSelector } from 'react-redux';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Box,
   Typography,
@@ -64,7 +65,6 @@ const TicketsPage = () => {
 
   // State
   const [tickets, setTickets] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState(null);
   const [pagination, setPagination] = useState({
     page: 1,
@@ -117,65 +117,52 @@ const TicketsPage = () => {
     resolutionNote: ''
   });
 
-  // Load data
-  const loadTickets = useCallback(async (silent = false) => {
-    try {
-      if (!silent) setLoading(true);
+  const queryClient = useQueryClient();
+
+  // React Query for tickets (replaces loadTickets + setInterval)
+  const ticketQueryKey = ['tickets', pagination.page, pagination.limit, filters];
+  const { data: ticketsData, isLoading: loading } = useQuery({
+    queryKey: ticketQueryKey,
+    queryFn: async () => {
       const params = {
         page: pagination.page,
         limit: pagination.limit,
         ...ticketsService.buildTicketFilters(filters)
       };
+      return ticketsService.getTickets(params);
+    },
+    refetchInterval: 30000,
+    keepPreviousData: true,
+  });
 
-      const response = await ticketsService.getTickets(params);
-      setTickets(response.data);
-      setPagination(response.pagination);
-    } catch (error) {
-      if (!silent) {
-        toast.error(error.response?.data?.message || 'Failed to load tickets');
-      }
-    } finally {
-      if (!silent) setLoading(false);
+  // Sync query data into existing state (minimal refactor)
+  useEffect(() => {
+    if (ticketsData) {
+      setTickets(ticketsData.data);
+      setPagination(ticketsData.pagination);
     }
-  }, [pagination.page, pagination.limit, filters]);
+  }, [ticketsData]);
 
-  const loadStats = useCallback(async () => {
-    // Only admins can see stats
-    if (user?.role !== 'admin') return;
-    
-    try {
+  // React Query for stats
+  useQuery({
+    queryKey: ['tickets', 'stats'],
+    queryFn: async () => {
       const response = await ticketsService.getTicketStats();
-      setStats(response.data);
-    } catch (error) {
-      console.error('Failed to load stats:', error);
-    }
-  }, [user?.role]);
+      return response.data;
+    },
+    enabled: user?.role === 'admin',
+    refetchInterval: 30000,
+    onSuccess: (data) => setStats(data),
+  });
 
-  useEffect(() => {
-    loadTickets();
-  }, [loadTickets]);
+  // Wrappers for backward compat with the rest of the component
+  const loadTickets = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['tickets'] });
+  }, [queryClient]);
 
-  useEffect(() => {
-    loadStats();
-  }, [loadStats]);
-
-  // Auto-refresh tickets every 30 seconds (silent refresh)
-  const autoRefreshRef = useRef(null);
-
-  useEffect(() => {
-    autoRefreshRef.current = setInterval(() => {
-      loadTickets(true); // Silent refresh - no loading spinner
-      if (user?.role === 'admin') {
-        loadStats();
-      }
-    }, 30000);
-
-    return () => {
-      if (autoRefreshRef.current) {
-        clearInterval(autoRefreshRef.current);
-      }
-    };
-  }, [loadTickets, loadStats, user?.role]);
+  const loadStats = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['tickets', 'stats'] });
+  }, [queryClient]);
 
   // Event handlers
   const handleFilterChange = (field, value) => {

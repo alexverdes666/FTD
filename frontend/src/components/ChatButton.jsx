@@ -1,16 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Fab, 
-  Badge, 
+import {
+  Fab,
+  Badge,
   Tooltip,
   Box,
   useTheme
 } from '@mui/material';
-import { 
+import {
   Chat as ChatIcon,
-  Close as CloseIcon 
+  Close as CloseIcon
 } from '@mui/icons-material';
 import { useSelector } from 'react-redux';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { selectUser, selectIsAuthenticated } from '../store/slices/authSlice';
 import ChatWindow from './ChatWindow';
 import chatService from '../services/chatService';
@@ -21,10 +22,20 @@ const ChatButton = () => {
   const user = useSelector(selectUser);
   const isAuthenticated = useSelector(selectIsAuthenticated);
 
+  const queryClient = useQueryClient();
   const [chatOpen, setChatOpen] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
-
   const [isConnected, setIsConnected] = useState(false);
+
+  // React Query for unread count polling (replaces setInterval)
+  const { data: unreadCount = 0 } = useQuery({
+    queryKey: ['chat', 'unreadCount'],
+    queryFn: async () => {
+      const response = await chatService.getUnreadCount();
+      return response.data.totalUnread || 0;
+    },
+    enabled: isAuthenticated && !!user,
+    refetchInterval: 30000,
+  });
 
   // Drag state
   const [position, setPosition] = useState({ bottom: 16, right: 16 });
@@ -66,17 +77,10 @@ const ChatButton = () => {
     };
   }, [isAuthenticated, user]);
 
-  // Fetch unread count periodically
-  useEffect(() => {
-    if (isAuthenticated && user) {
-      fetchUnreadCount();
-      
-      // Set up interval to check for unread messages
-      const interval = setInterval(fetchUnreadCount, 30000); // Every 30 seconds
-      
-      return () => clearInterval(interval);
-    }
-  }, [isAuthenticated, user]);
+  // Invalidate unread count query to trigger a refetch
+  const rerefetchUnreadCount = () => {
+    queryClient.invalidateQueries({ queryKey: ['chat', 'unreadCount'] });
+  };
 
   const initializeChat = () => {
     // Connect to chat service if not already connected
@@ -105,22 +109,12 @@ const ChatButton = () => {
     
     // Don't disconnect - other components might be using it
     setIsConnected(false);
-    setUnreadCount(0);
   };
 
-  const fetchUnreadCount = async () => {
-    try {
-      const response = await chatService.getUnreadCount();
-      const count = response.data.totalUnread || 0;
-      setUnreadCount(count);
-    } catch (error) {
-      console.error('❌ Error fetching unread count:', error);
-    }
-  };
 
   const handleChatConnected = () => {
     setIsConnected(true);
-    fetchUnreadCount();
+    refetchUnreadCount();
   };
 
   const handleChatDisconnected = () => {
@@ -128,13 +122,13 @@ const ChatButton = () => {
   };
 
   const handleConversationRead = () => {
-    fetchUnreadCount();
+    refetchUnreadCount();
   };
 
   const handleUnreadCountUpdate = (data) => {
     // Update the total unread count based on the specific conversation update
     if (data.conversationId && typeof data.unreadCount === 'number') {
-      fetchUnreadCount(); // Refresh the total count from server
+      refetchUnreadCount(); // Refresh the total count from server
     }
   };
 
@@ -144,9 +138,10 @@ const ChatButton = () => {
     // (if chat is open and focused, ChatWindow will handle marking as read automatically)
     if (data.message.sender._id !== user._id) {
       const shouldIncrementUnread = !chatOpen || !document.hasFocus();
-      
+
       if (shouldIncrementUnread) {
-        setUnreadCount(prev => prev + 1);
+        // Optimistically increment the cached unread count
+        queryClient.setQueryData(['chat', 'unreadCount'], (old) => (old || 0) + 1);
       }
 
       // Only trigger notifications when chat window is closed

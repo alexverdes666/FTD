@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
+import { useQuery } from "@tanstack/react-query";
 import {
   Box,
   Typography,
@@ -128,17 +129,12 @@ const ProfilePage = () => {
     }
   }, [success]);
 
-  // Fetch sessions on mount and auto-refresh every 30 seconds
-  useEffect(() => {
-    dispatch(fetchMySessions());
-
-    // Auto-refresh sessions every 30 seconds
-    const interval = setInterval(() => {
-      dispatch(fetchMySessions());
-    }, 30000);
-
-    return () => clearInterval(interval);
-  }, [dispatch]);
+  // Fetch sessions on mount and auto-refresh every 30 seconds via React Query
+  useQuery({
+    queryKey: ['profile', 'sessions'],
+    queryFn: () => dispatch(fetchMySessions()).unwrap(),
+    refetchInterval: 30000,
+  });
 
   // Session management handlers
   const handleTerminateClick = (session) => {

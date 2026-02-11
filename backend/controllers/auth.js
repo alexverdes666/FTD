@@ -3,7 +3,7 @@ const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 const LoginSession = require("../models/LoginSession");
 const axios = require("axios");
-const { getClientIP, isAdminIPAllowed } = require("../middleware/auth");
+const { getClientIP, isAdminIPAllowed, invalidateUserCache } = require("../middleware/auth");
 
 const generateToken = (id, originalUserId = null) => {
   const payload = { id };
@@ -208,6 +208,7 @@ exports.updateProfile = async (req, res, next) => {
         message: "User not found",
       });
     }
+    invalidateUserCache(req.user.id);
     res.status(200).json({
       success: true,
       message: "Profile updated successfully",
@@ -800,6 +801,7 @@ exports.terminateAllSessions = async (req, res, next) => {
     await User.findByIdAndUpdate(req.user.id, {
       tokenInvalidatedAt: new Date(),
     });
+    invalidateUserCache(req.user.id);
 
     // Generate a new token for the current session
     const { token: newToken, iat } = generateToken(req.user.id, req.user.originalUserId || null);

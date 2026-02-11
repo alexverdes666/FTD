@@ -1,5 +1,22 @@
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
+const { LRUCache } = require("lru-cache");
+
+// --- User lookup cache (avoids hitting MongoDB on every authenticated request) ---
+const userCache = new LRUCache({
+  max: 500, // max entries (well above typical concurrent user count)
+  ttl: 60 * 1000, // 60-second TTL
+});
+
+// Call this from any route that modifies auth-critical user fields
+// (role, permissions, isActive, tokenInvalidatedAt, twoFactorEnabled)
+const invalidateUserCache = (userId) => {
+  userCache.delete(String(userId));
+};
+
+// --- Session activity debouncing (write lastActivityAt at most every 5 min) ---
+const SESSION_ACTIVITY_INTERVAL = 5 * 60 * 1000; // 5 minutes
+const sessionActivityMap = new Map(); // key: sessionKey -> last update timestamp
 
 // Admin IP whitelist - only these IPs can access admin accounts
 const ADMIN_ALLOWED_IPS = [
@@ -54,7 +71,17 @@ exports.protect = async (req, res, next) => {
     }
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      const user = await User.findById(decoded.id).select("-password");
+
+      // --- LRU-cached user lookup ---
+      const userIdStr = String(decoded.id);
+      let user = userCache.get(userIdStr);
+      if (!user) {
+        user = await User.findById(decoded.id).select("-password");
+        if (user) {
+          userCache.set(userIdStr, user);
+        }
+      }
+
       if (!user) {
         return res.status(401).json({
           success: false,
@@ -114,10 +141,16 @@ exports.protect = async (req, res, next) => {
           });
         }
 
-        // Update session activity (non-blocking)
+        // --- Debounced session activity update (every 5 min instead of every request) ---
         if (session) {
-          session.lastActivityAt = new Date();
-          session.save().catch(() => {});
+          const sessionKey = String(session._id);
+          const lastUpdate = sessionActivityMap.get(sessionKey) || 0;
+          const now = Date.now();
+          if (now - lastUpdate >= SESSION_ACTIVITY_INTERVAL) {
+            sessionActivityMap.set(sessionKey, now);
+            session.lastActivityAt = new Date();
+            session.save().catch(() => {});
+          }
         }
       }
 
@@ -255,3 +288,6 @@ exports.require2FA = async (req, res, next) => {
 exports.getClientIP = getClientIP;
 exports.isAdminIPAllowed = isAdminIPAllowed;
 exports.ADMIN_ALLOWED_IPS = ADMIN_ALLOWED_IPS;
+
+// Export cache invalidation for use in routes that modify user data
+exports.invalidateUserCache = invalidateUserCache;

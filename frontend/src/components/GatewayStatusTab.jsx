@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   Box,
   Card,
@@ -32,16 +32,15 @@ import {
   AccountBalance as BalanceIcon,
   SimCard as SimCardIcon
 } from '@mui/icons-material';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { simCardService } from '../services/simCardService';
 import { useGatewayOperations, getStatusColor, getStatusDisplay } from '../hooks/useGatewayOperations';
 import toast from 'react-hot-toast';
 
 const GatewayStatusTab = () => {
-  const [simCards, setSimCards] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [autoRefresh, setAutoRefresh] = useState(true);
-  const [lastUpdate, setLastUpdate] = useState(null);
-  
+
   const {
     loading: operationLoading,
     lockPort,
@@ -49,40 +48,20 @@ const GatewayStatusTab = () => {
     resetPort
   } = useGatewayOperations();
 
-  useEffect(() => {
-    fetchGatewaySimCards();
-    
-    // Auto-refresh every 30 seconds
-    let interval;
-    if (autoRefresh) {
-      interval = setInterval(() => {
-        fetchGatewaySimCards(true);
-      }, 30000);
-    }
-    
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [autoRefresh]);
-
-  const fetchGatewaySimCards = async (silent = false) => {
-    try {
-      if (!silent) setLoading(true);
-      
-      // Fetch all SIM cards and filter for gateway-enabled ones
+  // React Query replaces the manual setInterval polling
+  const { data: simCards = [], isLoading: loading, dataUpdatedAt } = useQuery({
+    queryKey: ['gateway', 'simCards'],
+    queryFn: async () => {
       const response = await simCardService.getSimCards({ limit: 100 });
-      const gatewayCards = response.data.filter(card => card.gateway?.enabled);
-      
-      setSimCards(gatewayCards);
-      setLastUpdate(new Date());
-    } catch (error) {
-      console.error('Error fetching gateway SIM cards:', error);
-      if (!silent) {
-        toast.error('Failed to fetch gateway status');
-      }
-    } finally {
-      setLoading(false);
-    }
+      return response.data.filter(card => card.gateway?.enabled);
+    },
+    refetchInterval: autoRefresh ? 30000 : false,
+  });
+
+  const lastUpdate = dataUpdatedAt ? new Date(dataUpdatedAt) : null;
+
+  const refetchSimCards = () => {
+    queryClient.invalidateQueries({ queryKey: ['gateway', 'simCards'] });
   };
 
   const handleLockPort = async (simCard) => {
@@ -90,7 +69,7 @@ const GatewayStatusTab = () => {
       const result = await lockPort(simCard._id);
       if (result) {
         toast.success('Port locked successfully');
-        fetchGatewaySimCards(true);
+        refetchSimCards();
       }
     }
   };
@@ -99,7 +78,7 @@ const GatewayStatusTab = () => {
     const result = await unlockPort(simCard._id);
     if (result) {
       toast.success('Port unlocked successfully');
-      fetchGatewaySimCards(true);
+      refetchSimCards();
     }
   };
 
@@ -108,7 +87,7 @@ const GatewayStatusTab = () => {
       const result = await resetPort(simCard._id);
       if (result) {
         toast.success('Port reset initiated');
-        fetchGatewaySimCards(true);
+        refetchSimCards();
       }
     }
   };
@@ -247,7 +226,7 @@ const GatewayStatusTab = () => {
           <Button
             variant="outlined"
             startIcon={<RefreshIcon />}
-            onClick={() => fetchGatewaySimCards()}
+            onClick={() => refetchSimCards()}
             disabled={loading}
           >
             Refresh Now
