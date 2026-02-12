@@ -99,6 +99,7 @@ import {
   FilterListOff as FilterListOffIcon,
   Inbox as InboxIcon,
   ListAlt as ListAltIcon,
+  AlternateEmail as EmailSearchIcon,
 } from "@mui/icons-material";
 import { useForm, Controller } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
@@ -613,6 +614,7 @@ const OrdersPage = () => {
       startDate: "",
       endDate: "",
       search: urlSearch,
+      emailSearch: "",
       createdMonth: "",
       createdYear: "",
     };
@@ -1276,7 +1278,7 @@ const OrdersPage = () => {
       Object.entries(debouncedFilters).forEach(([key, value]) => {
         if (value) {
           // Skip search queries shorter than 2 characters
-          if (key === "search" && value.trim().length < 2) {
+          if ((key === "search" || key === "emailSearch") && value.trim().length < 2) {
             return;
           }
           params.append(key, value);
@@ -5064,27 +5066,31 @@ const OrdersPage = () => {
             }}
           />
           <Divider orientation="vertical" flexItem sx={{ my: 0.5, borderColor: (theme) => alpha(theme.palette.grey[300], 0.6) }} />
-          {/* Status */}
-          <FormControl size="small" sx={{ minWidth: 92, "& .MuiOutlinedInput-root": { height: 28, borderRadius: 6, fontSize: "0.75rem", bgcolor: "background.paper", boxShadow: (theme) => `0 1px 2px ${alpha(theme.palette.grey[400], 0.15)}`, "& fieldset": { borderColor: (theme) => alpha(theme.palette.grey[300], 0.7) }, "&:hover fieldset": { borderColor: (theme) => alpha(theme.palette.primary.main, 0.3) } } }}>
-            <Select
-              value={filters.status || ""}
-              onChange={handleFilterChange("status")}
-              displayEmpty
-              renderValue={(v) => v ? v.charAt(0).toUpperCase() + v.slice(1) : "Status"}
-              sx={{
-                "& .MuiSelect-select": { py: 0, pl: 1, pr: "24px !important", display: "flex", alignItems: "center" },
-                "& .MuiSelect-icon": { right: 2, fontSize: 18 },
-                color: filters.status ? "text.primary" : "text.disabled",
-                fontWeight: filters.status ? 600 : 400,
-              }}
-            >
-              <MenuItem value="" sx={{ fontSize: "0.8rem" }}>All Statuses</MenuItem>
-              <MenuItem value="pending" sx={{ fontSize: "0.8rem" }}>Pending</MenuItem>
-              <MenuItem value="partial" sx={{ fontSize: "0.8rem" }}>Partial</MenuItem>
-              <MenuItem value="fulfilled" sx={{ fontSize: "0.8rem" }}>Fulfilled</MenuItem>
-              <MenuItem value="cancelled" sx={{ fontSize: "0.8rem" }}>Cancelled</MenuItem>
-            </Select>
-          </FormControl>
+          {/* Email Search */}
+          <TextField
+            placeholder="Search by email..."
+            value={filters.emailSearch}
+            onChange={handleFilterChange("emailSearch")}
+            size="small"
+            sx={{
+              width: 180,
+              "& .MuiOutlinedInput-root": {
+                height: 28,
+                borderRadius: 6,
+                fontSize: "0.78rem",
+                bgcolor: "background.paper",
+                border: "none",
+                boxShadow: (theme) => `0 1px 2px ${alpha(theme.palette.grey[400], 0.15)}`,
+                "& fieldset": { border: "1px solid", borderColor: (theme) => alpha(theme.palette.grey[300], 0.7) },
+                "&:hover fieldset": { borderColor: (theme) => alpha(theme.palette.primary.main, 0.3) },
+                "&.Mui-focused fieldset": { borderColor: "primary.main", borderWidth: 1.5, boxShadow: (theme) => `0 0 0 2px ${alpha(theme.palette.primary.main, 0.1)}` },
+              },
+              "& input::placeholder": { fontSize: "0.75rem", opacity: 0.6 },
+            }}
+            InputProps={{
+              startAdornment: <EmailSearchIcon sx={{ color: "action.active", mr: 0.5, fontSize: 15 }} />,
+            }}
+          />
           {/* Month */}
           <FormControl size="small" sx={{ minWidth: 78, "& .MuiOutlinedInput-root": { height: 28, borderRadius: 6, fontSize: "0.75rem", bgcolor: "background.paper", boxShadow: (theme) => `0 1px 2px ${alpha(theme.palette.grey[400], 0.15)}`, "& fieldset": { borderColor: (theme) => alpha(theme.palette.grey[300], 0.7) }, "&:hover fieldset": { borderColor: (theme) => alpha(theme.palette.primary.main, 0.3) } } }}>
             <Select

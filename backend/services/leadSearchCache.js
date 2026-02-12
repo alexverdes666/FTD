@@ -106,4 +106,26 @@ function clearCache() {
   loadingPromise = null;
 }
 
-module.exports = { searchLeads, warmUp, clearCache };
+/**
+ * Search leads by email only (newEmail, oldEmail) using in-memory filtering.
+ * Much faster than searchLeads since it only checks 2 fields.
+ * Returns an array of Lead _id values.
+ */
+async function searchLeadsByEmail(keyword) {
+  const docs = await getDocs();
+  const regex = new RegExp(keyword, "i");
+
+  const ids = [];
+  for (let i = 0; i < docs.length; i++) {
+    const doc = docs[i];
+    if (
+      (doc.newEmail && regex.test(doc.newEmail)) ||
+      (doc.oldEmail && regex.test(doc.oldEmail))
+    ) {
+      ids.push(doc._id);
+    }
+  }
+  return ids;
+}
+
+module.exports = { searchLeads, searchLeadsByEmail, warmUp, clearCache };

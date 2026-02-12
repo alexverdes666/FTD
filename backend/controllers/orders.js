@@ -3096,7 +3096,7 @@ exports.getOrders = async (req, res, next) => {
         errors: errors.array(),
       });
     }
-    const { page = 1, limit = 10, startDate, endDate, search, createdMonth, createdYear } = req.query;
+    const { page = 1, limit = 10, startDate, endDate, search, emailSearch, createdMonth, createdYear } = req.query;
     let query = {};
     // Admin and lead_manager can see all orders; others see only their own
     if (req.user.role !== "admin" && req.user.role !== "lead_manager") {
@@ -3127,6 +3127,28 @@ exports.getOrders = async (req, res, next) => {
     const pageNum = parseInt(page);
     const limitNum = parseInt(limit);
     const skip = (pageNum - 1) * limitNum;
+
+    // Fast email-only search: only matches leads by newEmail/oldEmail
+    if (emailSearch && emailSearch.trim()) {
+      const emailKeywords = emailSearch
+        .toLowerCase()
+        .trim()
+        .split(/\s+/)
+        .filter((k) => k.length > 0);
+
+      const emailConditions = await Promise.all(
+        emailKeywords.map(async (keyword) => {
+          const matchingLeadIds = await leadSearchCache.searchLeadsByEmail(keyword);
+          return matchingLeadIds.length > 0
+            ? { leads: { $in: matchingLeadIds } }
+            : { _id: null };
+        })
+      );
+
+      if (emailConditions.length > 0) {
+        query.$and = [...(query.$and || []), ...emailConditions];
+      }
+    }
 
     if (search && search.trim()) {
       const searchKeywords = search
@@ -3215,7 +3237,7 @@ exports.getOrders = async (req, res, next) => {
 
       // Combine base query with all keyword conditions (AND logic)
       if (keywordConditions.length > 0) {
-        query.$and = keywordConditions;
+        query.$and = [...(query.$and || []), ...keywordConditions];
       }
 
       const [orders, total] = await Promise.all([
