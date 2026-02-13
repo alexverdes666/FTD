@@ -30,6 +30,7 @@ import {
   MenuItem,
   Divider,
   Tooltip,
+  Link,
 } from "@mui/material";
 import {
   ArrowBack as BackIcon,
@@ -41,6 +42,8 @@ import {
   Link as LinkIcon,
   Comment as CommentIcon,
   Handshake as DealsIcon,
+  Business as BrokerIcon,
+  Payment as PSPIcon,
 } from "@mui/icons-material";
 import { useSelector } from "react-redux";
 import { selectUser } from "../store/slices/authSlice";
@@ -435,6 +438,7 @@ const ClientNetworkProfilePage = () => {
           <Tab icon={<LinkIcon />} iconPosition="start" label={`References (${(profile.references?.length || 0) + (profile.referencedBy?.length || 0)})`} />
           <Tab icon={<CommentIcon />} iconPosition="start" label={`Comments (${profile.unresolvedCommentsCount || 0})`} />
           <Tab icon={<DealsIcon />} iconPosition="start" label={`CRM Deals (${profile.dealsSummary?.totalOrders || 0})`} />
+          <Tab icon={<BrokerIcon />} iconPosition="start" label={`Brokers & PSPs (${(profile.usedBrokers?.length || 0) + (profile.usedPsps?.length || 0)})`} />
         </Tabs>
       </Paper>
 
@@ -693,6 +697,120 @@ const ClientNetworkProfilePage = () => {
       {activeTab === 3 && (
         <Paper sx={{ p: 2 }}>
           <CrmNetworkOrdersTable networkId={id} />
+        </Paper>
+      )}
+
+      {/* Brokers & PSPs Tab */}
+      {activeTab === 4 && (
+        <Paper sx={{ p: 2 }}>
+          <Grid container spacing={3}>
+            <Grid item xs={12} md={6}>
+              <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1 }}>
+                <Typography variant="subtitle1" fontWeight={600}>
+                  <BrokerIcon sx={{ mr: 1, verticalAlign: "middle", fontSize: 20 }} />
+                  Used Client Brokers ({profile.usedBrokers?.length || 0})
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Assigned to leads from this network
+                </Typography>
+              </Box>
+              <TableContainer sx={{ maxHeight: 400, overflow: "auto" }}>
+                {profile.usedBrokers?.length ? (
+                  <Table size="small" stickyHeader>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Name</TableCell>
+                        <TableCell>Domain</TableCell>
+                        <TableCell>Status</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {profile.usedBrokers.map((broker) => (
+                        <TableRow key={broker._id} hover>
+                          <TableCell>
+                            <Typography fontWeight="medium" sx={{ fontSize: "0.85rem" }}>{broker.name}</Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2" color="text.secondary">
+                              {broker.domain || "-"}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Chip
+                              label={broker.isActive ? "Active" : "Inactive"}
+                              color={broker.isActive ? "success" : "default"}
+                              size="small"
+                            />
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                ) : (
+                  <Typography color="text.secondary" align="center" sx={{ py: 3 }}>
+                    No brokers assigned yet
+                  </Typography>
+                )}
+              </TableContainer>
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1 }}>
+                <Typography variant="subtitle1" fontWeight={600}>
+                  <PSPIcon sx={{ mr: 1, verticalAlign: "middle", fontSize: 20 }} />
+                  Used PSPs ({profile.usedPsps?.length || 0})
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  From deposit confirmations
+                </Typography>
+              </Box>
+              <TableContainer sx={{ maxHeight: 400, overflow: "auto" }}>
+                {profile.usedPsps?.length ? (
+                  <Table size="small" stickyHeader>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Name</TableCell>
+                        <TableCell>Website</TableCell>
+                        <TableCell>Status</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {profile.usedPsps.map((psp) => (
+                        <TableRow key={psp._id} hover>
+                          <TableCell>
+                            <Typography fontWeight="medium" sx={{ fontSize: "0.85rem" }}>{psp.name}</Typography>
+                          </TableCell>
+                          <TableCell>
+                            {psp.website ? (
+                              <Link
+                                href={psp.website.startsWith("http") ? psp.website : `https://${psp.website}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                {psp.website}
+                              </Link>
+                            ) : (
+                              "-"
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <Chip
+                              label={psp.isActive ? "Active" : "Inactive"}
+                              color={psp.isActive ? "success" : "default"}
+                              size="small"
+                            />
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                ) : (
+                  <Typography color="text.secondary" align="center" sx={{ py: 3 }}>
+                    No PSPs used yet
+                  </Typography>
+                )}
+              </TableContainer>
+            </Grid>
+          </Grid>
         </Paper>
       )}
 

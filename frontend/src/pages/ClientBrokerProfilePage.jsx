@@ -32,8 +32,6 @@ import {
 import {
   ArrowBack as BackIcon,
   Edit as EditIcon,
-  Delete as DeleteIcon,
-  Add as AddIcon,
   Business as BrokerIcon,
   Payment as PSPIcon,
   Language as WebIcon,
@@ -43,7 +41,6 @@ import { useSelector } from "react-redux";
 import { selectUser } from "../store/slices/authSlice";
 import api from "../services/api";
 import toast from "react-hot-toast";
-import PSPSelector from "../components/accountManagement/PSPSelector";
 import CommentButton from "../components/CommentButton";
 
 const leadsTableSx = {
@@ -93,9 +90,6 @@ const ClientBrokerProfilePage = () => {
   const [loading, setLoading] = useState(true);
 
   // Dialog states
-  const [pspDialogOpen, setPspDialogOpen] = useState(false);
-  const [pspLoading, setPspLoading] = useState(false);
-
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editData, setEditData] = useState({ name: "", domain: "", description: "" });
   const [editLoading, setEditLoading] = useState(false);
@@ -152,32 +146,6 @@ const ClientBrokerProfilePage = () => {
     fetchOrderLeads();
   }, [fetchProfile, fetchOrderLeads]);
 
-  // PSP handlers
-  const handleAddPSP = async (pspId) => {
-    try {
-      setPspLoading(true);
-      await api.post(`/client-brokers/${id}/psps`, { pspId });
-      toast.success("PSP added to broker");
-      setPspDialogOpen(false);
-      fetchProfile();
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to add PSP");
-    } finally {
-      setPspLoading(false);
-    }
-  };
-
-  const handleRemovePSP = async (pspId) => {
-    if (!window.confirm("Remove this PSP from the broker?")) return;
-    try {
-      await api.delete(`/client-brokers/${id}/psps/${pspId}`);
-      toast.success("PSP removed");
-      fetchProfile();
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to remove PSP");
-    }
-  };
-
   // Edit broker handlers
   const handleEditBroker = async () => {
     try {
@@ -208,8 +176,6 @@ const ClientBrokerProfilePage = () => {
       </Box>
     );
   }
-
-  const existingPspIds = profile.psps?.map((p) => p._id) || [];
 
   return (
     <Box>
@@ -352,9 +318,9 @@ const ClientBrokerProfilePage = () => {
                 orderLeads.map((row, idx) => (
                   <TableRow key={`${row.orderId}-${row.leadId}-${idx}`} hover>
                     <TableCell>
-                      <Tooltip title={row.orderId}>
+                      <Tooltip title={row.orderId || "No order"}>
                         <Typography noWrap sx={{ fontFamily: "monospace", fontSize: "0.75rem", color: "primary.dark", fontWeight: 500 }}>
-                          {row.orderId.slice(-8)}
+                          {row.orderId ? row.orderId.slice(-8) : "-"}
                         </Typography>
                       </Tooltip>
                     </TableCell>
@@ -410,19 +376,17 @@ const ClientBrokerProfilePage = () => {
       </Paper>
 
       <Grid container spacing={3}>
-        {/* PSPs Section */}
+        {/* PSPs Section - auto-fetched from deposit confirmations */}
         <Grid item xs={12} md={6}>
           <Paper sx={{ p: 2 }}>
             <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
               <Typography variant="h6">
                 <PSPIcon sx={{ mr: 1, verticalAlign: "middle" }} />
-                Payment Service Providers (PSPs)
+                Used PSPs
               </Typography>
-              {isAdmin && (
-                <Button size="small" startIcon={<AddIcon />} onClick={() => setPspDialogOpen(true)}>
-                  Add
-                </Button>
-              )}
+              <Typography variant="caption" color="text.secondary">
+                From deposit confirmations
+              </Typography>
             </Box>
             {profile.psps?.length ? (
               <TableContainer>
@@ -432,7 +396,6 @@ const ClientBrokerProfilePage = () => {
                       <TableCell>Name</TableCell>
                       <TableCell>Website</TableCell>
                       <TableCell>Status</TableCell>
-                      {isAdmin && <TableCell align="right">Actions</TableCell>}
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -461,17 +424,6 @@ const ClientBrokerProfilePage = () => {
                             size="small"
                           />
                         </TableCell>
-                        {isAdmin && (
-                          <TableCell align="right">
-                            <IconButton
-                              size="small"
-                              color="error"
-                              onClick={() => handleRemovePSP(psp._id)}
-                            >
-                              <DeleteIcon fontSize="small" />
-                            </IconButton>
-                          </TableCell>
-                        )}
                       </TableRow>
                     ))}
                   </TableBody>
@@ -479,7 +431,7 @@ const ClientBrokerProfilePage = () => {
               </TableContainer>
             ) : (
               <Typography color="text.secondary" align="center" sx={{ py: 3 }}>
-                No PSPs linked to this broker
+                No PSPs used for this broker yet
               </Typography>
             )}
           </Paper>
@@ -531,15 +483,6 @@ const ClientBrokerProfilePage = () => {
           </Paper>
         </Grid>
       </Grid>
-
-      {/* PSP Selector Dialog */}
-      <PSPSelector
-        open={pspDialogOpen}
-        onClose={() => setPspDialogOpen(false)}
-        onSelect={handleAddPSP}
-        excludeIds={existingPspIds}
-        loading={pspLoading}
-      />
 
       {/* Edit Broker Dialog */}
       <Dialog open={editDialogOpen} onClose={() => setEditDialogOpen(false)} maxWidth="sm" fullWidth>

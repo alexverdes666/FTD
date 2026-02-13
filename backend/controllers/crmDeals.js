@@ -4,6 +4,7 @@ const CrmDeal = require("../models/CrmDeal");
 const ClientNetwork = require("../models/ClientNetwork");
 const AgentComment = require("../models/AgentComment");
 const Order = require("../models/Order");
+const Lead = require("../models/Lead");
 
 exports.getCrmDeals = async (req, res, next) => {
   try {
@@ -293,21 +294,91 @@ exports.getCrmDashboardStats = async (req, res, next) => {
       commentStatsMap[stat._id.toString()] = stat.unresolvedCount;
     });
 
-    // Get leads count per client broker from orders
-    const brokerStats = await Order.aggregate([
-      { $unwind: "$selectedClientBrokers" },
+    // Get leads count per client broker from actual lead assignments (not order exclusion filters)
+    const brokerStats = await Lead.aggregate([
+      { $unwind: "$assignedClientBrokers" },
       {
         $group: {
-          _id: "$selectedClientBrokers",
-          ordersCount: { $sum: 1 },
-          totalLeads: { $sum: { $size: { $ifNull: ["$leads", []] } } },
+          _id: "$assignedClientBrokers",
+          totalLeads: { $sum: 1 },
+          leadIds: { $push: "$_id" },
         },
       },
     ]);
 
+    // Get unique PSP counts per broker from deposit confirmations
+    const allBrokerLeadIds = brokerStats.flatMap((s) => s.leadIds);
+    let brokerPspMap = {};
+    if (allBrokerLeadIds.length > 0) {
+      const pspAgg = await Order.aggregate([
+        { $match: { leads: { $in: allBrokerLeadIds } } },
+        { $unwind: "$leadsMetadata" },
+        {
+          $match: {
+            "leadsMetadata.depositConfirmed": true,
+            "leadsMetadata.depositPSP": { $ne: null },
+            "leadsMetadata.leadId": { $in: allBrokerLeadIds },
+          },
+        },
+        {
+          $lookup: {
+            from: "leads",
+            localField: "leadsMetadata.leadId",
+            foreignField: "_id",
+            as: "leadDoc",
+          },
+        },
+        { $unwind: "$leadDoc" },
+        { $unwind: "$leadDoc.assignedClientBrokers" },
+        {
+          $group: {
+            _id: "$leadDoc.assignedClientBrokers",
+            psps: { $addToSet: "$leadsMetadata.depositPSP" },
+          },
+        },
+      ]);
+      pspAgg.forEach((entry) => {
+        brokerPspMap[entry._id.toString()] = entry.psps.length;
+      });
+    }
+
     const brokerStatsMap = {};
     brokerStats.forEach((stat) => {
-      brokerStatsMap[stat._id.toString()] = stat;
+      brokerStatsMap[stat._id.toString()] = {
+        _id: stat._id,
+        totalLeads: stat.totalLeads,
+        pspCount: brokerPspMap[stat._id.toString()] || 0,
+      };
+    });
+
+    // Get unique broker counts per client network from lead assignments
+    const networkBrokerStats = await Order.aggregate([
+      { $match: { selectedClientNetwork: { $ne: null }, leads: { $exists: true, $ne: [] } } },
+      { $unwind: "$leads" },
+      {
+        $lookup: {
+          from: "leads",
+          localField: "leads",
+          foreignField: "_id",
+          as: "leadDoc",
+        },
+      },
+      { $unwind: "$leadDoc" },
+      { $match: { "leadDoc.assignedClientBrokers": { $exists: true, $ne: [] } } },
+      { $unwind: "$leadDoc.assignedClientBrokers" },
+      {
+        $group: {
+          _id: "$selectedClientNetwork",
+          brokers: { $addToSet: "$leadDoc.assignedClientBrokers" },
+        },
+      },
+    ]);
+    networkBrokerStats.forEach((stat) => {
+      const key = stat._id.toString();
+      if (!networkStatsMap[key]) {
+        networkStatsMap[key] = { _id: stat._id, dealsCount: 0 };
+      }
+      networkStatsMap[key].brokerCount = stat.brokers.length;
     });
 
     res.status(200).json({

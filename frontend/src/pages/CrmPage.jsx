@@ -201,24 +201,25 @@ const CrmPage = () => {
             <Table size="small" stickyHeader sx={compactTableSx}>
               <TableHead>
                 <TableRow>
-                  <TableCell sx={{ width: "30%" }}>Name</TableCell>
-                  <TableCell sx={{ textAlign: "center", width: "10%" }}>Status</TableCell>
-                  <TableCell sx={{ textAlign: "center", width: "12%" }}>Deal Type</TableCell>
-                  <TableCell sx={{ textAlign: "center", width: "12%" }}>Employees</TableCell>
-                  <TableCell sx={{ textAlign: "center", width: "14%" }}>CRM Deals</TableCell>
-                  <TableCell sx={{ textAlign: "center", width: "14%" }}>Open Comments</TableCell>
+                  <TableCell sx={{ width: "26%" }}>Name</TableCell>
+                  <TableCell sx={{ textAlign: "center", width: "9%" }}>Status</TableCell>
+                  <TableCell sx={{ textAlign: "center", width: "10%" }}>Deal Type</TableCell>
+                  <TableCell sx={{ textAlign: "center", width: "11%" }}>Employees</TableCell>
+                  <TableCell sx={{ textAlign: "center", width: "11%" }}>Brokers</TableCell>
+                  <TableCell sx={{ textAlign: "center", width: "11%" }}>CRM Deals</TableCell>
+                  <TableCell sx={{ textAlign: "center", width: "11%" }}>Open Comments</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {networksLoading ? (
                   <TableRow>
-                    <TableCell colSpan={6} align="center" sx={{ py: 3 }}>
+                    <TableCell colSpan={7} align="center" sx={{ py: 3 }}>
                       <CircularProgress size={22} />
                     </TableCell>
                   </TableRow>
                 ) : networks.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} align="center" sx={{ py: 3 }}>
+                    <TableCell colSpan={7} align="center" sx={{ py: 3 }}>
                       <Typography variant="caption" color="text.secondary">
                         No client networks found
                       </Typography>
@@ -263,6 +264,9 @@ const CrmPage = () => {
                       </TableCell>
                       <TableCell sx={{ textAlign: "center" }}>
                         {network.employees?.length || 0}
+                      </TableCell>
+                      <TableCell sx={{ textAlign: "center" }}>
+                        {networkStats.networkStats?.[network._id]?.brokerCount || 0}
                       </TableCell>
                       <TableCell sx={{ textAlign: "center" }}>
                         {getNetworkDealsCount(network._id)}
@@ -355,7 +359,7 @@ const CrmPage = () => {
                         />
                       </TableCell>
                       <TableCell sx={{ textAlign: "center" }}>
-                        {broker.psps?.length || 0}
+                        {networkStats.brokerStats?.[broker._id]?.pspCount || 0}
                       </TableCell>
                       <TableCell sx={{ textAlign: "center" }}>
                         {networkStats.brokerStats?.[broker._id]?.totalLeads || 0}

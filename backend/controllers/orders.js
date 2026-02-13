@@ -1246,26 +1246,8 @@ const handleManualSelectionOrder = async (req, res, next) => {
         });
       }
 
-      // Add client brokers to history if provided
-      if (selectedClientBrokers && selectedClientBrokers.length > 0) {
-        selectedClientBrokers.forEach((brokerId) => {
-          if (!lead.assignedClientBrokers) {
-            lead.assignedClientBrokers = [];
-          }
-          if (!lead.assignedClientBrokers.includes(brokerId)) {
-            lead.assignedClientBrokers.push(brokerId);
-          }
-          if (!lead.clientBrokerHistory) {
-            lead.clientBrokerHistory = [];
-          }
-          lead.clientBrokerHistory.push({
-            clientBroker: brokerId,
-            assignedAt: new Date(),
-            assignedBy: req.user._id,
-            orderId: order._id,
-          });
-        });
-      }
+      // No automatic client broker assignment - selectedClientBrokers are exclusion filters only
+      // Client brokers should be assigned manually later via "Manage Brokers" in the orders tab
 
       // Add campaign to history
       if (selectedCampaign) {
@@ -6018,26 +6000,8 @@ exports.addLeadsToOrder = async (req, res, next) => {
         });
       }
 
-      // Add client brokers to history if the order has any
-      if (order.selectedClientBrokers && order.selectedClientBrokers.length > 0) {
-        order.selectedClientBrokers.forEach((brokerId) => {
-          if (!lead.assignedClientBrokers) {
-            lead.assignedClientBrokers = [];
-          }
-          if (!lead.assignedClientBrokers.includes(brokerId)) {
-            lead.assignedClientBrokers.push(brokerId);
-          }
-          if (!lead.clientBrokerHistory) {
-            lead.clientBrokerHistory = [];
-          }
-          lead.clientBrokerHistory.push({
-            clientBroker: brokerId,
-            assignedAt: new Date(),
-            assignedBy: req.user._id,
-            orderId: order._id,
-          });
-        });
-      }
+      // No automatic client broker assignment - selectedClientBrokers are exclusion filters only
+      // Client brokers should be assigned manually later via "Manage Brokers" in the orders tab
 
       // Add campaign to history if the order has one
       if (order.selectedCampaign) {
@@ -6811,26 +6775,8 @@ exports.restoreLeadToOrder = async (req, res, next) => {
       });
     }
 
-    // Add client brokers to history if the order has any
-    if (order.selectedClientBrokers && order.selectedClientBrokers.length > 0) {
-      order.selectedClientBrokers.forEach((brokerId) => {
-        if (!lead.assignedClientBrokers) {
-          lead.assignedClientBrokers = [];
-        }
-        if (!lead.assignedClientBrokers.some((id) => id.toString() === brokerId.toString())) {
-          lead.assignedClientBrokers.push(brokerId);
-        }
-        if (!lead.clientBrokerHistory) {
-          lead.clientBrokerHistory = [];
-        }
-        lead.clientBrokerHistory.push({
-          clientBroker: brokerId,
-          assignedAt: new Date(),
-          assignedBy: req.user._id,
-          orderId: order._id,
-        });
-      });
-    }
+    // No automatic client broker assignment - selectedClientBrokers are exclusion filters only
+    // Client brokers should be assigned manually later via "Manage Brokers" in the orders tab
 
     // Add campaign to history if the order has one
     if (order.selectedCampaign) {
@@ -7118,25 +7064,8 @@ exports.undoLeadReplacement = async (req, res, next) => {
           orderId: order._id,
         });
       }
-      if (order.selectedClientBrokers && order.selectedClientBrokers.length > 0) {
-        order.selectedClientBrokers.forEach((brokerId) => {
-          if (!oldLead.assignedClientBrokers) {
-            oldLead.assignedClientBrokers = [];
-          }
-          if (!oldLead.assignedClientBrokers.some((id) => id.toString() === brokerId.toString())) {
-            oldLead.assignedClientBrokers.push(brokerId);
-          }
-          if (!oldLead.clientBrokerHistory) {
-            oldLead.clientBrokerHistory = [];
-          }
-          oldLead.clientBrokerHistory.push({
-            clientBroker: brokerId,
-            assignedAt: new Date(),
-            assignedBy: req.user._id,
-            orderId: order._id,
-          });
-        });
-      }
+      // No automatic client broker assignment - selectedClientBrokers are exclusion filters only
+      // Client brokers should be assigned manually later via "Manage Brokers" in the orders tab
       if (order.selectedCampaign) {
         if (!oldLead.campaignHistory) {
           oldLead.campaignHistory = [];

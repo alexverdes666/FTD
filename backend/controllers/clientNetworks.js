@@ -6,6 +6,8 @@ const Lead = require("../models/Lead");
 const Order = require("../models/Order");
 const CrmDeal = require("../models/CrmDeal");
 const AgentComment = require("../models/AgentComment");
+const ClientBroker = require("../models/ClientBroker");
+const PSP = require("../models/PSP");
 const ClientNetworkAuditService = require("../services/clientNetworkAuditService");
 
 exports.getClientNetworks = async (req, res, next) => {
@@ -330,6 +332,43 @@ exports.getClientNetworkProfile = async (req, res, next) => {
       },
     ]);
 
+    // Get used client brokers: leads from orders for this network that have assigned brokers
+    const networkOrderLeadIds = await Order.find({ selectedClientNetwork: clientNetwork._id })
+      .distinct("leads");
+    let usedBrokers = [];
+    let usedPsps = [];
+    if (networkOrderLeadIds.length > 0) {
+      // Unique broker IDs from leads in this network's orders
+      const brokerIds = await Lead.find({
+        _id: { $in: networkOrderLeadIds },
+        assignedClientBrokers: { $exists: true, $ne: [] },
+      }).distinct("assignedClientBrokers");
+      if (brokerIds.length > 0) {
+        usedBrokers = await ClientBroker.find({ _id: { $in: brokerIds } })
+          .select("name domain isActive")
+          .lean();
+      }
+
+      // Unique PSPs from deposit confirmations on this network's leads
+      const pspAgg = await Order.aggregate([
+        { $match: { selectedClientNetwork: clientNetwork._id } },
+        { $unwind: "$leadsMetadata" },
+        {
+          $match: {
+            "leadsMetadata.depositConfirmed": true,
+            "leadsMetadata.depositPSP": { $ne: null },
+          },
+        },
+        { $group: { _id: "$leadsMetadata.depositPSP" } },
+      ]);
+      const pspIds = pspAgg.map((p) => p._id);
+      if (pspIds.length > 0) {
+        usedPsps = await PSP.find({ _id: { $in: pspIds } })
+          .select("name description website isActive")
+          .lean();
+      }
+    }
+
     res.status(200).json({
       success: true,
       data: {
@@ -338,6 +377,8 @@ exports.getClientNetworkProfile = async (req, res, next) => {
         comments,
         commentsCount: comments.length,
         unresolvedCommentsCount: comments.filter((c) => !c.isResolved).length,
+        usedBrokers,
+        usedPsps,
         dealsSummary: dealsSummary[0] || {
           totalOrders: 0,
           totalFTDRequested: 0,

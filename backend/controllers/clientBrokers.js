@@ -521,24 +521,40 @@ exports.getClientBrokerProfile = async (req, res, next) => {
       })
       .sort({ createdAt: -1 });
 
-    // Get orders that include this broker and count leads
-    const orderStats = await Order.aggregate([
-      { $match: { selectedClientBrokers: clientBroker._id } },
-      {
-        $group: {
-          _id: null,
-          totalOrders: { $sum: 1 },
-          totalLeads: { $sum: { $size: { $ifNull: ["$leads", []] } } },
-        },
-      },
-    ]);
+    // Count leads actually assigned to this broker (via manual "Manage Brokers")
+    const totalLeads = await Lead.countDocuments({ assignedClientBrokers: clientBroker._id });
 
-    const stats = orderStats[0] || { totalOrders: 0, totalLeads: 0 };
+    // Fetch PSPs actually used in deposit confirmations for leads assigned to this broker
+    const leadIds = await Lead.find({ assignedClientBrokers: clientBroker._id }).distinct("_id");
+    let usedPsps = [];
+    if (leadIds.length > 0) {
+      const pspAgg = await Order.aggregate([
+        { $match: { leads: { $in: leadIds } } },
+        { $unwind: "$leadsMetadata" },
+        {
+          $match: {
+            "leadsMetadata.depositConfirmed": true,
+            "leadsMetadata.depositPSP": { $ne: null },
+            "leadsMetadata.leadId": { $in: leadIds },
+          },
+        },
+        { $group: { _id: "$leadsMetadata.depositPSP" } },
+      ]);
+      const pspIds = pspAgg.map((p) => p._id);
+      if (pspIds.length > 0) {
+        usedPsps = await PSP.find({ _id: { $in: pspIds } }).select("name description website isActive").lean();
+      }
+    }
+
+    const stats = { totalOrders: 0, totalLeads };
+    const brokerObj = clientBroker.toObject();
+    // Override manually managed psps with auto-fetched deposit PSPs
+    brokerObj.psps = usedPsps;
 
     res.status(200).json({
       success: true,
       data: {
-        ...clientBroker.toObject(),
+        ...brokerObj,
         comments,
         commentsCount: comments.length,
         unresolvedCommentsCount: comments.filter((c) => !c.isResolved).length,
@@ -566,51 +582,42 @@ exports.getBrokerOrdersWithLeads = async (req, res, next) => {
       });
     }
 
-    const filter = { selectedClientBrokers: clientBroker._id };
-    const skip = (page - 1) * limit;
+    const skip = (page - 1) * parseInt(limit);
 
-    const [orders, total] = await Promise.all([
-      Order.find(filter)
-        .populate({
-          path: "leads",
-          select: "firstName lastName newEmail leadType",
-        })
-        .select("leads leadsMetadata createdAt")
+    // Query leads that were actually assigned to this broker (via manual "Manage Brokers")
+    // Not orders where this broker was used as an exclusion filter
+    const [leads, total] = await Promise.all([
+      Lead.find({ assignedClientBrokers: clientBroker._id })
+        .select("firstName lastName newEmail leadType clientBrokerHistory")
         .skip(skip)
         .limit(parseInt(limit))
         .sort({ createdAt: -1 }),
-      Order.countDocuments(filter),
+      Lead.countDocuments({ assignedClientBrokers: clientBroker._id }),
     ]);
 
-    // Flatten into lead rows with order context
-    const rows = [];
-    for (const order of orders) {
-      const metadataMap = {};
-      if (order.leadsMetadata) {
-        for (const m of order.leadsMetadata) {
-          if (m.lead) metadataMap[m.lead.toString()] = m;
-        }
-      }
-      for (const lead of (order.leads || [])) {
-        if (!lead || !lead._id) continue;
-        const meta = metadataMap[lead._id.toString()];
-        rows.push({
-          orderId: order._id,
-          orderDate: order.createdAt,
-          leadId: lead._id,
-          name: `${lead.firstName} ${lead.lastName}`.trim(),
-          email: lead.newEmail,
-          leadType: meta?.orderedAs || lead.leadType,
-        });
-      }
-    }
+    // Build lead rows with order context from clientBrokerHistory
+    const rows = leads.map((lead) => {
+      // Find history entries for this broker, prefer one with an orderId
+      const historyEntries = (lead.clientBrokerHistory || []).filter(
+        (h) => h.clientBroker && h.clientBroker.toString() === clientBroker._id.toString()
+      );
+      const entryWithOrder = historyEntries.find((h) => h.orderId) || historyEntries[0];
+      return {
+        orderId: entryWithOrder?.orderId?.toString() || null,
+        orderDate: entryWithOrder?.assignedAt || lead.createdAt,
+        leadId: lead._id,
+        name: `${lead.firstName} ${lead.lastName}`.trim(),
+        email: lead.newEmail,
+        leadType: lead.leadType,
+      };
+    });
 
     res.status(200).json({
       success: true,
       data: rows,
       pagination: {
         current: parseInt(page),
-        pages: Math.ceil(total / limit),
+        pages: Math.ceil(total / parseInt(limit)),
         total,
         limit: parseInt(limit),
       },

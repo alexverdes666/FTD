@@ -4488,7 +4488,7 @@ exports.getLeadFullHistory = async (req, res, next) => {
     const fullHistory = {
       lead: lead,
       orders: orders.map((order) => {
-        const metadata = order.leadsMetadata.find(
+        const metadata = (order.leadsMetadata || []).find(
           (m) => m.leadId && m.leadId.toString() === leadId
         );
         return {
