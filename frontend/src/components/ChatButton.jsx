@@ -44,24 +44,35 @@ const ChatButton = () => {
   const dragStart = React.useRef({ x: 0, y: 0, bottom: 0, right: 0 });
   const hasMoved = React.useRef(false);
 
+  const pointerIdRef = React.useRef(null);
   const handlePointerDown = (e) => {
     isDragging.current = true;
     hasMoved.current = false;
+    pointerIdRef.current = e.pointerId;
     dragStart.current = { x: e.clientX, y: e.clientY, bottom: position.bottom, right: position.right };
-    e.currentTarget.setPointerCapture(e.pointerId);
+    // Don't capture pointer immediately — wait until drag threshold is reached
+    // so that click events on the inner Fab still fire normally on desktop
   };
   const handlePointerMove = (e) => {
     if (!isDragging.current) return;
     const dx = e.clientX - dragStart.current.x;
     const dy = e.clientY - dragStart.current.y;
-    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) hasMoved.current = true;
+    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+      if (!hasMoved.current) {
+        hasMoved.current = true;
+        // Capture pointer only once drag actually starts
+        try { e.currentTarget.setPointerCapture(pointerIdRef.current); } catch (_) {}
+      }
+    }
+    if (!hasMoved.current) return;
     setPosition({
       right: Math.max(0, dragStart.current.right - dx),
       bottom: Math.max(0, dragStart.current.bottom - dy),
     });
   };
-  const handlePointerUp = () => {
+  const handlePointerUp = (e) => {
     isDragging.current = false;
+    try { e.currentTarget.releasePointerCapture(pointerIdRef.current); } catch (_) {}
   };
 
   // Initialize chat service when user is authenticated
@@ -78,7 +89,7 @@ const ChatButton = () => {
   }, [isAuthenticated, user]);
 
   // Invalidate unread count query to trigger a refetch
-  const rerefetchUnreadCount = () => {
+  const refetchUnreadCount = () => {
     queryClient.invalidateQueries({ queryKey: ['chat', 'unreadCount'] });
   };
 
