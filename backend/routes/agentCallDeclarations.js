@@ -18,6 +18,7 @@ const {
   findLeadByPhone,
   streamRecording,
   getDisabledCallTypes,
+  getLeadOrders,
 } = require("../controllers/agentCallDeclarations");
 
 // All routes require authentication
@@ -40,6 +41,9 @@ router.get("/lead-by-phone", findLeadByPhone);
 
 // Get disabled call types for a lead (checks confirmed deposits and existing declarations)
 router.get("/lead-disabled-types/:leadId", getDisabledCallTypes);
+
+// Get confirmed deposit orders for a lead (for order selection in declaration dialog)
+router.get("/lead-orders/:leadId", getLeadOrders);
 
 // Proxy call recording to avoid mixed content (HTTP→HTTPS)
 router.get("/recording/:filename", streamRecording);

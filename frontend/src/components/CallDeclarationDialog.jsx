@@ -31,7 +31,7 @@ import {
   Person as PersonIcon,
   Contacts as ContactsIcon,
 } from '@mui/icons-material';
-import { createDeclaration, previewBonus, findLeadByPhone, getDisabledCallTypes } from '../services/callDeclarations';
+import { createDeclaration, previewBonus, findLeadsByPhone, getDisabledCallTypes, getLeadOrders } from '../services/callDeclarations';
 import api from '../services/api';
 
 const CALL_TYPES = [
@@ -67,6 +67,11 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
   const [leadAutoFilled, setLeadAutoFilled] = useState(false);
   const [leadSearchLoading, setLeadSearchLoading] = useState(false);
 
+  // Order selection state (when a lead has multiple orders with confirmed deposits)
+  const [availableOrders, setAvailableOrders] = useState([]);
+  const [selectedOrderId, setSelectedOrderId] = useState('');
+  const [ordersLoading, setOrdersLoading] = useState(false);
+
   // Disabled call types for the selected lead
   const [disabledCallTypes, setDisabledCallTypes] = useState([]);
 
@@ -100,10 +105,13 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
 
       setLeadSearchLoading(true);
       try {
-        const matchedLead = await findLeadByPhone(call.lineNumber, call.email);
-        if (matchedLead) {
-          setLeadId(matchedLead._id);
-          setLeadAutoFilled(true);
+        const { leads: matchedLeads, multiple } = await findLeadsByPhone(call.lineNumber, call.email);
+        if (matchedLeads.length > 0) {
+          setLeadId(matchedLeads[0]._id);
+          // Only lock selection when exactly one lead matches.
+          // When multiple leads match (same phone, different orders),
+          // let the agent pick which order's lead to declare for.
+          setLeadAutoFilled(!multiple);
         } else {
           setLeadAutoFilled(false);
         }
@@ -118,14 +126,43 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
     autoFillLead();
   }, [open, call?.lineNumber, call?.email]);
 
-  // Fetch disabled call types when lead changes
+  // Fetch available orders when lead changes
+  useEffect(() => {
+    const fetchOrders = async () => {
+      if (!leadId) {
+        setAvailableOrders([]);
+        setSelectedOrderId('');
+        return;
+      }
+      setOrdersLoading(true);
+      try {
+        const orders = await getLeadOrders(leadId);
+        setAvailableOrders(orders);
+        // Auto-select if only one order
+        if (orders.length === 1) {
+          setSelectedOrderId(orders[0].orderId);
+        } else {
+          setSelectedOrderId('');
+        }
+      } catch (err) {
+        console.error('Error fetching lead orders:', err);
+        setAvailableOrders([]);
+        setSelectedOrderId('');
+      } finally {
+        setOrdersLoading(false);
+      }
+    };
+    fetchOrders();
+  }, [leadId]);
+
+  // Fetch disabled call types when lead or selected order changes
   useEffect(() => {
     const fetchDisabledTypes = async () => {
       if (!leadId) {
         setDisabledCallTypes([]);
         return;
       }
-      const disabled = await getDisabledCallTypes(leadId);
+      const disabled = await getDisabledCallTypes(leadId, selectedOrderId || null);
       setDisabledCallTypes(disabled);
       // Reset callType if it became disabled
       if (callType && disabled.includes(callType)) {
@@ -133,7 +170,7 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
       }
     };
     fetchDisabledTypes();
-  }, [leadId]);
+  }, [leadId, selectedOrderId]);
 
   // Reset form when dialog opens/closes
   useEffect(() => {
@@ -147,6 +184,9 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
       setLeadId('');
       setLeadAutoFilled(false);
       setDisabledCallTypes([]);
+      setAvailableOrders([]);
+      setSelectedOrderId('');
+      setOrdersLoading(false);
     }
   }, [open]);
 
@@ -217,6 +257,7 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
         description: description.trim() || undefined,
         affiliateManagerId,
         leadId,
+        orderId: selectedOrderId || undefined,
         recordFile: call.recordFile || '',
       };
 
@@ -426,9 +467,11 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
               setLeadId(newValue ? (newValue._id || newValue.leadId) : '');
             }
           }}
-          getOptionLabel={(option) =>
-            `${option.firstName || ''} ${option.lastName || ''} - ${option.newEmail || ''} - ${option.newPhone || ''}`
-          }
+          getOptionLabel={(option) => {
+            const orderId = option.orderId?._id || option.orderId;
+            const orderSuffix = orderId ? ` (Order: ${orderId.toString().slice(-8)})` : '';
+            return `${option.firstName || ''} ${option.lastName || ''} - ${option.newEmail || ''} - ${option.newPhone || ''}${orderSuffix}`;
+          }}
           isOptionEqualToValue={(option, value) =>
             (option._id || option.leadId) === (value._id || value.leadId)
           }
@@ -442,18 +485,24 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
           }}
           disabled={loading || leadAutoFilled || leadSearchLoading || (!passedLeads || passedLeads.length === 0)}
           noOptionsText="No leads found"
-          renderOption={(props, option) => (
-            <li {...props} key={option._id || option.leadId}>
-              <Box>
-                <Typography variant="body2">
-                  {option.firstName} {option.lastName}
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  {option.newEmail} | {option.newPhone}
-                </Typography>
-              </Box>
-            </li>
-          )}
+          renderOption={(props, option) => {
+            const orderId = option.orderId?._id || option.orderId;
+            return (
+              <li {...props} key={option._id || option.leadId}>
+                <Box>
+                  <Typography variant="body2">
+                    {option.firstName} {option.lastName}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {option.newEmail} | {option.newPhone}
+                    {orderId && (
+                      <> | Order: <b>{orderId.toString().slice(-8)}</b></>
+                    )}
+                  </Typography>
+                </Box>
+              </li>
+            );
+          }}
           renderInput={(params) => (
             <TextField
               {...params}
@@ -463,9 +512,11 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
                   ? "Searching for matching lead..."
                   : leadAutoFilled
                     ? "Lead auto-matched by phone number"
-                    : !passedLeads || passedLeads.length === 0
-                      ? "No leads assigned to you"
-                      : "Search by name, email or phone"
+                    : leadId && !leadAutoFilled
+                      ? "Multiple leads found for this phone — select the correct order"
+                      : !passedLeads || passedLeads.length === 0
+                        ? "No leads assigned to you"
+                        : "Search by name, email or phone"
               }
               InputProps={{
                 ...params.InputProps,
@@ -484,6 +535,31 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
           )}
           sx={{ mb: 2 }}
         />
+
+        {/* Order Selection - shown when lead has multiple orders with confirmed deposits */}
+        {leadId && availableOrders.length > 1 && (
+          <TextField
+            select
+            fullWidth
+            label="Order *"
+            value={selectedOrderId}
+            onChange={(e) => setSelectedOrderId(e.target.value)}
+            disabled={loading || ordersLoading}
+            sx={{ mb: 2 }}
+            helperText={ordersLoading ? "Loading orders..." : "This lead has multiple orders — select which order this call is for"}
+          >
+            {availableOrders.map((order) => (
+              <MenuItem key={order.orderId} value={order.orderId}>
+                <Box display="flex" alignItems="center" gap={1} width="100%">
+                  <span>Order: ...{order.orderId.toString().slice(-8)}</span>
+                  <Typography variant="caption" color="text.secondary" sx={{ ml: 'auto' }}>
+                    {order.orderCreatedAt ? new Date(order.orderCreatedAt).toLocaleDateString() : ''}
+                  </Typography>
+                </Box>
+              </MenuItem>
+            ))}
+          </TextField>
+        )}
 
         <TextField
           fullWidth
@@ -563,7 +639,7 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
           variant="contained"
           color="primary"
           onClick={handleSubmit}
-          disabled={loading || (callCategory === 'ftd' && !callType) || !affiliateManagerId || !leadId}
+          disabled={loading || (callCategory === 'ftd' && !callType) || !affiliateManagerId || !leadId || (availableOrders.length > 1 && !selectedOrderId)}
           startIcon={loading ? <CircularProgress size={16} /> : <SendIcon />}
         >
           {loading ? 'Submitting...' : 'Submit Declaration'}

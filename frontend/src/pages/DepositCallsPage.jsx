@@ -518,6 +518,17 @@ const DepositCallsPage = () => {
     }
   };
 
+  // Sync approved declarations into deposit call records (admin only)
+  const handleSyncApprovedDeclarations = async () => {
+    try {
+      const result = await depositCallsService.syncApprovedDeclarations();
+      toast.success(result.message || 'Sync complete');
+      fetchDepositCalls();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to sync approved declarations');
+    }
+  };
+
   // Network dialog handlers
   const handleOpenClientNetworksDialog = useCallback((networks, leadName) => {
     setClientNetworksDialog({
@@ -697,6 +708,13 @@ const DepositCallsPage = () => {
                 variant="filled"
                 size="small"
               />
+            )}
+            {isAdmin && (
+              <Tooltip title="Sync approved declarations into call slots">
+                <IconButton onClick={handleSyncApprovedDeclarations} color="success" size="small">
+                  <VerifiedIcon />
+                </IconButton>
+              </Tooltip>
             )}
             {isAdmin && (
               <Tooltip title="Sync confirmed deposits from orders">

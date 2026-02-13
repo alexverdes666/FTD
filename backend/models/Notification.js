@@ -46,6 +46,8 @@ const notificationSchema = new mongoose.Schema({
       'withdrawal_rejected',
       'withdrawal_completed',
       'sim_card_cooldown',
+      'fine_disputed',
+      'fine_decision',
       'system',
       'general'
     ],
@@ -79,7 +81,7 @@ const notificationSchema = new mongoose.Schema({
     },
     type: {
       type: String,
-      enum: ['Ticket', 'Order', 'Lead', 'User', 'Withdrawal', 'SimCard'],
+      enum: ['Ticket', 'Order', 'Lead', 'User', 'Withdrawal', 'SimCard', 'AgentFine'],
       default: null
     }
   },

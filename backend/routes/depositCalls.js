@@ -30,6 +30,9 @@ router.post("/assign-to-agent", depositCallsController.createAndAssignToAgent);
 // Sync confirmed deposits from orders into deposit call records (admin only)
 router.post("/sync-confirmed", depositCallsController.syncConfirmedDeposits);
 
+// Sync approved call declarations into deposit call records (admin only)
+router.post("/sync-approved-declarations", depositCallsController.syncApprovedDeclarations);
+
 // Update deposit call
 router.put("/:id", depositCallsController.updateDepositCall);
 

@@ -17,12 +17,12 @@ export const fetchCDRCalls = async (months = 3) => {
 };
 
 /**
- * Find a lead by phone number or email (for auto-fill in declaration dialog)
+ * Find leads by phone number or email (for auto-fill in declaration dialog)
  * @param {string} phone - Phone number to search
  * @param {string} email - Email to search (fallback)
- * @returns {Object|null} - Matching lead or null
+ * @returns {{ leads: Array, multiple: boolean }} - Matching leads and whether multiple were found
  */
-export const findLeadByPhone = async (phone, email) => {
+export const findLeadsByPhone = async (phone, email) => {
   try {
     const params = {};
     if (phone) params.phone = phone;
@@ -31,10 +31,15 @@ export const findLeadByPhone = async (phone, email) => {
     const response = await api.get("/call-declarations/lead-by-phone", {
       params,
     });
-    return response.data.data;
+
+    const { data, multiple } = response.data;
+    if (!data) return { leads: [], multiple: false };
+    // Backend returns single object when 1 match, array when multiple
+    const leads = Array.isArray(data) ? data : [data];
+    return { leads, multiple: !!multiple };
   } catch (error) {
-    console.error("Error finding lead by phone/email:", error);
-    return null;
+    console.error("Error finding leads by phone/email:", error);
+    return { leads: [], multiple: false };
   }
 };
 
@@ -222,14 +227,32 @@ export const fetchRecordingBlob = async (recordFile) => {
 /**
  * Get disabled call types for a lead
  * @param {string} leadId - Lead ID
+ * @param {string} orderId - Optional order ID to scope the check
  * @returns {Array} - Array of disabled call type values
  */
-export const getDisabledCallTypes = async (leadId) => {
+export const getDisabledCallTypes = async (leadId, orderId = null) => {
   try {
-    const response = await api.get(`/call-declarations/lead-disabled-types/${leadId}`);
+    const params = {};
+    if (orderId) params.orderId = orderId;
+    const response = await api.get(`/call-declarations/lead-disabled-types/${leadId}`, { params });
     return response.data.data.disabledCallTypes || [];
   } catch (error) {
     console.error("Error fetching disabled call types:", error);
+    return [];
+  }
+};
+
+/**
+ * Get confirmed deposit orders for a lead
+ * @param {string} leadId - Lead ID
+ * @returns {Array} - Array of { orderId, orderCreatedAt, depositCallId }
+ */
+export const getLeadOrders = async (leadId) => {
+  try {
+    const response = await api.get(`/call-declarations/lead-orders/${leadId}`);
+    return response.data.data || [];
+  } catch (error) {
+    console.error("Error fetching lead orders:", error);
     return [];
   }
 };

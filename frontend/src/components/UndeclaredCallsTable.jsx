@@ -40,6 +40,12 @@ const UndeclaredCallsTable = ({
     return number;
   };
 
+  const extractEmail = (raw) => {
+    if (!raw) return null;
+    const match = raw.match(/[^\s@]+@[^\s@]+\.[^\s@]+/);
+    return match ? match[0] : raw;
+  };
+
   const getDurationColor = (seconds) => {
     if (seconds >= 3600) return 'error'; // 1+ hour - red
     if (seconds >= 1800) return 'warning'; // 30+ min - orange
@@ -97,7 +103,7 @@ const UndeclaredCallsTable = ({
             >
               <TableCell>
                 <Typography variant="body2">
-                  {call.email || 'N/A'}
+                  {extractEmail(call.email) || 'N/A'}
                 </Typography>
               </TableCell>
               <TableCell>

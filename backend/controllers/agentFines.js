@@ -2,7 +2,7 @@ const AgentFine = require("../models/AgentFine");
 const User = require("../models/User");
 const FineImage = require("../models/FineImage");
 const Ticket = require("../models/Ticket");
-const { createTicketNotification } = require("./notifications");
+const { createTicketNotification, createFineNotification } = require("./notifications");
 
 // Get all fines for all agents (admin view)
 const getAllAgentFines = async (req, res) => {
@@ -465,13 +465,13 @@ const agentRespondToFine = async (req, res) => {
           lastActivityBy: agentId,
         });
 
-        // Notify all admins about the new ticket
+        // Notify all admins about the fine dispute
         const admins = await User.find({ role: "admin", isActive: true });
         for (const admin of admins) {
           if (admin._id.toString() !== agentId) {
-            await createTicketNotification(
-              "ticket_created",
-              ticket,
+            await createFineNotification(
+              "fine_disputed",
+              fine,
               admin._id,
               agentId,
               req.io
@@ -551,6 +551,19 @@ const adminDecideFine = async (req, res) => {
     fine.status = action === "reject_dispute" ? "admin_approved" : "admin_rejected";
 
     await fine.save();
+
+    // Notify the agent about the decision
+    try {
+      await createFineNotification(
+        "fine_decision",
+        fine,
+        fine.agent,
+        adminId,
+        req.io
+      );
+    } catch (notifError) {
+      console.error("Failed to send fine decision notification:", notifError);
+    }
 
     // Populate the response
     await fine.populate("agent", "fullName email");

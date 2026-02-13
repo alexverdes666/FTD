@@ -3,8 +3,23 @@ const Lead = require("../models/Lead");
 const Order = require("../models/Order");
 const User = require("../models/User");
 const ClientBroker = require("../models/ClientBroker");
+const AgentCallDeclaration = require("../models/AgentCallDeclaration");
 const mongoose = require("mongoose");
 const { ObjectId } = mongoose.Types;
+
+// Map call types to call slot numbers on DepositCall model (same as in agentCallDeclarations controller)
+const CALL_TYPE_TO_CALL_NUMBER = {
+  first_call: 1,
+  second_call: 2,
+  third_call: 3,
+  fourth_call: 4,
+  fifth_call: 5,
+  sixth_call: 6,
+  seventh_call: 7,
+  eighth_call: 8,
+  ninth_call: 9,
+  tenth_call: 10,
+};
 
 // Get all deposit calls with filters
 exports.getDepositCalls = async (req, res, next) => {
@@ -1160,6 +1175,93 @@ exports.syncConfirmedDeposits = async (req, res, next) => {
       success: true,
       message: `Sync complete: ${created} created, ${updated} updated, ${skipped} skipped`,
       data: { created, updated, skipped },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Sync approved call declarations into DepositCall records
+// Repairs DepositCall call slots that were missed due to the findOne bug
+exports.syncApprovedDeclarations = async (req, res, next) => {
+  try {
+    // Only admin can run this
+    if (req.user.role !== "admin") {
+      return res.status(403).json({
+        success: false,
+        message: "Only admins can sync approved declarations",
+      });
+    }
+
+    // Find all approved FTD declarations (exclude deposit type and filler)
+    const declarations = await AgentCallDeclaration.find({
+      status: "approved",
+      isActive: true,
+      callCategory: "ftd",
+      callType: { $ne: "deposit" },
+    }).lean();
+
+    let updated = 0;
+    let skipped = 0;
+    let notFound = 0;
+
+    for (const declaration of declarations) {
+      const callNumber = CALL_TYPE_TO_CALL_NUMBER[declaration.callType];
+      if (!callNumber) {
+        skipped++;
+        continue;
+      }
+
+      const callField = `call${callNumber}`;
+
+      // Look up lead to get email for fallback matching
+      const leadDoc = await Lead.findById(declaration.lead).select("newEmail");
+
+      // Find ALL DepositCall records for this lead (by leadId, then also by email)
+      let depositCalls = await DepositCall.find({
+        leadId: declaration.lead,
+        depositConfirmed: true,
+      });
+
+      // Also find by email fallback and merge (avoid duplicates)
+      if (leadDoc?.newEmail) {
+        const emailMatches = await DepositCall.find({
+          ftdEmail: leadDoc.newEmail,
+          depositConfirmed: true,
+          _id: { $nin: depositCalls.map((dc) => dc._id) },
+        });
+        depositCalls = depositCalls.concat(emailMatches);
+      }
+
+      if (depositCalls.length === 0) {
+        notFound++;
+        continue;
+      }
+
+      // Update all matching DepositCall records
+      let allSkipped = true;
+      for (const depositCall of depositCalls) {
+        if (depositCall[callField].status === "completed") {
+          continue;
+        }
+        depositCall[callField].status = "completed";
+        depositCall[callField].doneDate = declaration.reviewedAt || new Date();
+        depositCall[callField].approvedBy = declaration.reviewedBy;
+        depositCall[callField].approvedAt = declaration.reviewedAt || new Date();
+        await depositCall.save();
+        updated++;
+        allSkipped = false;
+      }
+
+      if (allSkipped) {
+        skipped++;
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `Sync complete: ${updated} call slots updated, ${skipped} already up-to-date, ${notFound} deposit call records not found`,
+      data: { updated, skipped, notFound, totalDeclarations: declarations.length },
     });
   } catch (error) {
     next(error);

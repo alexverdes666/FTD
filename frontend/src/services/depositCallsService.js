@@ -80,6 +80,17 @@ const depositCallsService = {
     }
   },
 
+  // Sync approved call declarations into deposit call records (admin only)
+  syncApprovedDeclarations: async () => {
+    try {
+      const response = await api.post("/deposit-calls/sync-approved-declarations");
+      return response.data;
+    } catch (error) {
+      console.error("Error syncing approved declarations:", error);
+      throw error;
+    }
+  },
+
   // Create and assign deposit call for a single FTD lead to an agent
   assignToAgent: async (orderId, leadId, agentId) => {
     try {

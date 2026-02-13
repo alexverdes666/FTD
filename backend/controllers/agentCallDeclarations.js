@@ -165,7 +165,7 @@ const fetchCDRCalls = async (req, res) => {
 const createDeclaration = async (req, res) => {
   try {
     const userId = req.user.id;
-    const { cdrCallId, callDate, callDuration, sourceNumber, destinationNumber, lineNumber, callType, callCategory, description, affiliateManagerId, leadId, recordFile } = req.body;
+    const { cdrCallId, callDate, callDuration, sourceNumber, destinationNumber, lineNumber, callType, callCategory, description, affiliateManagerId, leadId, orderId, recordFile } = req.body;
 
     // Validate required fields
     if (!cdrCallId || !callDate || !callDuration || !sourceNumber || !destinationNumber) {
@@ -262,26 +262,39 @@ const createDeclaration = async (req, res) => {
       });
     }
 
-    // Prevent duplicate call type per lead (check approved or pending declarations)
+    // Prevent duplicate call type per lead+order (check approved or pending declarations)
+    // When orderId is provided, scope the check to that order so the same lead
+    // can have separate declarations for different orders.
     if (callCategory === "ftd" && callType) {
-      const duplicateDeclaration = await AgentCallDeclaration.findOne({
+      const duplicateQuery = {
         lead: leadId,
         callType,
         status: { $in: ["approved", "pending"] },
         isActive: true,
-      });
+      };
+      if (orderId) {
+        duplicateQuery.orderId = orderId;
+      }
+
+      const duplicateDeclaration = await AgentCallDeclaration.findOne(duplicateQuery);
 
       if (duplicateDeclaration) {
         const statusText = duplicateDeclaration.status === "approved" ? "already approved" : "already pending approval";
         return res.status(400).json({
           success: false,
-          message: `This call type is ${statusText} for this lead`,
+          message: `This call type is ${statusText} for this lead${orderId ? " on this order" : ""}`,
         });
       }
 
       // For "deposit" type, also check if lead has a confirmed deposit in DepositCall
       if (callType === "deposit") {
-        const depositCall = await findDepositCallForLead(leadId, { depositConfirmed: true });
+        const depositQuery = { depositConfirmed: true };
+        if (orderId) {
+          depositQuery.orderId = orderId;
+        }
+        const depositCall = orderId
+          ? await DepositCall.findOne({ leadId, ...depositQuery })
+          : await findDepositCallForLead(leadId, depositQuery);
 
         if (depositCall) {
           return res.status(400).json({
@@ -326,6 +339,7 @@ const createDeclaration = async (req, res) => {
       declarationYear,
       affiliateManager: affiliateManagerId,
       lead: leadId,
+      orderId: orderId || null,
       recordFile: recordFile || "",
     });
 
@@ -680,34 +694,57 @@ const updateDepositCallOnApproval = async (declaration, reviewerId) => {
     return;
   }
 
-  // Find the DepositCall record for this lead (by leadId, then email fallback)
-  const depositCall = await findDepositCallForLead(lead);
-  if (!depositCall) {
-    console.log(`No DepositCall record found for lead ${lead}, skipping deposit call update`);
+  // A lead can appear in multiple orders, each with its own DepositCall record.
+  // The call is made to the person (lead), so all confirmed DepositCall records
+  // for this lead should reflect the approved call.
+  const leadDoc = await Lead.findById(lead).select("newEmail");
+
+  // Find all DepositCall records for this lead (by leadId, then also by email)
+  let depositCalls = await DepositCall.find({ leadId: lead, depositConfirmed: true });
+
+  // Also find by email fallback and merge (avoid duplicates)
+  if (leadDoc?.newEmail) {
+    const emailMatches = await DepositCall.find({
+      ftdEmail: leadDoc.newEmail,
+      depositConfirmed: true,
+      _id: { $nin: depositCalls.map((dc) => dc._id) },
+    });
+    depositCalls = depositCalls.concat(emailMatches);
+  }
+
+  if (depositCalls.length === 0) {
+    console.log(`No confirmed DepositCall records found for lead ${lead}, skipping deposit call update`);
     return;
   }
 
   const callField = `call${callNumber}`;
-  depositCall[callField].status = "completed";
-  depositCall[callField].doneDate = new Date();
-  depositCall[callField].approvedBy = reviewerId;
-  depositCall[callField].approvedAt = new Date();
 
-  await depositCall.save();
-
-  console.log(
-    `Updated DepositCall ${depositCall._id} call${callNumber} to completed for lead ${lead}`
-  );
+  for (const depositCall of depositCalls) {
+    if (depositCall[callField].status === "completed") {
+      continue;
+    }
+    depositCall[callField].status = "completed";
+    depositCall[callField].doneDate = new Date();
+    depositCall[callField].approvedBy = reviewerId;
+    depositCall[callField].approvedAt = new Date();
+    await depositCall.save();
+    console.log(
+      `Updated DepositCall ${depositCall._id} call${callNumber} to completed for lead ${lead}`
+    );
+  }
 };
 
 /**
  * Get disabled call types for a lead
- * GET /call-declarations/lead-disabled-types/:leadId
- * Returns call types that should be disabled in the declaration dropdown
+ * GET /call-declarations/lead-disabled-types/:leadId?orderId=XXX
+ * Returns call types that should be disabled in the declaration dropdown.
+ * When orderId is provided, only considers declarations for that specific order,
+ * allowing the same call type to be declared for different orders.
  */
 const getDisabledCallTypes = async (req, res) => {
   try {
     const { leadId } = req.params;
+    const { orderId } = req.query;
 
     if (!leadId) {
       return res.status(400).json({
@@ -718,20 +755,36 @@ const getDisabledCallTypes = async (req, res) => {
 
     const disabledCallTypes = [];
 
-    // Check if lead has a confirmed deposit in DepositCall (by leadId, then email fallback)
-    const depositCall = await findDepositCallForLead(leadId, { depositConfirmed: true });
-
-    if (depositCall) {
-      disabledCallTypes.push("deposit");
+    // Check if lead has a confirmed deposit in DepositCall for this specific order
+    if (orderId) {
+      const depositCall = await DepositCall.findOne({
+        leadId,
+        orderId,
+        depositConfirmed: true,
+      });
+      if (depositCall) {
+        disabledCallTypes.push("deposit");
+      }
+    } else {
+      const depositCall = await findDepositCallForLead(leadId, { depositConfirmed: true });
+      if (depositCall) {
+        disabledCallTypes.push("deposit");
+      }
     }
 
-    // Check for approved or pending declarations for this lead
-    const existingDeclarations = await AgentCallDeclaration.find({
+    // Check for approved or pending declarations for this lead (scoped by order if provided)
+    const declarationQuery = {
       lead: leadId,
       status: { $in: ["approved", "pending"] },
       isActive: true,
       callCategory: "ftd",
-    }).select("callType status");
+    };
+    if (orderId) {
+      declarationQuery.orderId = orderId;
+    }
+
+    const existingDeclarations = await AgentCallDeclaration.find(declarationQuery)
+      .select("callType status");
 
     for (const decl of existingDeclarations) {
       if (decl.callType && !disabledCallTypes.includes(decl.callType)) {
@@ -1027,10 +1080,11 @@ const getAllAgentsMonthlyTotals = async (req, res) => {
 };
 
 /**
- * Find a lead by phone number or email (for auto-filling in declaration dialog)
+ * Find leads by phone number (for auto-filling in declaration dialog)
  * GET /call-declarations/lead-by-phone?phone=XXXX&email=YYYY
- * Returns matching lead only if assigned to the requesting agent
- * Tries phone matching first, then email fallback
+ * Returns ALL matching leads assigned to the requesting agent (by phone).
+ * A lead can appear in multiple orders, so returning all matches lets the
+ * agent pick which order's lead to declare for.
  */
 const findLeadByPhone = async (req, res) => {
   try {
@@ -1044,37 +1098,38 @@ const findLeadByPhone = async (req, res) => {
       });
     }
 
-    let lead = null;
+    const selectFields = "_id firstName lastName newEmail newPhone orderId";
+    let leads = [];
 
-    // 1. Try phone matching first
+    // 1. Try phone matching first (returns ALL matches)
     if (phone && phone.trim().length >= 4) {
       const cleanPhone = phone.replace(/[\s\-\(\)\+]/g, "");
 
       // 1a. Exact match on newPhone (try with and without leading +)
-      lead = await Lead.findOne({
+      leads = await Lead.find({
         newPhone: { $in: [cleanPhone, `+${cleanPhone}`, phone.trim()] },
         assignedAgent: userId,
-      }).select("_id firstName lastName newEmail newPhone");
+      }).select(selectFields).populate("orderId", "createdAt");
 
       // 1b. If not found, try suffix-based matching (last 10 digits)
-      if (!lead && cleanPhone.length >= 7) {
+      if (leads.length === 0 && cleanPhone.length >= 7) {
         const suffix = cleanPhone.slice(-10);
-        lead = await Lead.findOne({
+        leads = await Lead.find({
           newPhone: { $regex: suffix + "$" },
           assignedAgent: userId,
-        }).select("_id firstName lastName newEmail newPhone");
+        }).select(selectFields).populate("orderId", "createdAt");
       }
     }
 
     // 2. If phone didn't match, try email
-    if (!lead && email && email.trim()) {
-      lead = await Lead.findOne({
+    if (leads.length === 0 && email && email.trim()) {
+      leads = await Lead.find({
         newEmail: email.trim(),
         assignedAgent: userId,
-      }).select("_id firstName lastName newEmail newPhone");
+      }).select(selectFields).populate("orderId", "createdAt");
     }
 
-    if (!lead) {
+    if (leads.length === 0) {
       return res.json({
         success: true,
         data: null,
@@ -1082,9 +1137,11 @@ const findLeadByPhone = async (req, res) => {
       });
     }
 
+    // Return single lead for backward compatibility, or array if multiple
     res.json({
       success: true,
-      data: lead,
+      data: leads.length === 1 ? leads[0] : leads,
+      multiple: leads.length > 1,
     });
   } catch (error) {
     console.error("Error finding lead by phone/email:", error);
@@ -1150,6 +1207,68 @@ const streamRecording = async (req, res) => {
   }
 };
 
+/**
+ * Get confirmed deposit orders for a lead
+ * GET /call-declarations/lead-orders/:leadId
+ * Returns all orders where this lead has a confirmed deposit (from DepositCall records).
+ * Used by the frontend to let the agent pick which order to declare a call for.
+ */
+const getLeadOrders = async (req, res) => {
+  try {
+    const { leadId } = req.params;
+
+    if (!leadId) {
+      return res.status(400).json({
+        success: false,
+        message: "Lead ID is required",
+      });
+    }
+
+    // Find all DepositCall records for this lead with confirmed deposits
+    const depositCalls = await DepositCall.find({
+      leadId,
+      depositConfirmed: true,
+    })
+      .select("orderId ftdEmail ftdName createdAt")
+      .populate("orderId", "createdAt")
+      .sort({ createdAt: -1 });
+
+    // Also check by email fallback
+    const leadDoc = await Lead.findById(leadId).select("newEmail");
+    let emailMatches = [];
+    if (leadDoc?.newEmail) {
+      emailMatches = await DepositCall.find({
+        ftdEmail: leadDoc.newEmail,
+        depositConfirmed: true,
+        _id: { $nin: depositCalls.map((dc) => dc._id) },
+      })
+        .select("orderId ftdEmail ftdName createdAt")
+        .populate("orderId", "createdAt")
+        .sort({ createdAt: -1 });
+    }
+
+    const allDepositCalls = depositCalls.concat(emailMatches);
+
+    const orders = allDepositCalls.map((dc) => ({
+      orderId: dc.orderId?._id || dc.orderId,
+      orderCreatedAt: dc.orderId?.createdAt || dc.createdAt,
+      depositCallId: dc._id,
+    }));
+
+    res.json({
+      success: true,
+      data: orders,
+    });
+  } catch (error) {
+    console.error("Error fetching lead orders:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch lead orders",
+      error: error.message,
+    });
+  }
+};
+
 module.exports = {
   fetchCDRCalls,
   createDeclaration,
@@ -1167,4 +1286,5 @@ module.exports = {
   findLeadByPhone,
   streamRecording,
   getDisabledCallTypes,
+  getLeadOrders,
 };

@@ -352,3 +352,64 @@ exports.createTicketNotification = async (type, ticket, recipientId, senderId = 
     throw error;
   }
 };
+
+// Helper function to create fine-related notifications
+exports.createFineNotification = async (type, fine, recipientId, senderId = null, io = null) => {
+  try {
+    let sender = null;
+    if (senderId) {
+      sender = await User.findById(senderId).select('fullName email role');
+    }
+
+    const senderName = sender?.fullName || 'Admin';
+    const amount = `$${fine.amount}`;
+
+    let title, message, priority;
+
+    switch (type) {
+      case 'fine_disputed':
+        title = 'Fine Disputed by Agent';
+        message = `${senderName} disputed a fine of ${amount}. Reason: ${fine.agentResponse?.disputeReason || fine.reason}`;
+        priority = 'high';
+        break;
+      case 'fine_decision':
+        const isDropped = fine.status === 'admin_rejected';
+        title = isDropped ? 'Fine Dropped - Dispute Approved' : 'Fine Stands - Dispute Rejected';
+        message = isDropped
+          ? `Your dispute for the ${amount} fine (${fine.reason}) has been approved. The fine has been dropped.`
+          : `Your dispute for the ${amount} fine (${fine.reason}) has been rejected. The fine still stands.`;
+        priority = 'high';
+        break;
+      default:
+        title = 'Fine Update';
+        message = `There has been an update to a fine of ${amount}.`;
+        priority = 'medium';
+    }
+
+    const notification = await Notification.create({
+      recipient: recipientId,
+      sender: senderId,
+      title,
+      message,
+      type,
+      priority,
+      relatedEntity: { id: fine._id, type: 'AgentFine' },
+      actionUrl: '/payroll',
+    });
+
+    const populatedNotification = await notification.populate('sender', 'fullName email role');
+
+    if (io) {
+      const unreadCount = await Notification.getUnreadCount(recipientId);
+      io.to(`user:${recipientId}`).emit('new_notification', {
+        notification: populatedNotification,
+        unreadCount
+      });
+    }
+
+    return notification;
+  } catch (error) {
+    console.error('Create fine notification error:', error);
+    throw error;
+  }
+};

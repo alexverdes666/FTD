@@ -1106,6 +1106,40 @@ const handleManualSelectionOrder = async (req, res, next) => {
       });
     }
 
+    // Check client network conflicts - prevent reusing leads already assigned to the same client network
+    if (selectedClientNetwork) {
+      const conflictingLeads = foundLeads.filter((lead) =>
+        lead.isAssignedToClientNetwork(selectedClientNetwork)
+      );
+      if (conflictingLeads.length > 0) {
+        const conflictNames = conflictingLeads.map(
+          (l) => `${l.firstName} ${l.lastName} (${l.newEmail})`
+        );
+        return res.status(400).json({
+          success: false,
+          message: `Some leads were already used for the selected client network: ${conflictNames.join(", ")}`,
+        });
+      }
+    }
+
+    // Check client broker conflicts - prevent reusing leads already assigned to the same client brokers
+    if (selectedClientBrokers && selectedClientBrokers.length > 0) {
+      const brokerConflictLeads = foundLeads.filter((lead) =>
+        selectedClientBrokers.some((brokerId) =>
+          lead.isAssignedToClientBroker(brokerId)
+        )
+      );
+      if (brokerConflictLeads.length > 0) {
+        const conflictNames = brokerConflictLeads.map(
+          (l) => `${l.firstName} ${l.lastName} (${l.newEmail})`
+        );
+        return res.status(400).json({
+          success: false,
+          message: `Some leads were already assigned to the selected client brokers: ${conflictNames.join(", ")}`,
+        });
+      }
+    }
+
     // Validate agents exist (only for non-cold leads, cold leads don't need agents)
     const User = require("../models/User");
     const agentIds = [...new Set(
@@ -2966,59 +3000,44 @@ exports.createOrder = async (req, res, next) => {
         lead.lastUsedInOrder = new Date();
       }
 
+      // Build $push operations for history arrays (atomic, prevents race condition data loss)
+      const pushObj = {};
+
       if (selectedClientNetwork) {
-        try {
-          lead.addClientNetworkAssignment(
-            selectedClientNetwork,
-            req.user._id,
-            order._id
-          );
-          // Add the assignment to update object
-          if (lead.clientNetworkHistory) {
-            updateObj.clientNetworkHistory = lead.clientNetworkHistory;
-          }
-        } catch (error) {
-          console.warn(
-            `Could not assign client network to lead ${lead._id}: ${error.message}`
-          );
-        }
+        pushObj.clientNetworkHistory = {
+          clientNetwork: selectedClientNetwork,
+          assignedBy: req.user._id,
+          orderId: order._id,
+          assignedAt: new Date(),
+        };
       }
       if (selectedOurNetwork) {
-        try {
-          lead.addOurNetworkAssignment(
-            selectedOurNetwork,
-            req.user._id,
-            order._id
-          );
-          // Add the assignment to update object
-          if (lead.ourNetworkHistory) {
-            updateObj.ourNetworkHistory = lead.ourNetworkHistory;
-          }
-        } catch (error) {
-          console.warn(
-            `Could not assign our network to lead ${lead._id}: ${error.message}`
-          );
-        }
+        pushObj.ourNetworkHistory = {
+          ourNetwork: selectedOurNetwork,
+          assignedBy: req.user._id,
+          orderId: order._id,
+          assignedAt: new Date(),
+        };
       }
       if (selectedCampaign) {
-        try {
-          lead.addCampaignAssignment(selectedCampaign, req.user._id, order._id);
-          // Add the assignment to update object
-          if (lead.campaignHistory) {
-            updateObj.campaignHistory = lead.campaignHistory;
-          }
-        } catch (error) {
-          console.warn(
-            `Could not assign campaign to lead ${lead._id}: ${error.message}`
-          );
-        }
+        pushObj.campaignHistory = {
+          campaign: selectedCampaign,
+          assignedBy: req.user._id,
+          orderId: order._id,
+          assignedAt: new Date(),
+        };
       }
 
-      // Add to bulk operations
+      // Build bulk operation: $set for scalar fields, $push for history arrays
+      const bulkUpdate = { $set: updateObj };
+      if (Object.keys(pushObj).length > 0) {
+        bulkUpdate.$push = pushObj;
+      }
+
       bulkOps.push({
         updateOne: {
           filter: { _id: lead._id },
-          update: { $set: updateObj },
+          update: bulkUpdate,
         },
       });
 
@@ -5885,6 +5904,41 @@ exports.addLeadsToOrder = async (req, res, next) => {
       }
     }
 
+    // Check client network conflicts - prevent reusing leads already assigned to the same client network
+    if (order.selectedClientNetwork) {
+      const networkId = order.selectedClientNetwork._id || order.selectedClientNetwork;
+      const conflictingLeads = foundLeads.filter((lead) =>
+        lead.isAssignedToClientNetwork(networkId)
+      );
+      if (conflictingLeads.length > 0) {
+        const conflictNames = conflictingLeads.map(
+          (l) => `${l.firstName} ${l.lastName} (${l.newEmail})`
+        );
+        return res.status(400).json({
+          success: false,
+          message: `Some leads were already used for this order's client network: ${conflictNames.join(", ")}`,
+        });
+      }
+    }
+
+    // Check client broker conflicts - prevent reusing leads already assigned to the same client brokers
+    if (order.selectedClientBrokers && order.selectedClientBrokers.length > 0) {
+      const brokerConflictLeads = foundLeads.filter((lead) =>
+        order.selectedClientBrokers.some((brokerId) =>
+          lead.isAssignedToClientBroker(brokerId._id || brokerId)
+        )
+      );
+      if (brokerConflictLeads.length > 0) {
+        const conflictNames = brokerConflictLeads.map(
+          (l) => `${l.firstName} ${l.lastName} (${l.newEmail})`
+        );
+        return res.status(400).json({
+          success: false,
+          message: `Some leads were already assigned to this order's client brokers: ${conflictNames.join(", ")}`,
+        });
+      }
+    }
+
     // Validate agents if provided
     const User = require("../models/User");
     const agentIds = [...new Set(leadsToAdd.filter((l) => l.agentId).map((l) => l.agentId))];
@@ -6203,6 +6257,37 @@ exports.getAvailableLeadsForReplacement = async (req, res, next) => {
       baseQuery.leadType = leadToReplace.leadType;
     }
 
+    // Client network exclusion - prevent leads already assigned to the same client network
+    if (order.selectedClientNetwork) {
+      const networkId = new mongoose.Types.ObjectId(
+        order.selectedClientNetwork._id || order.selectedClientNetwork
+      );
+      baseQuery.$and = baseQuery.$and || [];
+      baseQuery.$and.push({
+        $or: [
+          { clientNetworkHistory: { $exists: false } },
+          { clientNetworkHistory: { $size: 0 } },
+          {
+            clientNetworkHistory: {
+              $not: {
+                $elemMatch: {
+                  clientNetwork: networkId,
+                },
+              },
+            },
+          },
+        ],
+      });
+    }
+
+    // Client broker exclusion - prevent leads already assigned to the same client brokers
+    if (order.selectedClientBrokers && order.selectedClientBrokers.length > 0) {
+      const brokerObjectIds = order.selectedClientBrokers.map(
+        (id) => new mongoose.Types.ObjectId(id._id || id)
+      );
+      baseQuery.assignedClientBrokers = { $nin: brokerObjectIds };
+    }
+
     // Add search filter if provided
     if (search && search.trim()) {
       const searchRegex = new RegExp(search.trim(), "i");
@@ -6410,6 +6495,32 @@ exports.replaceLeadInOrder = async (req, res, next) => {
         success: false,
         message: "This lead was previously used in this position and cannot be used again",
       });
+    }
+
+    // Check client network conflict - prevent reusing leads already assigned to the same client network
+    if (order.selectedClientNetwork) {
+      const networkId = order.selectedClientNetwork._id || order.selectedClientNetwork;
+      if (newLead.isAssignedToClientNetwork(networkId)) {
+        const ClientNetwork = require("../models/ClientNetwork");
+        const network = await ClientNetwork.findById(networkId).select("name");
+        return res.status(400).json({
+          success: false,
+          message: `Replacement lead "${newLead.firstName} ${newLead.lastName}" was already used for client network "${network?.name || 'Unknown'}". Cannot reuse the same lead for the same client network.`,
+        });
+      }
+    }
+
+    // Check client broker conflict - prevent reusing leads already assigned to the same client brokers
+    if (order.selectedClientBrokers && order.selectedClientBrokers.length > 0) {
+      const conflictingBroker = order.selectedClientBrokers.find((brokerId) =>
+        newLead.isAssignedToClientBroker(brokerId._id || brokerId)
+      );
+      if (conflictingBroker) {
+        return res.status(400).json({
+          success: false,
+          message: `Replacement lead "${newLead.firstName} ${newLead.lastName}" was already assigned to one of the order's client brokers. Cannot reuse the same lead for the same broker.`,
+        });
+      }
     }
 
     // Get client IP for audit log

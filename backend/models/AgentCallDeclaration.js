@@ -115,6 +115,12 @@ const agentCallDeclarationSchema = new mongoose.Schema(
       ref: "Lead",
       required: true,
     },
+    // The order this declaration is for (a lead can appear in multiple orders)
+    orderId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Order",
+      default: null,
+    },
     // CDR recording filename (used to build playback URL)
     recordFile: {
       type: String,
@@ -137,6 +143,7 @@ agentCallDeclarationSchema.index({ agent: 1, declarationYear: 1, declarationMont
 agentCallDeclarationSchema.index({ declarationYear: 1, declarationMonth: 1 });
 agentCallDeclarationSchema.index({ cdrCallId: 1 }, { unique: true, partialFilterExpression: { isActive: true } });
 agentCallDeclarationSchema.index({ affiliateManager: 1 });
+agentCallDeclarationSchema.index({ lead: 1, callType: 1, orderId: 1 });
 agentCallDeclarationSchema.index({ lead: 1 });
 agentCallDeclarationSchema.index({ affiliateManager: 1, status: 1 });
 

@@ -114,7 +114,7 @@ const LeadAuditHistoryModal = ({ open, onClose, leadId, leadName }) => {
       ASSIGN: 'info',
       UNASSIGN: 'warning'
     };
-    return colors[actionType] || 'default';
+    return colors[actionType] || 'grey';
   };
 
   const getActionIcon = (method, actionType) => {
@@ -223,8 +223,8 @@ const LeadAuditHistoryModal = ({ open, onClose, leadId, leadName }) => {
 
                   {/* Device info */}
                   <Box mt={2} display="flex" gap={1} flexWrap="wrap">
-                    {log.browser && <Chip label={log.browser} size="small" icon={<Laptop />} />}
-                    {log.device && <Chip label={log.device} size="small" />}
+                    {log.browser && <Chip label={typeof log.browser === 'object' ? [log.browser.name, log.browser.version].filter(Boolean).join(' ') : log.browser} size="small" icon={<Laptop />} />}
+                    {log.device && <Chip label={typeof log.device === 'object' ? [log.device.vendor, log.device.model, log.device.type].filter(Boolean).join(' ') : log.device} size="small" />}
                     {log.ip && <Chip label={log.ip} size="small" />}
                     {log.geo?.country && <Chip label={log.geo.country} size="small" />}
                   </Box>

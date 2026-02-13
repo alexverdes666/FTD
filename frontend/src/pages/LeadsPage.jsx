@@ -2384,6 +2384,7 @@ const LeadsPage = () => {
                 newEmail: groupedLead.leadInfo?.newEmail,
                 newPhone: groupedLead.leadInfo?.newPhone,
                 leadType: groupedLead.leadInfo?.leadType,
+                orderId: groupedLead.leadInfo?.orderId,
               })).filter(lead => lead._id)}
             />
           </Collapse>
