@@ -632,6 +632,8 @@ const exportRoutes = require("./routes/export");
 app.use("/api/export", exportRoutes);
 const healthRoutes = require("./routes/health");
 app.use("/api/health", healthRoutes);
+const amExpensesRoutes = require("./routes/amExpenses");
+app.use("/api/am-expenses", amExpensesRoutes);
 app.use(errorHandler);
 app.use("*", (req, res) => {
   res.status(404).json({

@@ -54,6 +54,7 @@ import {
   Payment as PSPIcon,
   CreditCard as CardIssuerIcon,
   Handshake as CrmIcon,
+  ReceiptLong as ReceiptLongIcon,
 } from "@mui/icons-material";
 import {
   logout,
@@ -360,6 +361,11 @@ const MainLayout = () => {
               path: "/affiliate-managers",
             },
             {
+              text: "AM Expenses",
+              icon: <ReceiptLongIcon />,
+              path: "/am-expenses",
+            },
+            {
               text: "Withdraw",
               icon: <WithdrawIcon />,
               path: "/withdrawals",
@@ -646,6 +652,7 @@ const MainLayout = () => {
     "/campaigns": "#ef5350",
     "/payroll": "#4caf50",
     "/affiliate-managers": "#42a5f5",
+    "/am-expenses": "#e91e63",
     "/withdrawals": "#ef5350",
     "/refunds": "#e53935",
     "/simcards": "#26c6da",
@@ -975,7 +982,7 @@ const MainLayout = () => {
             <Outlet />
           </Force2FASetup>
         </Box>
-        {location.pathname !== "/notes" && location.pathname !== "/orders" && location.pathname !== "/crm" && <Footer />}
+        {location.pathname !== "/notes" && location.pathname !== "/orders" && location.pathname !== "/crm" && location.pathname !== "/am-expenses" && <Footer />}
       </Box>
 
       {/* Floating Chat Button */}

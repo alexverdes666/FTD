@@ -80,6 +80,7 @@ const SearchResultsPage = lazy(() => import("./pages/SearchResultsPage.jsx"));
 const SheetsPage = lazy(() => import("./pages/SheetsPage.jsx"));
 const WorkspacePage = lazy(() => import("./pages/WorkspacePage.jsx"));
 const CrmPage = lazy(() => import("./pages/CrmPage.jsx"));
+const AMExpensesPage = lazy(() => import("./pages/AMExpensesPage.jsx"));
 
 // Component to handle role-based default routing
 const RoleBasedRedirect = () => {
@@ -306,6 +307,14 @@ function AppContent() {
             <Route
               path="affiliate-managers"
               element={<LazyPage><AffiliateManagersPage /></LazyPage>}
+            />
+            <Route
+              path="am-expenses"
+              element={
+                <ProtectedRoute allowedRoles={["admin"]}>
+                  <LazyPage><AMExpensesPage /></LazyPage>
+                </ProtectedRoute>
+              }
             />
             <Route path="my-table" element={<LazyPage><AffiliateManagerTableView /></LazyPage>} />
             <Route

@@ -1,9 +1,11 @@
 const { validationResult } = require("express-validator");
 const AffiliateManagerTable = require("../models/AffiliateManagerTable");
 const AgentCallDeclaration = require("../models/AgentCallDeclaration");
+const AMFixedExpense = require("../models/AMFixedExpense");
 const User = require("../models/User");
 const Order = require("../models/Order");
 const Lead = require("../models/Lead");
+const { calculateAMExpenses } = require("../services/amExpenseCalculationService");
 
 // Get affiliate manager table data
 exports.getAffiliateManagerTable = async (req, res, next) => {
@@ -823,50 +825,21 @@ exports.getAffiliateManagerSummary = async (req, res, next) => {
         }
       }
 
-      // Get affiliate manager's performance table(s) for expenses
+      // Get auto-calculated expenses from order data + fixed expenses
       let totalMoneyExpenses = 0;
       if (!isAllTime && targetMonth && targetYear) {
-        const tableStartDate = new Date(targetYear, targetMonth - 1, 1);
-        const tableEndDate = new Date(targetYear, targetMonth, 0, 23, 59, 59, 999);
-
-        const managerTable = await AffiliateManagerTable.findOne({
-          affiliateManager: manager._id,
-          period: 'monthly',
-          date: { $gte: tableStartDate, $lte: tableEndDate },
-          isActive: true
-        });
-
-        if (managerTable) {
-          totalMoneyExpenses = managerTable.tableData.reduce((sum, row) => {
-            if (!row.isCalculated) {
-              const value = parseFloat(row.value) || 0;
-              const quantity = parseFloat(row.quantity) || 1;
-              if (row.calculationType === 'percentage') {
-                return sum + (value * quantity) / 100;
-              }
-              return sum + value * quantity;
-            }
-            return sum;
-          }, 0);
-        }
-      } else {
-        const allTables = await AffiliateManagerTable.find({
-          affiliateManager: manager._id,
-          isActive: true
-        });
-
-        for (const table of allTables) {
-          totalMoneyExpenses += table.tableData.reduce((sum, row) => {
-            if (!row.isCalculated) {
-              const value = parseFloat(row.value) || 0;
-              const quantity = parseFloat(row.quantity) || 1;
-              if (row.calculationType === 'percentage') {
-                return sum + (value * quantity) / 100;
-              }
-              return sum + value * quantity;
-            }
-            return sum;
-          }, 0);
+        try {
+          const autoExpenses = await calculateAMExpenses(manager._id, targetMonth, targetYear);
+          const fixedExpenses = await AMFixedExpense.find({
+            affiliateManager: manager._id,
+            month: targetMonth,
+            year: targetYear,
+            isActive: true,
+          }).lean();
+          const fixedTotal = fixedExpenses.reduce((sum, fe) => sum + fe.amount, 0);
+          totalMoneyExpenses = autoExpenses.grandTotal + fixedTotal;
+        } catch (error) {
+          console.warn(`Failed to calculate expenses for manager ${manager.fullName}:`, error.message);
         }
       }
 
