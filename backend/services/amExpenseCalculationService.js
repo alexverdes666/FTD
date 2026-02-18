@@ -1,4 +1,6 @@
 const Order = require('../models/Order');
+const AgentCallDeclaration = require('../models/AgentCallDeclaration');
+const SalaryConfiguration = require('../models/SalaryConfiguration');
 const { normalizeCountry, getSimPrice } = require('../utils/countryNormalizer');
 
 // Pricing constants
@@ -7,6 +9,15 @@ const FTD_TRANSACTION_COMMISSION_RATE = 0.05; // 5%
 const DATA_TRAFFIC_RATE = 1;
 const ES_UK_CARDS_RATE = 0.15; // 15% of $300
 const CA_CARDS_RATE = 75;
+
+// Call expense base rates (matches cdrService BONUS_CONFIG)
+const CALL_EXPENSE_RATES = {
+  deposit: 10.0,
+  first_call: 7.5,
+  second_call: 7.5,
+  third_call: 5.0,
+  fourth_call: 10.0,
+};
 
 /**
  * Calculate auto-expenses for a given affiliate manager in a specific month/year.
@@ -94,13 +105,65 @@ const calculateAMExpenses = async (affiliateManagerId, month, year) => {
   const esUkCardsTotal = esUkCardsCount * FTD_DEPOSIT_RATE * ES_UK_CARDS_RATE;
   const caCardsTotal = caCardsCount * CA_CARDS_RATE;
 
+  // --- Call Expenses (from approved agent call declarations) ---
+  // Note: approved declarations may have isActive=false (processed/completed), so we don't filter on isActive
+  const approvedDeclarations = await AgentCallDeclaration.find({
+    affiliateManager: affiliateManagerId,
+    declarationMonth: month,
+    declarationYear: year,
+    status: 'approved',
+  }).select('callType callCategory callDuration totalBonus').lean();
+
+  let totalTalkingTimeSeconds = 0;
+  const callTypeCounts = {};
+  const callTypeTotals = {};
+
+  for (const decl of approvedDeclarations) {
+    totalTalkingTimeSeconds += decl.callDuration || 0;
+
+    const ct = decl.callType;
+    if (ct && CALL_EXPENSE_RATES[ct] !== undefined) {
+      callTypeCounts[ct] = (callTypeCounts[ct] || 0) + 1;
+      callTypeTotals[ct] = (callTypeTotals[ct] || 0) + (decl.totalBonus || 0);
+    }
+  }
+
+  const totalTalkingTimeHours = totalTalkingTimeSeconds / 3600;
+
+  const depositCallsCount = callTypeCounts.deposit || 0;
+  const depositCallsTotal = callTypeTotals.deposit || 0;
+  const firstCallsCount = callTypeCounts.first_call || 0;
+  const firstCallsTotal = callTypeTotals.first_call || 0;
+  const secondCallsCount = callTypeCounts.second_call || 0;
+  const secondCallsTotal = callTypeTotals.second_call || 0;
+  const thirdCallsCount = callTypeCounts.third_call || 0;
+  const thirdCallsTotal = callTypeTotals.third_call || 0;
+  const fourthCallsCount = callTypeCounts.fourth_call || 0;
+  const fourthCallsTotal = callTypeTotals.fourth_call || 0;
+
+  const callExpensesTotal =
+    depositCallsTotal + firstCallsTotal + secondCallsTotal + thirdCallsTotal + fourthCallsTotal;
+
+  // --- Salary (from SalaryConfiguration) ---
+  let salaryTotal = 0;
+  const salaryConfig = await SalaryConfiguration.findOne({
+    user: affiliateManagerId,
+    isActive: true,
+  }).select('fixedSalary salaryType').lean();
+
+  if (salaryConfig && salaryConfig.salaryType === 'fixed_monthly' && salaryConfig.fixedSalary) {
+    salaryTotal = salaryConfig.fixedSalary.amount || 0;
+  }
+
   const grandTotal =
     ftdDepositTotal +
     ftdTransactionCommissionTotal +
     simCardsTotal +
     dataTrafficTotal +
     esUkCardsTotal +
-    caCardsTotal;
+    caCardsTotal +
+    callExpensesTotal +
+    salaryTotal;
 
   return {
     categories: [
@@ -151,6 +214,62 @@ const calculateAMExpenses = async (affiliateManagerId, month, year) => {
         rate: CA_CARDS_RATE,
         rateType: 'fixed',
         total: caCardsTotal,
+      },
+      // --- Call Activities ---
+      {
+        key: 'totalTalkingTime',
+        label: 'Total Talking Time',
+        displayType: 'hours',
+        value: totalTalkingTimeHours,
+        count: approvedDeclarations.length,
+        total: 0, // Informational, not a dollar expense
+      },
+      {
+        key: 'depositCalls',
+        label: 'Deposit Calls',
+        count: depositCallsCount,
+        rate: CALL_EXPENSE_RATES.deposit,
+        rateType: 'fixed',
+        total: depositCallsTotal,
+      },
+      {
+        key: 'firstCalls',
+        label: '1st Calls',
+        count: firstCallsCount,
+        rate: CALL_EXPENSE_RATES.first_call,
+        rateType: 'fixed',
+        total: firstCallsTotal,
+      },
+      {
+        key: 'secondCalls',
+        label: '2nd Calls',
+        count: secondCallsCount,
+        rate: CALL_EXPENSE_RATES.second_call,
+        rateType: 'fixed',
+        total: secondCallsTotal,
+      },
+      {
+        key: 'thirdCalls',
+        label: '3rd Calls',
+        count: thirdCallsCount,
+        rate: CALL_EXPENSE_RATES.third_call,
+        rateType: 'fixed',
+        total: thirdCallsTotal,
+      },
+      {
+        key: 'fourthCalls',
+        label: '4th Calls',
+        count: fourthCallsCount,
+        rate: CALL_EXPENSE_RATES.fourth_call,
+        rateType: 'fixed',
+        total: fourthCallsTotal,
+      },
+      // --- Salary ---
+      {
+        key: 'contractSalary',
+        label: 'Contract Salary',
+        rateType: 'fixed',
+        total: salaryTotal,
       },
     ],
     grandTotal,

@@ -777,7 +777,7 @@ const approveDeclaration = async (req, res) => {
  * This is called when a call declaration is approved
  */
 const addCallExpenseToAffiliateManager = async (declaration) => {
-  const { affiliateManager, callType, callCategory, totalBonus, declarationMonth, declarationYear } = declaration;
+  const { affiliateManager, callType, callCategory, callDuration, totalBonus, declarationMonth, declarationYear } = declaration;
 
   // Skip filler calls - they have $0 bonus, no expense to track
   if (callCategory === "filler" || totalBonus === 0) {
@@ -814,6 +814,16 @@ const addCallExpenseToAffiliateManager = async (declaration) => {
   // We keep quantity at 1 so that totalExpense = value * 1 = value (the accumulated bonus)
   table.tableData[rowIndex].value = (table.tableData[rowIndex].value || 0) + totalBonus;
 
+  // Update total talking time (convert seconds to hours, accumulate)
+  if (callDuration > 0) {
+    const talkingTimeIndex = table.tableData.findIndex((row) => row.id === "total_talking_time");
+    if (talkingTimeIndex !== -1) {
+      const hoursToAdd = callDuration / 3600;
+      table.tableData[talkingTimeIndex].value =
+        Math.round(((table.tableData[talkingTimeIndex].value || 0) + hoursToAdd) * 100) / 100;
+    }
+  }
+
   // Save the updated table
   await table.save();
 
@@ -827,7 +837,7 @@ const addCallExpenseToAffiliateManager = async (declaration) => {
  * This is called when a deposit is unconfirmed by admin
  */
 const removeCallExpenseFromAffiliateManager = async (declaration) => {
-  const { affiliateManager, callType, callCategory, totalBonus, declarationMonth, declarationYear } = declaration;
+  const { affiliateManager, callType, callCategory, callDuration, totalBonus, declarationMonth, declarationYear } = declaration;
 
   if (callCategory === "filler" || totalBonus === 0) {
     return;
@@ -855,6 +865,17 @@ const removeCallExpenseFromAffiliateManager = async (declaration) => {
   }
 
   table.tableData[rowIndex].value = Math.max(0, (table.tableData[rowIndex].value || 0) - totalBonus);
+
+  // Reverse talking time
+  if (callDuration > 0) {
+    const talkingTimeIndex = table.tableData.findIndex((row) => row.id === "total_talking_time");
+    if (talkingTimeIndex !== -1) {
+      const hoursToSubtract = callDuration / 3600;
+      table.tableData[talkingTimeIndex].value =
+        Math.max(0, Math.round(((table.tableData[talkingTimeIndex].value || 0) - hoursToSubtract) * 100) / 100);
+    }
+  }
+
   await table.save();
 
   console.log(

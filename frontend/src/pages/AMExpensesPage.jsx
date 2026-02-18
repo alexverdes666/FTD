@@ -266,6 +266,21 @@ const AMDetailRow = ({ row, month, year, onFixedExpenseChange }) => {
                                 </TableRow>
                               );
                           }
+                          // Total talking time - display as hours, not a dollar expense
+                          if (cat.displayType === "hours") {
+                            const hours = Math.floor(cat.value || 0);
+                            const minutes = Math.round(((cat.value || 0) - hours) * 60);
+                            return (
+                              <TableRow key={cat.key} sx={{ bgcolor: "action.hover" }}>
+                                <TableCell sx={{ fontWeight: "medium" }}>{cat.label}</TableCell>
+                                <TableCell align="right">—</TableCell>
+                                <TableCell align="right">{cat.count} calls</TableCell>
+                                <TableCell align="right" sx={{ fontWeight: "medium" }}>
+                                  {hours}h {minutes}m
+                                </TableCell>
+                              </TableRow>
+                            );
+                          }
                           return (
                             <TableRow key={cat.key}>
                               <TableCell>{cat.label}</TableCell>
