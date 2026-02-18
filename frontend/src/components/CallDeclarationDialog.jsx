@@ -15,10 +15,6 @@ import {
   CircularProgress,
   Chip,
   Paper,
-  FormControl,
-  InputLabel,
-  Select,
-  ListItemText,
   ToggleButton,
   ToggleButtonGroup,
   Autocomplete,
@@ -31,7 +27,7 @@ import {
   Person as PersonIcon,
   Contacts as ContactsIcon,
 } from '@mui/icons-material';
-import { createDeclaration, previewBonus, findLeadsByPhone, getDisabledCallTypes, getLeadOrders } from '../services/callDeclarations';
+import { createDeclaration, previewBonus, findLeadsByPhone, getDisabledCallTypes } from '../services/callDeclarations';
 import api from '../services/api';
 
 const CALL_TYPES = [
@@ -67,13 +63,11 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
   const [leadAutoFilled, setLeadAutoFilled] = useState(false);
   const [leadSearchLoading, setLeadSearchLoading] = useState(false);
 
-  // Order selection state (when a lead has multiple orders with confirmed deposits)
-  const [availableOrders, setAvailableOrders] = useState([]);
-  const [selectedOrderId, setSelectedOrderId] = useState('');
-  const [ordersLoading, setOrdersLoading] = useState(false);
-
-  // Disabled call types for the selected lead
+  // Counter-based call type tracking
   const [disabledCallTypes, setDisabledCallTypes] = useState([]);
+  const [disabledReasons, setDisabledReasons] = useState({});
+  const [orderCount, setOrderCount] = useState(0);
+  const [callTypeProgress, setCallTypeProgress] = useState({});
 
   // Fetch affiliate managers only
   const fetchAffiliateManagers = useCallback(async () => {
@@ -126,51 +120,28 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
     autoFillLead();
   }, [open, call?.lineNumber, call?.email]);
 
-  // Fetch available orders when lead changes
-  useEffect(() => {
-    const fetchOrders = async () => {
-      if (!leadId) {
-        setAvailableOrders([]);
-        setSelectedOrderId('');
-        return;
-      }
-      setOrdersLoading(true);
-      try {
-        const orders = await getLeadOrders(leadId);
-        setAvailableOrders(orders);
-        // Auto-select if only one order
-        if (orders.length === 1) {
-          setSelectedOrderId(orders[0].orderId);
-        } else {
-          setSelectedOrderId('');
-        }
-      } catch (err) {
-        console.error('Error fetching lead orders:', err);
-        setAvailableOrders([]);
-        setSelectedOrderId('');
-      } finally {
-        setOrdersLoading(false);
-      }
-    };
-    fetchOrders();
-  }, [leadId]);
-
-  // Fetch disabled call types when lead or selected order changes
+  // Fetch disabled call types (counter-based) when lead changes
   useEffect(() => {
     const fetchDisabledTypes = async () => {
       if (!leadId) {
         setDisabledCallTypes([]);
+        setDisabledReasons({});
+        setOrderCount(0);
+        setCallTypeProgress({});
         return;
       }
-      const disabled = await getDisabledCallTypes(leadId, selectedOrderId || null);
-      setDisabledCallTypes(disabled);
+      const result = await getDisabledCallTypes(leadId);
+      setDisabledCallTypes(result.disabledCallTypes || []);
+      setDisabledReasons(result.disabledReasons || {});
+      setOrderCount(result.orderCount || 0);
+      setCallTypeProgress(result.callTypeProgress || {});
       // Reset callType if it became disabled
-      if (callType && disabled.includes(callType)) {
+      if (callType && (result.disabledCallTypes || []).includes(callType)) {
         setCallType('');
       }
     };
     fetchDisabledTypes();
-  }, [leadId, selectedOrderId]);
+  }, [leadId]);
 
   // Reset form when dialog opens/closes
   useEffect(() => {
@@ -184,9 +155,9 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
       setLeadId('');
       setLeadAutoFilled(false);
       setDisabledCallTypes([]);
-      setAvailableOrders([]);
-      setSelectedOrderId('');
-      setOrdersLoading(false);
+      setDisabledReasons({});
+      setOrderCount(0);
+      setCallTypeProgress({});
     }
   }, [open]);
 
@@ -257,7 +228,6 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
         description: description.trim() || undefined,
         affiliateManagerId,
         leadId,
-        orderId: selectedOrderId || undefined,
         recordFile: call.recordFile || '',
       };
 
@@ -387,34 +357,72 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
 
         {/* Call Type - only shown for FTD calls */}
         {callCategory === 'ftd' && (
-          <TextField
-            select
-            fullWidth
-            label="Call Type *"
-            value={callType}
-            onChange={(e) => setCallType(e.target.value)}
-            disabled={loading}
-            sx={{ mb: 2 }}
-            helperText="Select the type of call for bonus calculation"
-          >
-            {CALL_TYPES.map((type) => {
-              const isDisabled = disabledCallTypes.includes(type.value);
-              return (
-                <MenuItem key={type.value} value={type.value} disabled={isDisabled}>
-                  <Box display="flex" justifyContent="space-between" width="100%">
-                    <span>{type.label}{isDisabled ? (type.value === 'deposit' ? ' (AM needs to declare the deposit call)' : ' (already declared)') : ''}</span>
-                    <Chip
-                      label={formatCurrency(type.bonus)}
-                      size="small"
-                      color={isDisabled ? "default" : "success"}
-                      variant="outlined"
-                      sx={{ ml: 2 }}
-                    />
-                  </Box>
-                </MenuItem>
-              );
-            })}
-          </TextField>
+          <>
+            {/* Order counter info */}
+            {leadId && orderCount > 0 && (
+              <Alert severity="info" sx={{ mb: 2 }}>
+                This lead has <strong>{orderCount}</strong> confirmed deposit order{orderCount !== 1 ? 's' : ''}.
+                {orderCount > 1 && ' Orders will be automatically assigned.'}
+              </Alert>
+            )}
+            {leadId && orderCount === 0 && (
+              <Alert severity="warning" sx={{ mb: 2 }}>
+                No confirmed deposit orders found for this lead. AM must confirm deposit first.
+              </Alert>
+            )}
+
+            <TextField
+              select
+              fullWidth
+              label="Call Type *"
+              value={callType}
+              onChange={(e) => setCallType(e.target.value)}
+              disabled={loading}
+              sx={{ mb: 2 }}
+              helperText="Select the type of call for bonus calculation"
+            >
+              {CALL_TYPES.map((type) => {
+                const isDisabled = disabledCallTypes.includes(type.value);
+                const progress = callTypeProgress[type.value];
+                const reason = disabledReasons[type.value];
+                let disabledText = '';
+                if (isDisabled) {
+                  if (type.value === 'deposit') {
+                    disabledText = ' (AM declares deposit call)';
+                  } else if (reason === 'fully_declared') {
+                    disabledText = ' (fully declared)';
+                  } else if (reason === 'sequential') {
+                    disabledText = ' (declare previous calls first)';
+                  } else if (reason === 'no_deposits') {
+                    disabledText = ' (no confirmed deposits)';
+                  }
+                }
+                return (
+                  <MenuItem key={type.value} value={type.value} disabled={isDisabled}>
+                    <Box display="flex" justifyContent="space-between" width="100%" alignItems="center">
+                      <span>{type.label}{disabledText}</span>
+                      <Box display="flex" alignItems="center" gap={1}>
+                        {progress && orderCount > 1 && type.value !== 'deposit' && (
+                          <Chip
+                            label={`${progress.declared}/${progress.total}`}
+                            size="small"
+                            color={progress.declared >= progress.total ? "default" : "info"}
+                            variant="outlined"
+                          />
+                        )}
+                        <Chip
+                          label={formatCurrency(type.bonus)}
+                          size="small"
+                          color={isDisabled ? "default" : "success"}
+                          variant="outlined"
+                        />
+                      </Box>
+                    </Box>
+                  </MenuItem>
+                );
+              })}
+            </TextField>
+          </>
         )}
 
         {/* Filler call info */}
@@ -536,31 +544,6 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
           sx={{ mb: 2 }}
         />
 
-        {/* Order Selection - shown when lead has multiple orders with confirmed deposits */}
-        {leadId && availableOrders.length > 1 && (
-          <TextField
-            select
-            fullWidth
-            label="Order *"
-            value={selectedOrderId}
-            onChange={(e) => setSelectedOrderId(e.target.value)}
-            disabled={loading || ordersLoading}
-            sx={{ mb: 2 }}
-            helperText={ordersLoading ? "Loading orders..." : "This lead has multiple orders — select which order this call is for"}
-          >
-            {availableOrders.map((order) => (
-              <MenuItem key={order.orderId} value={order.orderId}>
-                <Box display="flex" alignItems="center" gap={1} width="100%">
-                  <span>Order: ...{order.orderId.toString().slice(-8)}</span>
-                  <Typography variant="caption" color="text.secondary" sx={{ ml: 'auto' }}>
-                    {order.orderCreatedAt ? new Date(order.orderCreatedAt).toLocaleDateString() : ''}
-                  </Typography>
-                </Box>
-              </MenuItem>
-            ))}
-          </TextField>
-        )}
-
         <TextField
           fullWidth
           multiline
@@ -639,7 +622,7 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
           variant="contained"
           color="primary"
           onClick={handleSubmit}
-          disabled={loading || (callCategory === 'ftd' && !callType) || !affiliateManagerId || !leadId || (availableOrders.length > 1 && !selectedOrderId)}
+          disabled={loading || (callCategory === 'ftd' && !callType) || !affiliateManagerId || !leadId}
           startIcon={loading ? <CircularProgress size={16} /> : <SendIcon />}
         >
           {loading ? 'Submitting...' : 'Submit Declaration'}

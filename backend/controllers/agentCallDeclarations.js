@@ -31,6 +31,46 @@ const findDepositCallForLead = async (leadId, extraQuery = {}) => {
   return depositCall;
 };
 
+/**
+ * Get ALL confirmed deposit calls for a lead (by leadId + email fallback).
+ * Unlike findDepositCallForLead (which returns one), this returns all matches.
+ * Used for counter-based call declaration logic.
+ * @param {string} leadId - Lead ObjectId
+ * @returns {{ count: number, depositCalls: Array }} - Count and array of DepositCall documents
+ */
+const getConfirmedDepositCallsForLead = async (leadId) => {
+  let depositCalls = await DepositCall.find({ leadId, depositConfirmed: true })
+    .select("orderId ftdEmail ftdName createdAt");
+
+  // Email fallback: find additional matches by lead email
+  const leadDoc = await Lead.findById(leadId).select("newEmail");
+  if (leadDoc?.newEmail) {
+    const emailMatches = await DepositCall.find({
+      ftdEmail: leadDoc.newEmail,
+      depositConfirmed: true,
+      _id: { $nin: depositCalls.map((dc) => dc._id) },
+    }).select("orderId ftdEmail ftdName createdAt");
+    depositCalls = depositCalls.concat(emailMatches);
+  }
+
+  return { count: depositCalls.length, depositCalls };
+};
+
+// Sequential call type ordering: each type requires the predecessor to be declared first
+const CALL_TYPE_SEQUENCE = [
+  "deposit",
+  "first_call",
+  "second_call",
+  "third_call",
+  "fourth_call",
+  "fifth_call",
+  "sixth_call",
+  "seventh_call",
+  "eighth_call",
+  "ninth_call",
+  "tenth_call",
+];
+
 // Map call types to call slot numbers on DepositCall model
 const CALL_TYPE_TO_CALL_NUMBER = {
   first_call: 1,
@@ -327,36 +367,87 @@ const createDeclaration = async (req, res) => {
       });
     }
 
-    // Prevent duplicate call type per lead+order (check approved or pending declarations)
-    // When orderId is provided, scope the check to that order so the same lead
-    // can have separate declarations for different orders.
+    // Counter-based duplicate prevention with sequential ordering
+    // A lead with N confirmed deposit orders can have up to N declarations per call type,
+    // enforced sequentially (deposit → 1st → 2nd → ... → 10th).
+    let resolvedOrderId = orderId || null;
+
     if (callCategory === "ftd" && callType) {
-      const duplicateQuery = {
-        lead: leadId,
-        callType,
-        status: { $in: ["approved", "pending"] },
-        isActive: true,
-      };
-      if (orderId) {
-        duplicateQuery.orderId = orderId;
-      }
-
-      const duplicateDeclaration = await AgentCallDeclaration.findOne(duplicateQuery);
-
-      if (duplicateDeclaration) {
-        const statusText = duplicateDeclaration.status === "approved" ? "already approved" : "already pending approval";
-        return res.status(400).json({
-          success: false,
-          message: `This call type is ${statusText} for this lead${orderId ? " on this order" : ""}`,
-        });
-      }
-
       // Deposit type is always declared by AM during deposit confirmation
       if (callType === "deposit") {
         return res.status(400).json({
           success: false,
           message: "AM access is required. The affiliate manager declares the deposit call during deposit confirmation.",
         });
+      }
+
+      // Count confirmed deposit orders for this lead
+      const { count: orderCount, depositCalls } = await getConfirmedDepositCallsForLead(leadId);
+
+      if (orderCount === 0) {
+        return res.status(400).json({
+          success: false,
+          message: "No confirmed deposit orders found for this lead. AM must confirm deposit first.",
+        });
+      }
+
+      // Count existing declarations for this call type and its predecessor
+      const sequenceIndex = CALL_TYPE_SEQUENCE.indexOf(callType);
+      const predecessorType = sequenceIndex > 0 ? CALL_TYPE_SEQUENCE[sequenceIndex - 1] : null;
+
+      const existingOfType = await AgentCallDeclaration.find({
+        lead: leadId,
+        callType,
+        status: { $in: ["approved", "pending"] },
+        isActive: true,
+      }).select("orderId");
+
+      // Cap check: can't exceed the number of confirmed deposit orders
+      if (existingOfType.length >= orderCount) {
+        return res.status(400).json({
+          success: false,
+          message: `This call type has been fully declared for all ${orderCount} order(s) of this lead`,
+        });
+      }
+
+      // Sequential check: predecessor must have more declarations than this type
+      // For "deposit" predecessor, use orderCount since a confirmed DepositCall IS the deposit
+      if (predecessorType) {
+        let predecessorCount;
+        if (predecessorType === "deposit") {
+          predecessorCount = orderCount;
+        } else {
+          predecessorCount = await AgentCallDeclaration.countDocuments({
+            lead: leadId,
+            callType: predecessorType,
+            status: { $in: ["approved", "pending"] },
+            isActive: true,
+          });
+        }
+
+        if (predecessorCount <= existingOfType.length) {
+          const predecessorLabel = predecessorType.replace("_", " ");
+          return res.status(400).json({
+            success: false,
+            message: `You must declare "${predecessorLabel}" first before declaring this call type`,
+          });
+        }
+      }
+
+      // Auto-assign orderId: find the first confirmed deposit order that doesn't
+      // have this callType declared yet
+      const declaredOrderIds = new Set(
+        existingOfType
+          .filter((d) => d.orderId)
+          .map((d) => d.orderId.toString())
+      );
+
+      const availableDepositCall = depositCalls.find(
+        (dc) => !declaredOrderIds.has((dc.orderId?._id || dc.orderId).toString())
+      );
+
+      if (availableDepositCall) {
+        resolvedOrderId = availableDepositCall.orderId?._id || availableDepositCall.orderId;
       }
     }
 
@@ -394,7 +485,7 @@ const createDeclaration = async (req, res) => {
       declarationYear,
       affiliateManager: affiliateManagerId,
       lead: leadId,
-      orderId: orderId || null,
+      orderId: resolvedOrderId || null,
       recordFile: recordFile || "",
     });
 
@@ -830,16 +921,15 @@ const updateDepositCallOnApproval = async (declaration, reviewerId) => {
 };
 
 /**
- * Get disabled call types for a lead
- * GET /call-declarations/lead-disabled-types/:leadId?orderId=XXX
+ * Get disabled call types for a lead (counter-based)
+ * GET /call-declarations/lead-disabled-types/:leadId
  * Returns call types that should be disabled in the declaration dropdown.
- * When orderId is provided, only considers declarations for that specific order,
- * allowing the same call type to be declared for different orders.
+ * Uses counter-based logic: if a lead has N confirmed deposit orders,
+ * each call type can be declared up to N times, with sequential enforcement.
  */
 const getDisabledCallTypes = async (req, res) => {
   try {
     const { leadId } = req.params;
-    const { orderId } = req.query;
 
     if (!leadId) {
       return res.status(400).json({
@@ -848,34 +938,70 @@ const getDisabledCallTypes = async (req, res) => {
       });
     }
 
-    const disabledCallTypes = [];
+    // 1. Count confirmed deposit orders for this lead
+    const { count: orderCount } = await getConfirmedDepositCallsForLead(leadId);
 
-    // Deposit type is always disabled for agents - AM declares it during deposit confirmation
-    disabledCallTypes.push("deposit");
-
-    // Check for approved or pending declarations for this lead (scoped by order if provided)
-    const declarationQuery = {
+    // 2. Count existing declarations per call type (approved + pending, active, ftd)
+    const existingDeclarations = await AgentCallDeclaration.find({
       lead: leadId,
       status: { $in: ["approved", "pending"] },
       isActive: true,
       callCategory: "ftd",
-    };
-    if (orderId) {
-      declarationQuery.orderId = orderId;
-    }
+    }).select("callType");
 
-    const existingDeclarations = await AgentCallDeclaration.find(declarationQuery)
-      .select("callType status");
-
+    const declarationCounts = {};
     for (const decl of existingDeclarations) {
-      if (decl.callType && !disabledCallTypes.includes(decl.callType)) {
-        disabledCallTypes.push(decl.callType);
+      if (decl.callType) {
+        declarationCounts[decl.callType] = (declarationCounts[decl.callType] || 0) + 1;
       }
     }
 
+    // 3. Build disabled list and progress using sequential chain
+    const disabledCallTypes = [];
+    disabledCallTypes.push("deposit"); // Always disabled for agents
+
+    const callTypeProgress = {};
+    const disabledReasons = {};
+
+    for (let i = 1; i < CALL_TYPE_SEQUENCE.length; i++) {
+      const ct = CALL_TYPE_SEQUENCE[i];
+      const predecessorCt = CALL_TYPE_SEQUENCE[i - 1];
+      const declared = declarationCounts[ct] || 0;
+      // For "deposit" predecessor, use orderCount since a confirmed DepositCall IS the deposit
+      // (deposit declarations may not exist as AgentCallDeclaration for legacy data)
+      const predecessorDeclared = predecessorCt === "deposit"
+        ? orderCount
+        : (declarationCounts[predecessorCt] || 0);
+
+      callTypeProgress[ct] = { declared, total: orderCount };
+
+      // Disabled if: all slots used OR sequential prerequisite not met OR no orders
+      if (orderCount === 0) {
+        disabledCallTypes.push(ct);
+        disabledReasons[ct] = "no_deposits";
+      } else if (declared >= orderCount) {
+        disabledCallTypes.push(ct);
+        disabledReasons[ct] = "fully_declared";
+      } else if (predecessorDeclared <= declared) {
+        disabledCallTypes.push(ct);
+        disabledReasons[ct] = "sequential";
+      }
+    }
+
+    // Also add deposit progress
+    callTypeProgress["deposit"] = {
+      declared: declarationCounts["deposit"] || 0,
+      total: orderCount,
+    };
+
     res.json({
       success: true,
-      data: { disabledCallTypes },
+      data: {
+        disabledCallTypes,
+        disabledReasons,
+        orderCount,
+        callTypeProgress,
+      },
     });
   } catch (error) {
     console.error("Error fetching disabled call types:", error);

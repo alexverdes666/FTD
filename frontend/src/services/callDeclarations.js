@@ -242,20 +242,17 @@ export const fetchRecordingBlob = async (recordFile) => {
 };
 
 /**
- * Get disabled call types for a lead
+ * Get disabled call types for a lead (counter-based)
  * @param {string} leadId - Lead ID
- * @param {string} orderId - Optional order ID to scope the check
- * @returns {Array} - Array of disabled call type values
+ * @returns {{ disabledCallTypes: Array, disabledReasons: Object, orderCount: number, callTypeProgress: Object }}
  */
-export const getDisabledCallTypes = async (leadId, orderId = null) => {
+export const getDisabledCallTypes = async (leadId) => {
   try {
-    const params = {};
-    if (orderId) params.orderId = orderId;
-    const response = await api.get(`/call-declarations/lead-disabled-types/${leadId}`, { params });
-    return response.data.data.disabledCallTypes || [];
+    const response = await api.get(`/call-declarations/lead-disabled-types/${leadId}`);
+    return response.data.data || { disabledCallTypes: [], disabledReasons: {}, orderCount: 0, callTypeProgress: {} };
   } catch (error) {
     console.error("Error fetching disabled call types:", error);
-    return [];
+    return { disabledCallTypes: [], disabledReasons: {}, orderCount: 0, callTypeProgress: {} };
   }
 };
 
