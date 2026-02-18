@@ -998,18 +998,30 @@ const generateDetailedReasonForLeadType = async (
     let filteredLeads = availableLeads;
     let currentCount = filteredLeads.length;
 
-    // Apply network/campaign filters in sequence
+    // ROBUST CLIENT NETWORK DEDUP: Check against ALL existing orders with the same client network
     if (selectedClientNetwork && currentCount >= requested) {
+      const existingNetworkOrders = await Order.find({
+        selectedClientNetwork: selectedClientNetwork,
+        status: { $ne: "cancelled" },
+      }).select("leads").lean();
+      const leadsInNetwork = new Set();
+      for (const eo of existingNetworkOrders) {
+        if (eo.leads) {
+          for (const lid of eo.leads) {
+            leadsInNetwork.add(lid.toString());
+          }
+        }
+      }
       const beforeFilter = currentCount;
       filteredLeads = filteredLeads.filter(
-        (lead) => !lead.isAssignedToClientNetwork(selectedClientNetwork)
+        (lead) => !leadsInNetwork.has(lead._id.toString())
       );
       currentCount = filteredLeads.length;
       if (currentCount < requested && currentCount < beforeFilter) {
         limitingFactors.push(
           `Client network conflict: ${
             beforeFilter - currentCount
-          } leads already assigned`
+          } leads already in orders with same network`
         );
       }
     }
@@ -1106,10 +1118,25 @@ const handleManualSelectionOrder = async (req, res, next) => {
       });
     }
 
-    // Check client network conflicts - prevent reusing leads already assigned to the same client network
+    // ROBUST CLIENT NETWORK DEDUP: Check against ALL existing orders with the same client network,
+    // not just clientNetworkHistory on the lead (which can be missing for older leads).
     if (selectedClientNetwork) {
+      const existingOrders = await Order.find({
+        selectedClientNetwork: selectedClientNetwork,
+        status: { $ne: "cancelled" },
+      }).select("leads").lean();
+
+      const leadsInSameNetwork = new Set();
+      for (const existingOrder of existingOrders) {
+        if (existingOrder.leads) {
+          for (const lid of existingOrder.leads) {
+            leadsInSameNetwork.add(lid.toString());
+          }
+        }
+      }
+
       const conflictingLeads = foundLeads.filter((lead) =>
-        lead.isAssignedToClientNetwork(selectedClientNetwork)
+        leadsInSameNetwork.has(lead._id.toString())
       );
       if (conflictingLeads.length > 0) {
         const conflictNames = conflictingLeads.map(
@@ -1417,6 +1444,27 @@ exports.createOrder = async (req, res, next) => {
     const agentLeadsInsufficient = { ftd: false, filler: false }; // Track if agent-assigned leads were insufficient
     const agentAssignmentInsufficient = []; // Track specific assignment failures: {leadType, index, agentId}
 
+    // ROBUST CLIENT NETWORK DEDUP: Collect lead IDs from ALL existing orders with the same client network.
+    // This is more reliable than checking clientNetworkHistory on each lead, which can be missing for older leads.
+    let leadsAlreadyInSameClientNetwork = new Set();
+    if (selectedClientNetwork) {
+      const existingOrders = await Order.find({
+        selectedClientNetwork: selectedClientNetwork,
+        status: { $ne: "cancelled" },
+      }).select("leads").lean();
+
+      for (const order of existingOrders) {
+        if (order.leads) {
+          for (const leadId of order.leads) {
+            leadsAlreadyInSameClientNetwork.add(leadId.toString());
+          }
+        }
+      }
+      console.log(
+        `[ORDER-DEDUP] Found ${leadsAlreadyInSameClientNetwork.size} leads already in ${existingOrders.length} orders with same client network - these will be excluded`
+      );
+    }
+
     const countryFilter = country ? { country: new RegExp(country, "i") } : {};
     const genderFilter = gender ? { gender } : {};
 
@@ -1442,9 +1490,15 @@ exports.createOrder = async (req, res, next) => {
         ...genderFilterToUse,
       };
 
-      // Exclude already-pulled leads
-      if (excludeLeadIds.length > 0) {
-        query._id = { $nin: excludeLeadIds };
+      // Exclude already-pulled leads AND leads already in orders with same client network
+      const allExcludedIds = [...excludeLeadIds];
+      if (leadsAlreadyInSameClientNetwork.size > 0) {
+        for (const id of leadsAlreadyInSameClientNetwork) {
+          allExcludedIds.push(new mongoose.Types.ObjectId(id));
+        }
+      }
+      if (allExcludedIds.length > 0) {
+        query._id = { $nin: allExcludedIds };
       }
 
       // Get total count first (for logging purposes)
@@ -1568,15 +1622,9 @@ exports.createOrder = async (req, res, next) => {
         );
       }
 
-      // Apply network and broker filters
-      if (selectedClientNetwork) {
-        availableLeads = availableLeads.filter(
-          (lead) => !lead.isAssignedToClientNetwork(selectedClientNetwork)
-        );
-      }
+      // Client network dedup is handled at DB query level via leadsAlreadyInSameClientNetwork exclusion set
 
-      // Our network filtering removed - leads can be reused for same our network
-
+      // Apply broker filters (assignedClientBrokers is a direct field, so this is reliable)
       if (selectedClientBrokers && selectedClientBrokers.length > 0) {
         availableLeads = availableLeads.filter(
           (lead) =>
@@ -1702,6 +1750,14 @@ exports.createOrder = async (req, res, next) => {
         ...genderFilter,
       };
 
+      // Exclude leads already in orders with same client network (robust dedup)
+      if (leadsAlreadyInSameClientNetwork.size > 0) {
+        const excludedObjectIds = [...leadsAlreadyInSameClientNetwork].map(
+          (id) => new mongoose.Types.ObjectId(id)
+        );
+        query._id = { $nin: excludedObjectIds };
+      }
+
       // Get total count first to determine fetch strategy
       const totalAvailableCount = await Lead.countDocuments(query);
       console.log(
@@ -1759,24 +1815,12 @@ exports.createOrder = async (req, res, next) => {
         );
       }
 
-      if (selectedClientNetwork) {
-        const beforeCount = availableLeads.length;
-        availableLeads = availableLeads.filter(
-          (lead) => !lead.isAssignedToClientNetwork(selectedClientNetwork)
-        );
-        console.log(
-          `[${leadType.toUpperCase()}-DEBUG] After client network filtering: ${
-            availableLeads.length
-          } leads remain (${beforeCount - availableLeads.length} filtered out)`
-        );
-      }
-
-      // Our network filtering removed - leads can be reused for same our network
-      // Campaign filtering removed - leads can be reused for same campaign from different networks
+      // Client network dedup is handled at DB query level via leadsAlreadyInSameClientNetwork exclusion set
       console.log(
-        `[${leadType.toUpperCase()}-DEBUG] Campaign filtering skipped - leads can be reused for same campaign from different networks`
+        `[${leadType.toUpperCase()}-DEBUG] Client network dedup handled at DB level (order-based exclusion)`
       );
 
+      // Apply broker filters (assignedClientBrokers is a direct field, so this is reliable)
       if (selectedClientBrokers && selectedClientBrokers.length > 0) {
         const beforeCount = availableLeads.length;
         availableLeads = availableLeads.filter(
@@ -2207,22 +2251,9 @@ exports.createOrder = async (req, res, next) => {
           } leads remain`
         );
 
-        if (selectedClientNetwork) {
-          console.log(
-            `[FTD-DEBUG] Filtering out leads already assigned to client network: ${selectedClientNetwork}`
-          );
-          filteredFTDLeads = filteredFTDLeads.filter(
-            (lead) => !lead.isAssignedToClientNetwork(selectedClientNetwork)
-          );
-          console.log(
-            `[FTD-DEBUG] After client network filtering: ${filteredFTDLeads.length} leads remain`
-          );
-        }
-
-        // Our network filtering removed - leads can be reused for same our network
-        // Campaign filtering removed - leads can be reused for same campaign from different networks
+        // Client network dedup is handled at DB query level via leadsAlreadyInSameClientNetwork exclusion set
         console.log(
-          `[FTD-DEBUG] Campaign filtering skipped - leads can be reused for same campaign from different networks`
+          `[FTD-DEBUG] Client network dedup handled at DB level (order-based exclusion)`
         );
 
         if (selectedClientBrokers && selectedClientBrokers.length > 0) {
@@ -2643,21 +2674,9 @@ exports.createOrder = async (req, res, next) => {
           );
         }
 
-        if (selectedClientNetwork) {
-          console.log(
-            `[FILLER-DEBUG] Filtering out leads already assigned to client network: ${selectedClientNetwork}`
-          );
-          filteredFillerLeads = filteredFillerLeads.filter(
-            (lead) => !lead.isAssignedToClientNetwork(selectedClientNetwork)
-          );
-          console.log(
-            `[FILLER-DEBUG] After client network filtering: ${filteredFillerLeads.length} leads remain`
-          );
-        }
-        // Our network filtering removed - leads can be reused for same our network
-        // Campaign filtering removed - leads can be reused for same campaign from different networks
+        // Client network dedup is handled at DB query level via leadsAlreadyInSameClientNetwork exclusion set
         console.log(
-          `[FILLER-DEBUG] Campaign filtering skipped - leads can be reused for same campaign from different networks`
+          `[FILLER-DEBUG] Client network dedup handled at DB level (order-based exclusion)`
         );
         if (selectedClientBrokers && selectedClientBrokers.length > 0) {
           console.log(
@@ -2707,6 +2726,14 @@ exports.createOrder = async (req, res, next) => {
         ...genderFilter,
       };
 
+      // Exclude leads already in orders with same client network (robust dedup)
+      if (leadsAlreadyInSameClientNetwork.size > 0) {
+        const excludedObjectIds = [...leadsAlreadyInSameClientNetwork].map(
+          (id) => new mongoose.Types.ObjectId(id)
+        );
+        coldQuery._id = { $nin: excludedObjectIds };
+      }
+
       // First, get the total count of available leads matching base criteria
       const totalAvailableCount = await Lead.countDocuments(coldQuery);
 
@@ -2733,28 +2760,8 @@ exports.createOrder = async (req, res, next) => {
         coldQuery.newPhone = { $nin: alreadyPulledPhoneNumbers };
       }
 
-      // Add client network filter to query (database level, not in-memory)
-      if (selectedClientNetwork) {
-        // Exclude leads that are already assigned to this client network
-        // Use $not + $elemMatch to check if NO history entry has this clientNetwork
-        // IMPORTANT: Convert string ID to ObjectId for aggregate() - unlike find(), aggregate doesn't auto-cast
-        const networkObjectId = new mongoose.Types.ObjectId(
-          selectedClientNetwork
-        );
-        coldQuery.$or = [
-          { clientNetworkHistory: { $exists: false } },
-          { clientNetworkHistory: { $size: 0 } },
-          {
-            clientNetworkHistory: {
-              $not: {
-                $elemMatch: {
-                  clientNetwork: networkObjectId,
-                },
-              },
-            },
-          },
-        ];
-      }
+      // Client network dedup for cold leads is handled above via order-based _id exclusion
+      // (leadsAlreadyInSameClientNetwork set), which is more reliable than clientNetworkHistory checks
 
       // Add client broker filter to query (database level, not in-memory)
       if (selectedClientBrokers && selectedClientBrokers.length > 0) {
@@ -4847,14 +4854,28 @@ exports.changeFTDInOrder = async (req, res, next) => {
         );
       }
 
-      // Apply network filtrations to ALL leads (including agent-assigned)
+      // ROBUST CLIENT NETWORK DEDUP: Exclude leads from ALL existing orders with the same client network
       if (networkToCheck) {
         const beforeCount = filteredFTDLeads.length;
         console.log(
-          `[CHANGE-FTD-DEBUG] Filtering out leads already assigned to client network: ${networkToCheck}`
+          `[CHANGE-FTD-DEBUG] Filtering out leads already in orders with client network: ${networkToCheck}`
         );
+        const existingNetworkOrders = await Order.find({
+          selectedClientNetwork: networkToCheck,
+          status: { $ne: "cancelled" },
+        }).select("leads").lean();
+
+        const leadsInSameNetwork = new Set();
+        for (const eo of existingNetworkOrders) {
+          if (eo.leads) {
+            for (const lid of eo.leads) {
+              leadsInSameNetwork.add(lid.toString());
+            }
+          }
+        }
+
         filteredFTDLeads = filteredFTDLeads.filter(
-          (lead) => !lead.isAssignedToClientNetwork(networkToCheck)
+          (lead) => !leadsInSameNetwork.has(lead._id.toString())
         );
         console.log(
           `[CHANGE-FTD-DEBUG] After client network filtering: ${
@@ -5886,11 +5907,25 @@ exports.addLeadsToOrder = async (req, res, next) => {
       }
     }
 
-    // Check client network conflicts - prevent reusing leads already assigned to the same client network
+    // ROBUST CLIENT NETWORK DEDUP: Check against ALL existing orders with the same client network
     if (order.selectedClientNetwork) {
       const networkId = order.selectedClientNetwork._id || order.selectedClientNetwork;
+      const existingOrders = await Order.find({
+        selectedClientNetwork: networkId,
+        status: { $ne: "cancelled" },
+      }).select("leads").lean();
+
+      const leadsInSameNetwork = new Set();
+      for (const existingOrder of existingOrders) {
+        if (existingOrder.leads) {
+          for (const lid of existingOrder.leads) {
+            leadsInSameNetwork.add(lid.toString());
+          }
+        }
+      }
+
       const conflictingLeads = foundLeads.filter((lead) =>
-        lead.isAssignedToClientNetwork(networkId)
+        leadsInSameNetwork.has(lead._id.toString())
       );
       if (conflictingLeads.length > 0) {
         const conflictNames = conflictingLeads.map(
@@ -6221,27 +6256,31 @@ exports.getAvailableLeadsForReplacement = async (req, res, next) => {
       baseQuery.leadType = leadToReplace.leadType;
     }
 
-    // Client network exclusion - prevent leads already assigned to the same client network
+    // ROBUST CLIENT NETWORK DEDUP: Exclude leads from ALL existing orders with the same client network.
+    // This is more reliable than checking clientNetworkHistory on each lead, which can be missing for older leads.
     if (order.selectedClientNetwork) {
-      const networkId = new mongoose.Types.ObjectId(
-        order.selectedClientNetwork._id || order.selectedClientNetwork
-      );
-      baseQuery.$and = baseQuery.$and || [];
-      baseQuery.$and.push({
-        $or: [
-          { clientNetworkHistory: { $exists: false } },
-          { clientNetworkHistory: { $size: 0 } },
-          {
-            clientNetworkHistory: {
-              $not: {
-                $elemMatch: {
-                  clientNetwork: networkId,
-                },
-              },
-            },
-          },
-        ],
-      });
+      const networkId = order.selectedClientNetwork._id || order.selectedClientNetwork;
+      const existingOrders = await Order.find({
+        selectedClientNetwork: networkId,
+        status: { $ne: "cancelled" },
+      }).select("leads").lean();
+
+      const leadsInSameNetwork = new Set();
+      for (const existingOrder of existingOrders) {
+        if (existingOrder.leads) {
+          for (const lid of existingOrder.leads) {
+            leadsInSameNetwork.add(lid.toString());
+          }
+        }
+      }
+
+      if (leadsInSameNetwork.size > 0) {
+        const currentExcluded = baseQuery._id?.$nin || [];
+        const networkExcludedIds = [...leadsInSameNetwork].map(
+          (id) => new mongoose.Types.ObjectId(id)
+        );
+        baseQuery._id = { $nin: [...currentExcluded, ...networkExcludedIds] };
+      }
     }
 
     // Client broker exclusion - prevent leads already assigned to the same client brokers
@@ -6461,10 +6500,24 @@ exports.replaceLeadInOrder = async (req, res, next) => {
       });
     }
 
-    // Check client network conflict - prevent reusing leads already assigned to the same client network
+    // ROBUST CLIENT NETWORK DEDUP: Check against ALL existing orders with the same client network
     if (order.selectedClientNetwork) {
       const networkId = order.selectedClientNetwork._id || order.selectedClientNetwork;
-      if (newLead.isAssignedToClientNetwork(networkId)) {
+      const existingOrders = await Order.find({
+        selectedClientNetwork: networkId,
+        status: { $ne: "cancelled" },
+      }).select("leads").lean();
+
+      const leadsInSameNetwork = new Set();
+      for (const existingOrder of existingOrders) {
+        if (existingOrder.leads) {
+          for (const lid of existingOrder.leads) {
+            leadsInSameNetwork.add(lid.toString());
+          }
+        }
+      }
+
+      if (leadsInSameNetwork.has(newLeadId)) {
         const ClientNetwork = require("../models/ClientNetwork");
         const network = await ClientNetwork.findById(networkId).select("name");
         return res.status(400).json({
