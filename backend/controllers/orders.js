@@ -1029,24 +1029,32 @@ const generateDetailedReasonForLeadType = async (
     // Our network filtering removed - leads can be reused for same our network
     // Campaign filtering removed - leads can be reused for same campaign from different networks
 
+    // ROBUST CLIENT BROKER DEDUP: Check against ALL existing orders with same client brokers
     if (
       selectedClientBrokers &&
       selectedClientBrokers.length > 0 &&
       currentCount >= Math.min(requested, filteredLeads.length)
     ) {
+      const existingBrokerOrders = await Order.find({
+        selectedClientBrokers: { $in: selectedClientBrokers },
+        status: { $ne: "cancelled" },
+      }).select("leads").lean();
+      const leadsWithSameBrokers = new Set();
+      for (const eo of existingBrokerOrders) {
+        if (eo.leads) {
+          for (const lid of eo.leads) leadsWithSameBrokers.add(lid.toString());
+        }
+      }
       const beforeFilter = currentCount;
       filteredLeads = filteredLeads.filter(
-        (lead) =>
-          !selectedClientBrokers.some((brokerId) =>
-            lead.isAssignedToClientBroker(brokerId)
-          )
+        (lead) => !leadsWithSameBrokers.has(lead._id.toString())
       );
       currentCount = filteredLeads.length;
       if (currentCount < requested && currentCount < beforeFilter) {
         limitingFactors.push(
           `Client brokers conflict: ${
             beforeFilter - currentCount
-          } leads already assigned to selected brokers`
+          } leads already in orders with same brokers`
         );
       }
     }
@@ -1149,12 +1157,20 @@ const handleManualSelectionOrder = async (req, res, next) => {
       }
     }
 
-    // Check client broker conflicts - prevent reusing leads already assigned to the same client brokers
+    // ROBUST CLIENT BROKER DEDUP: Check against ALL existing orders with same client brokers
     if (selectedClientBrokers && selectedClientBrokers.length > 0) {
+      const existingBrokerOrders = await Order.find({
+        selectedClientBrokers: { $in: selectedClientBrokers },
+        status: { $ne: "cancelled" },
+      }).select("leads").lean();
+      const leadsWithSameBrokers = new Set();
+      for (const eo of existingBrokerOrders) {
+        if (eo.leads) {
+          for (const lid of eo.leads) leadsWithSameBrokers.add(lid.toString());
+        }
+      }
       const brokerConflictLeads = foundLeads.filter((lead) =>
-        selectedClientBrokers.some((brokerId) =>
-          lead.isAssignedToClientBroker(brokerId)
-        )
+        leadsWithSameBrokers.has(lead._id.toString())
       );
       if (brokerConflictLeads.length > 0) {
         const conflictNames = brokerConflictLeads.map(
@@ -1465,6 +1481,27 @@ exports.createOrder = async (req, res, next) => {
       );
     }
 
+    // ROBUST CLIENT BROKER DEDUP: Collect lead IDs from ALL existing orders with any of the same client brokers.
+    // This is more reliable than checking assignedClientBrokers on each lead, which can be missing for older leads.
+    let leadsAlreadyWithSameBrokers = new Set();
+    if (selectedClientBrokers && selectedClientBrokers.length > 0) {
+      const existingBrokerOrders = await Order.find({
+        selectedClientBrokers: { $in: selectedClientBrokers },
+        status: { $ne: "cancelled" },
+      }).select("leads").lean();
+
+      for (const order of existingBrokerOrders) {
+        if (order.leads) {
+          for (const leadId of order.leads) {
+            leadsAlreadyWithSameBrokers.add(leadId.toString());
+          }
+        }
+      }
+      console.log(
+        `[ORDER-DEDUP] Found ${leadsAlreadyWithSameBrokers.size} leads already in ${existingBrokerOrders.length} orders with same client brokers - these will be excluded`
+      );
+    }
+
     const countryFilter = country ? { country: new RegExp(country, "i") } : {};
     const genderFilter = gender ? { gender } : {};
 
@@ -1490,10 +1527,15 @@ exports.createOrder = async (req, res, next) => {
         ...genderFilterToUse,
       };
 
-      // Exclude already-pulled leads AND leads already in orders with same client network
+      // Exclude already-pulled leads AND leads already in orders with same client network/brokers
       const allExcludedIds = [...excludeLeadIds];
       if (leadsAlreadyInSameClientNetwork.size > 0) {
         for (const id of leadsAlreadyInSameClientNetwork) {
+          allExcludedIds.push(new mongoose.Types.ObjectId(id));
+        }
+      }
+      if (leadsAlreadyWithSameBrokers.size > 0) {
+        for (const id of leadsAlreadyWithSameBrokers) {
           allExcludedIds.push(new mongoose.Types.ObjectId(id));
         }
       }
@@ -1622,17 +1664,8 @@ exports.createOrder = async (req, res, next) => {
         );
       }
 
-      // Client network dedup is handled at DB query level via leadsAlreadyInSameClientNetwork exclusion set
-
-      // Apply broker filters (assignedClientBrokers is a direct field, so this is reliable)
-      if (selectedClientBrokers && selectedClientBrokers.length > 0) {
-        availableLeads = availableLeads.filter(
-          (lead) =>
-            !selectedClientBrokers.some((brokerId) =>
-              lead.isAssignedToClientBroker(brokerId)
-            )
-        );
-      }
+      // Client network and broker dedup is handled at DB query level via
+      // leadsAlreadyInSameClientNetwork + leadsAlreadyWithSameBrokers exclusion sets
 
       // Filter by agent assignment
       if (agentId) {
@@ -1750,12 +1783,12 @@ exports.createOrder = async (req, res, next) => {
         ...genderFilter,
       };
 
-      // Exclude leads already in orders with same client network (robust dedup)
-      if (leadsAlreadyInSameClientNetwork.size > 0) {
-        const excludedObjectIds = [...leadsAlreadyInSameClientNetwork].map(
-          (id) => new mongoose.Types.ObjectId(id)
-        );
-        query._id = { $nin: excludedObjectIds };
+      // Exclude leads already in orders with same client network or same brokers (robust dedup)
+      const excludedIds = new Set();
+      for (const id of leadsAlreadyInSameClientNetwork) excludedIds.add(id);
+      for (const id of leadsAlreadyWithSameBrokers) excludedIds.add(id);
+      if (excludedIds.size > 0) {
+        query._id = { $nin: [...excludedIds].map((id) => new mongoose.Types.ObjectId(id)) };
       }
 
       // Get total count first to determine fetch strategy
@@ -1815,26 +1848,11 @@ exports.createOrder = async (req, res, next) => {
         );
       }
 
-      // Client network dedup is handled at DB query level via leadsAlreadyInSameClientNetwork exclusion set
+      // Client network and broker dedup is handled at DB query level via
+      // leadsAlreadyInSameClientNetwork + leadsAlreadyWithSameBrokers exclusion sets
       console.log(
-        `[${leadType.toUpperCase()}-DEBUG] Client network dedup handled at DB level (order-based exclusion)`
+        `[${leadType.toUpperCase()}-DEBUG] Client network + broker dedup handled at DB level (order-based exclusion)`
       );
-
-      // Apply broker filters (assignedClientBrokers is a direct field, so this is reliable)
-      if (selectedClientBrokers && selectedClientBrokers.length > 0) {
-        const beforeCount = availableLeads.length;
-        availableLeads = availableLeads.filter(
-          (lead) =>
-            !selectedClientBrokers.some((brokerId) =>
-              lead.isAssignedToClientBroker(brokerId)
-            )
-        );
-        console.log(
-          `[${leadType.toUpperCase()}-DEBUG] After client brokers filtering: ${
-            availableLeads.length
-          } leads remain (${beforeCount - availableLeads.length} filtered out)`
-        );
-      }
 
       // Apply cooldown filter for FTD and Filler leads (10-day cooldown)
       // This prevents returning leads that were previously ordered as FTD or Filler
@@ -2251,27 +2269,11 @@ exports.createOrder = async (req, res, next) => {
           } leads remain`
         );
 
-        // Client network dedup is handled at DB query level via leadsAlreadyInSameClientNetwork exclusion set
+        // Client network + broker dedup is handled at DB query level via
+        // leadsAlreadyInSameClientNetwork + leadsAlreadyWithSameBrokers exclusion sets
         console.log(
-          `[FTD-DEBUG] Client network dedup handled at DB level (order-based exclusion)`
+          `[FTD-DEBUG] Client network + broker dedup handled at DB level (order-based exclusion)`
         );
-
-        if (selectedClientBrokers && selectedClientBrokers.length > 0) {
-          console.log(
-            `[FTD-DEBUG] Filtering out leads already assigned to client brokers: ${selectedClientBrokers.join(
-              ", "
-            )}`
-          );
-          filteredFTDLeads = filteredFTDLeads.filter(
-            (lead) =>
-              !selectedClientBrokers.some((brokerId) =>
-                lead.isAssignedToClientBroker(brokerId)
-              )
-          );
-          console.log(
-            `[FTD-DEBUG] After client brokers filtering: ${filteredFTDLeads.length} leads remain`
-          );
-        }
 
         // Agent filtering for FTD leads
         if (agentFilter) {
@@ -2674,26 +2676,11 @@ exports.createOrder = async (req, res, next) => {
           );
         }
 
-        // Client network dedup is handled at DB query level via leadsAlreadyInSameClientNetwork exclusion set
+        // Client network + broker dedup is handled at DB query level via
+        // leadsAlreadyInSameClientNetwork + leadsAlreadyWithSameBrokers exclusion sets
         console.log(
-          `[FILLER-DEBUG] Client network dedup handled at DB level (order-based exclusion)`
+          `[FILLER-DEBUG] Client network + broker dedup handled at DB level (order-based exclusion)`
         );
-        if (selectedClientBrokers && selectedClientBrokers.length > 0) {
-          console.log(
-            `[FILLER-DEBUG] Filtering out leads already assigned to client brokers: ${selectedClientBrokers.join(
-              ", "
-            )}`
-          );
-          filteredFillerLeads = filteredFillerLeads.filter(
-            (lead) =>
-              !selectedClientBrokers.some((brokerId) =>
-                lead.isAssignedToClientBroker(brokerId)
-              )
-          );
-          console.log(
-            `[FILLER-DEBUG] After client brokers filtering: ${filteredFillerLeads.length} leads remain`
-          );
-        }
         fillerLeads = filteredFillerLeads;
       }
       if (fillerLeads.length > 0) {
@@ -2726,12 +2713,12 @@ exports.createOrder = async (req, res, next) => {
         ...genderFilter,
       };
 
-      // Exclude leads already in orders with same client network (robust dedup)
-      if (leadsAlreadyInSameClientNetwork.size > 0) {
-        const excludedObjectIds = [...leadsAlreadyInSameClientNetwork].map(
-          (id) => new mongoose.Types.ObjectId(id)
-        );
-        coldQuery._id = { $nin: excludedObjectIds };
+      // Exclude leads already in orders with same client network or same brokers (robust dedup)
+      const coldExcludedIds = new Set();
+      for (const id of leadsAlreadyInSameClientNetwork) coldExcludedIds.add(id);
+      for (const id of leadsAlreadyWithSameBrokers) coldExcludedIds.add(id);
+      if (coldExcludedIds.size > 0) {
+        coldQuery._id = { $nin: [...coldExcludedIds].map((id) => new mongoose.Types.ObjectId(id)) };
       }
 
       // First, get the total count of available leads matching base criteria
@@ -2760,18 +2747,9 @@ exports.createOrder = async (req, res, next) => {
         coldQuery.newPhone = { $nin: alreadyPulledPhoneNumbers };
       }
 
-      // Client network dedup for cold leads is handled above via order-based _id exclusion
-      // (leadsAlreadyInSameClientNetwork set), which is more reliable than clientNetworkHistory checks
-
-      // Add client broker filter to query (database level, not in-memory)
-      if (selectedClientBrokers && selectedClientBrokers.length > 0) {
-        // Exclude leads that have ANY of the selected brokers in assignedClientBrokers array
-        // IMPORTANT: Convert string IDs to ObjectIds for aggregate() - unlike find(), aggregate doesn't auto-cast
-        const brokerObjectIds = selectedClientBrokers.map(
-          (id) => new mongoose.Types.ObjectId(id)
-        );
-        coldQuery.assignedClientBrokers = { $nin: brokerObjectIds };
-      }
+      // Client network and broker dedup for cold leads is handled above via order-based _id exclusion
+      // (leadsAlreadyInSameClientNetwork + leadsAlreadyWithSameBrokers sets),
+      // which is more reliable than checking clientNetworkHistory/assignedClientBrokers on each lead
 
       // Use aggregate with $sample for random selection, but now with ALL filters applied
       // Sample more than needed to account for phone pattern filtering
@@ -4888,18 +4866,26 @@ exports.changeFTDInOrder = async (req, res, next) => {
 
       // Our network filtering removed - leads can be reused for same our network
 
+      // ROBUST CLIENT BROKER DEDUP: Exclude leads from ALL existing orders with same client brokers
       if (clientBrokersToCheck && clientBrokersToCheck.length > 0) {
         const beforeCount = filteredFTDLeads.length;
         console.log(
-          `[CHANGE-FTD-DEBUG] Filtering out leads already assigned to ${
+          `[CHANGE-FTD-DEBUG] Filtering out leads in orders with same ${
             clientBrokersToCheck.length
           } client broker(s): ${clientBrokersToCheck.join(", ")}`
         );
+        const existingBrokerOrders = await Order.find({
+          selectedClientBrokers: { $in: clientBrokersToCheck },
+          status: { $ne: "cancelled" },
+        }).select("leads").lean();
+        const leadsWithSameBrokers = new Set();
+        for (const eo of existingBrokerOrders) {
+          if (eo.leads) {
+            for (const lid of eo.leads) leadsWithSameBrokers.add(lid.toString());
+          }
+        }
         filteredFTDLeads = filteredFTDLeads.filter(
-          (lead) =>
-            !clientBrokersToCheck.some((brokerId) =>
-              lead.isAssignedToClientBroker(brokerId)
-            )
+          (lead) => !leadsWithSameBrokers.has(lead._id.toString())
         );
         console.log(
           `[CHANGE-FTD-DEBUG] After client brokers filtering: ${
@@ -5526,18 +5512,44 @@ exports.checkOrderFulfillment = async (req, res, next) => {
         ];
       }
 
-      // Client Network Exclusion
+      // ROBUST CLIENT NETWORK DEDUP: Exclude leads from ALL existing orders with same client network
       if (selectedClientNetwork) {
-        baseQuery["clientNetworkHistory.clientNetwork"] = {
-          $ne: selectedClientNetwork,
-        };
+        const existingNetworkOrders = await Order.find({
+          selectedClientNetwork: selectedClientNetwork,
+          status: { $ne: "cancelled" },
+        }).select("leads").lean();
+        const networkExcludedIds = new Set();
+        for (const eo of existingNetworkOrders) {
+          if (eo.leads) {
+            for (const lid of eo.leads) networkExcludedIds.add(lid.toString());
+          }
+        }
+        if (networkExcludedIds.size > 0) {
+          const currentExcluded = baseQuery._id?.$nin || [];
+          baseQuery._id = {
+            $nin: [...currentExcluded, ...[...networkExcludedIds].map((id) => new mongoose.Types.ObjectId(id))],
+          };
+        }
       }
 
-      // Client Broker Exclusion
+      // ROBUST CLIENT BROKER DEDUP: Exclude leads from ALL existing orders with same client brokers
       if (selectedClientBrokers && selectedClientBrokers.length > 0) {
-        baseQuery["clientBrokerHistory.clientBroker"] = {
-          $nin: selectedClientBrokers,
-        };
+        const existingBrokerOrders = await Order.find({
+          selectedClientBrokers: { $in: selectedClientBrokers },
+          status: { $ne: "cancelled" },
+        }).select("leads").lean();
+        const brokerExcludedIds = new Set();
+        for (const eo of existingBrokerOrders) {
+          if (eo.leads) {
+            for (const lid of eo.leads) brokerExcludedIds.add(lid.toString());
+          }
+        }
+        if (brokerExcludedIds.size > 0) {
+          const currentExcluded = baseQuery._id?.$nin || [];
+          baseQuery._id = {
+            $nin: [...currentExcluded, ...[...brokerExcludedIds].map((id) => new mongoose.Types.ObjectId(id))],
+          };
+        }
       }
 
       let insufficient = false;
@@ -5938,12 +5950,21 @@ exports.addLeadsToOrder = async (req, res, next) => {
       }
     }
 
-    // Check client broker conflicts - prevent reusing leads already assigned to the same client brokers
+    // ROBUST CLIENT BROKER DEDUP: Check against ALL existing orders with same client brokers
     if (order.selectedClientBrokers && order.selectedClientBrokers.length > 0) {
+      const brokerIds = order.selectedClientBrokers.map((b) => b._id || b);
+      const existingBrokerOrders = await Order.find({
+        selectedClientBrokers: { $in: brokerIds },
+        status: { $ne: "cancelled" },
+      }).select("leads").lean();
+      const leadsWithSameBrokers = new Set();
+      for (const eo of existingBrokerOrders) {
+        if (eo.leads) {
+          for (const lid of eo.leads) leadsWithSameBrokers.add(lid.toString());
+        }
+      }
       const brokerConflictLeads = foundLeads.filter((lead) =>
-        order.selectedClientBrokers.some((brokerId) =>
-          lead.isAssignedToClientBroker(brokerId._id || brokerId)
-        )
+        leadsWithSameBrokers.has(lead._id.toString())
       );
       if (brokerConflictLeads.length > 0) {
         const conflictNames = brokerConflictLeads.map(
@@ -6283,12 +6304,26 @@ exports.getAvailableLeadsForReplacement = async (req, res, next) => {
       }
     }
 
-    // Client broker exclusion - prevent leads already assigned to the same client brokers
+    // ROBUST CLIENT BROKER DEDUP: Exclude leads from ALL existing orders with same client brokers
     if (order.selectedClientBrokers && order.selectedClientBrokers.length > 0) {
-      const brokerObjectIds = order.selectedClientBrokers.map(
-        (id) => new mongoose.Types.ObjectId(id._id || id)
-      );
-      baseQuery.assignedClientBrokers = { $nin: brokerObjectIds };
+      const brokerIds = order.selectedClientBrokers.map((b) => b._id || b);
+      const existingBrokerOrders = await Order.find({
+        selectedClientBrokers: { $in: brokerIds },
+        status: { $ne: "cancelled" },
+      }).select("leads").lean();
+      const leadsWithSameBrokers = new Set();
+      for (const eo of existingBrokerOrders) {
+        if (eo.leads) {
+          for (const lid of eo.leads) leadsWithSameBrokers.add(lid.toString());
+        }
+      }
+      if (leadsWithSameBrokers.size > 0) {
+        const currentExcluded = baseQuery._id?.$nin || [];
+        const brokerExcludedIds = [...leadsWithSameBrokers].map(
+          (id) => new mongoose.Types.ObjectId(id)
+        );
+        baseQuery._id = { $nin: [...currentExcluded, ...brokerExcludedIds] };
+      }
     }
 
     // Add search filter if provided
@@ -6527,15 +6562,23 @@ exports.replaceLeadInOrder = async (req, res, next) => {
       }
     }
 
-    // Check client broker conflict - prevent reusing leads already assigned to the same client brokers
+    // ROBUST CLIENT BROKER DEDUP: Check against ALL existing orders with same client brokers
     if (order.selectedClientBrokers && order.selectedClientBrokers.length > 0) {
-      const conflictingBroker = order.selectedClientBrokers.find((brokerId) =>
-        newLead.isAssignedToClientBroker(brokerId._id || brokerId)
-      );
-      if (conflictingBroker) {
+      const brokerIds = order.selectedClientBrokers.map((b) => b._id || b);
+      const existingBrokerOrders = await Order.find({
+        selectedClientBrokers: { $in: brokerIds },
+        status: { $ne: "cancelled" },
+      }).select("leads").lean();
+      const leadsWithSameBrokers = new Set();
+      for (const eo of existingBrokerOrders) {
+        if (eo.leads) {
+          for (const lid of eo.leads) leadsWithSameBrokers.add(lid.toString());
+        }
+      }
+      if (leadsWithSameBrokers.has(newLeadId)) {
         return res.status(400).json({
           success: false,
-          message: `Replacement lead "${newLead.firstName} ${newLead.lastName}" was already assigned to one of the order's client brokers. Cannot reuse the same lead for the same broker.`,
+          message: `Replacement lead "${newLead.firstName} ${newLead.lastName}" was already used in an order with the same client brokers. Cannot reuse the same lead for the same broker.`,
         });
       }
     }
