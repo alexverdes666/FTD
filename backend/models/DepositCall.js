@@ -110,6 +110,12 @@ const depositCallSchema = new Schema({
     type: Date,
     default: null
   },
+  // Reference to the auto-approved AgentCallDeclaration created during deposit confirmation
+  depositCallDeclaration: {
+    type: Schema.Types.ObjectId,
+    ref: 'AgentCallDeclaration',
+    default: null
+  },
   // Overall status
   status: {
     type: String,

@@ -402,7 +402,7 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
               return (
                 <MenuItem key={type.value} value={type.value} disabled={isDisabled}>
                   <Box display="flex" justifyContent="space-between" width="100%">
-                    <span>{type.label}{isDisabled ? ' (already declared)' : ''}</span>
+                    <span>{type.label}{isDisabled ? (type.value === 'deposit' ? ' (AM needs to declare the deposit call)' : ' (already declared)') : ''}</span>
                     <Chip
                       label={formatCurrency(type.bonus)}
                       size="small"

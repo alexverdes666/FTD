@@ -4523,7 +4523,7 @@ exports.confirmDeposit = async (req, res, next) => {
     const leadId = req.params.id;
     const userId = req.user._id;
     const userRole = req.user.role;
-    const { pspId, orderId, cardIssuerId } = req.body;
+    const { pspId, orderId, cardIssuerId, selectedCall } = req.body;
 
     // Only admin and affiliate_manager can confirm deposits
     if (userRole !== "admin" && userRole !== "affiliate_manager") {
@@ -4546,6 +4546,14 @@ exports.confirmDeposit = async (req, res, next) => {
       return res.status(400).json({
         success: false,
         message: "Order ID is required for confirming deposit",
+      });
+    }
+
+    // Validate selectedCall is provided (AM must select the deposit call)
+    if (!selectedCall || !selectedCall.cdrCallId || !selectedCall.callDate || !selectedCall.callDuration) {
+      return res.status(400).json({
+        success: false,
+        message: "Please select an agent call as the deposit call",
       });
     }
 
@@ -4688,6 +4696,78 @@ exports.confirmDeposit = async (req, res, next) => {
       await depositCall.save();
     }
 
+    // Create approved deposit call declaration from the selected CDR call
+    const AgentCallDeclaration = require("../models/AgentCallDeclaration");
+    const cdrService = require("../services/cdrService");
+    const { addCallExpenseToAffiliateManager } = require("./agentCallDeclarations");
+
+    // Check if this CDR call is already declared
+    const existingCdrDecl = await AgentCallDeclaration.findOne({
+      cdrCallId: selectedCall.cdrCallId,
+      isActive: true,
+    });
+    if (existingCdrDecl) {
+      return res.status(400).json({
+        success: false,
+        message: "This call has already been declared",
+      });
+    }
+
+    // Check if a deposit declaration already exists for this lead+order
+    const existingDepositDecl = await AgentCallDeclaration.findOne({
+      lead: leadId,
+      orderId,
+      callType: "deposit",
+      status: { $in: ["approved", "pending"] },
+      isActive: true,
+    });
+    if (existingDepositDecl) {
+      return res.status(400).json({
+        success: false,
+        message: "A deposit call declaration already exists for this lead on this order",
+      });
+    }
+
+    // Calculate bonus
+    const bonusData = cdrService.calculateBonus("deposit", selectedCall.callDuration);
+    const callDateObj = new Date(selectedCall.callDate);
+
+    const depositDeclaration = await AgentCallDeclaration.create({
+      agent: lead.assignedAgent._id || lead.assignedAgent,
+      cdrCallId: selectedCall.cdrCallId,
+      callDate: callDateObj,
+      callDuration: selectedCall.callDuration,
+      sourceNumber: selectedCall.sourceNumber || "unknown",
+      destinationNumber: selectedCall.destinationNumber || "unknown",
+      callCategory: "ftd",
+      callType: "deposit",
+      description: "Deposit call selected by AM during deposit confirmation",
+      baseBonus: bonusData.baseBonus,
+      hourlyBonus: bonusData.hourlyBonus,
+      totalBonus: bonusData.totalBonus,
+      status: "approved",
+      reviewedBy: userId,
+      reviewedAt: new Date(),
+      reviewNotes: "Auto-approved: selected by AM during deposit confirmation",
+      declarationMonth: callDateObj.getMonth() + 1,
+      declarationYear: callDateObj.getFullYear(),
+      affiliateManager: userId,
+      lead: leadId,
+      orderId,
+      recordFile: selectedCall.recordFile || "",
+    });
+
+    // Add expense to affiliate manager's table
+    try {
+      await addCallExpenseToAffiliateManager(depositDeclaration);
+    } catch (expenseError) {
+      console.error("Error adding deposit call expense:", expenseError);
+    }
+
+    // Store declaration reference on DepositCall for reversal tracking
+    depositCall.depositCallDeclaration = depositDeclaration._id;
+    await depositCall.save();
+
     // Populate order metadata for response
     await order.populate("leadsMetadata.depositConfirmedBy", "fullName email");
     await order.populate("leadsMetadata.depositPSP", "name website");
@@ -4809,9 +4889,35 @@ exports.unconfirmDeposit = async (req, res, next) => {
     const DepositCall = require("../models/DepositCall");
     const depositCall = await DepositCall.findOne({ leadId: lead._id, orderId });
     if (depositCall) {
+      // Reverse the deposit call declaration if one exists
+      if (depositCall.depositCallDeclaration) {
+        try {
+          const AgentCallDeclaration = require("../models/AgentCallDeclaration");
+          const { removeCallExpenseFromAffiliateManager } = require("./agentCallDeclarations");
+
+          const declaration = await AgentCallDeclaration.findById(depositCall.depositCallDeclaration);
+          if (declaration && declaration.isActive) {
+            // Reverse expense from AM's table
+            try {
+              await removeCallExpenseFromAffiliateManager(declaration);
+            } catch (expenseError) {
+              console.error("Error reversing deposit call expense:", expenseError);
+            }
+
+            // Soft-delete the declaration
+            declaration.isActive = false;
+            await declaration.save();
+            console.log(`Reversed deposit declaration ${declaration._id} for lead ${leadId} on order ${orderId}`);
+          }
+        } catch (declError) {
+          console.error("Error reversing deposit call declaration:", declError);
+        }
+      }
+
       depositCall.depositConfirmed = false;
       depositCall.depositConfirmedBy = null;
       depositCall.depositConfirmedAt = null;
+      depositCall.depositCallDeclaration = null;
       await depositCall.save();
     }
 

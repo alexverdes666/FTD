@@ -159,6 +159,71 @@ const fetchCDRCalls = async (req, res) => {
 };
 
 /**
+ * Fetch CDR calls for a specific agent (used by AM during deposit confirmation)
+ * GET /call-declarations/cdr/:agentId
+ */
+const fetchAgentCDRCalls = async (req, res) => {
+  try {
+    const { agentId } = req.params;
+    const months = parseInt(req.query.months) || 3;
+
+    // Get the agent's fourDigitCode
+    const agent = await User.findById(agentId).select("fourDigitCode fullName");
+    if (!agent || !agent.fourDigitCode) {
+      return res.status(400).json({
+        success: false,
+        message: "Agent does not have a four digit code configured",
+      });
+    }
+
+    const agentCode = cdrService.extractAgentCode(agent.fourDigitCode);
+    const allCalls = await cdrService.fetchCDRCalls(agentCode, months);
+    const longCalls = cdrService.filterLongCalls(allCalls);
+    const parsedCalls = longCalls.map(cdrService.parseCallRecord);
+
+    // Check existing declarations for this agent
+    const declaredCalls = await AgentCallDeclaration.find({
+      agent: agentId,
+      isActive: true,
+    }).select("cdrCallId status");
+
+    const declarationMap = new Map();
+    for (const d of declaredCalls) {
+      declarationMap.set(d.cdrCallId, d.status);
+    }
+
+    const enrichedCalls = parsedCalls
+      .filter((call) => !declarationMap.has(call.cdrCallId))
+      .map((call) => ({
+        ...call,
+        email: call.email && call.email.startsWith(agentCode)
+          ? call.email.slice(agentCode.length)
+          : call.email,
+        destinationNumber: call.destinationNumber && call.destinationNumber.startsWith(agentCode)
+          ? call.destinationNumber.slice(agentCode.length)
+          : call.destinationNumber,
+        formattedDuration: cdrService.formatDuration(call.callDuration),
+      }));
+
+    res.json({
+      success: true,
+      data: {
+        calls: enrichedCalls,
+        totalCount: enrichedCalls.length,
+        agentName: agent.fullName,
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching agent CDR calls:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch agent CDR calls",
+      error: error.message,
+    });
+  }
+};
+
+/**
  * Create a new call declaration
  * POST /call-declarations
  */
@@ -286,22 +351,12 @@ const createDeclaration = async (req, res) => {
         });
       }
 
-      // For "deposit" type, also check if lead has a confirmed deposit in DepositCall
+      // Deposit type is always declared by AM during deposit confirmation
       if (callType === "deposit") {
-        const depositQuery = { depositConfirmed: true };
-        if (orderId) {
-          depositQuery.orderId = orderId;
-        }
-        const depositCall = orderId
-          ? await DepositCall.findOne({ leadId, ...depositQuery })
-          : await findDepositCallForLead(leadId, depositQuery);
-
-        if (depositCall) {
-          return res.status(400).json({
-            success: false,
-            message: "Deposit has already been confirmed for this lead",
-          });
-        }
+        return res.status(400).json({
+          success: false,
+          message: "AM access is required. The affiliate manager declares the deposit call during deposit confirmation.",
+        });
       }
     }
 
@@ -677,6 +732,46 @@ const addCallExpenseToAffiliateManager = async (declaration) => {
 };
 
 /**
+ * Remove call bonus expense from affiliate manager's table (reversal)
+ * This is called when a deposit is unconfirmed by admin
+ */
+const removeCallExpenseFromAffiliateManager = async (declaration) => {
+  const { affiliateManager, callType, callCategory, totalBonus, declarationMonth, declarationYear } = declaration;
+
+  if (callCategory === "filler" || totalBonus === 0) {
+    return;
+  }
+
+  const rowId = CALL_TYPE_TO_TABLE_ROW[callType];
+  if (!rowId) {
+    console.warn(`Unknown call type for expense reversal: ${callType}`);
+    return;
+  }
+
+  const tableDate = new Date(declarationYear, declarationMonth - 1, 1);
+
+  const table = await AffiliateManagerTable.getOrCreateTable(
+    affiliateManager,
+    "monthly",
+    tableDate,
+    { month: declarationMonth, year: declarationYear }
+  );
+
+  const rowIndex = table.tableData.findIndex((row) => row.id === rowId);
+  if (rowIndex === -1) {
+    console.warn(`Row ${rowId} not found in affiliate manager table for reversal`);
+    return;
+  }
+
+  table.tableData[rowIndex].value = Math.max(0, (table.tableData[rowIndex].value || 0) - totalBonus);
+  await table.save();
+
+  console.log(
+    `Reversed expense for ${callType} ($${totalBonus}) from affiliate manager ${affiliateManager} for ${declarationMonth}/${declarationYear}`
+  );
+};
+
+/**
  * Update DepositCall record when a call declaration is approved
  * Maps the declaration's callType to the corresponding call slot on the DepositCall
  */
@@ -755,22 +850,8 @@ const getDisabledCallTypes = async (req, res) => {
 
     const disabledCallTypes = [];
 
-    // Check if lead has a confirmed deposit in DepositCall for this specific order
-    if (orderId) {
-      const depositCall = await DepositCall.findOne({
-        leadId,
-        orderId,
-        depositConfirmed: true,
-      });
-      if (depositCall) {
-        disabledCallTypes.push("deposit");
-      }
-    } else {
-      const depositCall = await findDepositCallForLead(leadId, { depositConfirmed: true });
-      if (depositCall) {
-        disabledCallTypes.push("deposit");
-      }
-    }
+    // Deposit type is always disabled for agents - AM declares it during deposit confirmation
+    disabledCallTypes.push("deposit");
 
     // Check for approved or pending declarations for this lead (scoped by order if provided)
     const declarationQuery = {
@@ -1271,6 +1352,7 @@ const getLeadOrders = async (req, res) => {
 
 module.exports = {
   fetchCDRCalls,
+  fetchAgentCDRCalls,
   createDeclaration,
   getDeclarations,
   getPendingDeclarations,
@@ -1287,4 +1369,6 @@ module.exports = {
   streamRecording,
   getDisabledCallTypes,
   getLeadOrders,
+  addCallExpenseToAffiliateManager,
+  removeCallExpenseFromAffiliateManager,
 };

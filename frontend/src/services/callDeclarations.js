@@ -17,6 +17,23 @@ export const fetchCDRCalls = async (months = 3) => {
 };
 
 /**
+ * Fetch CDR calls for a specific agent (used by AM during deposit confirmation)
+ * @param {string} agentId - The agent's user ID
+ * @param {number} months - Number of months to fetch (default 3)
+ */
+export const fetchAgentCDRCalls = async (agentId, months = 3) => {
+  try {
+    const response = await api.get(`/call-declarations/cdr/${agentId}`, {
+      params: { months },
+    });
+    return response.data.data;
+  } catch (error) {
+    console.error("Error fetching agent CDR calls:", error);
+    throw error;
+  }
+};
+
+/**
  * Find leads by phone number or email (for auto-fill in declaration dialog)
  * @param {string} phone - Phone number to search
  * @param {string} email - Email to search (fallback)

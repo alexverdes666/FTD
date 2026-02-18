@@ -49,6 +49,7 @@ import {
   Divider,
   alpha,
   Link,
+  Radio,
 } from "@mui/material";
 import {
   Add as AddIcon,
@@ -100,6 +101,7 @@ import {
   Inbox as InboxIcon,
   ListAlt as ListAltIcon,
   AlternateEmail as EmailSearchIcon,
+  PlayArrow as PlayArrowIcon,
 } from "@mui/icons-material";
 import { useForm, Controller } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
@@ -750,7 +752,7 @@ const OrdersPage = () => {
     open: false,
     lead: null,
     orderId: null,
-    step: 1, // 1 = select card issuer, 2 = select PSP
+    step: 1, // 1 = select card issuer, 2 = select PSP, 3 = select deposit call
     cardIssuers: [],
     selectedCardIssuer: null,
     newCardIssuerName: "",
@@ -760,6 +762,12 @@ const OrdersPage = () => {
     selectedPsp: null,
     newPspWebsite: "",
     creatingPsp: false,
+    // Step 3: CDR call selection
+    agentCalls: [],
+    agentCallsLoading: false,
+    selectedCall: null,
+    playingRecording: null,
+    callSearchQuery: "",
   });
 
   const {
@@ -4471,8 +4479,8 @@ const OrdersPage = () => {
     }
   }, [pspDepositDialog, setNotification]);
 
-  // Handle PSP selection and confirm deposit
-  const handlePspDepositConfirm = useCallback(
+  // Handle PSP selection → move to step 3 (select deposit call)
+  const handlePspSelect = useCallback(
     async () => {
       const { lead, selectedPsp, selectedCardIssuer, orderId, newPspWebsite } = pspDepositDialog;
 
@@ -4536,13 +4544,71 @@ const OrdersPage = () => {
         return;
       }
 
+      // Move to step 3: select deposit call
+      const agentId = lead.assignedAgent?._id || lead.assignedAgent;
+      if (!agentId) {
+        setNotification({
+          message: "Lead has no assigned agent. Cannot fetch CDR calls.",
+          severity: "error",
+        });
+        return;
+      }
+
+      setPspDepositDialog((prev) => ({
+        ...prev,
+        step: 3,
+        selectedPsp: pspToUse,
+        agentCallsLoading: true,
+      }));
+
+      try {
+        const { fetchAgentCDRCalls } = await import("../services/callDeclarations");
+        const data = await fetchAgentCDRCalls(agentId, 3);
+        setPspDepositDialog((prev) => ({
+          ...prev,
+          agentCalls: data.calls || [],
+          agentCallsLoading: false,
+        }));
+      } catch (err) {
+        console.error("Error fetching agent CDR calls:", err);
+        setNotification({
+          message: err.response?.data?.message || "Failed to load agent's calls",
+          severity: "error",
+        });
+        setPspDepositDialog((prev) => ({ ...prev, agentCallsLoading: false }));
+      }
+    },
+    [pspDepositDialog, setNotification]
+  );
+
+  // Handle final deposit confirmation with selected call (step 3)
+  const handleDepositCallConfirm = useCallback(
+    async () => {
+      const { lead, selectedPsp, selectedCardIssuer, orderId, selectedCall } = pspDepositDialog;
+
+      if (!selectedCall) {
+        setNotification({
+          message: "Please select a call as the deposit call",
+          severity: "error",
+        });
+        return;
+      }
+
       try {
         setPspDepositDialog((prev) => ({ ...prev, loading: true }));
 
         const response = await api.put(`/leads/${lead._id}/confirm-deposit`, {
-          pspId: pspToUse._id,
+          pspId: selectedPsp._id,
           orderId: orderId,
           cardIssuerId: selectedCardIssuer?._id || null,
+          selectedCall: {
+            cdrCallId: selectedCall.cdrCallId,
+            callDate: selectedCall.callDate,
+            callDuration: selectedCall.callDuration,
+            sourceNumber: selectedCall.sourceNumber,
+            destinationNumber: selectedCall.destinationNumber,
+            recordFile: selectedCall.recordFile || "",
+          },
         });
 
         // Get the order metadata from response
@@ -4553,7 +4619,7 @@ const OrdersPage = () => {
           depositConfirmed: orderMetadata.depositConfirmed || true,
           depositConfirmedBy: orderMetadata.depositConfirmedBy || user,
           depositConfirmedAt: orderMetadata.depositConfirmedAt || new Date().toISOString(),
-          depositPSP: orderMetadata.depositPSP || pspToUse,
+          depositPSP: orderMetadata.depositPSP || selectedPsp,
         };
 
         setAssignedLeadsModal((prev) => ({
@@ -4565,7 +4631,6 @@ const OrdersPage = () => {
 
         // Also update preview modal if open
         setLeadsPreviewModal((prev) => {
-          // Also update order's leadsMetadata if we have the order
           let updatedOrder = prev.order;
           if (updatedOrder && updatedOrder.leadsMetadata) {
             updatedOrder = {
@@ -4614,6 +4679,9 @@ const OrdersPage = () => {
         });
 
         // Close the dialog
+        if (pspDepositDialog.playingRecording?.blobUrl) {
+          URL.revokeObjectURL(pspDepositDialog.playingRecording.blobUrl);
+        }
         setPspDepositDialog({
           open: false,
           lead: null,
@@ -4628,6 +4696,11 @@ const OrdersPage = () => {
           selectedPsp: null,
           newPspWebsite: "",
           creatingPsp: false,
+          agentCalls: [],
+          agentCallsLoading: false,
+          selectedCall: null,
+          playingRecording: null,
+          callSearchQuery: "",
         });
 
         // Refresh the orders in background
@@ -4646,6 +4719,10 @@ const OrdersPage = () => {
 
   // Close PSP deposit dialog
   const handleClosePspDepositDialog = useCallback(() => {
+    // Revoke any blob URL before closing
+    if (pspDepositDialog.playingRecording?.blobUrl) {
+      URL.revokeObjectURL(pspDepositDialog.playingRecording.blobUrl);
+    }
     setPspDepositDialog({
       open: false,
       lead: null,
@@ -4660,8 +4737,13 @@ const OrdersPage = () => {
       selectedPsp: null,
       newPspWebsite: "",
       creatingPsp: false,
+      agentCalls: [],
+      agentCallsLoading: false,
+      selectedCall: null,
+      playingRecording: null,
+      callSearchQuery: "",
     });
-  }, []);
+  }, [pspDepositDialog.playingRecording]);
 
   // Unconfirm Deposit Handler (admin only)
   const handleUnconfirmDeposit = useCallback(
@@ -7515,7 +7597,7 @@ const OrdersPage = () => {
       <Dialog
         open
         onClose={handleClosePspDepositDialog}
-        maxWidth="sm"
+        maxWidth={pspDepositDialog.step === 3 ? "md" : "sm"}
         fullWidth
         disableEscapeKeyDown={pspDepositDialog.loading || pspDepositDialog.creatingIssuer || pspDepositDialog.creatingPsp}
       >
@@ -7523,7 +7605,7 @@ const OrdersPage = () => {
           <Box display="flex" alignItems="center" gap={1}>
             <CallIcon color="success" />
             <Typography variant="h6">
-              Confirm Deposit - Step {pspDepositDialog.step} of 2
+              Confirm Deposit - Step {pspDepositDialog.step} of 3
             </Typography>
           </Box>
         </DialogTitle>
@@ -7705,19 +7787,167 @@ const OrdersPage = () => {
               )}
             </Box>
           )}
+
+          {/* Step 3: Select Deposit Call */}
+          {pspDepositDialog.step === 3 && (
+            <Box>
+              <Box sx={{ mb: 2, p: 1.5, bgcolor: "grey.100", borderRadius: 1 }}>
+                <Typography variant="body2" color="text.secondary">
+                  Card Issuer: <strong>{pspDepositDialog.selectedCardIssuer?.name || "—"}</strong>
+                  {" | "}
+                  PSP: <strong>{pspDepositDialog.selectedPsp?.name || "—"}</strong>
+                </Typography>
+              </Box>
+              <Typography variant="subtitle2" gutterBottom>
+                Select the agent's deposit call
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Choose which call from the agent was the deposit call. A $10.00 deposit call bonus will be created.
+              </Typography>
+
+              {pspDepositDialog.agentCallsLoading ? (
+                <Box display="flex" justifyContent="center" alignItems="center" py={4}>
+                  <CircularProgress size={24} sx={{ mr: 1 }} />
+                  <Typography variant="body2" color="text.secondary">Loading agent calls...</Typography>
+                </Box>
+              ) : pspDepositDialog.agentCalls.length === 0 ? (
+                <Alert severity="warning">
+                  No calls found for this agent in the last 3 months. The agent may not have a CDR code configured.
+                </Alert>
+              ) : (
+                <>
+                <TextField
+                  size="small"
+                  fullWidth
+                  placeholder="Search by phone number or email..."
+                  value={pspDepositDialog.callSearchQuery}
+                  onChange={(e) => setPspDepositDialog((prev) => ({ ...prev, callSearchQuery: e.target.value }))}
+                  sx={{ mb: 1.5 }}
+                />
+                <Box sx={{ maxHeight: 400, overflow: "auto" }}>
+                  {pspDepositDialog.agentCalls
+                    .filter((call) => {
+                      const q = (pspDepositDialog.callSearchQuery || "").toLowerCase().trim();
+                      if (!q) return true;
+                      return (
+                        (call.lineNumber || "").toLowerCase().includes(q) ||
+                        (call.sourceNumber || "").toLowerCase().includes(q) ||
+                        (call.email || "").toLowerCase().includes(q) ||
+                        (call.destinationNumber || "").toLowerCase().includes(q)
+                      );
+                    })
+                    .map((call) => {
+                    const isSelected = pspDepositDialog.selectedCall?.cdrCallId === call.cdrCallId;
+                    return (
+                      <Paper
+                        key={call.cdrCallId}
+                        variant="outlined"
+                        sx={{
+                          p: 1.5,
+                          mb: 1,
+                          cursor: "pointer",
+                          border: isSelected ? "2px solid" : "1px solid",
+                          borderColor: isSelected ? "primary.main" : "divider",
+                          bgcolor: isSelected ? "primary.50" : "transparent",
+                          "&:hover": { bgcolor: isSelected ? "primary.50" : "action.hover" },
+                        }}
+                        onClick={() =>
+                          setPspDepositDialog((prev) => ({ ...prev, selectedCall: call }))
+                        }
+                      >
+                        <Box display="flex" alignItems="center" justifyContent="space-between">
+                          <Box sx={{ flex: 1, minWidth: 0 }}>
+                            <Box display="flex" alignItems="center" gap={1} flexWrap="wrap">
+                              <Typography variant="body2">
+                                {new Date(call.callDate).toLocaleString()}
+                              </Typography>
+                              <Chip
+                                label={call.formattedDuration}
+                                size="small"
+                                color={call.callDuration >= 3600 ? "error" : call.callDuration >= 1800 ? "warning" : "default"}
+                                variant="outlined"
+                              />
+                            </Box>
+                            <Typography variant="caption" color="text.secondary" sx={{ fontFamily: "monospace" }}>
+                              {call.lineNumber || call.sourceNumber} → {call.email || call.destinationNumber}
+                            </Typography>
+                          </Box>
+                          <Box display="flex" alignItems="center" gap={0.5} sx={{ ml: 1 }}>
+                            {call.recordFile && (
+                              <IconButton
+                                size="small"
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  // Revoke previous blob URL
+                                  if (pspDepositDialog.playingRecording?.blobUrl) {
+                                    URL.revokeObjectURL(pspDepositDialog.playingRecording.blobUrl);
+                                  }
+                                  // Toggle off if clicking same call
+                                  if (pspDepositDialog.playingRecording?.cdrCallId === call.cdrCallId) {
+                                    setPspDepositDialog((prev) => ({ ...prev, playingRecording: null }));
+                                    return;
+                                  }
+                                  try {
+                                    const { fetchRecordingBlob } = await import("../services/callDeclarations");
+                                    const blobUrl = await fetchRecordingBlob(call.recordFile);
+                                    setPspDepositDialog((prev) => ({
+                                      ...prev,
+                                      playingRecording: { cdrCallId: call.cdrCallId, blobUrl },
+                                    }));
+                                  } catch (err) {
+                                    console.error("Failed to load recording:", err);
+                                    setNotification({ message: "Failed to load recording", severity: "error" });
+                                  }
+                                }}
+                                color={pspDepositDialog.playingRecording?.cdrCallId === call.cdrCallId ? "primary" : "default"}
+                              >
+                                <PlayArrowIcon fontSize="small" />
+                              </IconButton>
+                            )}
+                            <Radio
+                              checked={isSelected}
+                              size="small"
+                              onClick={(e) => e.stopPropagation()}
+                              onChange={() =>
+                                setPspDepositDialog((prev) => ({ ...prev, selectedCall: call }))
+                              }
+                            />
+                          </Box>
+                        </Box>
+                        {pspDepositDialog.playingRecording?.cdrCallId === call.cdrCallId && (
+                          <Box sx={{ mt: 1 }}>
+                            <audio
+                              controls
+                              src={pspDepositDialog.playingRecording.blobUrl}
+                              style={{ width: "100%" }}
+                            />
+                          </Box>
+                        )}
+                      </Paper>
+                    );
+                  })}
+                </Box>
+                </>
+              )}
+            </Box>
+          )}
         </DialogContent>
         <DialogActions>
-          {pspDepositDialog.step === 2 && (
+          {pspDepositDialog.step > 1 && (
             <Button
-              onClick={() =>
+              onClick={() => {
+                // Revoke blob URL when going back from step 3
+                if (pspDepositDialog.step === 3 && pspDepositDialog.playingRecording?.blobUrl) {
+                  URL.revokeObjectURL(pspDepositDialog.playingRecording.blobUrl);
+                }
                 setPspDepositDialog((prev) => ({
                   ...prev,
-                  step: 1,
-                  selectedPsp: null,
-                  newPspWebsite: "",
-                }))
-              }
-              disabled={pspDepositDialog.loading || pspDepositDialog.creatingPsp}
+                  step: prev.step - 1,
+                  ...(prev.step === 3 ? { selectedCall: null, agentCalls: [], playingRecording: null, callSearchQuery: "" } : {}),
+                  ...(prev.step === 2 ? { selectedPsp: null, newPspWebsite: "" } : {}),
+                }));
+              }}
+              disabled={pspDepositDialog.loading || pspDepositDialog.creatingPsp || pspDepositDialog.agentCallsLoading}
             >
               Back
             </Button>
@@ -7741,27 +7971,39 @@ const OrdersPage = () => {
             >
               {pspDepositDialog.creatingIssuer ? "Creating..." : "Next"}
             </Button>
-          ) : (
+          ) : pspDepositDialog.step === 2 ? (
             <Button
-              onClick={handlePspDepositConfirm}
+              onClick={handlePspSelect}
               variant="contained"
-              color="success"
               disabled={
                 (!pspDepositDialog.selectedPsp && !pspDepositDialog.newPspWebsite.trim()) ||
                 pspDepositDialog.loading ||
                 pspDepositDialog.creatingPsp
               }
               startIcon={
-                pspDepositDialog.loading || pspDepositDialog.creatingPsp
+                pspDepositDialog.creatingPsp
+                  ? <CircularProgress size={16} />
+                  : null
+              }
+            >
+              {pspDepositDialog.creatingPsp ? "Creating PSP..." : "Next"}
+            </Button>
+          ) : (
+            <Button
+              onClick={handleDepositCallConfirm}
+              variant="contained"
+              color="success"
+              disabled={
+                !pspDepositDialog.selectedCall ||
+                pspDepositDialog.loading
+              }
+              startIcon={
+                pspDepositDialog.loading
                   ? <CircularProgress size={16} />
                   : <CallIcon />
               }
             >
-              {pspDepositDialog.creatingPsp
-                ? "Creating PSP..."
-                : pspDepositDialog.loading
-                  ? "Confirming..."
-                  : "Confirm Deposit"}
+              {pspDepositDialog.loading ? "Confirming..." : "Confirm Deposit"}
             </Button>
           )}
         </DialogActions>
@@ -10295,9 +10537,12 @@ const OrdersPage = () => {
                               variant="body2"
                               sx={{ whiteSpace: "nowrap", fontSize: "0.75rem" }}
                             >
-                              {(lead.assignedClientBrokers?.length > 0
-                                ? lead.assignedClientBrokers[lead.assignedClientBrokers.length - 1]?.name
+                              {(lead.clientBrokerHistory?.length > 0
+                                ? (lead.clientBrokerHistory.find(h => h.orderId === leadsPreviewModal.orderId || h.orderId?._id === leadsPreviewModal.orderId) || lead.clientBrokerHistory[lead.clientBrokerHistory.length - 1])?.clientBroker?.name
                                 : null) ||
+                                (lead.assignedClientBrokers?.length > 0
+                                  ? lead.assignedClientBrokers[lead.assignedClientBrokers.length - 1]?.name
+                                  : null) ||
                                 lead.clientBroker ||
                                 "-"}
                             </Typography>
@@ -10334,7 +10579,7 @@ const OrdersPage = () => {
                               sx={{ whiteSpace: "nowrap", fontSize: "0.75rem" }}
                             >
                               {lead.clientNetworkHistory?.length > 0
-                                ? lead.clientNetworkHistory[lead.clientNetworkHistory.length - 1]?.clientNetwork?.name || "-"
+                                ? (lead.clientNetworkHistory.find(h => h.orderId === leadsPreviewModal.orderId || h.orderId?._id === leadsPreviewModal.orderId) || lead.clientNetworkHistory[lead.clientNetworkHistory.length - 1])?.clientNetwork?.name || "-"
                                 : "-"}
                             </Typography>
                             {lead.clientNetworkHistory &&
@@ -10370,7 +10615,7 @@ const OrdersPage = () => {
                               sx={{ whiteSpace: "nowrap", fontSize: "0.75rem" }}
                             >
                               {lead.ourNetworkHistory?.length > 0
-                                ? lead.ourNetworkHistory[lead.ourNetworkHistory.length - 1]?.ourNetwork?.name || "-"
+                                ? (lead.ourNetworkHistory.find(h => h.orderId === leadsPreviewModal.orderId || h.orderId?._id === leadsPreviewModal.orderId) || lead.ourNetworkHistory[lead.ourNetworkHistory.length - 1])?.ourNetwork?.name || "-"
                                 : "-"}
                             </Typography>
                             {lead.ourNetworkHistory &&
@@ -10406,7 +10651,7 @@ const OrdersPage = () => {
                               sx={{ whiteSpace: "nowrap", fontSize: "0.75rem" }}
                             >
                               {lead.campaignHistory?.length > 0
-                                ? lead.campaignHistory[lead.campaignHistory.length - 1]?.campaign?.name || "-"
+                                ? (lead.campaignHistory.find(h => h.orderId === leadsPreviewModal.orderId || h.orderId?._id === leadsPreviewModal.orderId) || lead.campaignHistory[lead.campaignHistory.length - 1])?.campaign?.name || "-"
                                 : "-"}
                             </Typography>
                             {lead.campaignHistory &&

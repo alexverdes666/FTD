@@ -3,6 +3,7 @@ const router = express.Router();
 const { protect, isManager } = require("../middleware/auth");
 const {
   fetchCDRCalls,
+  fetchAgentCDRCalls,
   createDeclaration,
   getDeclarations,
   getPendingDeclarations,
@@ -35,6 +36,9 @@ router.post("/preview-bonus", previewBonus);
 
 // Agent fetches CDR calls (only their own based on fourDigitCode)
 router.get("/cdr", fetchCDRCalls);
+
+// AM/Admin fetches CDR calls for a specific agent (by agent ID)
+router.get("/cdr/:agentId", isManager, fetchAgentCDRCalls);
 
 // Find lead by phone number (for auto-fill in declaration dialog)
 router.get("/lead-by-phone", findLeadByPhone);
