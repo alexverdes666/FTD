@@ -10578,9 +10578,11 @@ const OrdersPage = () => {
                               variant="body2"
                               sx={{ whiteSpace: "nowrap", fontSize: "0.75rem" }}
                             >
-                              {lead.clientNetworkHistory?.length > 0
-                                ? (lead.clientNetworkHistory.find(h => h.orderId === leadsPreviewModal.orderId || h.orderId?._id === leadsPreviewModal.orderId) || lead.clientNetworkHistory[lead.clientNetworkHistory.length - 1])?.clientNetwork?.name || "-"
-                                : "-"}
+                              {leadsPreviewModal.order?.selectedClientNetwork?.name
+                                || (lead.clientNetworkHistory?.length > 0
+                                  ? (lead.clientNetworkHistory.find(h => h.orderId === leadsPreviewModal.orderId || h.orderId?._id === leadsPreviewModal.orderId) || lead.clientNetworkHistory[lead.clientNetworkHistory.length - 1])?.clientNetwork?.name
+                                  : null)
+                                || "-"}
                             </Typography>
                             {lead.clientNetworkHistory &&
                               lead.clientNetworkHistory.length > 0 && (
@@ -10614,9 +10616,11 @@ const OrdersPage = () => {
                               variant="body2"
                               sx={{ whiteSpace: "nowrap", fontSize: "0.75rem" }}
                             >
-                              {lead.ourNetworkHistory?.length > 0
-                                ? (lead.ourNetworkHistory.find(h => h.orderId === leadsPreviewModal.orderId || h.orderId?._id === leadsPreviewModal.orderId) || lead.ourNetworkHistory[lead.ourNetworkHistory.length - 1])?.ourNetwork?.name || "-"
-                                : "-"}
+                              {leadsPreviewModal.order?.selectedOurNetwork?.name
+                                || (lead.ourNetworkHistory?.length > 0
+                                  ? (lead.ourNetworkHistory.find(h => h.orderId === leadsPreviewModal.orderId || h.orderId?._id === leadsPreviewModal.orderId) || lead.ourNetworkHistory[lead.ourNetworkHistory.length - 1])?.ourNetwork?.name
+                                  : null)
+                                || "-"}
                             </Typography>
                             {lead.ourNetworkHistory &&
                               lead.ourNetworkHistory.length > 0 && (
@@ -10650,9 +10654,11 @@ const OrdersPage = () => {
                               variant="body2"
                               sx={{ whiteSpace: "nowrap", fontSize: "0.75rem" }}
                             >
-                              {lead.campaignHistory?.length > 0
-                                ? (lead.campaignHistory.find(h => h.orderId === leadsPreviewModal.orderId || h.orderId?._id === leadsPreviewModal.orderId) || lead.campaignHistory[lead.campaignHistory.length - 1])?.campaign?.name || "-"
-                                : "-"}
+                              {leadsPreviewModal.order?.selectedCampaign?.name
+                                || (lead.campaignHistory?.length > 0
+                                  ? (lead.campaignHistory.find(h => h.orderId === leadsPreviewModal.orderId || h.orderId?._id === leadsPreviewModal.orderId) || lead.campaignHistory[lead.campaignHistory.length - 1])?.campaign?.name
+                                  : null)
+                                || "-"}
                             </Typography>
                             {lead.campaignHistory &&
                               lead.campaignHistory.length > 0 && (
