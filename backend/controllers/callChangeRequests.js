@@ -259,16 +259,18 @@ exports.getPendingRequests = async (req, res, next) => {
         ]
       })
       .populate("requestedBy", "fullName email")
+      .populate("affiliateManagerId", "fullName")
       .sort({ createdAt: -1 });
 
-    // Filter for affiliate_manager: only show requests for orders they requested
+    // Filter for affiliate_manager: show requests for their orders OR where they were explicitly selected
     if (req.user.role === "affiliate_manager") {
       requests = requests.filter(request => {
-        // Check if order exists and requester matches current user
-        // Note: request.orderId is the populated order object
-        return request.orderId && 
-               request.orderId.requester && 
+        const isOrderRequester = request.orderId &&
+               request.orderId.requester &&
                request.orderId.requester._id.toString() === req.user.id;
+        const isSelectedAM = request.affiliateManagerId &&
+               (request.affiliateManagerId._id || request.affiliateManagerId).toString() === req.user.id;
+        return isOrderRequester || isSelectedAM;
       });
     }
 
@@ -307,7 +309,9 @@ exports.approveRequest = async (req, res, next) => {
     // Check ownership for affiliate_manager
     if (req.user.role === "affiliate_manager") {
       const order = await Order.findById(request.orderId);
-      if (!order || order.requester.toString() !== req.user.id) {
+      const isOrderRequester = order && order.requester.toString() === req.user.id;
+      const isSelectedAM = request.affiliateManagerId && request.affiliateManagerId.toString() === req.user.id;
+      if (!isOrderRequester && !isSelectedAM) {
         return res.status(403).json({
           success: false,
           message: "Not authorized to approve call change requests for this order",
@@ -411,7 +415,9 @@ exports.rejectRequest = async (req, res, next) => {
     // Check ownership for affiliate_manager
     if (req.user.role === "affiliate_manager") {
       const order = await Order.findById(request.orderId);
-      if (!order || order.requester.toString() !== req.user.id) {
+      const isOrderRequester = order && order.requester.toString() === req.user.id;
+      const isSelectedAM = request.affiliateManagerId && request.affiliateManagerId.toString() === req.user.id;
+      if (!isOrderRequester && !isSelectedAM) {
         return res.status(403).json({
           success: false,
           message: "Not authorized to reject call change requests for this order",

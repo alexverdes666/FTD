@@ -1,5 +1,6 @@
 const Order = require('../models/Order');
 const AgentCallDeclaration = require('../models/AgentCallDeclaration');
+const CallChangeRequest = require('../models/CallChangeRequest');
 const SalaryConfiguration = require('../models/SalaryConfiguration');
 const { normalizeCountry, getSimPrice } = require('../utils/countryNormalizer');
 
@@ -10,6 +11,8 @@ const DATA_TRAFFIC_RATE = 1;
 const ES_UK_CARDS_RATE = 0.15; // 15% of $300
 const CA_CARDS_RATE = 75;
 const TALKING_TIME_HOURLY_RATE = 10; // $10 per full hour
+const VERIFIED_LEAD_RATE = 5; // $5 per verified lead
+const DOCUMENTS_RATE = 20; // $20 per FTD ordered
 
 // All supported SIM card geos (always displayed, even with 0 count)
 const SIM_CARD_GEOS = ['SE', 'UK', 'CA', 'PL', 'ES'];
@@ -51,6 +54,9 @@ const calculateAMExpenses = async (affiliateManagerId, month, year) => {
   // --- Data Traffic (cold leads) ---
   let dataTrafficCount = 0;
 
+  // --- Documents (all FTD-ordered leads) ---
+  let ftdOrderedCount = 0;
+
   // --- ES/UK Cards & CA Cards (deposit confirmed by GEO) ---
   let esUkCardsCount = 0;
   let caCardsCount = 0;
@@ -76,7 +82,10 @@ const calculateAMExpenses = async (affiliateManagerId, month, year) => {
         }
       }
 
-      // SIM Cards: leads ordered as "ftd", priced by GEO
+      // Documents & SIM Cards: leads ordered as "ftd"
+      if (lead.orderedAs === 'ftd') {
+        ftdOrderedCount++;
+      }
       if (lead.orderedAs === 'ftd' && geo) {
         const simPrice = getSimPrice(geo);
         if (simPrice !== null) {
@@ -106,6 +115,7 @@ const calculateAMExpenses = async (affiliateManagerId, month, year) => {
     simCardsBreakdown.push({ geo, count, rate: price, total });
   }
 
+  const documentsTotal = ftdOrderedCount * DOCUMENTS_RATE;
   const dataTrafficTotal = dataTrafficCount * DATA_TRAFFIC_RATE;
   const esUkCardsTotal = esUkCardsCount * FTD_DEPOSIT_RATE * ES_UK_CARDS_RATE;
   const caCardsTotal = caCardsCount * CA_CARDS_RATE;
@@ -162,16 +172,27 @@ const calculateAMExpenses = async (affiliateManagerId, month, year) => {
     salaryTotal = salaryConfig.fixedSalary.amount || 0;
   }
 
+  // --- Verified Leads (from approved call change requests) ---
+  const verifiedLeadsCount = await CallChangeRequest.countDocuments({
+    affiliateManagerId: affiliateManagerId,
+    requestedVerified: true,
+    status: 'approved',
+    reviewedAt: { $gte: startDate, $lte: endDate },
+  });
+  const verifiedLeadsTotal = verifiedLeadsCount * VERIFIED_LEAD_RATE;
+
   const grandTotal =
     ftdDepositTotal +
     ftdTransactionCommissionTotal +
     simCardsTotal +
+    documentsTotal +
     dataTrafficTotal +
     esUkCardsTotal +
     caCardsTotal +
     totalTalkingTimeExpense +
     callExpensesTotal +
-    salaryTotal;
+    salaryTotal +
+    verifiedLeadsTotal;
 
   return {
     categories: [
@@ -197,6 +218,14 @@ const calculateAMExpenses = async (affiliateManagerId, month, year) => {
         label: 'SIM Cards',
         breakdown: simCardsBreakdown,
         total: simCardsTotal,
+      },
+      {
+        key: 'documents',
+        label: 'Documents',
+        count: ftdOrderedCount,
+        rate: DOCUMENTS_RATE,
+        rateType: 'fixed',
+        total: documentsTotal,
       },
       {
         key: 'dataTraffic',
@@ -273,6 +302,15 @@ const calculateAMExpenses = async (affiliateManagerId, month, year) => {
         rate: CALL_EXPENSE_RATES.fourth_call,
         rateType: 'fixed',
         total: fourthCallsTotal,
+      },
+      // --- Verified Leads ---
+      {
+        key: 'verifiedLeads',
+        label: 'Verified Leads',
+        count: verifiedLeadsCount,
+        rate: VERIFIED_LEAD_RATE,
+        rateType: 'fixed',
+        total: verifiedLeadsTotal,
       },
       // --- Salary ---
       {

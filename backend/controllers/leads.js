@@ -3230,7 +3230,7 @@ exports.updateLeadCallNumber = async (req, res, next) => {
       });
     }
 
-    const { callNumber, notes, orderId, verified } = req.body;
+    const { callNumber, notes, orderId, verified, affiliateManagerId } = req.body;
     const leadId = req.params.id;
 
     const lead = await Lead.findById(leadId);
@@ -3356,6 +3356,7 @@ exports.updateLeadCallNumber = async (req, res, next) => {
           callNumber !== undefined ? callNumber || null : currentCallNumber,
         currentVerified: currentVerified,
         requestedVerified: verified !== undefined ? verified : currentVerified,
+        affiliateManagerId: affiliateManagerId || null,
       });
 
       await callChangeRequest.save();
@@ -3374,6 +3375,7 @@ exports.updateLeadCallNumber = async (req, res, next) => {
           currentVerified: currentVerified,
           requestedVerified:
             verified !== undefined ? verified : currentVerified,
+          affiliateManagerId: affiliateManagerId || null,
         },
       });
     }

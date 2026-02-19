@@ -1140,6 +1140,12 @@ const LeadsPage = () => {
     fine: null,
   });
 
+  // AM selection for verified leads (agents only)
+  const [amDialogOpen, setAmDialogOpen] = useState(false);
+  const [affiliateManagers, setAffiliateManagers] = useState([]);
+  const [selectedAMId, setSelectedAMId] = useState("");
+  const [pendingVerification, setPendingVerification] = useState(null);
+
   // Local search input state for instant UI updates (initialized from URL params)
   const [searchInput, setSearchInput] = useState(
     () => searchParams.get("search") || ""
@@ -1154,6 +1160,17 @@ const LeadsPage = () => {
       return () => clearTimeout(timer);
     }
   }, []);
+
+  // Fetch affiliate managers for agent verified-lead dialog
+  useEffect(() => {
+    if (user?.role === ROLES.AGENT) {
+      api
+        .get("/users", { params: { role: "affiliate_manager" } })
+        .then((res) => setAffiliateManagers(res.data.data || []))
+        .catch((err) => console.error("Error fetching AMs:", err));
+    }
+  }, [user?.role]);
+
   const searchDebounceTimer = useRef(null);
   const fetchAbortControllerRef = useRef(null);
   const hasDataRef = useRef(false);
@@ -1561,7 +1578,7 @@ const LeadsPage = () => {
   }, []);
 
   const updateVerification = useCallback(
-    async (leadId, verified, orderId) => {
+    async (leadId, verified, orderId, affiliateManagerId = null) => {
       try {
         setError(null);
 
@@ -1571,10 +1588,9 @@ const LeadsPage = () => {
         }
 
         // Make API call to update verification for specific order
-        const response = await api.put(`/leads/${leadId}/call-number`, {
-          verified: verified,
-          orderId: orderId,
-        });
+        const body = { verified, orderId };
+        if (affiliateManagerId) body.affiliateManagerId = affiliateManagerId;
+        const response = await api.put(`/leads/${leadId}/call-number`, body);
 
         // Check if the request is pending (for agents)
         if (response.data.isPending) {
@@ -1624,6 +1640,19 @@ const LeadsPage = () => {
       }
     },
     [fetchLeads, setSuccess, setError]
+  );
+
+  // Wrapper for agents: intercept verified=yes to show AM dialog
+  const handleVerificationChange = useCallback(
+    (leadId, verified, orderId) => {
+      if (verified && isAgent) {
+        setPendingVerification({ leadId, orderId });
+        setAmDialogOpen(true);
+      } else {
+        updateVerification(leadId, verified, orderId);
+      }
+    },
+    [isAgent, updateVerification]
   );
 
   const handleDeleteLead = useCallback(
@@ -2668,7 +2697,7 @@ const LeadsPage = () => {
                       onUpdateStatus={updateLeadStatus}
                       updateCallNumber={updateCallNumber}
                       handleCallNumberChange={handleCallNumberChange}
-                      updateVerification={updateVerification}
+                      updateVerification={handleVerificationChange}
                       getAvailableCallOptions={getAvailableCallOptions}
                       pendingRequests={pendingRequests}
                       leadFines={leadFines}
@@ -3646,6 +3675,69 @@ const LeadsPage = () => {
         fine={fineDetailDialog.fine}
         onFineUpdated={handleFineUpdated}
       />
+
+      {/* AM Selection Dialog for Verified Leads (agents only) */}
+      <Dialog
+        open={amDialogOpen}
+        onClose={() => {
+          setAmDialogOpen(false);
+          setPendingVerification(null);
+          setSelectedAMId("");
+        }}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Select Affiliate Manager</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" sx={{ mb: 2 }}>
+            Choose which affiliate manager should approve this verified lead.
+          </Typography>
+          <FormControl fullWidth sx={{ mt: 1 }}>
+            <InputLabel>Affiliate Manager</InputLabel>
+            <Select
+              value={selectedAMId}
+              onChange={(e) => setSelectedAMId(e.target.value)}
+              label="Affiliate Manager"
+            >
+              {affiliateManagers.map((am) => (
+                <MenuItem key={am._id} value={am._id}>
+                  {am.fullName} ({am.email})
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => {
+              setAmDialogOpen(false);
+              setPendingVerification(null);
+              setSelectedAMId("");
+            }}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            disabled={!selectedAMId}
+            onClick={() => {
+              if (pendingVerification) {
+                updateVerification(
+                  pendingVerification.leadId,
+                  true,
+                  pendingVerification.orderId,
+                  selectedAMId
+                );
+              }
+              setAmDialogOpen(false);
+              setPendingVerification(null);
+              setSelectedAMId("");
+            }}
+          >
+            Submit
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

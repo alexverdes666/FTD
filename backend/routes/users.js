@@ -41,12 +41,21 @@ router.get(
     protect,
     (req, res, next) => {
       if (req.user.role === "affiliate_manager") {
-        if (req.query.role === "agent") {
+        if (req.query.role === "agent" || req.query.role === "affiliate_manager") {
           return next();
         }
         return res.status(403).json({
           success: false,
-          message: "Affiliate managers can only view agent lists",
+          message: "Affiliate managers can only view agent or affiliate manager lists",
+        });
+      }
+      if (req.user.role === "agent") {
+        if (req.query.role === "affiliate_manager") {
+          return next();
+        }
+        return res.status(403).json({
+          success: false,
+          message: "Agents can only view affiliate manager lists",
         });
       }
       if (req.user.role === "admin") {

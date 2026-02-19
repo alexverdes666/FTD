@@ -95,4 +95,55 @@ router.delete(
   amExpensesController.deleteFixedExpense
 );
 
+// ==================== Global Fixed Expenses ====================
+
+const globalFixedExpenseValidation = [
+  body('label').isString().trim().notEmpty().withMessage('Label is required'),
+  body('amount').isNumeric().withMessage('Amount must be numeric'),
+  body('category').optional().isString().withMessage('Category must be a string'),
+  body('notes').optional().isString().isLength({ max: 500 }).withMessage('Notes max 500 characters'),
+];
+
+const globalFixedExpenseUpdateValidation = [
+  body('label').optional().isString().trim().notEmpty().withMessage('Label must be a non-empty string'),
+  body('amount').optional().isNumeric().withMessage('Amount must be numeric'),
+  body('category').optional().isString().withMessage('Category must be a string'),
+  body('notes').optional().isString().isLength({ max: 500 }).withMessage('Notes max 500 characters'),
+];
+
+// Get all global fixed expenses
+router.get(
+  '/global-fixed',
+  protect,
+  isAdmin,
+  amExpensesController.getGlobalFixedExpenses
+);
+
+// Add global fixed expense
+router.post(
+  '/global-fixed',
+  protect,
+  isAdmin,
+  globalFixedExpenseValidation,
+  amExpensesController.addGlobalFixedExpense
+);
+
+// Update global fixed expense
+router.put(
+  '/global-fixed/:id',
+  protect,
+  isAdmin,
+  [param('id').isMongoId().withMessage('Valid expense ID is required'), ...globalFixedExpenseUpdateValidation],
+  amExpensesController.updateGlobalFixedExpense
+);
+
+// Delete global fixed expense
+router.delete(
+  '/global-fixed/:id',
+  protect,
+  isAdmin,
+  [param('id').isMongoId().withMessage('Valid expense ID is required')],
+  amExpensesController.deleteGlobalFixedExpense
+);
+
 module.exports = router;

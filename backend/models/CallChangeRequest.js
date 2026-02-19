@@ -17,6 +17,11 @@ const callChangeRequestSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
+    affiliateManagerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
     currentCallNumber: {
       type: String,
       enum: ["1st", "2nd", "3rd", "4th", "5th", null],
@@ -57,6 +62,7 @@ const callChangeRequestSchema = new mongoose.Schema(
 callChangeRequestSchema.index({ status: 1, createdAt: -1 });
 callChangeRequestSchema.index({ leadId: 1, orderId: 1 });
 callChangeRequestSchema.index({ requestedBy: 1 });
+callChangeRequestSchema.index({ affiliateManagerId: 1, status: 1, reviewedAt: -1 });
 
 const CallChangeRequest = mongoose.model(
   "CallChangeRequest",
