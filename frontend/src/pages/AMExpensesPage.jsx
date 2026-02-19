@@ -244,39 +244,34 @@ const AMDetailRow = ({ row, month, year, onFixedExpenseChange }) => {
                       <TableBody>
                         {detail.categories.map((cat) => {
                           if (cat.key === "simCards" && cat.breakdown) {
-                            return cat.breakdown.length > 0
-                              ? cat.breakdown.map((sim) => (
-                                  <TableRow key={`sim-${sim.geo}`}>
-                                    <TableCell>SIM Cards ({sim.geo})</TableCell>
-                                    <TableCell align="right">
-                                      {formatCurrency(sim.rate)}
-                                    </TableCell>
-                                    <TableCell align="right">{sim.count}</TableCell>
-                                    <TableCell align="right">
-                                      {formatCurrency(sim.total)}
-                                    </TableCell>
-                                  </TableRow>
-                                ))
-                              : (
-                                <TableRow key="sim-none">
-                                  <TableCell>SIM Cards</TableCell>
-                                  <TableCell align="right">—</TableCell>
-                                  <TableCell align="right">0</TableCell>
-                                  <TableCell align="right">{formatCurrency(0)}</TableCell>
-                                </TableRow>
-                              );
+                            return cat.breakdown.map((sim) => (
+                              <TableRow key={`sim-${sim.geo}`}>
+                                <TableCell>SIM Cards ({sim.geo})</TableCell>
+                                <TableCell align="right">
+                                  {formatCurrency(sim.rate)}
+                                </TableCell>
+                                <TableCell align="right">{sim.count}</TableCell>
+                                <TableCell align="right">
+                                  {formatCurrency(sim.total)}
+                                </TableCell>
+                              </TableRow>
+                            ));
                           }
-                          // Total talking time - display as hours, not a dollar expense
+                          // Total talking time - display hours with $10/hr rate
                           if (cat.displayType === "hours") {
                             const hours = Math.floor(cat.value || 0);
                             const minutes = Math.round(((cat.value || 0) - hours) * 60);
                             return (
                               <TableRow key={cat.key} sx={{ bgcolor: "action.hover" }}>
-                                <TableCell sx={{ fontWeight: "medium" }}>{cat.label}</TableCell>
-                                <TableCell align="right">—</TableCell>
-                                <TableCell align="right">{cat.count} calls</TableCell>
+                                <TableCell sx={{ fontWeight: "medium" }}>
+                                  {cat.label} ({hours}h {minutes}m)
+                                </TableCell>
+                                <TableCell align="right">
+                                  {formatCurrency(cat.rate || 10)}/hr
+                                </TableCell>
+                                <TableCell align="right">{hours} hrs</TableCell>
                                 <TableCell align="right" sx={{ fontWeight: "medium" }}>
-                                  {hours}h {minutes}m
+                                  {formatCurrency(cat.total || 0)}
                                 </TableCell>
                               </TableRow>
                             );

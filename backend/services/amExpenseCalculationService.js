@@ -9,6 +9,10 @@ const FTD_TRANSACTION_COMMISSION_RATE = 0.05; // 5%
 const DATA_TRAFFIC_RATE = 1;
 const ES_UK_CARDS_RATE = 0.15; // 15% of $300
 const CA_CARDS_RATE = 75;
+const TALKING_TIME_HOURLY_RATE = 10; // $10 per full hour
+
+// All supported SIM card geos (always displayed, even with 0 count)
+const SIM_CARD_GEOS = ['SE', 'UK', 'CA', 'PL', 'ES'];
 
 // Call expense base rates (matches cdrService BONUS_CONFIG)
 const CALL_EXPENSE_RATES = {
@@ -91,10 +95,11 @@ const calculateAMExpenses = async (affiliateManagerId, month, year) => {
   const ftdDepositTotal = ftdDepositCount * FTD_DEPOSIT_RATE;
   const ftdTransactionCommissionTotal = ftdDepositTotal * FTD_TRANSACTION_COMMISSION_RATE;
 
-  // SIM cards breakdown per GEO
+  // SIM cards breakdown per GEO — always show all supported geos, even with 0 count
   const simCardsBreakdown = [];
   let simCardsTotal = 0;
-  for (const [geo, count] of Object.entries(simCardsByGeo)) {
+  for (const geo of SIM_CARD_GEOS) {
+    const count = simCardsByGeo[geo] || 0;
     const price = getSimPrice(geo);
     const total = count * price;
     simCardsTotal += total;
@@ -129,6 +134,8 @@ const calculateAMExpenses = async (affiliateManagerId, month, year) => {
   }
 
   const totalTalkingTimeHours = totalTalkingTimeSeconds / 3600;
+  const totalTalkingTimeFullHours = Math.floor(totalTalkingTimeHours);
+  const totalTalkingTimeExpense = totalTalkingTimeFullHours * TALKING_TIME_HOURLY_RATE;
 
   const depositCallsCount = callTypeCounts.deposit || 0;
   const depositCallsTotal = callTypeTotals.deposit || 0;
@@ -162,6 +169,7 @@ const calculateAMExpenses = async (affiliateManagerId, month, year) => {
     dataTrafficTotal +
     esUkCardsTotal +
     caCardsTotal +
+    totalTalkingTimeExpense +
     callExpensesTotal +
     salaryTotal;
 
@@ -222,7 +230,9 @@ const calculateAMExpenses = async (affiliateManagerId, month, year) => {
         displayType: 'hours',
         value: totalTalkingTimeHours,
         count: approvedDeclarations.length,
-        total: 0, // Informational, not a dollar expense
+        rate: TALKING_TIME_HOURLY_RATE,
+        rateType: 'fixed',
+        total: totalTalkingTimeExpense,
       },
       {
         key: 'depositCalls',
