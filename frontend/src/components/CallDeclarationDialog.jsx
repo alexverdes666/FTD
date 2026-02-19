@@ -27,7 +27,7 @@ import {
   Person as PersonIcon,
   Contacts as ContactsIcon,
 } from '@mui/icons-material';
-import { createDeclaration, previewBonus, findLeadsByPhone, getDisabledCallTypes } from '../services/callDeclarations';
+import { createDeclaration, previewBonus, findLeadsByPhone, getDisabledCallTypes, getLeadOrders } from '../services/callDeclarations';
 import api from '../services/api';
 
 const CALL_TYPES = [
@@ -68,6 +68,11 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
   const [disabledReasons, setDisabledReasons] = useState({});
   const [orderCount, setOrderCount] = useState(0);
   const [callTypeProgress, setCallTypeProgress] = useState({});
+
+  // Order selection state
+  const [orders, setOrders] = useState([]);
+  const [selectedOrderId, setSelectedOrderId] = useState('');
+  const [ordersLoading, setOrdersLoading] = useState(false);
 
   // Fetch affiliate managers only
   const fetchAffiliateManagers = useCallback(async () => {
@@ -120,7 +125,36 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
     autoFillLead();
   }, [open, call?.lineNumber, call?.email]);
 
-  // Fetch disabled call types (counter-based) when lead changes
+  // Fetch confirmed deposit orders when lead changes
+  useEffect(() => {
+    const fetchOrders = async () => {
+      if (!leadId) {
+        setOrders([]);
+        setSelectedOrderId('');
+        return;
+      }
+      setOrdersLoading(true);
+      try {
+        const orderList = await getLeadOrders(leadId);
+        setOrders(orderList);
+        // Auto-select if only one order
+        if (orderList.length === 1) {
+          setSelectedOrderId(orderList[0].orderId);
+        } else {
+          setSelectedOrderId('');
+        }
+      } catch (err) {
+        console.error('Error fetching orders:', err);
+        setOrders([]);
+        setSelectedOrderId('');
+      } finally {
+        setOrdersLoading(false);
+      }
+    };
+    fetchOrders();
+  }, [leadId]);
+
+  // Fetch disabled call types when lead or selected order changes
   useEffect(() => {
     const fetchDisabledTypes = async () => {
       if (!leadId) {
@@ -130,7 +164,8 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
         setCallTypeProgress({});
         return;
       }
-      const result = await getDisabledCallTypes(leadId);
+      // Pass orderId for order-specific disabled types when an order is selected
+      const result = await getDisabledCallTypes(leadId, selectedOrderId || undefined);
       setDisabledCallTypes(result.disabledCallTypes || []);
       setDisabledReasons(result.disabledReasons || {});
       setOrderCount(result.orderCount || 0);
@@ -141,7 +176,7 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
       }
     };
     fetchDisabledTypes();
-  }, [leadId]);
+  }, [leadId, selectedOrderId]);
 
   // Reset form when dialog opens/closes
   useEffect(() => {
@@ -158,6 +193,9 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
       setDisabledReasons({});
       setOrderCount(0);
       setCallTypeProgress({});
+      setOrders([]);
+      setSelectedOrderId('');
+      setOrdersLoading(false);
     }
   }, [open]);
 
@@ -211,6 +249,10 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
       setError('Please select a lead');
       return;
     }
+    if (callCategory === 'ftd' && orders.length > 1 && !selectedOrderId) {
+      setError('Please select an order for this declaration');
+      return;
+    }
 
     setLoading(true);
     setError(null);
@@ -228,6 +270,7 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
         description: description.trim() || undefined,
         affiliateManagerId,
         leadId,
+        orderId: selectedOrderId || undefined,
         recordFile: call.recordFile || '',
       };
 
@@ -359,16 +402,59 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
         {callCategory === 'ftd' && (
           <>
             {/* Order counter info */}
-            {leadId && orderCount > 0 && (
+            {leadId && orders.length > 1 && (
               <Alert severity="info" sx={{ mb: 2 }}>
-                This lead has <strong>{orderCount}</strong> confirmed deposit order{orderCount !== 1 ? 's' : ''}.
-                {orderCount > 1 && ' Orders will be automatically assigned.'}
+                This lead has <strong>{orders.length}</strong> confirmed deposit orders.
+                {' '}Please select which order this call is for.
               </Alert>
             )}
-            {leadId && orderCount === 0 && (
-              <Alert severity="warning" sx={{ mb: 2 }}>
-                No confirmed deposit orders found for this lead. AM must confirm deposit first.
+            {leadId && orders.length === 1 && (
+              <Alert severity="info" sx={{ mb: 2 }}>
+                This lead has <strong>1</strong> confirmed deposit order. Order auto-selected.
               </Alert>
+            )}
+            {leadId && !ordersLoading && orders.length === 0 && (
+              <Alert severity="info" sx={{ mb: 2 }}>
+                No confirmed deposit orders found yet for this lead. You can still declare the call.
+              </Alert>
+            )}
+
+            {/* Order Selection - shown when multiple orders exist */}
+            {leadId && orders.length > 1 && (
+              <TextField
+                select
+                fullWidth
+                label="Select Order *"
+                value={selectedOrderId}
+                onChange={(e) => setSelectedOrderId(e.target.value)}
+                disabled={loading || ordersLoading}
+                sx={{ mb: 2 }}
+                helperText="Choose which order this call declaration is for"
+                InputProps={{
+                  startAdornment: ordersLoading ? (
+                    <CircularProgress size={16} sx={{ mr: 1 }} />
+                  ) : null,
+                }}
+              >
+                {orders.map((order) => {
+                  const shortId = order.orderId?.toString().slice(-8) || '?';
+                  const planned = order.plannedDate
+                    ? new Date(order.plannedDate).toLocaleDateString()
+                    : 'No date';
+                  const broker = order.brokerName || 'Unknown broker';
+                  return (
+                    <MenuItem key={order.orderId} value={order.orderId}>
+                      <Box display="flex" justifyContent="space-between" width="100%" alignItems="center">
+                        <span>Order ...{shortId}</span>
+                        <Box display="flex" alignItems="center" gap={1}>
+                          <Chip label={planned} size="small" variant="outlined" />
+                          <Chip label={broker} size="small" color="primary" variant="outlined" />
+                        </Box>
+                      </Box>
+                    </MenuItem>
+                  );
+                })}
+              </TextField>
             )}
 
             <TextField
@@ -390,11 +476,7 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
                   if (type.value === 'deposit') {
                     disabledText = ' (AM declares deposit call)';
                   } else if (reason === 'fully_declared') {
-                    disabledText = ' (fully declared)';
-                  } else if (reason === 'sequential') {
-                    disabledText = ' (declare previous calls first)';
-                  } else if (reason === 'no_deposits') {
-                    disabledText = ' (no confirmed deposits)';
+                    disabledText = ' (already declared for this order)';
                   }
                 }
                 return (
@@ -622,7 +704,7 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
           variant="contained"
           color="primary"
           onClick={handleSubmit}
-          disabled={loading || (callCategory === 'ftd' && !callType) || !affiliateManagerId || !leadId}
+          disabled={loading || (callCategory === 'ftd' && !callType) || !affiliateManagerId || !leadId || (callCategory === 'ftd' && orders.length > 1 && !selectedOrderId)}
           startIcon={loading ? <CircularProgress size={16} /> : <SendIcon />}
         >
           {loading ? 'Submitting...' : 'Submit Declaration'}

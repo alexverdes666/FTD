@@ -246,9 +246,11 @@ export const fetchRecordingBlob = async (recordFile) => {
  * @param {string} leadId - Lead ID
  * @returns {{ disabledCallTypes: Array, disabledReasons: Object, orderCount: number, callTypeProgress: Object }}
  */
-export const getDisabledCallTypes = async (leadId) => {
+export const getDisabledCallTypes = async (leadId, orderId = null) => {
   try {
-    const response = await api.get(`/call-declarations/lead-disabled-types/${leadId}`);
+    const params = {};
+    if (orderId) params.orderId = orderId;
+    const response = await api.get(`/call-declarations/lead-disabled-types/${leadId}`, { params });
     return response.data.data || { disabledCallTypes: [], disabledReasons: {}, orderCount: 0, callTypeProgress: {} };
   } catch (error) {
     console.error("Error fetching disabled call types:", error);
