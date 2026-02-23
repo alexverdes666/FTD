@@ -139,7 +139,7 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
         setOrders(orderList);
         // Auto-select if only one order
         if (orderList.length === 1) {
-          setSelectedOrderId(orderList[0].orderId);
+          setSelectedOrderId(orderList[0].depositCallId);
         } else {
           setSelectedOrderId('');
         }
@@ -270,7 +270,7 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
         description: description.trim() || undefined,
         affiliateManagerId,
         leadId,
-        orderId: selectedOrderId || undefined,
+        depositCallId: selectedOrderId || undefined,
         recordFile: call.recordFile || '',
       };
 
@@ -446,7 +446,7 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
                     ? order.customNote
                     : `Order ...${shortId}`;
                   return (
-                    <MenuItem key={order.depositCallId || order.orderId} value={order.orderId}>
+                    <MenuItem key={order.depositCallId} value={order.depositCallId}>
                       <Box display="flex" justifyContent="space-between" width="100%" alignItems="center">
                         <span>{label}</span>
                         <Box display="flex" alignItems="center" gap={1}>

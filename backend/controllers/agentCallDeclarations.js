@@ -270,7 +270,7 @@ const fetchAgentCDRCalls = async (req, res) => {
 const createDeclaration = async (req, res) => {
   try {
     const userId = req.user.id;
-    const { cdrCallId, callDate, callDuration, sourceNumber, destinationNumber, lineNumber, callType, callCategory, description, affiliateManagerId, leadId, orderId, recordFile } = req.body;
+    const { cdrCallId, callDate, callDuration, sourceNumber, destinationNumber, lineNumber, callType, callCategory, description, affiliateManagerId, leadId, depositCallId, recordFile } = req.body;
 
     // Validate required fields
     if (!cdrCallId || !callDate || !callDuration || !sourceNumber || !destinationNumber) {
@@ -367,10 +367,11 @@ const createDeclaration = async (req, res) => {
       });
     }
 
-    // Duplicate prevention per order: a lead with N confirmed deposit orders
-    // can have up to N declarations per call type (one per order).
+    // Duplicate prevention per order/depositCall: a lead with N confirmed deposit orders
+    // can have up to N declarations per call type (one per order/depositCall).
     // No sequential ordering enforced — agent can declare any call type freely.
-    let resolvedOrderId = orderId || null;
+    let resolvedOrderId = null;
+    let resolvedDepositCallId = depositCallId || null;
 
     if (callCategory === "ftd" && callType) {
       // Deposit type is always declared by AM during deposit confirmation
@@ -390,47 +391,49 @@ const createDeclaration = async (req, res) => {
         callType,
         status: { $in: ["approved", "pending"] },
         isActive: true,
-      }).select("orderId");
+      }).select("orderId depositCallId");
 
-      if (orderId) {
-        // Explicit order selection: validate the orderId belongs to a confirmed deposit for this lead
+      if (depositCallId) {
+        // Explicit deposit call selection: validate it belongs to a confirmed deposit for this lead
         const matchingDepositCall = depositCalls.find(
-          (dc) => (dc.orderId?._id || dc.orderId).toString() === orderId.toString()
+          (dc) => dc._id.toString() === depositCallId.toString()
         );
         if (!matchingDepositCall) {
           return res.status(400).json({
             success: false,
-            message: "Selected order does not have a confirmed deposit for this lead",
+            message: "Selected deposit call does not have a confirmed deposit for this lead",
           });
         }
 
-        // Check this call type isn't already declared for this specific order
-        const alreadyDeclaredForOrder = existingOfType.some(
-          (d) => d.orderId && d.orderId.toString() === orderId.toString()
+        // Resolve orderId from the deposit call (may be null for custom records)
+        resolvedOrderId = matchingDepositCall.orderId?._id || matchingDepositCall.orderId || null;
+
+        // Check this call type isn't already declared for this specific deposit call
+        const alreadyDeclared = existingOfType.some(
+          (d) => d.depositCallId && d.depositCallId.toString() === depositCallId.toString()
         );
-        if (alreadyDeclaredForOrder) {
+        if (alreadyDeclared) {
           return res.status(400).json({
             success: false,
             message: "This call type has already been declared for the selected order",
           });
         }
-
-        resolvedOrderId = orderId;
       } else if (orderCount > 0) {
-        // Auto-assign orderId: find the first confirmed deposit order that doesn't
+        // Auto-assign: find the first confirmed deposit call that doesn't
         // have this callType declared yet
-        const declaredOrderIds = new Set(
+        const declaredDepositCallIds = new Set(
           existingOfType
-            .filter((d) => d.orderId)
-            .map((d) => d.orderId.toString())
+            .filter((d) => d.depositCallId)
+            .map((d) => d.depositCallId.toString())
         );
 
         const availableDepositCall = depositCalls.find(
-          (dc) => !declaredOrderIds.has((dc.orderId?._id || dc.orderId).toString())
+          (dc) => !declaredDepositCallIds.has(dc._id.toString())
         );
 
         if (availableDepositCall) {
-          resolvedOrderId = availableDepositCall.orderId?._id || availableDepositCall.orderId;
+          resolvedOrderId = availableDepositCall.orderId?._id || availableDepositCall.orderId || null;
+          resolvedDepositCallId = availableDepositCall._id;
         }
       }
     }
@@ -470,6 +473,7 @@ const createDeclaration = async (req, res) => {
       affiliateManager: affiliateManagerId,
       lead: leadId,
       orderId: resolvedOrderId || null,
+      depositCallId: resolvedDepositCallId || null,
       recordFile: recordFile || "",
     });
 
@@ -872,7 +876,7 @@ const removeCallExpenseFromAffiliateManager = async (declaration) => {
  * Maps the declaration's callType to the corresponding call slot on the DepositCall
  */
 const updateDepositCallOnApproval = async (declaration, reviewerId) => {
-  const { lead, callType, callCategory, orderId: declarationOrderId } = declaration;
+  const { lead, callType, callCategory, orderId: declarationOrderId, depositCallId: declarationDepositCallId } = declaration;
 
   // Skip filler calls and deposit type (deposit confirmation is handled via Orders page)
   if (callCategory === "filler" || callType === "deposit") {
@@ -905,9 +909,17 @@ const updateDepositCallOnApproval = async (declaration, reviewerId) => {
     return;
   }
 
-  // When the declaration has an explicit orderId, only update the specific
-  // DepositCall for that order. Fall back to updating all for legacy declarations.
-  if (declarationOrderId) {
+  // When the declaration has a depositCallId, target that specific record.
+  // Otherwise fall back to orderId matching, then update all for legacy declarations.
+  if (declarationDepositCallId) {
+    depositCalls = depositCalls.filter(
+      (dc) => dc._id.toString() === declarationDepositCallId.toString()
+    );
+    if (depositCalls.length === 0) {
+      console.log(`No DepositCall found for depositCallId ${declarationDepositCallId} and lead ${lead}, skipping`);
+      return;
+    }
+  } else if (declarationOrderId) {
     depositCalls = depositCalls.filter(
       (dc) => (dc.orderId?._id || dc.orderId).toString() === declarationOrderId.toString()
     );
@@ -944,7 +956,7 @@ const updateDepositCallOnApproval = async (declaration, reviewerId) => {
 const getDisabledCallTypes = async (req, res) => {
   try {
     const { leadId } = req.params;
-    const { orderId } = req.query;
+    const { depositCallId } = req.query;
 
     if (!leadId) {
       return res.status(400).json({
@@ -953,16 +965,26 @@ const getDisabledCallTypes = async (req, res) => {
       });
     }
 
-    // Order-specific mode: when an orderId is provided, check declarations
-    // for that specific order only (each call type max once per order)
-    if (orderId) {
-      const existingDeclarations = await AgentCallDeclaration.find({
+    // Order-specific mode: when a depositCallId is provided, resolve orderId
+    // and check declarations for that specific order/depositCall
+    if (depositCallId) {
+      const dc = await DepositCall.findById(depositCallId).select("orderId");
+      const orderId = dc?.orderId || null;
+
+      // Match declarations by orderId if it exists, or by depositCallId for custom records
+      const matchQuery = {
         lead: leadId,
-        orderId: orderId,
         status: { $in: ["approved", "pending"] },
         isActive: true,
         callCategory: "ftd",
-      }).select("callType");
+      };
+      if (orderId) {
+        matchQuery.orderId = orderId;
+      } else {
+        matchQuery.depositCallId = depositCallId;
+      }
+
+      const existingDeclarations = await AgentCallDeclaration.find(matchQuery).select("callType");
 
       const declaredTypes = new Set(
         existingDeclarations.map((d) => d.callType).filter(Boolean)

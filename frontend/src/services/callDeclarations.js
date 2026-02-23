@@ -246,10 +246,10 @@ export const fetchRecordingBlob = async (recordFile) => {
  * @param {string} leadId - Lead ID
  * @returns {{ disabledCallTypes: Array, disabledReasons: Object, orderCount: number, callTypeProgress: Object }}
  */
-export const getDisabledCallTypes = async (leadId, orderId = null) => {
+export const getDisabledCallTypes = async (leadId, depositCallId = null) => {
   try {
     const params = {};
-    if (orderId) params.orderId = orderId;
+    if (depositCallId) params.depositCallId = depositCallId;
     const response = await api.get(`/call-declarations/lead-disabled-types/${leadId}`, { params });
     return response.data.data || { disabledCallTypes: [], disabledReasons: {}, orderCount: 0, callTypeProgress: {} };
   } catch (error) {

@@ -1006,7 +1006,7 @@ const DepositCallsPage = () => {
                             {dc.orderId?.createdAt
                               ? new Date(dc.orderId.createdAt).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })
                               : dc.customDate
-                                ? new Date(dc.customDate).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+                                ? new Date(dc.customDate).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
                                 : '-'}
                           </Typography>
                         </TableCell>
@@ -1475,7 +1475,7 @@ const DepositCallsPage = () => {
                 <TextField
                   fullWidth
                   size="small"
-                  type="datetime-local"
+                  type="date"
                   label="Date (optional - shown in Order Created column)"
                   value={customRecordDate}
                   onChange={(e) => setCustomRecordDate(e.target.value)}

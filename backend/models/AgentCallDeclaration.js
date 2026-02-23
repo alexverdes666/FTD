@@ -121,6 +121,12 @@ const agentCallDeclarationSchema = new mongoose.Schema(
       ref: "Order",
       default: null,
     },
+    // The deposit call record this declaration is for (supports custom records without orderId)
+    depositCallId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "DepositCall",
+      default: null,
+    },
     // CDR recording filename (used to build playback URL)
     recordFile: {
       type: String,
