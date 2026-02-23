@@ -2211,6 +2211,17 @@ exports.createOrder = async (req, res, next) => {
         ...genderFilter,
       };
 
+      // Exclude leads already in orders with same client network or same brokers (robust dedup)
+      const excludedIds = new Set();
+      for (const id of leadsAlreadyInSameClientNetwork) excludedIds.add(id);
+      for (const id of leadsAlreadyWithSameBrokers) excludedIds.add(id);
+      if (excludedIds.size > 0) {
+        ftdQuery._id = { $nin: [...excludedIds].map((id) => new mongoose.Types.ObjectId(id)) };
+        console.log(
+          `[FTD-DEBUG] Excluding ${excludedIds.size} leads from same client network/brokers`
+        );
+      }
+
       // First, get the total count of available leads matching base criteria
       const totalAvailableCount = await Lead.countDocuments(ftdQuery);
       console.log(
@@ -2304,17 +2315,20 @@ exports.createOrder = async (req, res, next) => {
           // Prioritize agent-assigned leads, then fill with unassigned
           filteredFTDLeads = [...agentAssignedLeads, ...unassignedLeads];
         } else {
-          // If no agent filter, only use unassigned FTD leads
-          const beforeCount = filteredFTDLeads.length;
-          filteredFTDLeads = filteredFTDLeads.filter(
+          // No agent filter - Priority: UNASSIGNED first (priority 1), then ANY assigned leads (priority 2)
+          const unassignedLeads = filteredFTDLeads.filter(
             (lead) => !lead.assignedAgent
           );
+          const assignedLeads = filteredFTDLeads.filter(
+            (lead) => lead.assignedAgent
+          );
+          filteredFTDLeads = [...unassignedLeads, ...assignedLeads];
           console.log(
-            `[FTD-DEBUG] No agent filter - only unassigned leads: ${
-              filteredFTDLeads.length
-            } leads remain (${
-              beforeCount - filteredFTDLeads.length
-            } filtered out)`
+            `[FTD-DEBUG] No agent filter - ${
+              unassignedLeads.length
+            } unassigned (priority 1) + ${
+              assignedLeads.length
+            } assigned (priority 2) leads`
           );
         }
 
@@ -2599,6 +2613,17 @@ exports.createOrder = async (req, res, next) => {
         ...countryFilter,
         ...genderFilter,
       };
+
+      // Exclude leads already in orders with same client network or same brokers (robust dedup)
+      const fillerExcludedIds = new Set();
+      for (const id of leadsAlreadyInSameClientNetwork) fillerExcludedIds.add(id);
+      for (const id of leadsAlreadyWithSameBrokers) fillerExcludedIds.add(id);
+      if (fillerExcludedIds.size > 0) {
+        fillerQuery._id = { $nin: [...fillerExcludedIds].map((id) => new mongoose.Types.ObjectId(id)) };
+        console.log(
+          `[FILLER-DEBUG] Excluding ${fillerExcludedIds.size} leads from same client network/brokers`
+        );
+      }
 
       // First, get the total count of available leads matching base criteria
       const totalAvailableCount = await Lead.countDocuments(fillerQuery);

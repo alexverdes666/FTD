@@ -80,20 +80,15 @@ exports.getDepositCalls = async (req, res, next) => {
       query.clientBrokerId = clientBrokerId;
     }
 
-    // Date range filter (for order dates)
-    if (startDate || endDate) {
-      const dateQuery = {};
-      if (startDate) dateQuery.$gte = new Date(startDate);
-      if (endDate) dateQuery.$lte = new Date(endDate);
-      query.createdAt = dateQuery;
-    }
+    // Date range filter is applied on order.createdAt via aggregation
+    const hasDateFilter = startDate || endDate;
 
     // Build aggregation for search or network filtering
     let depositCalls;
     let total;
 
-    // Need aggregation if searching or filtering by lead fields (clientNetwork, ourNetwork)
-    const needsAggregation = search || clientNetwork || ourNetwork;
+    // Need aggregation if searching or filtering by lead fields (clientNetwork, ourNetwork) or date
+    const needsAggregation = search || clientNetwork || ourNetwork || hasDateFilter;
 
     if (needsAggregation) {
       // Use aggregation for search across populated fields or network filtering
@@ -132,14 +127,35 @@ exports.getDepositCalls = async (req, res, next) => {
         { $match: query },
         {
           $lookup: {
+            from: "orders",
+            localField: "orderId",
+            foreignField: "_id",
+            as: "order",
+          },
+        },
+        { $unwind: { path: "$order", preserveNullAndEmptyArrays: true } },
+      ];
+
+      // Filter by order.createdAt date range
+      if (hasDateFilter) {
+        const orderDateMatch = {};
+        if (startDate) orderDateMatch.$gte = new Date(startDate);
+        if (endDate) orderDateMatch.$lte = new Date(endDate);
+        pipeline.push({ $match: { "order.createdAt": orderDateMatch } });
+      }
+
+      // Lookup leads
+      pipeline.push(
+        {
+          $lookup: {
             from: "leads",
             localField: "leadId",
             foreignField: "_id",
             as: "lead",
           },
         },
-        { $unwind: { path: "$lead", preserveNullAndEmptyArrays: true } },
-      ];
+        { $unwind: { path: "$lead", preserveNullAndEmptyArrays: true } }
+      );
 
       // Add lead field matching if we have conditions
       if (leadMatchConditions.length > 0) {
@@ -163,14 +179,33 @@ exports.getDepositCalls = async (req, res, next) => {
         { $match: query },
         {
           $lookup: {
+            from: "orders",
+            localField: "orderId",
+            foreignField: "_id",
+            as: "order",
+          },
+        },
+        { $unwind: { path: "$order", preserveNullAndEmptyArrays: true } },
+      ];
+
+      if (hasDateFilter) {
+        const orderDateMatch = {};
+        if (startDate) orderDateMatch.$gte = new Date(startDate);
+        if (endDate) orderDateMatch.$lte = new Date(endDate);
+        countPipeline.push({ $match: { "order.createdAt": orderDateMatch } });
+      }
+
+      countPipeline.push(
+        {
+          $lookup: {
             from: "leads",
             localField: "leadId",
             foreignField: "_id",
             as: "lead",
           },
         },
-        { $unwind: { path: "$lead", preserveNullAndEmptyArrays: true } },
-      ];
+        { $unwind: { path: "$lead", preserveNullAndEmptyArrays: true } }
+      );
 
       if (leadMatchConditions.length > 0) {
         countPipeline.push({
