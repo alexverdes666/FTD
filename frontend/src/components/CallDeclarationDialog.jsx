@@ -440,7 +440,9 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
                   const shortId = order.orderId?.toString().slice(-8) || '?';
                   const planned = order.plannedDate
                     ? new Date(order.plannedDate).toLocaleDateString()
-                    : 'No date';
+                    : order.orderCreatedAt
+                      ? new Date(order.orderCreatedAt).toLocaleDateString()
+                      : 'No date';
                   const broker = order.brokerName || 'Unknown broker';
                   const label = order.isCustomRecord && order.customNote
                     ? order.customNote
