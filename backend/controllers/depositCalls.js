@@ -1222,6 +1222,117 @@ exports.syncConfirmedDeposits = async (req, res, next) => {
 
 // Sync approved call declarations into DepositCall records
 // Repairs DepositCall call slots that were missed due to the findOne bug
+exports.createCustomDepositCall = async (req, res, next) => {
+  try {
+    // Only admin can create custom records
+    if (req.user.role !== "admin") {
+      return res.status(403).json({
+        success: false,
+        message: "Only admins can create custom deposit call records",
+      });
+    }
+
+    const { leadId, orderId, accountManager, assignedAgent } = req.body;
+
+    if (!leadId) {
+      return res.status(400).json({
+        success: false,
+        message: "leadId is required",
+      });
+    }
+
+    // Validate lead exists
+    const lead = await Lead.findById(leadId);
+    if (!lead) {
+      return res.status(404).json({
+        success: false,
+        message: "Lead not found",
+      });
+    }
+
+    // If orderId provided, validate it exists (support partial ID matching)
+    let resolvedOrderId = null;
+    if (orderId) {
+      if (orderId.match(/^[0-9a-fA-F]{24}$/)) {
+        // Full ObjectId
+        const order = await Order.findById(orderId);
+        if (!order) {
+          return res.status(404).json({
+            success: false,
+            message: "Order not found",
+          });
+        }
+        resolvedOrderId = order._id;
+      } else {
+        // Partial ID (e.g. last 8 chars shown in UI) — use aggregation to match
+        const orders = await Order.aggregate([
+          { $addFields: { idStr: { $toString: "$_id" } } },
+          { $match: { idStr: { $regex: new RegExp(orderId + "$", "i") } } },
+          { $limit: 2 },
+          { $project: { _id: 1 } },
+        ]);
+        if (orders.length === 0) {
+          return res.status(404).json({
+            success: false,
+            message: "Order not found with this ID",
+          });
+        }
+        if (orders.length > 1) {
+          return res.status(400).json({
+            success: false,
+            message: "Multiple orders match this partial ID. Please provide more characters.",
+          });
+        }
+        resolvedOrderId = orders[0]._id;
+      }
+    }
+
+    // If accountManager provided, validate user exists
+    if (accountManager) {
+      const am = await User.findById(accountManager);
+      if (!am) {
+        return res.status(404).json({
+          success: false,
+          message: "Account manager not found",
+        });
+      }
+    }
+
+    // Create custom deposit call record
+    const depositCall = await DepositCall.create({
+      leadId,
+      orderId: resolvedOrderId,
+      clientBrokerId: lead.clientBroker || null,
+      accountManager: accountManager || null,
+      assignedAgent: assignedAgent || lead.assignedAgent || null,
+      ftdName: `${lead.firstName || ""} ${lead.lastName || ""}`.trim(),
+      ftdEmail: lead.newEmail,
+      ftdPhone: lead.newPhone,
+      isCustomRecord: true,
+      depositConfirmed: true,
+      depositConfirmedBy: req.user.id,
+      depositConfirmedAt: new Date(),
+      createdBy: req.user.id,
+    });
+
+    // Populate and return
+    const populated = await DepositCall.findById(depositCall._id)
+      .populate("leadId", "firstName lastName newEmail newPhone country")
+      .populate("orderId", "createdAt plannedDate status")
+      .populate("clientBrokerId", "name domain")
+      .populate("accountManager", "fullName email")
+      .populate("assignedAgent", "fullName email");
+
+    res.status(201).json({
+      success: true,
+      message: "Custom deposit call record created successfully",
+      data: populated,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 exports.syncApprovedDeclarations = async (req, res, next) => {
   try {
     // Only admin can run this

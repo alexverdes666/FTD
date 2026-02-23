@@ -47,6 +47,17 @@ const depositCallsService = {
     }
   },
 
+  // Create custom deposit call record (admin only)
+  createCustomDepositCall: async (data) => {
+    try {
+      const response = await api.post("/deposit-calls/custom", data);
+      return response.data;
+    } catch (error) {
+      console.error("Error creating custom deposit call:", error);
+      throw error;
+    }
+  },
+
   // Create deposit call
   createDepositCall: async (data) => {
     try {

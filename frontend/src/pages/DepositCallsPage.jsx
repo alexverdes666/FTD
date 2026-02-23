@@ -52,7 +52,8 @@ import {
   Person as PersonIcon,
   FormatListBulleted as ListIcon,
   FilterList as FilterListIcon,
-  ExpandMore as ExpandMoreIcon
+  ExpandMore as ExpandMoreIcon,
+  Add as AddIcon
 } from '@mui/icons-material';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -297,6 +298,16 @@ const DepositCallsPage = () => {
 
   // Pending approvals count
   const [pendingCount, setPendingCount] = useState(0);
+
+  // Custom Record Dialog State
+  const [customRecordOpen, setCustomRecordOpen] = useState(false);
+  const [customRecordEmail, setCustomRecordEmail] = useState('');
+  const [customRecordSearching, setCustomRecordSearching] = useState(false);
+  const [customRecordLead, setCustomRecordLead] = useState(null);
+  const [customRecordOrderId, setCustomRecordOrderId] = useState('');
+  const [customRecordAM, setCustomRecordAM] = useState('');
+  const [customRecordAgent, setCustomRecordAgent] = useState('');
+  const [customRecordCreating, setCustomRecordCreating] = useState(false);
 
   // Client Networks Display Dialog State
   const [clientNetworksDialog, setClientNetworksDialog] = useState({
@@ -562,6 +573,62 @@ const DepositCallsPage = () => {
     });
   }, []);
 
+  // Custom record handlers
+  const handleCustomRecordSearch = async () => {
+    if (!customRecordEmail.trim()) {
+      toast.error('Please enter an email address');
+      return;
+    }
+    setCustomRecordSearching(true);
+    setCustomRecordLead(null);
+    try {
+      const response = await api.post('/leads/search-by-emails', { emails: [customRecordEmail.trim()] });
+      if (response.data.success && response.data.data?.length > 0) {
+        setCustomRecordLead(response.data.data[0]);
+      } else {
+        toast.error('No lead found with this email');
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to search lead');
+    } finally {
+      setCustomRecordSearching(false);
+    }
+  };
+
+  const handleCustomRecordCreate = async () => {
+    if (!customRecordLead) return;
+    setCustomRecordCreating(true);
+    try {
+      const data = { leadId: customRecordLead._id };
+      if (customRecordOrderId.trim()) data.orderId = customRecordOrderId.trim();
+      if (customRecordAM) data.accountManager = customRecordAM;
+      if (customRecordAgent) data.assignedAgent = customRecordAgent;
+
+      await depositCallsService.createCustomDepositCall(data);
+      toast.success('Custom deposit call record created');
+      setCustomRecordOpen(false);
+      setCustomRecordEmail('');
+      setCustomRecordLead(null);
+      setCustomRecordOrderId('');
+      setCustomRecordAM('');
+      setCustomRecordAgent('');
+      fetchDepositCalls();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to create custom record');
+    } finally {
+      setCustomRecordCreating(false);
+    }
+  };
+
+  const handleCustomRecordClose = () => {
+    setCustomRecordOpen(false);
+    setCustomRecordEmail('');
+    setCustomRecordLead(null);
+    setCustomRecordOrderId('');
+    setCustomRecordAM('');
+    setCustomRecordAgent('');
+  };
+
   // Calendar helpers
   const getDaysInMonth = () => new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate();
   const getFirstDayOfMonth = () => new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).getDay();
@@ -708,6 +775,13 @@ const DepositCallsPage = () => {
                 variant="filled"
                 size="small"
               />
+            )}
+            {isAdmin && (
+              <Tooltip title="Add custom deposit call record">
+                <IconButton onClick={() => setCustomRecordOpen(true)} color="primary" size="small">
+                  <AddIcon />
+                </IconButton>
+              </Tooltip>
             )}
             {isAdmin && (
               <Tooltip title="Sync approved declarations into call slots">
@@ -902,7 +976,7 @@ const DepositCallsPage = () => {
                   </TableHead>
                   <TableBody>
                     {depositCalls.map((dc) => (
-                      <TableRow key={dc._id} hover>
+                      <TableRow key={dc._id} hover sx={dc.isCustomRecord ? { borderLeft: '3px solid', borderLeftColor: 'error.main' } : undefined}>
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>
                           <Typography fontWeight="medium" sx={{ fontFamily: 'monospace', fontSize: '0.6rem' }}>
                             {dc.orderId?._id ? dc.orderId._id.toString().slice(-8) : '-'}
@@ -1301,6 +1375,116 @@ const DepositCallsPage = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseOurNetworksDialog}>Close</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Custom Deposit Call Record Dialog */}
+      <Dialog
+        open={customRecordOpen}
+        onClose={handleCustomRecordClose}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Add Custom Deposit Call Record</DialogTitle>
+        <DialogContent>
+          <Box sx={{ pt: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {/* Email Search */}
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <TextField
+                fullWidth
+                size="small"
+                label="Lead Email"
+                value={customRecordEmail}
+                onChange={(e) => setCustomRecordEmail(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleCustomRecordSearch(); }}
+                placeholder="Enter lead email..."
+              />
+              <Button
+                variant="contained"
+                onClick={handleCustomRecordSearch}
+                disabled={customRecordSearching || !customRecordEmail.trim()}
+                sx={{ minWidth: 80 }}
+              >
+                {customRecordSearching ? <CircularProgress size={20} /> : 'Search'}
+              </Button>
+            </Box>
+
+            {/* Lead Info */}
+            {customRecordLead && (
+              <Paper variant="outlined" sx={{ p: 2 }}>
+                <Typography variant="subtitle2" gutterBottom>Lead Found</Typography>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                  <Typography variant="body2">
+                    <strong>Name:</strong> {customRecordLead.firstName} {customRecordLead.lastName}
+                  </Typography>
+                  <Typography variant="body2">
+                    <strong>Email:</strong> {customRecordLead.newEmail}
+                  </Typography>
+                  <Typography variant="body2">
+                    <strong>Phone:</strong> {customRecordLead.newPhone || '-'}
+                  </Typography>
+                  <Typography variant="body2">
+                    <strong>Country:</strong> {customRecordLead.country || '-'}
+                  </Typography>
+                  {customRecordLead.assignedAgent && (
+                    <Typography variant="body2">
+                      <strong>Agent:</strong> {customRecordLead.assignedAgent?.fullName || customRecordLead.assignedAgent}
+                    </Typography>
+                  )}
+                </Box>
+              </Paper>
+            )}
+
+            {/* Optional Fields */}
+            {customRecordLead && (
+              <>
+                <TextField
+                  fullWidth
+                  size="small"
+                  label="Order ID (optional)"
+                  value={customRecordOrderId}
+                  onChange={(e) => setCustomRecordOrderId(e.target.value)}
+                  placeholder="Enter order ID..."
+                />
+                <FormControl fullWidth size="small">
+                  <InputLabel>Affiliate Manager (optional)</InputLabel>
+                  <Select
+                    value={customRecordAM}
+                    onChange={(e) => setCustomRecordAM(e.target.value)}
+                    label="Affiliate Manager (optional)"
+                  >
+                    <MenuItem value="">None</MenuItem>
+                    {accountManagers.map(am => (
+                      <MenuItem key={am._id} value={am._id}>{am.fullName}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+                <FormControl fullWidth size="small">
+                  <InputLabel>Agent (optional)</InputLabel>
+                  <Select
+                    value={customRecordAgent}
+                    onChange={(e) => setCustomRecordAgent(e.target.value)}
+                    label="Agent (optional)"
+                  >
+                    <MenuItem value="">None</MenuItem>
+                    {agents.map(agent => (
+                      <MenuItem key={agent._id} value={agent._id}>{agent.fullName}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </>
+            )}
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCustomRecordClose}>Cancel</Button>
+          <Button
+            variant="contained"
+            onClick={handleCustomRecordCreate}
+            disabled={!customRecordLead || customRecordCreating}
+          >
+            {customRecordCreating ? <CircularProgress size={20} /> : 'Create'}
+          </Button>
         </DialogActions>
       </Dialog>
     </Box>

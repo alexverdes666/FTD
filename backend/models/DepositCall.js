@@ -48,11 +48,16 @@ const depositCallSchema = new Schema({
     ref: 'Lead',
     required: true
   },
-  // Reference to the order
+  // Reference to the order (optional for custom admin records)
   orderId: {
     type: Schema.Types.ObjectId,
     ref: 'Order',
-    required: true
+    default: null
+  },
+  // Flag for custom records added manually by admin (not tied to order flow)
+  isCustomRecord: {
+    type: Boolean,
+    default: false
   },
   // Client Broker reference
   clientBrokerId: {
@@ -135,7 +140,8 @@ const depositCallSchema = new Schema({
 });
 
 // Indexes for efficient queries
-depositCallSchema.index({ leadId: 1, orderId: 1 }, { unique: true });
+// Unique per lead+order, but only when orderId exists (custom records have null orderId)
+depositCallSchema.index({ leadId: 1, orderId: 1 }, { unique: true, partialFilterExpression: { orderId: { $type: "objectId" } } });
 depositCallSchema.index({ accountManager: 1, status: 1 });
 depositCallSchema.index({ assignedAgent: 1, status: 1 });
 depositCallSchema.index({ clientBrokerId: 1 });

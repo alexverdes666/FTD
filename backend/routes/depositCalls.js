@@ -21,6 +21,9 @@ router.get("/:id", depositCallsController.getDepositCallById);
 // Create deposit call
 router.post("/", depositCallsController.createDepositCall);
 
+// Create custom deposit call record (admin only)
+router.post("/custom", depositCallsController.createCustomDepositCall);
+
 // Create deposit calls from order (bulk create for all FTDs in order)
 router.post("/from-order", depositCallsController.createFromOrder);
 
