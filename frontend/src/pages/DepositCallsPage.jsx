@@ -307,6 +307,8 @@ const DepositCallsPage = () => {
   const [customRecordOrderId, setCustomRecordOrderId] = useState('');
   const [customRecordAM, setCustomRecordAM] = useState('');
   const [customRecordAgent, setCustomRecordAgent] = useState('');
+  const [customRecordNote, setCustomRecordNote] = useState('');
+  const [customRecordDate, setCustomRecordDate] = useState('');
   const [customRecordCreating, setCustomRecordCreating] = useState(false);
 
   // Client Networks Display Dialog State
@@ -597,12 +599,17 @@ const DepositCallsPage = () => {
 
   const handleCustomRecordCreate = async () => {
     if (!customRecordLead) return;
+    if (!customRecordNote.trim()) {
+      toast.error('Note is required');
+      return;
+    }
     setCustomRecordCreating(true);
     try {
-      const data = { leadId: customRecordLead._id };
+      const data = { leadId: customRecordLead._id, note: customRecordNote.trim() };
       if (customRecordOrderId.trim()) data.orderId = customRecordOrderId.trim();
       if (customRecordAM) data.accountManager = customRecordAM;
       if (customRecordAgent) data.assignedAgent = customRecordAgent;
+      if (customRecordDate) data.customDate = new Date(customRecordDate).toISOString();
 
       await depositCallsService.createCustomDepositCall(data);
       toast.success('Custom deposit call record created');
@@ -612,6 +619,8 @@ const DepositCallsPage = () => {
       setCustomRecordOrderId('');
       setCustomRecordAM('');
       setCustomRecordAgent('');
+      setCustomRecordNote('');
+      setCustomRecordDate('');
       fetchDepositCalls();
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to create custom record');
@@ -627,6 +636,8 @@ const DepositCallsPage = () => {
     setCustomRecordOrderId('');
     setCustomRecordAM('');
     setCustomRecordAgent('');
+    setCustomRecordNote('');
+    setCustomRecordDate('');
   };
 
   // Calendar helpers
@@ -978,13 +989,25 @@ const DepositCallsPage = () => {
                     {depositCalls.map((dc) => (
                       <TableRow key={dc._id} hover sx={dc.isCustomRecord ? { borderLeft: '3px solid', borderLeftColor: 'error.main' } : undefined}>
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                          <Typography fontWeight="medium" sx={{ fontFamily: 'monospace', fontSize: '0.6rem' }}>
-                            {dc.orderId?._id ? dc.orderId._id.toString().slice(-8) : '-'}
-                          </Typography>
+                          {dc.isCustomRecord && dc.customNote ? (
+                            <Tooltip title={dc.customNote}>
+                              <Typography fontWeight="medium" sx={{ fontFamily: 'monospace', fontSize: '0.6rem' }}>
+                                {dc.orderId?._id ? dc.orderId._id.toString().slice(-8) : dc.customNote.length > 12 ? dc.customNote.slice(0, 12) + '...' : dc.customNote}
+                              </Typography>
+                            </Tooltip>
+                          ) : (
+                            <Typography fontWeight="medium" sx={{ fontFamily: 'monospace', fontSize: '0.6rem' }}>
+                              {dc.orderId?._id ? dc.orderId._id.toString().slice(-8) : '-'}
+                            </Typography>
+                          )}
                         </TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>
                           <Typography sx={{ fontSize: '0.6rem', color: 'text.secondary' }}>
-                            {dc.orderId?.createdAt ? new Date(dc.orderId.createdAt).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-'}
+                            {dc.orderId?.createdAt
+                              ? new Date(dc.orderId.createdAt).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+                              : dc.customDate
+                                ? new Date(dc.customDate).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+                                : '-'}
                           </Typography>
                         </TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>
@@ -1435,9 +1458,29 @@ const DepositCallsPage = () => {
               </Paper>
             )}
 
-            {/* Optional Fields */}
+            {/* Required + Optional Fields */}
             {customRecordLead && (
               <>
+                <TextField
+                  fullWidth
+                  size="small"
+                  label="Note *"
+                  value={customRecordNote}
+                  onChange={(e) => setCustomRecordNote(e.target.value)}
+                  placeholder="Enter a note to identify this record..."
+                  required
+                  multiline
+                  rows={2}
+                />
+                <TextField
+                  fullWidth
+                  size="small"
+                  type="datetime-local"
+                  label="Date (optional - shown in Order Created column)"
+                  value={customRecordDate}
+                  onChange={(e) => setCustomRecordDate(e.target.value)}
+                  InputLabelProps={{ shrink: true }}
+                />
                 <TextField
                   fullWidth
                   size="small"

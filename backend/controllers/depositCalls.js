@@ -1232,12 +1232,19 @@ exports.createCustomDepositCall = async (req, res, next) => {
       });
     }
 
-    const { leadId, orderId, accountManager, assignedAgent } = req.body;
+    const { leadId, orderId, accountManager, assignedAgent, note, customDate } = req.body;
 
     if (!leadId) {
       return res.status(400).json({
         success: false,
         message: "leadId is required",
+      });
+    }
+
+    if (!note || !note.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Note is required for custom records",
       });
     }
 
@@ -1309,6 +1316,8 @@ exports.createCustomDepositCall = async (req, res, next) => {
       ftdEmail: lead.newEmail,
       ftdPhone: lead.newPhone,
       isCustomRecord: true,
+      customNote: note.trim(),
+      customDate: customDate ? new Date(customDate) : null,
       depositConfirmed: true,
       depositConfirmedBy: req.user.id,
       depositConfirmedAt: new Date(),

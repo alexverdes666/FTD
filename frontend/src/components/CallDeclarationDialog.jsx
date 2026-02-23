@@ -442,10 +442,13 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
                     ? new Date(order.plannedDate).toLocaleDateString()
                     : 'No date';
                   const broker = order.brokerName || 'Unknown broker';
+                  const label = order.isCustomRecord && order.customNote
+                    ? order.customNote
+                    : `Order ...${shortId}`;
                   return (
-                    <MenuItem key={order.orderId} value={order.orderId}>
+                    <MenuItem key={order.depositCallId || order.orderId} value={order.orderId}>
                       <Box display="flex" justifyContent="space-between" width="100%" alignItems="center">
-                        <span>Order ...{shortId}</span>
+                        <span>{label}</span>
                         <Box display="flex" alignItems="center" gap={1}>
                           <Chip label={planned} size="small" variant="outlined" />
                           <Chip label={broker} size="small" color="primary" variant="outlined" />

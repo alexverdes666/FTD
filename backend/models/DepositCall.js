@@ -59,6 +59,17 @@ const depositCallSchema = new Schema({
     type: Boolean,
     default: false
   },
+  // Note for custom records (helps agents identify the record)
+  customNote: {
+    type: String,
+    trim: true,
+    default: ''
+  },
+  // Custom date for display when no order is linked
+  customDate: {
+    type: Date,
+    default: null
+  },
   // Client Broker reference
   clientBrokerId: {
     type: Schema.Types.ObjectId,

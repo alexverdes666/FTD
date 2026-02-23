@@ -1488,7 +1488,7 @@ const getLeadOrders = async (req, res) => {
       leadId,
       depositConfirmed: true,
     })
-      .select("orderId clientBrokerId ftdEmail ftdName createdAt")
+      .select("orderId clientBrokerId ftdEmail ftdName createdAt isCustomRecord customNote customDate")
       .populate("orderId", "createdAt plannedDate")
       .populate("clientBrokerId", "name domain")
       .sort({ createdAt: -1 });
@@ -1502,7 +1502,7 @@ const getLeadOrders = async (req, res) => {
         depositConfirmed: true,
         _id: { $nin: depositCalls.map((dc) => dc._id) },
       })
-        .select("orderId clientBrokerId ftdEmail ftdName createdAt")
+        .select("orderId clientBrokerId ftdEmail ftdName createdAt isCustomRecord customNote customDate")
         .populate("orderId", "createdAt plannedDate")
         .populate("clientBrokerId", "name domain")
         .sort({ createdAt: -1 });
@@ -1512,11 +1512,13 @@ const getLeadOrders = async (req, res) => {
 
     const orders = allDepositCalls.map((dc) => ({
       orderId: dc.orderId?._id || dc.orderId,
-      orderCreatedAt: dc.orderId?.createdAt || dc.createdAt,
+      orderCreatedAt: dc.orderId?.createdAt || dc.customDate || dc.createdAt,
       plannedDate: dc.orderId?.plannedDate || null,
       brokerName: dc.clientBrokerId?.name || null,
       brokerDomain: dc.clientBrokerId?.domain || null,
       depositCallId: dc._id,
+      isCustomRecord: dc.isCustomRecord || false,
+      customNote: dc.customNote || '',
     }));
 
     res.json({
