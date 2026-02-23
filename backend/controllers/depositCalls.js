@@ -40,28 +40,32 @@ exports.getDepositCalls = async (req, res, next) => {
 
     const query = {};
 
+    // Helper: cast to ObjectId for aggregation compatibility
+    // Mongoose .find() auto-casts strings to ObjectIds, but aggregation $match does NOT
+    const toObjectId = (id) => new ObjectId(id);
+
     // Role-based filtering
     if (req.user.role === "agent") {
       // Agents can only see their assigned deposit calls
-      query.assignedAgent = req.user.id;
+      query.assignedAgent = toObjectId(req.user.id);
     } else if (req.user.role === "affiliate_manager") {
       // AMs can see their own assigned deposit calls OR filter by agent
       if (assignedAgent) {
-        query.assignedAgent = assignedAgent;
+        query.assignedAgent = toObjectId(assignedAgent);
       } else {
         // Show all that they are AM for, or assigned to them as agent
         query.$or = [
-          { accountManager: req.user.id },
-          { assignedAgent: req.user.id },
+          { accountManager: toObjectId(req.user.id) },
+          { assignedAgent: toObjectId(req.user.id) },
         ];
       }
     } else if (req.user.role === "admin") {
       // Admins can filter by any AM or agent
       if (accountManager) {
-        query.accountManager = accountManager;
+        query.accountManager = toObjectId(accountManager);
       }
       if (assignedAgent) {
-        query.assignedAgent = assignedAgent;
+        query.assignedAgent = toObjectId(assignedAgent);
       }
     } else {
       return res.status(403).json({
@@ -77,7 +81,7 @@ exports.getDepositCalls = async (req, res, next) => {
 
     // Client broker filter
     if (clientBrokerId) {
-      query.clientBrokerId = clientBrokerId;
+      query.clientBrokerId = toObjectId(clientBrokerId);
     }
 
     // Date range filter is applied on order.createdAt via aggregation
