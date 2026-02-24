@@ -1527,6 +1527,15 @@ exports.createOrder = async (req, res, next) => {
         ...genderFilterToUse,
       };
 
+      // Exclude leads currently assigned to any of the excluded brokers
+      if (selectedClientBrokers && selectedClientBrokers.length > 0) {
+        query.assignedClientBrokers = {
+          $nin: selectedClientBrokers.map(
+            (id) => new mongoose.Types.ObjectId(id)
+          ),
+        };
+      }
+
       // Exclude already-pulled leads AND leads already in orders with same client network/brokers
       const allExcludedIds = [...excludeLeadIds];
       if (leadsAlreadyInSameClientNetwork.size > 0) {
@@ -1782,6 +1791,15 @@ exports.createOrder = async (req, res, next) => {
         ...countryFilter,
         ...genderFilter,
       };
+
+      // Exclude leads currently assigned to any of the excluded brokers
+      if (selectedClientBrokers && selectedClientBrokers.length > 0) {
+        query.assignedClientBrokers = {
+          $nin: selectedClientBrokers.map(
+            (id) => new mongoose.Types.ObjectId(id)
+          ),
+        };
+      }
 
       // Exclude leads already in orders with same client network or same brokers (robust dedup)
       const excludedIds = new Set();
@@ -6349,6 +6367,11 @@ exports.getAvailableLeadsForReplacement = async (req, res, next) => {
         );
         baseQuery._id = { $nin: [...currentExcluded, ...brokerExcludedIds] };
       }
+
+      // Also exclude leads currently assigned to any of the excluded brokers
+      baseQuery.assignedClientBrokers = {
+        $nin: brokerIds.map((id) => new mongoose.Types.ObjectId(id)),
+      };
     }
 
     // Add search filter if provided
