@@ -49,8 +49,8 @@ import {
   Menu,
   ListItemIcon,
   ListItemText,
-  Drawer,
 } from "@mui/material";
+import { alpha } from "@mui/material/styles";
 import {
   ExpandMore as ExpandMoreIcon,
   ExpandLess as ExpandLessIcon,
@@ -90,7 +90,8 @@ import {
   History as HistoryIcon,
   Gavel as GavelIcon,
   Refresh as RefreshIcon,
-  Close as CloseIcon,
+
+  FilterListOff as FilterListOffIcon,
 } from "@mui/icons-material";
 import AddLeadForm from "../components/AddLeadForm";
 import DocumentPreview from "../components/DocumentPreview";
@@ -1114,7 +1115,7 @@ const LeadsPage = () => {
       ipqsResult: "",
     };
   });
-  const [showFilters, setShowFilters] = useState(false);
+
   const [globalAuditDialogOpen, setGlobalAuditDialogOpen] = useState(false);
   const [expandedRows, setExpandedRows] = useState(new Set());
   const [pendingRequests, setPendingRequests] = useState(new Map()); // Map<"leadId-orderId", pendingRequest>
@@ -2420,135 +2421,6 @@ const LeadsPage = () => {
         </Paper>
       )}
 
-      {/* Sidebar Drawer */}
-      <Drawer
-        anchor="right"
-        open={showFilters}
-        onClose={() => setShowFilters(false)}
-        variant="temporary"
-        PaperProps={{ sx: { width: 340, p: 0 } }}
-      >
-        <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", px: 2.5, py: 1.5, borderBottom: 1, borderColor: "divider" }}>
-          <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>Leads Panel</Typography>
-          <IconButton size="small" onClick={() => setShowFilters(false)}>
-            <CloseIcon fontSize="small" />
-          </IconButton>
-        </Box>
-        <Box sx={{ p: 2.5, display: "flex", flexDirection: "column", gap: 2, overflow: "auto", flex: 1 }}>
-          {/* Search */}
-          <TextField
-            fullWidth
-            size="small"
-            placeholder="Search by name, email, phone, country, agent..."
-            value={searchInput}
-            onChange={(e) => handleSearchChange(e.target.value)}
-            InputProps={{
-              startAdornment: <SearchIcon sx={{ mr: 1, color: "text.secondary" }} />,
-            }}
-            sx={{ "& .MuiOutlinedInput-root": { borderRadius: 2, bgcolor: "grey.50", "&:hover": { bgcolor: "grey.100" } } }}
-          />
-          {/* Actions */}
-          <Divider />
-          <Typography variant="caption" sx={{ fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px", color: "text.secondary" }}>Actions</Typography>
-          <Box display="flex" gap={0.5} flexWrap="wrap">
-            {(isLeadManager || user?.role === ROLES.ADMIN) && (
-              <Tooltip title="Add New Lead">
-                <IconButton size="small" onClick={() => setAddLeadDialogOpen(true)} sx={{ color: "primary.main", "&:hover": { bgcolor: "primary.lighter" } }}>
-                  <PersonAddIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-            )}
-            {isAdminOrManager && (
-              <Tooltip title="Import Leads">
-                <IconButton size="small" onClick={() => setImportDialogOpen(true)} sx={{ color: "info.main", "&:hover": { bgcolor: "info.lighter" } }}>
-                  <ImportIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-            )}
-            {canDeleteLeads && (
-              <Tooltip title="Bulk Delete">
-                <IconButton size="small" onClick={() => setBulkDeleteDialogOpen(true)} sx={{ color: "error.main", "&:hover": { bgcolor: "error.lighter" } }}>
-                  <DeleteIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-            )}
-            {user?.role === ROLES.ADMIN && (
-              <Tooltip title="View Archived Leads">
-                <IconButton size="small" onClick={handleOpenArchivedLeadsDialog} sx={{ color: "warning.main", "&:hover": { bgcolor: "warning.lighter" } }}>
-                  <ArchiveIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-            )}
-            {(isAdminOrManager || isLeadManager) && (
-              <Tooltip title="View Lead Changes Audit">
-                <IconButton size="small" onClick={() => setGlobalAuditDialogOpen(true)} sx={{ color: "secondary.main", "&:hover": { bgcolor: "secondary.lighter" } }}>
-                  <HistoryIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-            )}
-          </Box>
-          {/* Filters */}
-          <Divider />
-          <Box display="flex" alignItems="center" justifyContent="space-between">
-            <Typography variant="caption" sx={{ fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px", color: "text.secondary" }}>Filters</Typography>
-            {hasActiveFilters && (
-              <Chip label="Clear All" size="small" onDelete={clearFilters} onClick={clearFilters} color="default" variant="outlined" sx={{ height: 22, fontSize: "0.7rem" }} />
-            )}
-          </Box>
-          {isAdminOrManager && (
-            <FormControlLabel
-              control={<Switch checked={filters.includeConverted} onChange={(e) => handleFilterChange("includeConverted", e.target.checked)} color="primary" size="small" />}
-              label={<Typography variant="body2">Include Converted</Typography>}
-            />
-          )}
-          {isAffiliateManager && (
-            <FormControlLabel
-              control={<Switch checked={filters.assignedToMe} onChange={(e) => handleFilterChange("assignedToMe", e.target.checked)} color="primary" size="small" />}
-              label={<Typography variant="body2">My Assigned Leads</Typography>}
-            />
-          )}
-          <FormControl fullWidth size="small">
-            <InputLabel>Order</InputLabel>
-            <Select value={filters.orderId} label="Order" onChange={(e) => handleFilterChange("orderId", e.target.value)} sx={{ borderRadius: 2 }}>
-              <MenuItem value="">All Orders</MenuItem>
-              {orders.map((order) => (
-                <MenuItem key={order._id} value={order._id}>
-                  <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                    <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: order.status === "active" ? "success.main" : order.status === "paused" ? "warning.main" : order.status === "completed" ? "info.main" : "error.main" }} />
-                    Order {order._id.slice(-8)} - {order.priority}
-                  </Box>
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-          <FormControl fullWidth size="small">
-            <InputLabel>IPQS Type</InputLabel>
-            <Select value={filters.ipqsType} label="IPQS Type" onChange={(e) => { handleFilterChange("ipqsType", e.target.value); if (!e.target.value) handleFilterChange("ipqsResult", ""); }} sx={{ borderRadius: 2 }}>
-              <MenuItem value="">All</MenuItem>
-              <MenuItem value="phone">Phone</MenuItem>
-              <MenuItem value="email">Email</MenuItem>
-              <MenuItem value="both">Both</MenuItem>
-            </Select>
-          </FormControl>
-          {filters.ipqsType && (
-            <FormControl fullWidth size="small">
-              <InputLabel>IPQS Result</InputLabel>
-              <Select value={filters.ipqsResult} label="IPQS Result" onChange={(e) => handleFilterChange("ipqsResult", e.target.value)} sx={{ borderRadius: 2 }}>
-                <MenuItem value="">All</MenuItem>
-                <MenuItem value="clean">Clean</MenuItem>
-                <MenuItem value="low_risk">Low Risk</MenuItem>
-                <MenuItem value="medium_risk">Medium Risk</MenuItem>
-                <MenuItem value="high_risk">High Risk</MenuItem>
-                <MenuItem value="invalid">Invalid</MenuItem>
-              </Select>
-            </FormControl>
-          )}
-          <Divider />
-          <Typography variant="caption" sx={{ fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px", color: "text.secondary" }}>Date Range</Typography>
-          <TextField fullWidth size="small" label="Order Created From" type="date" value={filters.orderCreatedStart} onChange={(e) => handleFilterChange("orderCreatedStart", e.target.value)} InputLabelProps={{ shrink: true }} sx={{ "& .MuiOutlinedInput-root": { borderRadius: 2 } }} />
-          <TextField fullWidth size="small" label="Order Created To" type="date" value={filters.orderCreatedEnd} onChange={(e) => handleFilterChange("orderCreatedEnd", e.target.value)} InputLabelProps={{ shrink: true }} sx={{ "& .MuiOutlinedInput-root": { borderRadius: 2 } }} />
-        </Box>
-      </Drawer>
       {}
       <Box sx={{ display: { xs: "none", md: "block" }, width: "100%" }}>
         <Paper sx={{ width: "100%", position: "relative", borderRadius: 2, overflow: "hidden", border: 1, borderColor: "divider", boxShadow: "0 1px 3px rgba(0,0,0,0.08)" }}>
@@ -2564,6 +2436,266 @@ const LeadsPage = () => {
               }}
             />
           )}
+          {/* Compact Top Filter Bar */}
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              gap: 0.75,
+              px: 1,
+              py: 0.5,
+              flexWrap: "wrap",
+              background: (theme) => `linear-gradient(135deg, ${alpha(theme.palette.grey[100], 0.7)} 0%, ${alpha(theme.palette.grey[50], 0.5)} 100%)`,
+              borderBottom: "1px solid",
+              borderColor: (theme) => alpha(theme.palette.divider, 0.6),
+              minHeight: 36,
+            }}
+          >
+            {/* Search */}
+            <TextField
+              placeholder="Search leads..."
+              value={searchInput}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              size="small"
+              sx={{
+                width: 200,
+                "& .MuiOutlinedInput-root": {
+                  height: 28,
+                  borderRadius: 6,
+                  fontSize: "0.78rem",
+                  bgcolor: "background.paper",
+                  border: "none",
+                  boxShadow: (theme) => `0 1px 2px ${alpha(theme.palette.grey[400], 0.15)}`,
+                  "& fieldset": { border: "1px solid", borderColor: (theme) => alpha(theme.palette.grey[300], 0.7) },
+                  "&:hover fieldset": { borderColor: (theme) => alpha(theme.palette.primary.main, 0.3) },
+                  "&.Mui-focused fieldset": { borderColor: "primary.main", borderWidth: 1.5, boxShadow: (theme) => `0 0 0 2px ${alpha(theme.palette.primary.main, 0.1)}` },
+                },
+                "& input::placeholder": { fontSize: "0.75rem", opacity: 0.6 },
+              }}
+              InputProps={{
+                startAdornment: <SearchIcon sx={{ color: "action.active", mr: 0.5, fontSize: 15 }} />,
+              }}
+            />
+            <Divider orientation="vertical" flexItem sx={{ my: 0.5, borderColor: (theme) => alpha(theme.palette.grey[300], 0.6) }} />
+            {/* Order */}
+            <FormControl size="small" sx={{ minWidth: 130, "& .MuiOutlinedInput-root": { height: 28, borderRadius: 6, fontSize: "0.75rem", bgcolor: "background.paper", boxShadow: (theme) => `0 1px 2px ${alpha(theme.palette.grey[400], 0.15)}`, "& fieldset": { borderColor: (theme) => alpha(theme.palette.grey[300], 0.7) }, "&:hover fieldset": { borderColor: (theme) => alpha(theme.palette.primary.main, 0.3) } } }}>
+              <Select
+                value={filters.orderId}
+                onChange={(e) => handleFilterChange("orderId", e.target.value)}
+                displayEmpty
+                renderValue={(v) => {
+                  if (!v) return "Order";
+                  return `Order ...${v.slice(-6)}`;
+                }}
+                sx={{
+                  "& .MuiSelect-select": { py: 0, pl: 1, pr: "24px !important", display: "flex", alignItems: "center" },
+                  "& .MuiSelect-icon": { right: 2, fontSize: 18 },
+                  color: filters.orderId ? "text.primary" : "text.disabled",
+                  fontWeight: filters.orderId ? 600 : 400,
+                }}
+              >
+                <MenuItem value="" sx={{ fontSize: "0.8rem" }}>All Orders</MenuItem>
+                {orders.map((order) => (
+                  <MenuItem key={order._id} value={order._id} sx={{ fontSize: "0.8rem" }}>
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                      <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: order.status === "active" ? "success.main" : order.status === "paused" ? "warning.main" : order.status === "completed" ? "info.main" : "error.main" }} />
+                      Order {order._id.slice(-8)} - {order.priority}
+                    </Box>
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            {/* IPQS Type */}
+            <FormControl size="small" sx={{ minWidth: 85, "& .MuiOutlinedInput-root": { height: 28, borderRadius: 6, fontSize: "0.75rem", bgcolor: "background.paper", boxShadow: (theme) => `0 1px 2px ${alpha(theme.palette.grey[400], 0.15)}`, "& fieldset": { borderColor: (theme) => alpha(theme.palette.grey[300], 0.7) }, "&:hover fieldset": { borderColor: (theme) => alpha(theme.palette.primary.main, 0.3) } } }}>
+              <Select
+                value={filters.ipqsType}
+                onChange={(e) => { handleFilterChange("ipqsType", e.target.value); if (!e.target.value) handleFilterChange("ipqsResult", ""); }}
+                displayEmpty
+                renderValue={(v) => v ? v.charAt(0).toUpperCase() + v.slice(1) : "IPQS"}
+                sx={{
+                  "& .MuiSelect-select": { py: 0, pl: 1, pr: "24px !important", display: "flex", alignItems: "center" },
+                  "& .MuiSelect-icon": { right: 2, fontSize: 18 },
+                  color: filters.ipqsType ? "text.primary" : "text.disabled",
+                  fontWeight: filters.ipqsType ? 600 : 400,
+                }}
+              >
+                <MenuItem value="" sx={{ fontSize: "0.8rem" }}>All</MenuItem>
+                <MenuItem value="phone" sx={{ fontSize: "0.8rem" }}>Phone</MenuItem>
+                <MenuItem value="email" sx={{ fontSize: "0.8rem" }}>Email</MenuItem>
+                <MenuItem value="both" sx={{ fontSize: "0.8rem" }}>Both</MenuItem>
+              </Select>
+            </FormControl>
+            {/* IPQS Result (conditional) */}
+            {filters.ipqsType && (
+              <FormControl size="small" sx={{ minWidth: 95, "& .MuiOutlinedInput-root": { height: 28, borderRadius: 6, fontSize: "0.75rem", bgcolor: "background.paper", boxShadow: (theme) => `0 1px 2px ${alpha(theme.palette.grey[400], 0.15)}`, "& fieldset": { borderColor: (theme) => alpha(theme.palette.grey[300], 0.7) }, "&:hover fieldset": { borderColor: (theme) => alpha(theme.palette.primary.main, 0.3) } } }}>
+                <Select
+                  value={filters.ipqsResult}
+                  onChange={(e) => handleFilterChange("ipqsResult", e.target.value)}
+                  displayEmpty
+                  renderValue={(v) => v ? v.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase()) : "Result"}
+                  sx={{
+                    "& .MuiSelect-select": { py: 0, pl: 1, pr: "24px !important", display: "flex", alignItems: "center" },
+                    "& .MuiSelect-icon": { right: 2, fontSize: 18 },
+                    color: filters.ipqsResult ? "text.primary" : "text.disabled",
+                    fontWeight: filters.ipqsResult ? 600 : 400,
+                  }}
+                >
+                  <MenuItem value="" sx={{ fontSize: "0.8rem" }}>All</MenuItem>
+                  <MenuItem value="clean" sx={{ fontSize: "0.8rem" }}>Clean</MenuItem>
+                  <MenuItem value="low_risk" sx={{ fontSize: "0.8rem" }}>Low Risk</MenuItem>
+                  <MenuItem value="medium_risk" sx={{ fontSize: "0.8rem" }}>Medium Risk</MenuItem>
+                  <MenuItem value="high_risk" sx={{ fontSize: "0.8rem" }}>High Risk</MenuItem>
+                  <MenuItem value="invalid" sx={{ fontSize: "0.8rem" }}>Invalid</MenuItem>
+                </Select>
+              </FormControl>
+            )}
+            {/* Include Converted toggle */}
+            {isAdminOrManager && (
+              <Chip
+                label={filters.includeConverted ? "Converted: On" : "Converted: Off"}
+                size="small"
+                onClick={() => handleFilterChange("includeConverted", !filters.includeConverted)}
+                sx={{
+                  height: 24,
+                  fontSize: "0.7rem",
+                  fontWeight: 600,
+                  bgcolor: (theme) => filters.includeConverted ? alpha(theme.palette.primary.main, 0.08) : alpha(theme.palette.grey[500], 0.08),
+                  color: filters.includeConverted ? "primary.dark" : "text.secondary",
+                  border: "1px solid",
+                  borderColor: (theme) => filters.includeConverted ? alpha(theme.palette.primary.main, 0.2) : alpha(theme.palette.grey[400], 0.3),
+                  "&:hover": { bgcolor: (theme) => alpha(theme.palette.primary.main, 0.14) },
+                }}
+              />
+            )}
+            {/* Assigned To Me toggle */}
+            {isAffiliateManager && (
+              <Chip
+                label={filters.assignedToMe ? "My Leads: On" : "My Leads: Off"}
+                size="small"
+                onClick={() => handleFilterChange("assignedToMe", !filters.assignedToMe)}
+                sx={{
+                  height: 24,
+                  fontSize: "0.7rem",
+                  fontWeight: 600,
+                  bgcolor: (theme) => filters.assignedToMe ? alpha(theme.palette.info.main, 0.08) : alpha(theme.palette.grey[500], 0.08),
+                  color: filters.assignedToMe ? "info.dark" : "text.secondary",
+                  border: "1px solid",
+                  borderColor: (theme) => filters.assignedToMe ? alpha(theme.palette.info.main, 0.2) : alpha(theme.palette.grey[400], 0.3),
+                  "&:hover": { bgcolor: (theme) => alpha(theme.palette.info.main, 0.14) },
+                }}
+              />
+            )}
+            {/* Date From */}
+            <TextField
+              type="date"
+              value={filters.orderCreatedStart}
+              onChange={(e) => handleFilterChange("orderCreatedStart", e.target.value)}
+              size="small"
+              sx={{
+                width: 130,
+                "& .MuiOutlinedInput-root": {
+                  height: 28,
+                  borderRadius: 6,
+                  fontSize: "0.72rem",
+                  bgcolor: "background.paper",
+                  boxShadow: (theme) => `0 1px 2px ${alpha(theme.palette.grey[400], 0.15)}`,
+                  "& fieldset": { border: "1px solid", borderColor: (theme) => alpha(theme.palette.grey[300], 0.7) },
+                  "&:hover fieldset": { borderColor: (theme) => alpha(theme.palette.primary.main, 0.3) },
+                },
+                "& input": { fontSize: "0.72rem", py: 0 },
+              }}
+              InputProps={{
+                startAdornment: <Typography sx={{ fontSize: "0.65rem", color: "text.disabled", mr: 0.5, whiteSpace: "nowrap" }}>From</Typography>,
+              }}
+            />
+            {/* Date To */}
+            <TextField
+              type="date"
+              value={filters.orderCreatedEnd}
+              onChange={(e) => handleFilterChange("orderCreatedEnd", e.target.value)}
+              size="small"
+              sx={{
+                width: 130,
+                "& .MuiOutlinedInput-root": {
+                  height: 28,
+                  borderRadius: 6,
+                  fontSize: "0.72rem",
+                  bgcolor: "background.paper",
+                  boxShadow: (theme) => `0 1px 2px ${alpha(theme.palette.grey[400], 0.15)}`,
+                  "& fieldset": { border: "1px solid", borderColor: (theme) => alpha(theme.palette.grey[300], 0.7) },
+                  "&:hover fieldset": { borderColor: (theme) => alpha(theme.palette.primary.main, 0.3) },
+                },
+                "& input": { fontSize: "0.72rem", py: 0 },
+              }}
+              InputProps={{
+                startAdornment: <Typography sx={{ fontSize: "0.65rem", color: "text.disabled", mr: 0.5, whiteSpace: "nowrap" }}>To</Typography>,
+              }}
+            />
+            {/* Clear filters */}
+            {activeFilterCount > 0 && (
+              <>
+                <Divider orientation="vertical" flexItem sx={{ my: 0.5, borderColor: (theme) => alpha(theme.palette.grey[300], 0.6) }} />
+                <Chip
+                  label={`Clear (${activeFilterCount})`}
+                  size="small"
+                  onDelete={clearFilters}
+                  deleteIcon={<FilterListOffIcon sx={{ fontSize: "14px !important" }} />}
+                  onClick={clearFilters}
+                  sx={{
+                    height: 24,
+                    fontSize: "0.7rem",
+                    fontWeight: 600,
+                    bgcolor: (theme) => alpha(theme.palette.error.main, 0.08),
+                    color: "error.dark",
+                    border: "1px solid",
+                    borderColor: (theme) => alpha(theme.palette.error.main, 0.2),
+                    "& .MuiChip-deleteIcon": { color: "error.main", "&:hover": { color: "error.dark" } },
+                    "&:hover": { bgcolor: (theme) => alpha(theme.palette.error.main, 0.14) },
+                  }}
+                />
+              </>
+            )}
+            {/* Spacer */}
+            <Box sx={{ flex: 1 }} />
+            {/* Action buttons */}
+            <Box sx={{ display: "flex", gap: 0.5, alignItems: "center" }}>
+              {(isLeadManager || user?.role === ROLES.ADMIN) && (
+                <Tooltip title="Add New Lead">
+                  <IconButton size="small" onClick={() => setAddLeadDialogOpen(true)} sx={{ padding: "3px", color: "primary.main" }}>
+                    <PersonAddIcon sx={{ fontSize: 16 }} />
+                  </IconButton>
+                </Tooltip>
+              )}
+              {isAdminOrManager && (
+                <Tooltip title="Import Leads">
+                  <IconButton size="small" onClick={() => setImportDialogOpen(true)} sx={{ padding: "3px", color: "info.main" }}>
+                    <ImportIcon sx={{ fontSize: 16 }} />
+                  </IconButton>
+                </Tooltip>
+              )}
+              {canDeleteLeads && (
+                <Tooltip title="Bulk Delete">
+                  <IconButton size="small" onClick={() => setBulkDeleteDialogOpen(true)} sx={{ padding: "3px", color: "error.main" }}>
+                    <DeleteIcon sx={{ fontSize: 16 }} />
+                  </IconButton>
+                </Tooltip>
+              )}
+              {user?.role === ROLES.ADMIN && (
+                <Tooltip title="Archived Leads">
+                  <IconButton size="small" onClick={handleOpenArchivedLeadsDialog} sx={{ padding: "3px", color: "warning.main" }}>
+                    <ArchiveIcon sx={{ fontSize: 16 }} />
+                  </IconButton>
+                </Tooltip>
+              )}
+              {(isAdminOrManager || isLeadManager) && (
+                <Tooltip title="Audit Log">
+                  <IconButton size="small" onClick={() => setGlobalAuditDialogOpen(true)} sx={{ padding: "3px", color: "secondary.main" }}>
+                    <HistoryIcon sx={{ fontSize: 16 }} />
+                  </IconButton>
+                </Tooltip>
+              )}
+            </Box>
+          </Box>
           <TableContainer sx={{ width: "100%", overflowX: "auto" }}>
             <Table
               size="small"
@@ -2645,15 +2777,7 @@ const LeadsPage = () => {
                     <TableCell sx={{ textAlign: "center", width: "120px", maxWidth: "120px", borderRight: "1px solid rgba(255,255,255,0.1)" }}>Assigned To</TableCell>
                   )}
                   <TableCell sx={{ textAlign: "center", width: "70px", maxWidth: "70px", borderRight: "1px solid rgba(255,255,255,0.1)" }}>Cooldown</TableCell>
-                  <TableCell sx={{ textAlign: "right", width: "85px", maxWidth: "85px" }}>
-                    <Box sx={{ display: "inline-flex", alignItems: "center", justifyContent: "flex-end", gap: 0.25, lineHeight: 1 }}>
-                      Actions
-                      <FilterIcon
-                        onClick={(e) => { e.stopPropagation(); setShowFilters(true); }}
-                        sx={{ fontSize: 13, color: "rgba(255,255,255,0.6)", cursor: "pointer", "&:hover": { color: "#fff" }, ml: 0.25 }}
-                      />
-                    </Box>
-                  </TableCell>
+                  <TableCell sx={{ textAlign: "right", width: "85px", maxWidth: "85px" }}>Actions</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
