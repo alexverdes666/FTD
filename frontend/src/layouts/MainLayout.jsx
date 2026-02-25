@@ -964,8 +964,8 @@ const MainLayout = () => {
           display: "flex",
           flexDirection: "column",
           minHeight: "100vh",
-          overflow: (location.pathname === "/notes" || location.pathname === "/orders" || location.pathname === "/crm") ? "hidden" : "auto",
-          height: (location.pathname === "/notes" || location.pathname === "/orders" || location.pathname === "/crm") ? "100vh" : "auto",
+          overflow: (location.pathname === "/notes" || location.pathname === "/orders" || location.pathname === "/crm" || location.pathname === "/leads") ? "hidden" : "auto",
+          height: (location.pathname === "/notes" || location.pathname === "/orders" || location.pathname === "/crm" || location.pathname === "/leads") ? "100vh" : "auto",
         }}
       >
         <Box sx={{ minHeight: 42 }} />
@@ -973,7 +973,7 @@ const MainLayout = () => {
           component="div"
           sx={{
             flexGrow: 1,
-            overflow: (location.pathname === "/notes" || location.pathname === "/orders" || location.pathname === "/crm") ? "hidden" : "auto",
+            overflow: (location.pathname === "/notes" || location.pathname === "/orders" || location.pathname === "/crm" || location.pathname === "/leads") ? "hidden" : "auto",
             display: "flex",
             flexDirection: "column",
           }}
@@ -982,7 +982,7 @@ const MainLayout = () => {
             <Outlet />
           </Force2FASetup>
         </Box>
-        {location.pathname !== "/notes" && location.pathname !== "/orders" && location.pathname !== "/crm" && location.pathname !== "/am-expenses" && <Footer />}
+        {location.pathname !== "/notes" && location.pathname !== "/orders" && location.pathname !== "/crm" && location.pathname !== "/leads" && location.pathname !== "/am-expenses" && <Footer />}
       </Box>
 
       {/* Floating Chat Button */}

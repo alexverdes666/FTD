@@ -2207,7 +2207,7 @@ const LeadsPage = () => {
     }
   };
   return (
-    <Box sx={{ position: "relative" }}>
+    <Box sx={{ position: "relative", height: "100%", display: "flex", flexDirection: "column", overflow: "hidden" }}>
       {/* Floating action bar for selected leads */}
       {(canSelectLeads && numSelected > 0 && numAssignableSelected === 0) ||
       (isAdminOrManager && numAssignableSelected > 0) ||
@@ -2422,8 +2422,8 @@ const LeadsPage = () => {
       )}
 
       {}
-      <Box sx={{ display: { xs: "none", md: "block" }, width: "100%" }}>
-        <Paper sx={{ width: "100%", position: "relative", borderRadius: 2, overflow: "hidden", border: 1, borderColor: "divider", boxShadow: "0 1px 3px rgba(0,0,0,0.08)" }}>
+      <Box sx={{ display: { xs: "none", md: "flex" }, flexDirection: "column", width: "100%", flex: 1, minHeight: 0, overflow: "hidden" }}>
+        <Paper sx={{ width: "100%", position: "relative", borderRadius: 2, overflow: "hidden", border: 1, borderColor: "divider", boxShadow: "0 1px 3px rgba(0,0,0,0.08)", display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
           {searching && (
             <LinearProgress
               sx={{
@@ -2696,7 +2696,7 @@ const LeadsPage = () => {
               )}
             </Box>
           </Box>
-          <TableContainer sx={{ width: "100%", overflowX: "auto" }}>
+          <TableContainer sx={{ width: "100%", overflowX: "auto", flex: 1, overflowY: "auto" }}>
             <Table
               size="small"
               sx={{
@@ -2889,6 +2889,7 @@ const LeadsPage = () => {
             page={page}
             onPageChange={handleChangePage}
             onRowsPerPageChange={handleChangeRowsPerPage}
+            sx={{ minHeight: 36, height: 36, overflow: "hidden", "& .MuiTablePagination-toolbar": { minHeight: 36, height: 36, py: 0 }, "& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows": { fontSize: "0.75rem", m: 0 }, "& .MuiTablePagination-select": { fontSize: "0.75rem" } }}
           />
         </Paper>
       </Box>
