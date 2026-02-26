@@ -15,6 +15,8 @@ import {
   IconButton,
   Autocomplete,
   Radio,
+  Tooltip,
+  Divider,
 } from "@mui/material";
 import {
   Call as CallIcon,
@@ -265,8 +267,8 @@ export default function PspDepositDialog({
                   sx={{ mb: 1.5 }}
                 />
                 <Box sx={{ maxHeight: 400, overflow: "auto" }}>
-                  {dialog.agentCalls
-                    .filter((call) => {
+                  {(() => {
+                    const filtered = dialog.agentCalls.filter((call) => {
                       const q = (dialog.callSearchQuery || "").toLowerCase().trim();
                       if (!q) return true;
                       return (
@@ -275,12 +277,24 @@ export default function PspDepositDialog({
                         (call.email || "").toLowerCase().includes(q) ||
                         (call.destinationNumber || "").toLowerCase().includes(q)
                       );
-                    })
-                    .map((call) => {
+                    });
+                    const hasMatchingCalls = filtered.some((c) => c.matchesLead);
+                    const hasOtherCalls = filtered.some((c) => !c.matchesLead);
+                    let dividerInserted = false;
+
+                    return filtered.map((call) => {
                     const isSelected = dialog.selectedCall?.cdrCallId === call.cdrCallId;
+                    const showDivider = hasMatchingCalls && hasOtherCalls && !call.matchesLead && !dividerInserted;
+                    if (showDivider) dividerInserted = true;
+
                     return (
+                      <React.Fragment key={call.cdrCallId}>
+                      {showDivider && (
+                        <Divider sx={{ my: 1.5 }}>
+                          <Typography variant="caption" color="text.secondary">Other agent calls</Typography>
+                        </Divider>
+                      )}
                       <Paper
-                        key={call.cdrCallId}
                         variant="outlined"
                         sx={{
                           p: 1.5,
@@ -289,6 +303,7 @@ export default function PspDepositDialog({
                           border: isSelected ? "2px solid" : "1px solid",
                           borderColor: isSelected ? "primary.main" : "divider",
                           bgcolor: isSelected ? "primary.50" : "transparent",
+                          opacity: !call.matchesLead && hasMatchingCalls ? 0.7 : 1,
                           "&:hover": { bgcolor: isSelected ? "primary.50" : "action.hover" },
                         }}
                         onClick={() =>
@@ -307,6 +322,24 @@ export default function PspDepositDialog({
                                 color={call.callDuration >= 3600 ? "error" : call.callDuration >= 1800 ? "warning" : "default"}
                                 variant="outlined"
                               />
+                              {call.declarationStatus === "pending" && (
+                                <Chip
+                                  label={`Pending: ${(call.declaredCallType || "").replace(/_/g, " ")}`}
+                                  size="small"
+                                  color="warning"
+                                  variant="filled"
+                                />
+                              )}
+                              {call.declarationStatus === "approved" && (
+                                <Tooltip title="Selecting this will reset the existing declaration">
+                                  <Chip
+                                    label={`Declared: ${(call.declaredCallType || "").replace(/_/g, " ")}`}
+                                    size="small"
+                                    color="error"
+                                    variant="filled"
+                                  />
+                                </Tooltip>
+                              )}
                             </Box>
                             <Typography variant="caption" color="text.secondary" sx={{ fontFamily: "monospace" }}>
                               {call.lineNumber || call.sourceNumber} {"\u2192"} {call.email || call.destinationNumber}
@@ -364,8 +397,10 @@ export default function PspDepositDialog({
                           </Box>
                         )}
                       </Paper>
+                      </React.Fragment>
                     );
-                  })}
+                  });
+                  })()}
                 </Box>
                 </>
               )}

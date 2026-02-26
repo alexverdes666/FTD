@@ -4716,18 +4716,61 @@ exports.confirmDeposit = async (req, res, next) => {
     // Create approved deposit call declaration from the selected CDR call
     const AgentCallDeclaration = require("../models/AgentCallDeclaration");
     const cdrService = require("../services/cdrService");
-    const { addCallExpenseToAffiliateManager } = require("./agentCallDeclarations");
+    const { addCallExpenseToAffiliateManager, removeCallExpenseFromAffiliateManager } = require("./agentCallDeclarations");
 
-    // Check if this CDR call is already declared
+    // Check if this CDR call is already declared — if so, reverse it so we can re-declare as deposit
     const existingCdrDecl = await AgentCallDeclaration.findOne({
       cdrCallId: selectedCall.cdrCallId,
       isActive: true,
     });
     if (existingCdrDecl) {
-      return res.status(400).json({
-        success: false,
-        message: "This call has already been declared",
-      });
+      // Reverse AM table expense if it was approved
+      if (existingCdrDecl.status === "approved") {
+        try {
+          await removeCallExpenseFromAffiliateManager(existingCdrDecl);
+        } catch (expenseErr) {
+          console.error("Error reversing existing declaration expense during deposit override:", expenseErr);
+        }
+
+        // Reset the DepositCall slot if it was a non-deposit FTD call
+        if (existingCdrDecl.callCategory !== "filler" && existingCdrDecl.callType !== "deposit") {
+          const CALL_TYPE_TO_CALL_NUMBER = {
+            first_call: 1, second_call: 2, third_call: 3, fourth_call: 4, fifth_call: 5,
+            sixth_call: 6, seventh_call: 7, eighth_call: 8, ninth_call: 9, tenth_call: 10,
+          };
+          const callNumber = CALL_TYPE_TO_CALL_NUMBER[existingCdrDecl.callType];
+          if (callNumber) {
+            // Find the DepositCall for this lead
+            const existingDepositCall = await DepositCall.findOne({
+              $or: [
+                { leadId: leadId },
+                ...(lead.newEmail ? [{ ftdEmail: lead.newEmail }] : []),
+              ],
+              depositConfirmed: true,
+            });
+            if (existingDepositCall) {
+              const callField = `call${callNumber}`;
+              if (existingDepositCall[callField].status !== "pending") {
+                existingDepositCall[callField].status = "pending";
+                existingDepositCall[callField].expectedDate = null;
+                existingDepositCall[callField].doneDate = null;
+                existingDepositCall[callField].markedBy = null;
+                existingDepositCall[callField].markedAt = null;
+                existingDepositCall[callField].approvedBy = null;
+                existingDepositCall[callField].approvedAt = null;
+                existingDepositCall[callField].notes = "";
+                await existingDepositCall.save();
+                console.log(`Reset DepositCall ${existingDepositCall._id} call${callNumber} to pending (deposit override)`);
+              }
+            }
+          }
+        }
+      }
+
+      // Soft-delete the old declaration
+      existingCdrDecl.isActive = false;
+      await existingCdrDecl.save();
+      console.log(`Soft-deleted existing declaration ${existingCdrDecl._id} for CDR call override during deposit confirmation`);
     }
 
     // Check if a deposit declaration already exists for this lead+order

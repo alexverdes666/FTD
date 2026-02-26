@@ -22,15 +22,17 @@ import {
   Check as CheckIcon,
   Close as CloseIcon,
   Person as PersonIcon,
+  RestartAlt as ResetIcon,
 } from '@mui/icons-material';
 import { approveDeclaration, rejectDeclaration } from '../services/callDeclarations';
 
-const CallDeclarationApprovalDialog = ({ open, onClose, declaration, onDeclarationUpdated }) => {
+const CallDeclarationApprovalDialog = ({ open, onClose, declaration, onDeclarationUpdated, onReset, isAdmin }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [rejectionNotes, setRejectionNotes] = useState('');
   const [showRejectionInput, setShowRejectionInput] = useState(false);
   const [approvalNotes, setApprovalNotes] = useState('');
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   if (!declaration) return null;
 
@@ -112,10 +114,25 @@ const CallDeclarationApprovalDialog = ({ open, onClose, declaration, onDeclarati
     }
   };
 
+  const handleReset = async () => {
+    if (!onReset) return;
+    setLoading(true);
+    setError(null);
+    try {
+      await onReset(declaration._id);
+      setShowResetConfirm(false);
+    } catch (err) {
+      setError(err.response?.data?.message || err.message || 'Failed to reset declaration');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const resetForm = () => {
     setRejectionNotes('');
     setApprovalNotes('');
     setShowRejectionInput(false);
+    setShowResetConfirm(false);
     setError(null);
   };
 
@@ -146,6 +163,12 @@ const CallDeclarationApprovalDialog = ({ open, onClose, declaration, onDeclarati
         {error && (
           <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
             {error}
+          </Alert>
+        )}
+
+        {showResetConfirm && (
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            This will reverse the AM table expense, reset the deposit call slot back to pending, and deactivate this declaration. The agent will be able to re-declare this call.
           </Alert>
         )}
 
@@ -402,7 +425,22 @@ const CallDeclarationApprovalDialog = ({ open, onClose, declaration, onDeclarati
       </DialogContent>
 
       <DialogActions sx={{ px: 3, py: 2 }}>
-        {isPending ? (
+        {showResetConfirm ? (
+          <>
+            <Button onClick={() => setShowResetConfirm(false)} disabled={loading}>
+              Cancel
+            </Button>
+            <Button
+              variant="contained"
+              color="error"
+              onClick={handleReset}
+              disabled={loading}
+              startIcon={loading ? <CircularProgress size={16} /> : <ResetIcon />}
+            >
+              Confirm Reset
+            </Button>
+          </>
+        ) : isPending ? (
           showRejectionInput ? (
             <>
               <Button
@@ -423,6 +461,17 @@ const CallDeclarationApprovalDialog = ({ open, onClose, declaration, onDeclarati
             </>
           ) : (
             <>
+              {isAdmin && onReset && (
+                <Button
+                  color="error"
+                  onClick={() => setShowResetConfirm(true)}
+                  disabled={loading}
+                  startIcon={<ResetIcon />}
+                  sx={{ mr: 'auto' }}
+                >
+                  Reset
+                </Button>
+              )}
               <Button onClick={handleClose} disabled={loading}>
                 Close
               </Button>
@@ -447,9 +496,22 @@ const CallDeclarationApprovalDialog = ({ open, onClose, declaration, onDeclarati
             </>
           )
         ) : (
-          <Button onClick={handleClose}>
-            Close
-          </Button>
+          <>
+            {isAdmin && onReset && (declaration.status === 'approved' || declaration.status === 'rejected') && (
+              <Button
+                color="error"
+                onClick={() => setShowResetConfirm(true)}
+                disabled={loading}
+                startIcon={<ResetIcon />}
+                sx={{ mr: 'auto' }}
+              >
+                Reset
+              </Button>
+            )}
+            <Button onClick={handleClose}>
+              Close
+            </Button>
+          </>
         )}
       </DialogActions>
     </Dialog>

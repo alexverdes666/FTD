@@ -280,6 +280,67 @@ exports.getDepositCalls = async (req, res, next) => {
         .lean();
     }
 
+    // Attach pending/approved AgentCallDeclarations to each deposit call.
+    // Many declarations lack depositCallId, so match by lead + orderId instead.
+    const dcIds = depositCalls.map((dc) => dc._id);
+    const leadIds = [...new Set(depositCalls.map((dc) => (dc.leadId?._id || dc.leadId).toString()))];
+    const orderIds = depositCalls.map((dc) => dc.orderId?._id || dc.orderId).filter(Boolean);
+
+    const declarations = await AgentCallDeclaration.find({
+      isActive: true,
+      callCategory: "ftd",
+      callType: { $ne: "deposit" },
+      $or: [
+        { depositCallId: { $in: dcIds } },
+        { lead: { $in: leadIds }, orderId: { $in: orderIds } },
+      ],
+    })
+      .populate("agent", "fullName email fourDigitCode")
+      .populate("lead", "firstName lastName newEmail newPhone")
+      .populate("reviewedBy", "fullName email")
+      .populate("affiliateManager", "fullName email")
+      .lean();
+
+    // Build lookup maps for matching declarations -> deposit calls
+    const dcByDepositCallId = {};
+    const dcByLeadOrder = {};
+    for (const dc of depositCalls) {
+      const dcId = dc._id.toString();
+      dcByDepositCallId[dcId] = dc;
+      const leadId = (dc.leadId?._id || dc.leadId)?.toString();
+      const orderId = (dc.orderId?._id || dc.orderId)?.toString();
+      if (leadId && orderId) {
+        dcByLeadOrder[`${leadId}_${orderId}`] = dc;
+      }
+    }
+
+    // Build per-depositCall, per-callNumber map
+    const declMap = {};
+    for (const decl of declarations) {
+      const callNum = CALL_TYPE_TO_CALL_NUMBER[decl.callType];
+      if (!callNum) continue;
+
+      // Resolve which deposit call this declaration belongs to
+      let targetDcId = null;
+      if (decl.depositCallId && dcByDepositCallId[decl.depositCallId.toString()]) {
+        targetDcId = decl.depositCallId.toString();
+      } else if (decl.lead && decl.orderId) {
+        const leadId = (decl.lead._id || decl.lead).toString();
+        const orderId = decl.orderId.toString();
+        const matchedDc = dcByLeadOrder[`${leadId}_${orderId}`];
+        if (matchedDc) targetDcId = matchedDc._id.toString();
+      }
+      if (!targetDcId) continue;
+
+      if (!declMap[targetDcId]) declMap[targetDcId] = {};
+      declMap[targetDcId][callNum] = decl;
+    }
+
+    // Attach to each depositCall
+    for (const dc of depositCalls) {
+      dc.callDeclarations = declMap[dc._id.toString()] || {};
+    }
+
     res.status(200).json({
       success: true,
       data: depositCalls,

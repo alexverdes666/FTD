@@ -63,6 +63,7 @@ import depositCallsService from '../services/depositCallsService';
 import api from '../services/api';
 import toast from 'react-hot-toast';
 import { formatPhoneWithCountryCode } from '../utils/phoneUtils';
+import CallDeclarationApprovalDialog from '../components/CallDeclarationApprovalDialog';
 
 // Call status colors
 const getStatusColor = (status) => {
@@ -90,7 +91,7 @@ const formatDateTime = (date) => {
 
 
 // Call Cell Component
-const CallCell = ({ call, callNumber, depositCall, onSchedule, onMarkDone, onApprove, onReject, onMarkAnswered, onMarkRejected, isAdmin, isAM, isAgent }) => {
+const CallCell = ({ call, callNumber, depositCall, declaration, onSchedule, onMarkDone, onApprove, onReject, onMarkAnswered, onMarkRejected, onViewDeclaration, isAdmin, isAM, isAgent }) => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [expectedDate, setExpectedDate] = useState(call?.expectedDate ? new Date(call.expectedDate) : null);
   const [notes, setNotes] = useState('');
@@ -118,7 +119,17 @@ const CallCell = ({ call, callNumber, depositCall, onSchedule, onMarkDone, onApp
   return (
     <TableCell sx={{ p: '2px 4px' }}>
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: '2px', alignItems: 'center', minWidth: 48 }}>
-        {call?.status === 'pending' ? (
+        {call?.status === 'pending' && declaration?.status === 'pending' ? (
+          <Tooltip title="Agent declared this call — click to review">
+            <Chip
+              label="Declared"
+              size="small"
+              color="warning"
+              onClick={() => onViewDeclaration(declaration)}
+              sx={{ fontSize: '0.5rem', height: 15, cursor: 'pointer', '& .MuiChip-label': { px: 0.5 } }}
+            />
+          </Tooltip>
+        ) : call?.status === 'pending' ? (
           <Button
             size="small"
             variant="outlined"
@@ -199,7 +210,13 @@ const CallCell = ({ call, callNumber, depositCall, onSchedule, onMarkDone, onApp
           </Tooltip>
         ) : call?.status === 'completed' ? (
           <Tooltip title={call.approvedAt ? formatDateTime(call.approvedAt) : formatDateTime(call.doneDate)}>
-            <Chip label="Approved" size="small" color="success" sx={{ fontSize: '0.5rem', height: 15, '& .MuiChip-label': { px: 0.5 } }} />
+            <Chip
+              label="Approved"
+              size="small"
+              color="success"
+              onClick={declaration ? () => onViewDeclaration(declaration) : undefined}
+              sx={{ fontSize: '0.5rem', height: 15, cursor: declaration ? 'pointer' : 'default', '& .MuiChip-label': { px: 0.5 } }}
+            />
           </Tooltip>
         ) : (
           <Typography sx={{ fontSize: '0.55rem', color: 'text.secondary' }}>-</Typography>
@@ -264,6 +281,7 @@ const DepositCallsPage = () => {
   const [depositCalls, setDepositCalls] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [selectedDeclaration, setSelectedDeclaration] = useState(null);
   
   // Filters
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -1063,12 +1081,14 @@ const DepositCallsPage = () => {
                             call={dc[`call${num}`]}
                             callNumber={num}
                             depositCall={dc}
+                            declaration={dc.callDeclarations?.[num] || null}
                             onSchedule={handleScheduleCall}
                             onMarkDone={handleMarkDone}
                             onApprove={handleApproveCall}
                             onReject={handleRejectCall}
                             onMarkAnswered={handleMarkAnswered}
                             onMarkRejected={handleMarkRejected}
+                            onViewDeclaration={setSelectedDeclaration}
                             isAdmin={isAdmin}
                             isAM={isAM}
                             isAgent={isAgent}
@@ -1530,6 +1550,24 @@ const DepositCallsPage = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Call Declaration Approval Dialog */}
+      <CallDeclarationApprovalDialog
+        open={!!selectedDeclaration}
+        declaration={selectedDeclaration}
+        onClose={() => setSelectedDeclaration(null)}
+        onDeclarationUpdated={() => {
+          setSelectedDeclaration(null);
+          fetchDepositCalls();
+        }}
+        isAdmin={isAdmin}
+        onReset={async (declarationId) => {
+          await api.put(`/call-declarations/${declarationId}/reset`);
+          toast.success('Declaration reset successfully');
+          setSelectedDeclaration(null);
+          fetchDepositCalls();
+        }}
+      />
     </Box>
   );
 };

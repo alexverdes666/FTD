@@ -56,6 +56,31 @@ const getConfirmedDepositCallsForLead = async (leadId) => {
   return { count: depositCalls.length, depositCalls };
 };
 
+/**
+ * Agent-scoped variant: only returns confirmed deposit calls where the agent is assigned.
+ * Used for call declaration logic so agents can only declare against their own orders.
+ */
+const getConfirmedDepositCallsForAgent = async (leadId, agentId) => {
+  let depositCalls = await DepositCall.find({
+    leadId,
+    depositConfirmed: true,
+    assignedAgent: agentId,
+  }).select("orderId ftdEmail ftdName createdAt");
+
+  const leadDoc = await Lead.findById(leadId).select("newEmail");
+  if (leadDoc?.newEmail) {
+    const emailMatches = await DepositCall.find({
+      ftdEmail: leadDoc.newEmail,
+      depositConfirmed: true,
+      assignedAgent: agentId,
+      _id: { $nin: depositCalls.map((dc) => dc._id) },
+    }).select("orderId ftdEmail ftdName createdAt");
+    depositCalls = depositCalls.concat(emailMatches);
+  }
+
+  return { count: depositCalls.length, depositCalls };
+};
+
 // Sequential call type ordering: each type requires the predecessor to be declared first
 const CALL_TYPE_SEQUENCE = [
   "deposit",
@@ -206,7 +231,8 @@ const fetchAgentCDRCalls = async (req, res) => {
   try {
     const { agentId } = req.params;
     const months = parseInt(req.query.months) || 3;
-    const { leadPhone, leadEmail } = req.query;
+    const { leadPhone, leadEmail, includeDeclared } = req.query;
+    const showDeclared = includeDeclared === "true";
 
     // Get the agent's fourDigitCode
     const agent = await User.findById(agentId).select("fourDigitCode fullName");
@@ -226,49 +252,76 @@ const fetchAgentCDRCalls = async (req, res) => {
     const declaredCalls = await AgentCallDeclaration.find({
       agent: agentId,
       isActive: true,
-    }).select("cdrCallId status");
+    }).select("cdrCallId status callType");
 
     const declarationMap = new Map();
     for (const d of declaredCalls) {
-      declarationMap.set(d.cdrCallId, d.status);
+      declarationMap.set(d.cdrCallId, { status: d.status, callType: d.callType });
     }
 
     let enrichedCalls = parsedCalls
-      .filter((call) => !declarationMap.has(call.cdrCallId))
-      .map((call) => ({
-        ...call,
-        email: call.email && call.email.startsWith(agentCode)
-          ? call.email.slice(agentCode.length)
-          : call.email,
-        destinationNumber: call.destinationNumber && call.destinationNumber.startsWith(agentCode)
-          ? call.destinationNumber.slice(agentCode.length)
-          : call.destinationNumber,
-        formattedDuration: cdrService.formatDuration(call.callDuration),
-      }));
+      .filter((call) => showDeclared || !declarationMap.has(call.cdrCallId))
+      .map((call) => {
+        const decl = declarationMap.get(call.cdrCallId);
+        return {
+          ...call,
+          email: call.email && call.email.startsWith(agentCode)
+            ? call.email.slice(agentCode.length)
+            : call.email,
+          destinationNumber: call.destinationNumber && call.destinationNumber.startsWith(agentCode)
+            ? call.destinationNumber.slice(agentCode.length)
+            : call.destinationNumber,
+          formattedDuration: cdrService.formatDuration(call.callDuration),
+          ...(showDeclared && decl ? { declarationStatus: decl.status, declaredCallType: decl.callType } : {}),
+        };
+      });
 
     // Filter by lead phone/email when provided (used during deposit confirmation)
+    // When includeDeclared is true, sort matching calls first instead of filtering
     if (leadPhone || leadEmail) {
-      const cleanLeadPhone = leadPhone ? leadPhone.replace(/[\s\-\(\)\+]/g, "") : "";
-      const leadPhoneSuffix = cleanLeadPhone.length >= 7 ? cleanLeadPhone.slice(-10) : cleanLeadPhone;
+      // Strip everything except digits for phone comparison
+      const cleanLeadPhone = leadPhone ? leadPhone.replace(/[^\d]/g, "") : "";
       const normalizedLeadEmail = leadEmail ? leadEmail.trim().toLowerCase() : "";
 
-      enrichedCalls = enrichedCalls.filter((call) => {
-        // Match by phone suffix (last 10 digits)
-        if (leadPhoneSuffix && call.destinationNumber) {
-          const cleanDst = call.destinationNumber.replace(/[\s\-\(\)\+]/g, "");
-          const dstSuffix = cleanDst.length >= 7 ? cleanDst.slice(-10) : cleanDst;
-          if (dstSuffix && leadPhoneSuffix && dstSuffix === leadPhoneSuffix) {
-            return true;
-          }
+      // Phone matching: strip country code prefix (1-3 digits) and compare core number.
+      // Phones can appear as 3325xxx, +3325xxx, 33 25xxx etc. — all the same number.
+      // Strategy: strip all non-digits, then check if one is a suffix of the other
+      // with at least 7 digits overlap to avoid false positives.
+      const phonesMatch = (phoneA, phoneB) => {
+        if (!phoneA || !phoneB) return false;
+        const a = phoneA.replace(/[^\d]/g, "");
+        const b = phoneB.replace(/[^\d]/g, "");
+        if (a.length < 7 || b.length < 7) return false;
+        // Check if either is a suffix of the other (handles different prefix lengths)
+        return a.endsWith(b.slice(-Math.min(b.length, 10))) ||
+               b.endsWith(a.slice(-Math.min(a.length, 10)));
+      };
+
+      const matchesLead = (call) => {
+        // Try phone match against lineNumber, email, and destinationNumber
+        // CDR systems store the dialed number in different fields depending on the setup
+        // lineNumber is what agents see as "Phone Number" in the call bonuses table
+        if (cleanLeadPhone) {
+          if (phonesMatch(cleanLeadPhone, call.lineNumber)) return true;
+          if (phonesMatch(cleanLeadPhone, call.email)) return true;
+          if (phonesMatch(cleanLeadPhone, call.destinationNumber)) return true;
         }
-        // Match by email (case-insensitive)
+        // Try email match
         if (normalizedLeadEmail && call.email) {
-          if (call.email.trim().toLowerCase() === normalizedLeadEmail) {
-            return true;
-          }
+          if (call.email.trim().toLowerCase() === normalizedLeadEmail) return true;
         }
         return false;
-      });
+      };
+
+      if (showDeclared) {
+        // When showing all calls, sort lead-matching calls first instead of filtering
+        enrichedCalls.forEach((call) => {
+          call.matchesLead = matchesLead(call);
+        });
+        enrichedCalls.sort((a, b) => (b.matchesLead ? 1 : 0) - (a.matchesLead ? 1 : 0));
+      } else {
+        enrichedCalls = enrichedCalls.filter(matchesLead);
+      }
     }
 
     res.json({
@@ -408,12 +461,13 @@ const createDeclaration = async (req, res) => {
         });
       }
 
-      // Get confirmed deposit orders for this lead (used for order validation and auto-assignment)
-      const { count: orderCount, depositCalls } = await getConfirmedDepositCallsForLead(leadId);
+      // Get confirmed deposit orders for this lead assigned to this agent
+      const { count: orderCount, depositCalls } = await getConfirmedDepositCallsForAgent(leadId, userId);
 
-      // Count existing declarations for this call type (for duplicate prevention per order)
+      // Count existing declarations for this call type by this agent (for duplicate prevention per order)
       const existingOfType = await AgentCallDeclaration.find({
         lead: leadId,
+        agent: userId,
         callType,
         status: { $in: ["approved", "pending"] },
         isActive: true,
@@ -983,6 +1037,9 @@ const getDisabledCallTypes = async (req, res) => {
   try {
     const { leadId } = req.params;
     const { depositCallId } = req.query;
+    const userId = req.user.id;
+    const userRole = req.user.role;
+    const isAgent = userRole === "agent";
 
     if (!leadId) {
       return res.status(400).json({
@@ -994,8 +1051,16 @@ const getDisabledCallTypes = async (req, res) => {
     // Order-specific mode: when a depositCallId is provided, resolve orderId
     // and check declarations for that specific order/depositCall
     if (depositCallId) {
-      const dc = await DepositCall.findById(depositCallId).select("orderId");
+      const dc = await DepositCall.findById(depositCallId).select("orderId assignedAgent");
       const orderId = dc?.orderId || null;
+
+      // Agents can only check deposit calls assigned to them
+      if (isAgent && dc?.assignedAgent && dc.assignedAgent.toString() !== userId) {
+        return res.status(403).json({
+          success: false,
+          message: "This deposit call is not assigned to you",
+        });
+      }
 
       // Match declarations by orderId if it exists, or by depositCallId for custom records
       const matchQuery = {
@@ -1004,6 +1069,9 @@ const getDisabledCallTypes = async (req, res) => {
         isActive: true,
         callCategory: "ftd",
       };
+      if (isAgent) {
+        matchQuery.agent = userId;
+      }
       if (orderId) {
         matchQuery.orderId = orderId;
       } else {
@@ -1049,22 +1117,36 @@ const getDisabledCallTypes = async (req, res) => {
       });
     }
 
-    // Lead-wide mode (no orderId): existing counter-based logic
-    // 1. Count confirmed deposit orders for this lead
-    const { count: orderCount } = await getConfirmedDepositCallsForLead(leadId);
+    // Lead-wide mode (no orderId): counter-based logic
+    // 1. Count confirmed deposit orders for this lead (agent-scoped for agents)
+    const { count: orderCount } = isAgent
+      ? await getConfirmedDepositCallsForAgent(leadId, userId)
+      : await getConfirmedDepositCallsForLead(leadId);
 
     // 2. Count existing declarations per call type (approved + pending, active, ftd)
-    const existingDeclarations = await AgentCallDeclaration.find({
+    const declarationQuery = {
       lead: leadId,
       status: { $in: ["approved", "pending"] },
       isActive: true,
       callCategory: "ftd",
-    }).select("callType");
+    };
+    if (isAgent) {
+      declarationQuery.agent = userId;
+    }
+    const existingDeclarations = await AgentCallDeclaration.find(declarationQuery)
+      .select("callType depositCallId");
 
     const declarationCounts = {};
+    const orderDeclaredTypes = {};
     for (const decl of existingDeclarations) {
       if (decl.callType) {
         declarationCounts[decl.callType] = (declarationCounts[decl.callType] || 0) + 1;
+      }
+      // Build per-depositCall declared types map
+      if (decl.depositCallId && decl.callType) {
+        const dcId = decl.depositCallId.toString();
+        if (!orderDeclaredTypes[dcId]) orderDeclaredTypes[dcId] = [];
+        orderDeclaredTypes[dcId].push(decl.callType);
       }
     }
 
@@ -1101,6 +1183,7 @@ const getDisabledCallTypes = async (req, res) => {
         disabledReasons,
         orderCount,
         callTypeProgress,
+        orderDeclaredTypes,
       },
     });
   } catch (error) {
@@ -1523,6 +1606,8 @@ const streamRecording = async (req, res) => {
 const getLeadOrders = async (req, res) => {
   try {
     const { leadId } = req.params;
+    const userId = req.user.id;
+    const userRole = req.user.role;
 
     if (!leadId) {
       return res.status(400).json({
@@ -1531,10 +1616,14 @@ const getLeadOrders = async (req, res) => {
       });
     }
 
+    // Agents only see deposit calls assigned to them
+    const agentFilter = userRole === "agent" ? { assignedAgent: userId } : {};
+
     // Find all DepositCall records for this lead with confirmed deposits
     const depositCalls = await DepositCall.find({
       leadId,
       depositConfirmed: true,
+      ...agentFilter,
     })
       .select("orderId clientBrokerId ftdEmail ftdName createdAt isCustomRecord customNote customDate")
       .populate("orderId", "createdAt plannedDate")
@@ -1548,6 +1637,7 @@ const getLeadOrders = async (req, res) => {
       emailMatches = await DepositCall.find({
         ftdEmail: leadDoc.newEmail,
         depositConfirmed: true,
+        ...agentFilter,
         _id: { $nin: depositCalls.map((dc) => dc._id) },
       })
         .select("orderId clientBrokerId ftdEmail ftdName createdAt isCustomRecord customNote customDate")
@@ -1583,6 +1673,86 @@ const getLeadOrders = async (req, res) => {
   }
 };
 
+/**
+ * Reset (undo) a call declaration (admin only)
+ * PUT /call-declarations/:id/reset
+ * Reverses the AM table expense, resets the DepositCall slot, and soft-deletes the declaration.
+ */
+const resetDeclaration = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const declaration = await AgentCallDeclaration.findById(id);
+    if (!declaration || !declaration.isActive) {
+      return res.status(404).json({
+        success: false,
+        message: "Declaration not found or already inactive",
+      });
+    }
+
+    // 1. Reverse AM table expense (only matters for approved declarations)
+    if (declaration.status === "approved") {
+      try {
+        await removeCallExpenseFromAffiliateManager(declaration);
+      } catch (expenseErr) {
+        console.error("Error reversing AM expense during reset:", expenseErr);
+      }
+
+      // 2. Reset DepositCall slot back to pending
+      const { lead, callType, callCategory, depositCallId: declDepositCallId } = declaration;
+
+      if (callCategory !== "filler" && callType !== "deposit") {
+        const callNumber = CALL_TYPE_TO_CALL_NUMBER[callType];
+        if (callNumber) {
+          const depositCall = await findDepositCallForLead(lead);
+          if (depositCall) {
+            const callField = `call${callNumber}`;
+            if (depositCall[callField].status !== "pending") {
+              depositCall[callField].status = "pending";
+              depositCall[callField].expectedDate = null;
+              depositCall[callField].doneDate = null;
+              depositCall[callField].markedBy = null;
+              depositCall[callField].markedAt = null;
+              depositCall[callField].approvedBy = null;
+              depositCall[callField].approvedAt = null;
+              depositCall[callField].notes = "";
+              await depositCall.save();
+              console.log(`Reset DepositCall ${depositCall._id} call${callNumber} to pending`);
+            }
+          }
+        }
+      }
+
+      // For deposit type declarations, clear the reference on the DepositCall record
+      if (callType === "deposit" && declDepositCallId) {
+        const depositCall = await DepositCall.findById(declDepositCallId);
+        if (depositCall && depositCall.depositCallDeclaration?.toString() === id) {
+          depositCall.depositCallDeclaration = null;
+          await depositCall.save();
+        }
+      }
+    }
+
+    // 3. Soft-delete the declaration
+    declaration.isActive = false;
+    await declaration.save();
+
+    console.log(`Declaration ${id} reset by admin ${req.user.id}`);
+
+    res.json({
+      success: true,
+      message: "Declaration reset successfully",
+    });
+  } catch (error) {
+    console.error("Error resetting declaration:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to reset declaration",
+      error: error.message,
+    });
+  }
+};
+
 module.exports = {
   fetchCDRCalls,
   fetchAgentCDRCalls,
@@ -1604,4 +1774,5 @@ module.exports = {
   getLeadOrders,
   addCallExpenseToAffiliateManager,
   removeCallExpenseFromAffiliateManager,
+  resetDeclaration,
 };

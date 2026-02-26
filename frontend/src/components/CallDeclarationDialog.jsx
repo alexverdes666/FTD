@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -68,6 +68,7 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
   const [disabledReasons, setDisabledReasons] = useState({});
   const [orderCount, setOrderCount] = useState(0);
   const [callTypeProgress, setCallTypeProgress] = useState({});
+  const [orderDeclaredTypes, setOrderDeclaredTypes] = useState({});
 
   // Order selection state
   const [orders, setOrders] = useState([]);
@@ -154,7 +155,7 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
     fetchOrders();
   }, [leadId]);
 
-  // Fetch disabled call types when lead or selected order changes
+  // Fetch disabled call types when lead changes (lead-wide mode for agent-scoped counts)
   useEffect(() => {
     const fetchDisabledTypes = async () => {
       if (!leadId) {
@@ -162,21 +163,22 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
         setDisabledReasons({});
         setOrderCount(0);
         setCallTypeProgress({});
+        setOrderDeclaredTypes({});
         return;
       }
-      // Pass orderId for order-specific disabled types when an order is selected
-      const result = await getDisabledCallTypes(leadId, selectedOrderId || undefined);
+      const result = await getDisabledCallTypes(leadId);
       setDisabledCallTypes(result.disabledCallTypes || []);
       setDisabledReasons(result.disabledReasons || {});
       setOrderCount(result.orderCount || 0);
       setCallTypeProgress(result.callTypeProgress || {});
+      setOrderDeclaredTypes(result.orderDeclaredTypes || {});
       // Reset callType if it became disabled
       if (callType && (result.disabledCallTypes || []).includes(callType)) {
         setCallType('');
       }
     };
     fetchDisabledTypes();
-  }, [leadId, selectedOrderId]);
+  }, [leadId]);
 
   // Reset form when dialog opens/closes
   useEffect(() => {
@@ -193,11 +195,35 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
       setDisabledReasons({});
       setOrderCount(0);
       setCallTypeProgress({});
+      setOrderDeclaredTypes({});
       setOrders([]);
       setSelectedOrderId('');
       setOrdersLoading(false);
     }
   }, [open]);
+
+  // Filter orders to only show ones that don't already have the selected call type declared
+  const availableOrders = useMemo(() => {
+    if (!callType) return orders;
+    return orders.filter(order => {
+      const declared = orderDeclaredTypes[order.depositCallId] || [];
+      return !declared.includes(callType);
+    });
+  }, [orders, callType, orderDeclaredTypes]);
+
+  // Auto-select order when only 1 available for this call type
+  useEffect(() => {
+    if (callCategory !== 'ftd' || !callType) return;
+    if (availableOrders.length === 1) {
+      setSelectedOrderId(availableOrders[0].depositCallId);
+    } else if (selectedOrderId) {
+      // Check if currently selected order is still available
+      const stillAvailable = availableOrders.some(o => o.depositCallId === selectedOrderId);
+      if (!stillAvailable) {
+        setSelectedOrderId('');
+      }
+    }
+  }, [callType, availableOrders, callCategory]);
 
   // Calculate bonus preview when call type or category changes
   useEffect(() => {
@@ -249,7 +275,7 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
       setError('Please select a lead');
       return;
     }
-    if (callCategory === 'ftd' && orders.length > 1 && !selectedOrderId) {
+    if (callCategory === 'ftd' && availableOrders.length > 1 && !selectedOrderId) {
       setError('Please select an order for this declaration');
       return;
     }
@@ -398,70 +424,28 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
           </ToggleButtonGroup>
         </Box>
 
-        {/* Call Type - only shown for FTD calls */}
+        {/* Call Type and Order - only shown for FTD calls */}
         {callCategory === 'ftd' && (
           <>
             {/* Order counter info */}
-            {leadId && orders.length > 1 && (
-              <Alert severity="info" sx={{ mb: 2 }}>
-                This lead has <strong>{orders.length}</strong> confirmed deposit orders.
-                {' '}Please select which order this call is for.
-              </Alert>
-            )}
-            {leadId && orders.length === 1 && (
-              <Alert severity="info" sx={{ mb: 2 }}>
-                This lead has <strong>1</strong> confirmed deposit order. Order auto-selected.
-              </Alert>
-            )}
             {leadId && !ordersLoading && orders.length === 0 && (
               <Alert severity="info" sx={{ mb: 2 }}>
                 No confirmed deposit orders found yet for this lead. You can still declare the call.
               </Alert>
             )}
-
-            {/* Order Selection - shown when multiple orders exist */}
+            {leadId && orders.length === 1 && (
+              <Alert severity="info" sx={{ mb: 2 }}>
+                This lead has <strong>1</strong> confirmed deposit order assigned to you. Order auto-selected.
+              </Alert>
+            )}
             {leadId && orders.length > 1 && (
-              <TextField
-                select
-                fullWidth
-                label="Select Order *"
-                value={selectedOrderId}
-                onChange={(e) => setSelectedOrderId(e.target.value)}
-                disabled={loading || ordersLoading}
-                sx={{ mb: 2 }}
-                helperText="Choose which order this call declaration is for"
-                InputProps={{
-                  startAdornment: ordersLoading ? (
-                    <CircularProgress size={16} sx={{ mr: 1 }} />
-                  ) : null,
-                }}
-              >
-                {orders.map((order) => {
-                  const shortId = order.orderId?.toString().slice(-8) || '?';
-                  const planned = order.plannedDate
-                    ? new Date(order.plannedDate).toLocaleDateString()
-                    : order.orderCreatedAt
-                      ? new Date(order.orderCreatedAt).toLocaleDateString()
-                      : 'No date';
-                  const broker = order.brokerName || 'Unknown broker';
-                  const label = order.isCustomRecord && order.customNote
-                    ? order.customNote
-                    : `Order ...${shortId}`;
-                  return (
-                    <MenuItem key={order.depositCallId} value={order.depositCallId}>
-                      <Box display="flex" justifyContent="space-between" width="100%" alignItems="center">
-                        <span>{label}</span>
-                        <Box display="flex" alignItems="center" gap={1}>
-                          <Chip label={planned} size="small" variant="outlined" />
-                          <Chip label={broker} size="small" color="primary" variant="outlined" />
-                        </Box>
-                      </Box>
-                    </MenuItem>
-                  );
-                })}
-              </TextField>
+              <Alert severity="info" sx={{ mb: 2 }}>
+                This lead has <strong>{orders.length}</strong> confirmed deposit orders assigned to you.
+                {' '}Select a call type first, then pick the order.
+              </Alert>
             )}
 
+            {/* Call Type Selection (shown first so order dropdown filters by it) */}
             <TextField
               select
               fullWidth
@@ -481,7 +465,7 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
                   if (type.value === 'deposit') {
                     disabledText = ' (AM declares deposit call)';
                   } else if (reason === 'fully_declared') {
-                    disabledText = ' (already declared for this order)';
+                    disabledText = ' (fully declared for all your orders)';
                   }
                 }
                 return (
@@ -509,6 +493,54 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
                 );
               })}
             </TextField>
+
+            {/* Order Selection - shown when call type is selected and multiple orders are available */}
+            {leadId && callType && availableOrders.length > 1 && (
+              <TextField
+                select
+                fullWidth
+                label="Select Order *"
+                value={selectedOrderId}
+                onChange={(e) => setSelectedOrderId(e.target.value)}
+                disabled={loading || ordersLoading}
+                sx={{ mb: 2 }}
+                helperText="Choose which order this call declaration is for"
+                InputProps={{
+                  startAdornment: ordersLoading ? (
+                    <CircularProgress size={16} sx={{ mr: 1 }} />
+                  ) : null,
+                }}
+              >
+                {availableOrders.map((order) => {
+                  const shortId = order.orderId?.toString().slice(-8) || '?';
+                  const planned = order.plannedDate
+                    ? new Date(order.plannedDate).toLocaleDateString()
+                    : order.orderCreatedAt
+                      ? new Date(order.orderCreatedAt).toLocaleDateString()
+                      : 'No date';
+                  const broker = order.brokerName || 'Unknown broker';
+                  const label = order.isCustomRecord && order.customNote
+                    ? order.customNote
+                    : `Order ...${shortId}`;
+                  return (
+                    <MenuItem key={order.depositCallId} value={order.depositCallId}>
+                      <Box display="flex" justifyContent="space-between" width="100%" alignItems="center">
+                        <span>{label}</span>
+                        <Box display="flex" alignItems="center" gap={1}>
+                          <Chip label={planned} size="small" variant="outlined" />
+                          <Chip label={broker} size="small" color="primary" variant="outlined" />
+                        </Box>
+                      </Box>
+                    </MenuItem>
+                  );
+                })}
+              </TextField>
+            )}
+            {leadId && callType && availableOrders.length === 1 && orders.length > 1 && (
+              <Alert severity="success" sx={{ mb: 2 }}>
+                Order auto-selected — only 1 order remaining for this call type.
+              </Alert>
+            )}
           </>
         )}
 
@@ -709,7 +741,7 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
           variant="contained"
           color="primary"
           onClick={handleSubmit}
-          disabled={loading || (callCategory === 'ftd' && !callType) || !affiliateManagerId || !leadId || (callCategory === 'ftd' && orders.length > 1 && !selectedOrderId)}
+          disabled={loading || (callCategory === 'ftd' && !callType) || !affiliateManagerId || !leadId || (callCategory === 'ftd' && availableOrders.length > 1 && !selectedOrderId)}
           startIcon={loading ? <CircularProgress size={16} /> : <SendIcon />}
         >
           {loading ? 'Submitting...' : 'Submit Declaration'}

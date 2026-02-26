@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const { protect, isManager } = require("../middleware/auth");
+const { protect, isManager, isAdmin } = require("../middleware/auth");
 const {
   fetchCDRCalls,
   fetchAgentCDRCalls,
@@ -20,6 +20,7 @@ const {
   streamRecording,
   getDisabledCallTypes,
   getLeadOrders,
+  resetDeclaration,
 } = require("../controllers/agentCallDeclarations");
 
 // All routes require authentication
@@ -69,6 +70,9 @@ router.get("/agent/:id/monthly", getMonthlyTotals);
 
 // Create a new declaration (agents only create their own)
 router.post("/", createDeclaration);
+
+// Reset a declaration (admin only - reverses expense, resets slot, soft-deletes)
+router.put("/:id/reset", isAdmin, resetDeclaration);
 
 // Approve a declaration (managers only)
 router.patch("/:id/approve", isManager, approveDeclaration);

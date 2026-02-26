@@ -83,8 +83,8 @@ const UndeclaredCallsTable = ({
   }
 
   return (
-    <TableContainer component={Paper} variant="outlined">
-      <Table size="small">
+    <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 400, overflow: 'auto' }}>
+      <Table stickyHeader size="small">
         <TableHead>
           <TableRow>
             <TableCell>Alias</TableCell>
