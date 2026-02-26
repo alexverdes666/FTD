@@ -21,10 +21,13 @@ export const fetchCDRCalls = async (months = 3) => {
  * @param {string} agentId - The agent's user ID
  * @param {number} months - Number of months to fetch (default 3)
  */
-export const fetchAgentCDRCalls = async (agentId, months = 3) => {
+export const fetchAgentCDRCalls = async (agentId, months = 3, leadPhone = null, leadEmail = null) => {
   try {
+    const params = { months };
+    if (leadPhone) params.leadPhone = leadPhone;
+    if (leadEmail) params.leadEmail = leadEmail;
     const response = await api.get(`/call-declarations/cdr/${agentId}`, {
-      params: { months },
+      params,
     });
     return response.data.data;
   } catch (error) {

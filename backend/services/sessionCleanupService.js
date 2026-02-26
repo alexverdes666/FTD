@@ -153,15 +153,19 @@ class SessionCleanupService {
     try {
       console.log(`🧹 Cleaning up sessions older than ${daysOld} days...`);
       const cutoffDate = new Date(Date.now() - (daysOld * 24 * 60 * 60 * 1000));
-      const leadsWithExpiredSessions = await Lead.find({
+      const BATCH_SIZE = 500;
+      let cleanedLeads = 0;
+      let totalSessionsRemoved = 0;
+      let totalProcessed = 0;
+      const query = {
         $or: [
           { 'browserSession.createdAt': { $lt: cutoffDate } },
           { 'sessionHistory.createdAt': { $lt: cutoffDate } }
         ]
-      });
-      let cleanedLeads = 0;
-      let totalSessionsRemoved = 0;
-      for (const lead of leadsWithExpiredSessions) {
+      };
+      const cursor = Lead.find(query).select('browserSession sessionHistory').cursor({ batchSize: BATCH_SIZE });
+      for await (const lead of cursor) {
+        totalProcessed++;
         const initialSessionCount = lead.sessionHistory.length + (lead.browserSession?.sessionId ? 1 : 0);
         lead.clearExpiredSessions(daysOld);
         await lead.save();
@@ -173,7 +177,7 @@ class SessionCleanupService {
         }
       }
       const stats = {
-        leadsProcessed: leadsWithExpiredSessions.length,
+        leadsProcessed: totalProcessed,
         leadsCleaned: cleanedLeads,
         totalSessionsRemoved,
         daysThreshold: daysOld,
@@ -191,13 +195,15 @@ class SessionCleanupService {
       console.log('🧹 Cleaning up orphaned session data...');
       let totalSessionsRemoved = 0;
       let leadsProcessed = 0;
-      const leadsWithSessions = await Lead.find({
+      const BATCH_SIZE = 500;
+      const query = {
         $or: [
           { 'browserSession.sessionId': { $exists: true } },
           { 'sessionHistory.0': { $exists: true } }
         ]
-      });
-      for (const lead of leadsWithSessions) {
+      };
+      const cursor = Lead.find(query).select('browserSession sessionHistory currentSessionId').cursor({ batchSize: BATCH_SIZE });
+      for await (const lead of cursor) {
         let modified = false;
         if (lead.browserSession && (!lead.browserSession.sessionId || !lead.browserSession.createdAt)) {
           lead.browserSession = undefined;
@@ -235,12 +241,14 @@ class SessionCleanupService {
   async enforceSessionLimits() {
     try {
       console.log(`🧹 Enforcing session limits (max ${this.config.maxSessionsPerLead} per lead)...`);
-      const leadsWithManySessions = await Lead.find({
+      const BATCH_SIZE = 500;
+      const query = {
         $expr: { $gt: [{ $size: { $ifNull: ['$sessionHistory', []] } }, this.config.maxSessionsPerLead] }
-      });
+      };
       let leadsProcessed = 0;
       let totalSessionsRemoved = 0;
-      for (const lead of leadsWithManySessions) {
+      const cursor = Lead.find(query).select('sessionHistory').cursor({ batchSize: BATCH_SIZE });
+      for await (const lead of cursor) {
         const sessionCount = lead.sessionHistory.length;
         if (sessionCount > this.config.maxSessionsPerLead) {
           lead.sessionHistory.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));

@@ -857,7 +857,7 @@ const useLeadActions = ({
 
       try {
         const { fetchAgentCDRCalls } = await import("../../services/callDeclarations");
-        const data = await fetchAgentCDRCalls(agentId, 3);
+        const data = await fetchAgentCDRCalls(agentId, 3, lead.newPhone, lead.newEmail);
         setPspDepositDialog((prev) => ({
           ...prev,
           agentCalls: data.calls || [],

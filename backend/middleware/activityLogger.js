@@ -109,7 +109,7 @@ const SKIP_BODY_ROUTES = [
 ];
 
 // Routes to skip logging entirely (noisy endpoints)
-const SKIP_LOG_ROUTES = ["/api/health"];
+const SKIP_LOG_ROUTES = ["/api/health", "/socket.io"];
 
 // Known bot patterns
 const BOT_PATTERNS = [
@@ -472,6 +472,11 @@ const activityLogger = (options = {}) => {
       return next();
     }
 
+    // Skip OPTIONS preflight requests - they don't carry meaningful data
+    if (req.method === "OPTIONS") {
+      return next();
+    }
+
     // Skip GET requests unless explicitly enabled
     if (!logAllMethods && req.method === "GET") {
       return next();
@@ -491,16 +496,27 @@ const activityLogger = (options = {}) => {
     const originalSend = res.send;
     const originalJson = res.json;
     let responseBody = null;
+    const MAX_CAPTURE_SIZE = 10000; // Only capture responses under 10KB to prevent memory bloat
 
-    // Override res.send to capture response
+    // Override res.send to capture response (with size limit)
     res.send = function (body) {
-      responseBody = body;
+      if (body && ((typeof body === 'string' && body.length < MAX_CAPTURE_SIZE) ||
+          (Buffer.isBuffer(body) && body.length < MAX_CAPTURE_SIZE))) {
+        responseBody = body;
+      }
       return originalSend.call(this, body);
     };
 
-    // Override res.json to capture response
+    // Override res.json to capture response (with size limit)
     res.json = function (body) {
-      responseBody = body;
+      try {
+        const size = JSON.stringify(body).length;
+        if (size < MAX_CAPTURE_SIZE) {
+          responseBody = body;
+        }
+      } catch {
+        // Skip capture if serialization fails
+      }
       return originalJson.call(this, body);
     };
 

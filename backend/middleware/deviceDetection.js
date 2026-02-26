@@ -27,6 +27,7 @@ const SKIP_ROUTES = [
   "/api/auth/login", // Already logged by auth system
   "/api/auth/logout",
   "/api/two-factor", // Already logged by 2FA system
+  "/socket.io",
 ];
 
 // Sensitive fields to redact in logs
@@ -199,13 +200,21 @@ const deviceDetectionMiddleware = () => {
 
     const startTime = Date.now();
 
-    // Capture response for logging
+    // Capture response for logging (with size limit to prevent memory bloat)
     const originalJson = res.json;
     let responseBody = null;
     let responseStatusCode = null;
+    const MAX_CAPTURE_SIZE = 10000;
 
     res.json = function (body) {
-      responseBody = body;
+      try {
+        const size = JSON.stringify(body).length;
+        if (size < MAX_CAPTURE_SIZE) {
+          responseBody = body;
+        }
+      } catch {
+        // Skip capture if serialization fails
+      }
       responseStatusCode = res.statusCode;
       return originalJson.call(this, body);
     };

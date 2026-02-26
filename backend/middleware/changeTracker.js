@@ -61,6 +61,7 @@ const SKIP_ROUTES = [
   "/api/chat",
   "/api/notifications/mark-read",
   "/api/notifications/mark-all-read",
+  "/socket.io",
 ];
 
 /**

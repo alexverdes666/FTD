@@ -4611,6 +4611,21 @@ exports.confirmDeposit = async (req, res, next) => {
       });
     }
 
+    // Validate that the selected call's destination matches the lead's phone
+    if (selectedCall.destinationNumber && selectedCall.destinationNumber !== "unknown" && lead.newPhone) {
+      const cleanDst = selectedCall.destinationNumber.replace(/[\s\-\(\)\+]/g, "");
+      const cleanLeadPhone = lead.newPhone.replace(/[\s\-\(\)\+]/g, "");
+      const dstSuffix = cleanDst.length >= 7 ? cleanDst.slice(-10) : cleanDst;
+      const phoneSuffix = cleanLeadPhone.length >= 7 ? cleanLeadPhone.slice(-10) : cleanLeadPhone;
+
+      if (dstSuffix && phoneSuffix && dstSuffix !== phoneSuffix) {
+        return res.status(400).json({
+          success: false,
+          message: `Selected call destination (${selectedCall.destinationNumber}) does not match the lead's phone (${lead.newPhone}). Please select a call that was made to this lead.`,
+        });
+      }
+    }
+
     // Find the order and check if lead is in it
     const Order = require("../models/Order");
     const order = await Order.findById(orderId);

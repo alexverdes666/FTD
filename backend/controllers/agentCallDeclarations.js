@@ -206,6 +206,7 @@ const fetchAgentCDRCalls = async (req, res) => {
   try {
     const { agentId } = req.params;
     const months = parseInt(req.query.months) || 3;
+    const { leadPhone, leadEmail } = req.query;
 
     // Get the agent's fourDigitCode
     const agent = await User.findById(agentId).select("fourDigitCode fullName");
@@ -232,7 +233,7 @@ const fetchAgentCDRCalls = async (req, res) => {
       declarationMap.set(d.cdrCallId, d.status);
     }
 
-    const enrichedCalls = parsedCalls
+    let enrichedCalls = parsedCalls
       .filter((call) => !declarationMap.has(call.cdrCallId))
       .map((call) => ({
         ...call,
@@ -244,6 +245,31 @@ const fetchAgentCDRCalls = async (req, res) => {
           : call.destinationNumber,
         formattedDuration: cdrService.formatDuration(call.callDuration),
       }));
+
+    // Filter by lead phone/email when provided (used during deposit confirmation)
+    if (leadPhone || leadEmail) {
+      const cleanLeadPhone = leadPhone ? leadPhone.replace(/[\s\-\(\)\+]/g, "") : "";
+      const leadPhoneSuffix = cleanLeadPhone.length >= 7 ? cleanLeadPhone.slice(-10) : cleanLeadPhone;
+      const normalizedLeadEmail = leadEmail ? leadEmail.trim().toLowerCase() : "";
+
+      enrichedCalls = enrichedCalls.filter((call) => {
+        // Match by phone suffix (last 10 digits)
+        if (leadPhoneSuffix && call.destinationNumber) {
+          const cleanDst = call.destinationNumber.replace(/[\s\-\(\)\+]/g, "");
+          const dstSuffix = cleanDst.length >= 7 ? cleanDst.slice(-10) : cleanDst;
+          if (dstSuffix && leadPhoneSuffix && dstSuffix === leadPhoneSuffix) {
+            return true;
+          }
+        }
+        // Match by email (case-insensitive)
+        if (normalizedLeadEmail && call.email) {
+          if (call.email.trim().toLowerCase() === normalizedLeadEmail) {
+            return true;
+          }
+        }
+        return false;
+      });
+    }
 
     res.json({
       success: true,
