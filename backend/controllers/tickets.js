@@ -77,9 +77,30 @@ exports.getTickets = async (req, res) => {
       filter.dueDate = { $lte: date };
     }
 
-    // Text search
+    // Text search - use regex for flexible substring matching across all text fields
     if (search) {
-      filter.$text = { $search: search };
+      // Escape special regex chars, then replace whitespace sequences with \s+ so
+      // spaces in the search match newlines/tabs in stored content and vice versa
+      const escapedSearch = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
+      const searchRegex = { $regex: escapedSearch, $options: 'i' };
+      const searchConditions = [
+        { title: searchRegex },
+        { description: searchRegex },
+        { 'comments.message': searchRegex },
+        { 'resolution.resolutionNote': searchRegex },
+        { tags: searchRegex },
+      ];
+
+      // If there's already an $or from role-based filtering, combine with $and
+      if (filter.$or) {
+        filter.$and = [
+          { $or: filter.$or },
+          { $or: searchConditions }
+        ];
+        delete filter.$or;
+      } else {
+        filter.$or = searchConditions;
+      }
     }
 
     // Sort options
