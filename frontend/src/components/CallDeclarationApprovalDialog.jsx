@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -24,7 +24,7 @@ import {
   Person as PersonIcon,
   RestartAlt as ResetIcon,
 } from '@mui/icons-material';
-import { approveDeclaration, rejectDeclaration } from '../services/callDeclarations';
+import { approveDeclaration, rejectDeclaration, fetchRecordingBlob } from '../services/callDeclarations';
 
 const CallDeclarationApprovalDialog = ({ open, onClose, declaration, onDeclarationUpdated, onReset, isAdmin }) => {
   const [loading, setLoading] = useState(false);
@@ -33,6 +33,34 @@ const CallDeclarationApprovalDialog = ({ open, onClose, declaration, onDeclarati
   const [showRejectionInput, setShowRejectionInput] = useState(false);
   const [approvalNotes, setApprovalNotes] = useState('');
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [audioUrl, setAudioUrl] = useState(null);
+  const [audioLoading, setAudioLoading] = useState(false);
+
+  // Load recording when declaration changes
+  useEffect(() => {
+    let objectUrl = null;
+    if (open && declaration?.recordFile) {
+      setAudioLoading(true);
+      setAudioUrl(null);
+      fetchRecordingBlob(declaration.recordFile)
+        .then((url) => {
+          objectUrl = url;
+          setAudioUrl(url);
+        })
+        .catch((err) => {
+          console.error("Failed to load recording:", err);
+        })
+        .finally(() => setAudioLoading(false));
+    } else {
+      setAudioUrl(null);
+    }
+
+    return () => {
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+  }, [open, declaration?.recordFile]);
 
   if (!declaration) return null;
 
@@ -134,6 +162,8 @@ const CallDeclarationApprovalDialog = ({ open, onClose, declaration, onDeclarati
     setShowRejectionInput(false);
     setShowResetConfirm(false);
     setError(null);
+    setAudioUrl(null);
+    setAudioLoading(false);
   };
 
   const handleClose = () => {
@@ -289,6 +319,25 @@ const CallDeclarationApprovalDialog = ({ open, onClose, declaration, onDeclarati
             )}
           </Grid>
         </Paper>
+
+        {/* Call Recording */}
+        {declaration.recordFile && (
+          <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
+            <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+              Call Recording
+            </Typography>
+            {audioLoading ? (
+              <Box display="flex" alignItems="center" gap={1}>
+                <CircularProgress size={20} />
+                <Typography variant="body2" color="text.secondary">Loading recording...</Typography>
+              </Box>
+            ) : audioUrl ? (
+              <audio controls src={audioUrl} style={{ width: '100%' }} />
+            ) : (
+              <Typography variant="body2" color="error">Failed to load recording</Typography>
+            )}
+          </Paper>
+        )}
 
         {/* Bonus Details */}
         <Paper

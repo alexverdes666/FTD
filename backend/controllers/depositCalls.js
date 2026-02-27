@@ -247,6 +247,15 @@ exports.getDepositCalls = async (req, res, next) => {
         { path: "assignedAgent", select: "fullName email" },
         { path: "createdBy", select: "fullName" },
         { path: "depositConfirmedBy", select: "fullName" },
+        {
+          path: "depositCallDeclaration",
+          populate: [
+            { path: "agent", select: "fullName email fourDigitCode" },
+            { path: "lead", select: "firstName lastName newEmail newPhone" },
+            { path: "reviewedBy", select: "fullName email" },
+            { path: "affiliateManager", select: "fullName email" },
+          ],
+        },
       ]);
     } else {
       // Standard query
@@ -274,6 +283,15 @@ exports.getDepositCalls = async (req, res, next) => {
         .populate("assignedAgent", "fullName email")
         .populate("createdBy", "fullName")
         .populate("depositConfirmedBy", "fullName")
+        .populate({
+          path: "depositCallDeclaration",
+          populate: [
+            { path: "agent", select: "fullName email fourDigitCode" },
+            { path: "lead", select: "firstName lastName newEmail newPhone" },
+            { path: "reviewedBy", select: "fullName email" },
+            { path: "affiliateManager", select: "fullName email" },
+          ],
+        })
         .sort({ createdAt: -1 })
         .skip((parseInt(page) - 1) * parseInt(limit))
         .limit(parseInt(limit))

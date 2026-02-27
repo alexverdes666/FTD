@@ -55,6 +55,7 @@ import {
   CreditCard as CardIssuerIcon,
   Handshake as CrmIcon,
   ReceiptLong as ReceiptLongIcon,
+  Headset as HeadsetIcon,
 } from "@mui/icons-material";
 import {
   logout,
@@ -442,6 +443,11 @@ const MainLayout = () => {
               icon: <CommentIcon />,
               path: "/agent-comments",
             },
+            {
+              text: "PBX Agents",
+              icon: <HeadsetIcon />,
+              path: "/ami-agents",
+            },
           ],
         },
         { text: "Tickets", icon: <TicketIcon />, path: "/tickets" },
@@ -672,6 +678,7 @@ const MainLayout = () => {
     "/payment-history": "#78909c",
     "/verifications": "#66bb6a",
     "/lead-management": "#66bb6a",
+    "/ami-agents": "#e91e63",
   };
 
   // Flatten navigation items: expand all children into a single flat list

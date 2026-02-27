@@ -8,7 +8,6 @@ class ChatService {
     this.socket = null;
     this.isConnected = false;
     this.reconnectAttempts = 0;
-    this.maxReconnectAttempts = 5;
     this.eventListeners = new Map();
     
     // Connection health monitoring
@@ -66,11 +65,12 @@ class ChatService {
       transports: ['polling', 'websocket'], // Start with polling, then upgrade to websocket
       upgrade: true,
       autoConnect: true,
-      timeout: 30000, // Increased timeout for production
+      timeout: 90000, // Must be > server pingTimeout(60s) + pingInterval(25s)
       reconnection: true,
-      reconnectionAttempts: 10, // More attempts for production
-      reconnectionDelay: 2000, // Longer delay for production
-      reconnectionDelayMax: 10000,
+      reconnectionAttempts: 8,
+      reconnectionDelay: 3000, // Start with 3s delay
+      reconnectionDelayMax: 30000, // Max 30s between attempts (with jitter)
+      randomizationFactor: 0.5, // Add jitter to prevent thundering herd on server restart
       // Production-specific options
       forceNew: false,
       rememberUpgrade: false,
@@ -107,16 +107,15 @@ class ChatService {
 
     this.socket.on('connect_error', (error) => {
       console.error('💥 Chat connection error:', error.message);
-      console.error('🔍 Error details:', error);
-      console.error('🌐 Attempted URL:', import.meta.env.VITE_API_URL);
       this.connectionHealthy = false;
       this.isInitializing = false; // Clear flag on error
-      this.handleReconnect();
+      // Let Socket.IO's built-in reconnection handle retries — do NOT call handleReconnect()
     });
 
     this.socket.on('reconnect', (attemptNumber) => {
       console.log('🔄 Reconnected to chat server after', attemptNumber, 'attempts');
       this.connectionHealthy = true;
+      this.reconnectAttempts = 0;
     });
 
     this.socket.on('reconnect_error', (error) => {
@@ -125,8 +124,9 @@ class ChatService {
     });
 
     this.socket.on('reconnect_failed', () => {
-      console.error('🚫 Failed to reconnect to chat server');
+      console.error('🚫 Failed to reconnect to chat server after all attempts');
       this.connectionHealthy = false;
+      this.emit('chat:max_reconnect_attempts');
     });
 
     this.socket.on('connected', (data) => {
@@ -262,23 +262,6 @@ class ChatService {
     this.socket.on('notification_deleted', (data) => {
       this.emit('notification:deleted', data);
     });
-  }
-
-  // Handle reconnection logic
-  handleReconnect() {
-    if (this.reconnectAttempts < this.maxReconnectAttempts) {
-      this.reconnectAttempts++;
-      const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);
-      
-      setTimeout(() => {
-        if (!this.isConnected) {
-          this.connect();
-        }
-      }, delay);
-    } else {
-      console.error('🚫 Max reconnection attempts reached');
-      this.emit('chat:max_reconnect_attempts');
-    }
   }
 
   // Disconnect from chat

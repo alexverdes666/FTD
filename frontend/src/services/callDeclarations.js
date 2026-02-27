@@ -234,6 +234,20 @@ export const rejectDeclaration = async (declarationId, notes) => {
 };
 
 /**
+ * Get filler call declarations with filters and pagination
+ * @param {Object} params - { page, limit, accountManager, assignedAgent, status, startDate, endDate, search }
+ */
+export const getFillerDeclarations = async (params = {}) => {
+  try {
+    const response = await api.get("/call-declarations/fillers", { params });
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching filler declarations:", error);
+    throw error;
+  }
+};
+
+/**
  * Fetch a call recording as a blob (proxied through backend to avoid mixed content)
  * @param {string} recordFile - Recording filename (without .mp3 extension)
  * @returns {string} - Object URL for the audio blob

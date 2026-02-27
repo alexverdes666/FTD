@@ -53,7 +53,8 @@ import {
   FormatListBulleted as ListIcon,
   FilterList as FilterListIcon,
   ExpandMore as ExpandMoreIcon,
-  Add as AddIcon
+  Add as AddIcon,
+  PlayCircleOutline as PlayIcon
 } from '@mui/icons-material';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -64,6 +65,7 @@ import api from '../services/api';
 import toast from 'react-hot-toast';
 import { formatPhoneWithCountryCode } from '../utils/phoneUtils';
 import CallDeclarationApprovalDialog from '../components/CallDeclarationApprovalDialog';
+import { getFillerDeclarations, fetchRecordingBlob } from '../services/callDeclarations';
 
 // Call status colors
 const getStatusColor = (status) => {
@@ -282,7 +284,20 @@ const DepositCallsPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedDeclaration, setSelectedDeclaration] = useState(null);
-  
+
+  // Filler calls state
+  const [fillerDeclarations, setFillerDeclarations] = useState([]);
+  const [fillerLoading, setFillerLoading] = useState(false);
+  const [fillerError, setFillerError] = useState(null);
+  const [fillerPage, setFillerPage] = useState(0);
+  const [fillerRowsPerPage, setFillerRowsPerPage] = useState(25);
+  const [fillerTotalCount, setFillerTotalCount] = useState(0);
+
+  // Recording playback state
+  const [recordingDeclaration, setRecordingDeclaration] = useState(null);
+  const [audioUrl, setAudioUrl] = useState(null);
+  const [audioLoading, setAudioLoading] = useState(false);
+
   // Filters
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -357,7 +372,8 @@ const DepositCallsPage = () => {
           // Fetch Agents
           const agentResponse = await api.get('/users?role=agent&isActive=true&limit=1000');
           if (agentResponse.data.success) {
-            setAgents(agentResponse.data.data || []);
+            const sorted = (agentResponse.data.data || []).sort((a, b) => (a.fullName || '').localeCompare(b.fullName || ''));
+            setAgents(sorted);
           }
 
           // Fetch Client Brokers
@@ -470,6 +486,71 @@ const DepositCallsPage = () => {
       fetchCalendarEvents();
     }
   }, [tabValue, fetchCalendarEvents]);
+
+  // Fetch filler declarations
+  const fetchFillerDeclarations = useCallback(async () => {
+    setFillerLoading(true);
+    setFillerError(null);
+    try {
+      const params = {
+        page: fillerPage + 1,
+        limit: fillerRowsPerPage,
+      };
+
+      params.status = 'approved';
+      if (search) params.search = search;
+      if (selectedAM) params.accountManager = selectedAM;
+      if (selectedAgent) params.assignedAgent = selectedAgent;
+      if (selectedMonth) {
+        const [year, month] = selectedMonth.split('-').map(Number);
+        params.startDate = new Date(year, month - 1, 1).toISOString();
+        params.endDate = new Date(year, month, 0, 23, 59, 59, 999).toISOString();
+      }
+
+      const response = await getFillerDeclarations(params);
+
+      if (response.success) {
+        setFillerDeclarations(response.data || []);
+        setFillerTotalCount(response.pagination?.total || 0);
+      }
+    } catch (err) {
+      setFillerError(err.response?.data?.message || 'Failed to fetch filler declarations');
+    } finally {
+      setFillerLoading(false);
+    }
+  }, [fillerPage, fillerRowsPerPage, search, selectedAM, selectedAgent, selectedMonth]);
+
+  useEffect(() => {
+    if (tabValue === 2) {
+      fetchFillerDeclarations();
+    }
+  }, [tabValue, fetchFillerDeclarations]);
+
+  // Recording playback effect
+  useEffect(() => {
+    let objectUrl = null;
+    if (recordingDeclaration?.recordFile) {
+      setAudioLoading(true);
+      setAudioUrl(null);
+      fetchRecordingBlob(recordingDeclaration.recordFile)
+        .then((url) => {
+          objectUrl = url;
+          setAudioUrl(url);
+        })
+        .catch((err) => {
+          console.error("Failed to load recording:", err);
+        })
+        .finally(() => setAudioLoading(false));
+    } else {
+      setAudioUrl(null);
+    }
+
+    return () => {
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+  }, [recordingDeclaration]);
 
   // Handlers
   const handleScheduleCall = async (depositCallId, callNumber, expectedDate, notes) => {
@@ -766,21 +847,24 @@ const DepositCallsPage = () => {
         <Tabs value={tabValue} onChange={(e, v) => setTabValue(v)}>
           <Tab icon={<TableIcon />} label="Table View" iconPosition="start" />
           <Tab icon={<CalendarIcon />} label="Calendar View" iconPosition="start" />
+          <Tab icon={<PhoneIcon />} label="Filler Calls" iconPosition="start" />
         </Tabs>
       </Paper>
 
       {/* Toolbar & Collapsible Filters */}
       <Paper sx={{ mb: 2 }}>
         <Box sx={{ px: 2, py: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Button
-            size="small"
-            startIcon={<FilterListIcon />}
-            endIcon={<ExpandMoreIcon sx={{ transform: filtersOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: '0.2s' }} />}
-            onClick={() => setFiltersOpen(!filtersOpen)}
-            variant={filtersOpen ? 'contained' : 'outlined'}
-          >
-            Filters
-          </Button>
+          {tabValue !== 2 && (
+            <Button
+              size="small"
+              startIcon={<FilterListIcon />}
+              endIcon={<ExpandMoreIcon sx={{ transform: filtersOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: '0.2s' }} />}
+              onClick={() => setFiltersOpen(!filtersOpen)}
+              variant={filtersOpen ? 'contained' : 'outlined'}
+            >
+              Filters
+            </Button>
+          )}
           <TextField
             size="small"
             placeholder="Search..."
@@ -795,6 +879,47 @@ const DepositCallsPage = () => {
             }}
             sx={{ width: 220 }}
           />
+          {tabValue === 2 && (isAdmin || isAM) && (
+            <>
+              {isAdmin && (
+                <FormControl size="small" sx={{ minWidth: 160 }}>
+                  <InputLabel>Account Manager</InputLabel>
+                  <Select
+                    value={selectedAM}
+                    onChange={(e) => setSelectedAM(e.target.value)}
+                    label="Account Manager"
+                  >
+                    <MenuItem value="">All AMs</MenuItem>
+                    {accountManagers.map(am => (
+                      <MenuItem key={am._id} value={am._id}>{am.fullName}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              )}
+              <FormControl size="small" sx={{ minWidth: 140 }}>
+                <InputLabel>Agent</InputLabel>
+                <Select
+                  value={selectedAgent}
+                  onChange={(e) => setSelectedAgent(e.target.value)}
+                  label="Agent"
+                >
+                  <MenuItem value="">All Agents</MenuItem>
+                  {agents.map(agent => (
+                    <MenuItem key={agent._id} value={agent._id}>{agent.fullName}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <TextField
+                size="small"
+                type="month"
+                label="Month"
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(e.target.value)}
+                InputLabelProps={{ shrink: true }}
+                sx={{ minWidth: 140 }}
+              />
+            </>
+          )}
           <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 1 }}>
             {(isAdmin || isAM) && pendingCount > 0 && (
               <Chip
@@ -827,13 +952,13 @@ const DepositCallsPage = () => {
               </Tooltip>
             )}
             <Tooltip title="Refresh">
-              <IconButton onClick={() => { fetchDepositCalls(); if (tabValue === 1) fetchCalendarEvents(); }} color="primary" size="small">
+              <IconButton onClick={() => { fetchDepositCalls(); if (tabValue === 1) fetchCalendarEvents(); if (tabValue === 2) fetchFillerDeclarations(); }} color="primary" size="small">
                 <RefreshIcon />
               </IconButton>
             </Tooltip>
           </Box>
         </Box>
-        <Collapse in={filtersOpen}>
+        <Collapse in={filtersOpen && tabValue !== 2}>
           <Divider />
           <Box sx={{ px: 2, py: 1.5 }}>
             <Grid container spacing={1.5} alignItems="center">
@@ -873,53 +998,59 @@ const DepositCallsPage = () => {
                     </FormControl>
                   </Grid>
 
-                  <Grid item xs={6} sm={4} md={2}>
-                    <FormControl fullWidth size="small">
-                      <InputLabel>Client Broker</InputLabel>
-                      <Select
-                        value={selectedBroker}
-                        onChange={(e) => setSelectedBroker(e.target.value)}
-                        label="Client Broker"
-                      >
-                        <MenuItem value="">All Brokers</MenuItem>
-                        {brokers.map(broker => (
-                          <MenuItem key={broker._id} value={broker._id}>{broker.name}</MenuItem>
-                        ))}
-                      </Select>
-                    </FormControl>
-                  </Grid>
+                  {tabValue !== 2 && (
+                    <Grid item xs={6} sm={4} md={2}>
+                      <FormControl fullWidth size="small">
+                        <InputLabel>Client Broker</InputLabel>
+                        <Select
+                          value={selectedBroker}
+                          onChange={(e) => setSelectedBroker(e.target.value)}
+                          label="Client Broker"
+                        >
+                          <MenuItem value="">All Brokers</MenuItem>
+                          {brokers.map(broker => (
+                            <MenuItem key={broker._id} value={broker._id}>{broker.name}</MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
+                    </Grid>
+                  )}
 
-                  <Grid item xs={6} sm={4} md={2}>
-                    <FormControl fullWidth size="small">
-                      <InputLabel>Client Network</InputLabel>
-                      <Select
-                        value={selectedClientNetwork}
-                        onChange={(e) => setSelectedClientNetwork(e.target.value)}
-                        label="Client Network"
-                      >
-                        <MenuItem value="">All Client Networks</MenuItem>
-                        {clientNetworks.map(network => (
-                          <MenuItem key={network._id} value={network._id}>{network.name}</MenuItem>
-                        ))}
-                      </Select>
-                    </FormControl>
-                  </Grid>
+                  {tabValue !== 2 && (
+                    <Grid item xs={6} sm={4} md={2}>
+                      <FormControl fullWidth size="small">
+                        <InputLabel>Client Network</InputLabel>
+                        <Select
+                          value={selectedClientNetwork}
+                          onChange={(e) => setSelectedClientNetwork(e.target.value)}
+                          label="Client Network"
+                        >
+                          <MenuItem value="">All Client Networks</MenuItem>
+                          {clientNetworks.map(network => (
+                            <MenuItem key={network._id} value={network._id}>{network.name}</MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
+                    </Grid>
+                  )}
 
-                  <Grid item xs={6} sm={4} md={2}>
-                    <FormControl fullWidth size="small">
-                      <InputLabel>Our Network</InputLabel>
-                      <Select
-                        value={selectedOurNetwork}
-                        onChange={(e) => setSelectedOurNetwork(e.target.value)}
-                        label="Our Network"
-                      >
-                        <MenuItem value="">All Our Networks</MenuItem>
-                        {ourNetworks.map(network => (
-                          <MenuItem key={network._id} value={network._id}>{network.name}</MenuItem>
-                        ))}
-                      </Select>
-                    </FormControl>
-                  </Grid>
+                  {tabValue !== 2 && (
+                    <Grid item xs={6} sm={4} md={2}>
+                      <FormControl fullWidth size="small">
+                        <InputLabel>Our Network</InputLabel>
+                        <Select
+                          value={selectedOurNetwork}
+                          onChange={(e) => setSelectedOurNetwork(e.target.value)}
+                          label="Our Network"
+                        >
+                          <MenuItem value="">All Our Networks</MenuItem>
+                          {ourNetworks.map(network => (
+                            <MenuItem key={network._id} value={network._id}>{network.name}</MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
+                    </Grid>
+                  )}
                 </>
               )}
 
@@ -935,20 +1066,22 @@ const DepositCallsPage = () => {
                 />
               </Grid>
 
-              <Grid item xs={6} sm={4} md={2}>
-                <FormControl fullWidth size="small">
-                  <InputLabel>Status</InputLabel>
-                  <Select
-                    value={status}
-                    onChange={(e) => setStatus(e.target.value)}
-                    label="Status"
-                  >
-                    <MenuItem value="active">Active</MenuItem>
-                    <MenuItem value="completed">Completed</MenuItem>
-                    <MenuItem value="">All</MenuItem>
-                  </Select>
-                </FormControl>
-              </Grid>
+              {tabValue !== 2 && (
+                <Grid item xs={6} sm={4} md={2}>
+                  <FormControl fullWidth size="small">
+                    <InputLabel>Status</InputLabel>
+                    <Select
+                      value={status}
+                      onChange={(e) => setStatus(e.target.value)}
+                      label="Status"
+                    >
+                      <MenuItem value="active">Active</MenuItem>
+                      <MenuItem value="completed">Completed</MenuItem>
+                      <MenuItem value="">All</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Grid>
+              )}
             </Grid>
           </Box>
         </Collapse>
@@ -996,6 +1129,7 @@ const DepositCallsPage = () => {
                       <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', fontSize: '0.6rem' }}>Email</TableCell>
                       <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', fontSize: '0.6rem' }}>Phone</TableCell>
                       <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', textAlign: 'center', fontSize: '0.6rem' }}>Dep.</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', textAlign: 'center', fontSize: '0.6rem' }}>Dep. Call</TableCell>
                       {[1,2,3,4,5,6,7,8,9,10].map(num => (
                         <TableCell key={num} sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', textAlign: 'center', fontSize: '0.6rem' }}>
                           C{num}
@@ -1073,6 +1207,22 @@ const DepositCallsPage = () => {
                             </Tooltip>
                           ) : (
                             <Chip label="Pending" size="small" variant="outlined" sx={{ height: 16, fontSize: '0.55rem' }} />
+                          )}
+                        </TableCell>
+                        {/* Deposit Call Declaration column */}
+                        <TableCell sx={{ p: '2px 4px', textAlign: 'center' }}>
+                          {dc.depositCallDeclaration ? (
+                            <Tooltip title={`Deposit Call - ${dc.depositCallDeclaration.status}`}>
+                              <Chip
+                                label={dc.depositCallDeclaration.status === 'approved' ? 'Approved' : dc.depositCallDeclaration.status === 'pending' ? 'Pending' : dc.depositCallDeclaration.status === 'rejected' ? 'Rejected' : dc.depositCallDeclaration.status}
+                                size="small"
+                                color={dc.depositCallDeclaration.status === 'approved' ? 'success' : dc.depositCallDeclaration.status === 'pending' ? 'warning' : dc.depositCallDeclaration.status === 'rejected' ? 'error' : 'default'}
+                                onClick={() => setSelectedDeclaration(dc.depositCallDeclaration)}
+                                sx={{ fontSize: '0.5rem', height: 15, cursor: 'pointer', '& .MuiChip-label': { px: 0.5 } }}
+                              />
+                            </Tooltip>
+                          ) : (
+                            <Typography sx={{ fontSize: '0.55rem', color: 'text.secondary' }}>-</Typography>
                           )}
                         </TableCell>
                         {[1,2,3,4,5,6,7,8,9,10].map(num => (
@@ -1308,6 +1458,210 @@ const DepositCallsPage = () => {
           </Dialog>
         </Paper>
       )}
+
+      {/* Filler Calls Tab */}
+      {tabValue === 2 && (
+        <Paper sx={{ width: '100%', overflow: 'auto' }}>
+          {fillerLoading ? (
+            <Box display="flex" justifyContent="center" alignItems="center" minHeight={400}>
+              <CircularProgress />
+            </Box>
+          ) : fillerError ? (
+            <Alert severity="error" sx={{ m: 2 }}>{fillerError}</Alert>
+          ) : fillerDeclarations.length === 0 ? (
+            <Box sx={{ textAlign: 'center', py: 6 }}>
+              <Typography variant="h6" color="text.secondary">
+                No filler declarations found
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                Filler call declarations will appear here when agents submit them
+              </Typography>
+            </Box>
+          ) : (
+            <>
+              <TableContainer sx={{ maxHeight: 'calc(100vh - 300px)' }}>
+                <Table stickyHeader size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100' }}>Agent</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100' }}>Affiliate Manager</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100' }}>Lead</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100' }}>Call Date</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100' }}>Duration</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100' }}>Source</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100' }}>Destination</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', textAlign: 'center' }}>Recording</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', textAlign: 'center' }}>Actions</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {fillerDeclarations.map((decl) => (
+                      <TableRow key={decl._id} hover>
+                        <TableCell>
+                          <Typography variant="body2">{decl.agent?.fullName || 'N/A'}</Typography>
+                          {decl.agent?.fourDigitCode && (
+                            <Typography variant="caption" color="text.secondary">
+                              ({decl.agent.fourDigitCode})
+                            </Typography>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2">{decl.affiliateManager?.fullName || 'N/A'}</Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2">
+                            {decl.lead ? `${decl.lead.firstName || ''} ${decl.lead.lastName || ''}`.trim() || 'N/A' : 'N/A'}
+                          </Typography>
+                          {decl.lead?.newEmail && (
+                            <Typography variant="caption" color="text.secondary" display="block">
+                              {decl.lead.newEmail}
+                            </Typography>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2">
+                            {decl.callDate ? new Date(decl.callDate).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'N/A'}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2">
+                            {(() => {
+                              const h = Math.floor(decl.callDuration / 3600);
+                              const m = Math.floor((decl.callDuration % 3600) / 60);
+                              const s = decl.callDuration % 60;
+                              return h > 0
+                                ? `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`
+                                : `${m}:${String(s).padStart(2,'0')}`;
+                            })()}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2" fontFamily="monospace" sx={{ fontSize: '0.75rem' }}>{decl.sourceNumber}</Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2" fontFamily="monospace" sx={{ fontSize: '0.75rem' }}>{decl.destinationNumber}</Typography>
+                        </TableCell>
+                        <TableCell sx={{ textAlign: 'center' }}>
+                          {decl.recordFile ? (
+                            <Tooltip title="Play Recording">
+                              <IconButton size="small" color="primary" onClick={() => setRecordingDeclaration(decl)}>
+                                <PlayIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                          ) : (
+                            <Typography variant="caption" color="text.secondary">-</Typography>
+                          )}
+                        </TableCell>
+                        <TableCell sx={{ textAlign: 'center' }}>
+                          <Chip
+                            label="Review"
+                            size="small"
+                            variant="outlined"
+                            color="primary"
+                            onClick={() => setSelectedDeclaration(decl)}
+                            sx={{ cursor: 'pointer' }}
+                          />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+              <TablePagination
+                component="div"
+                count={fillerTotalCount}
+                page={fillerPage}
+                onPageChange={(e, newPage) => setFillerPage(newPage)}
+                rowsPerPage={fillerRowsPerPage}
+                onRowsPerPageChange={(e) => {
+                  setFillerRowsPerPage(parseInt(e.target.value, 10));
+                  setFillerPage(0);
+                }}
+                rowsPerPageOptions={[10, 25, 50, 100]}
+              />
+            </>
+          )}
+        </Paper>
+      )}
+
+      {/* Recording Playback Dialog */}
+      <Dialog
+        open={!!recordingDeclaration}
+        onClose={() => setRecordingDeclaration(null)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          <Box display="flex" alignItems="center" justifyContent="space-between">
+            <Box display="flex" alignItems="center" gap={1}>
+              <PlayIcon color="primary" />
+              <Typography variant="h6">Call Recording</Typography>
+            </Box>
+            <IconButton size="small" onClick={() => setRecordingDeclaration(null)}>
+              <RejectIcon />
+            </IconButton>
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          {recordingDeclaration && (
+            <Box sx={{ py: 1 }}>
+              <Box display="flex" gap={3} mb={2}>
+                <Box>
+                  <Typography variant="caption" color="text.secondary">Agent</Typography>
+                  <Typography variant="body2">{recordingDeclaration.agent?.fullName || 'N/A'}</Typography>
+                </Box>
+                <Box>
+                  <Typography variant="caption" color="text.secondary">Date</Typography>
+                  <Typography variant="body2">
+                    {recordingDeclaration.callDate ? new Date(recordingDeclaration.callDate).toLocaleString() : 'N/A'}
+                  </Typography>
+                </Box>
+                <Box>
+                  <Typography variant="caption" color="text.secondary">Duration</Typography>
+                  <Typography variant="body2">
+                    {(() => {
+                      const s = recordingDeclaration.callDuration;
+                      const h = Math.floor(s / 3600);
+                      const m = Math.floor((s % 3600) / 60);
+                      const sec = s % 60;
+                      return h > 0 ? `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}` : `${m}:${String(sec).padStart(2,'0')}`;
+                    })()}
+                  </Typography>
+                </Box>
+              </Box>
+              <Box display="flex" gap={3} mb={2}>
+                <Box>
+                  <Typography variant="caption" color="text.secondary">Source</Typography>
+                  <Typography variant="body2" fontFamily="monospace">{recordingDeclaration.sourceNumber}</Typography>
+                </Box>
+                <Box>
+                  <Typography variant="caption" color="text.secondary">Destination</Typography>
+                  <Typography variant="body2" fontFamily="monospace">{recordingDeclaration.destinationNumber}</Typography>
+                </Box>
+              </Box>
+              {recordingDeclaration.lead && (
+                <Box mb={2}>
+                  <Typography variant="caption" color="text.secondary">Lead</Typography>
+                  <Typography variant="body2">
+                    {`${recordingDeclaration.lead.firstName || ''} ${recordingDeclaration.lead.lastName || ''}`.trim() || 'N/A'}
+                    {recordingDeclaration.lead.newPhone ? ` - ${recordingDeclaration.lead.newPhone}` : ''}
+                  </Typography>
+                </Box>
+              )}
+              {audioLoading ? (
+                <Box display="flex" justifyContent="center" alignItems="center" py={2}>
+                  <CircularProgress size={24} sx={{ mr: 1 }} />
+                  <Typography variant="body2" color="text.secondary">Loading recording...</Typography>
+                </Box>
+              ) : audioUrl ? (
+                <audio controls src={audioUrl} style={{ width: '100%' }} />
+              ) : (
+                <Typography variant="body2" color="error">Failed to load recording</Typography>
+              )}
+            </Box>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Client Networks Display Dialog */}
       <Dialog
@@ -1559,13 +1913,15 @@ const DepositCallsPage = () => {
         onDeclarationUpdated={() => {
           setSelectedDeclaration(null);
           fetchDepositCalls();
+          if (tabValue === 2) fetchFillerDeclarations();
         }}
         isAdmin={isAdmin}
-        onReset={async (declarationId) => {
+        onReset={selectedDeclaration?.callCategory === 'filler' ? null : async (declarationId) => {
           await api.put(`/call-declarations/${declarationId}/reset`);
           toast.success('Declaration reset successfully');
           setSelectedDeclaration(null);
           fetchDepositCalls();
+          if (tabValue === 2) fetchFillerDeclarations();
         }}
       />
     </Box>

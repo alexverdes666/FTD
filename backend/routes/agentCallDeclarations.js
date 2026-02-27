@@ -21,6 +21,7 @@ const {
   getDisabledCallTypes,
   getLeadOrders,
   resetDeclaration,
+  getFillerDeclarations,
 } = require("../controllers/agentCallDeclarations");
 
 // All routes require authentication
@@ -58,6 +59,9 @@ router.get("/all-agents-monthly", isManager, getAllAgentsMonthlyTotals);
 
 // Get pending declarations for manager approval
 router.get("/pending", isManager, getPendingDeclarations);
+
+// Get filler call declarations with filters
+router.get("/fillers", getFillerDeclarations);
 
 // Get declarations with filters (agents see their own, managers see all)
 router.get("/", getDeclarations);

@@ -67,6 +67,7 @@ const deviceDetectionRoutes = require("./routes/deviceDetection");
 const agentCheckinRoutes = require("./routes/agentCheckin");
 const globalSearchRoutes = require("./routes/globalSearch");
 const crmDealRoutes = require("./routes/crmDeals");
+const amiAgentRoutes = require("./routes/amiAgents");
 const errorHandler = require("./middleware/errorHandler");
 const { changeTracker } = require("./middleware/changeTracker");
 const { activityLogger } = require("./middleware/activityLogger");
@@ -273,6 +274,20 @@ const io = socketIo(server, {
 // Socket.IO authentication middleware
 const jwt = require("jsonwebtoken");
 const User = require("./models/User");
+const { LRUCache } = require("lru-cache");
+
+// --- Socket auth cache (avoids DB hit on every reconnect) ---
+const socketAuthCache = new LRUCache({
+  max: 500,
+  ttl: 60 * 1000, // 60-second TTL
+});
+
+// --- Global typing timeouts keyed by `userId:conversationId` ---
+const globalTypingTimeouts = new Map();
+
+// --- Track active sockets per user (prevents zombie socket accumulation) ---
+const userActiveSockets = new Map(); // userId -> Set<socketId>
+const MAX_SOCKETS_PER_USER = 3;
 
 io.use(async (socket, next) => {
   try {
@@ -282,7 +297,16 @@ io.use(async (socket, next) => {
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.id).select("-password");
+    const userIdStr = String(decoded.id);
+
+    // Check cache first to avoid DB hit during reconnection storms
+    let user = socketAuthCache.get(userIdStr);
+    if (!user) {
+      user = await User.findById(decoded.id).select("-password");
+      if (user) {
+        socketAuthCache.set(userIdStr, user);
+      }
+    }
 
     if (!user || !user.isActive) {
       return next(new Error("Authentication error - invalid user"));
@@ -301,6 +325,26 @@ io.on("connection", (socket) => {
   console.log(
     `🔌 User ${socket.userId} connected via ${socket.conn.transport.name}`
   );
+
+  // --- Per-user socket limit: disconnect oldest if over limit ---
+  if (!userActiveSockets.has(socket.userId)) {
+    userActiveSockets.set(socket.userId, new Set());
+  }
+  const userSockets = userActiveSockets.get(socket.userId);
+
+  // If user already has too many sockets, disconnect the oldest ones
+  if (userSockets.size >= MAX_SOCKETS_PER_USER) {
+    const socketsToRemove = [...userSockets].slice(0, userSockets.size - MAX_SOCKETS_PER_USER + 1);
+    for (const oldSocketId of socketsToRemove) {
+      const oldSocket = io.sockets.sockets.get(oldSocketId);
+      if (oldSocket) {
+        console.log(`⚠️ Disconnecting stale socket ${oldSocketId} for user ${socket.userId} (limit: ${MAX_SOCKETS_PER_USER})`);
+        oldSocket.disconnect(true);
+      }
+      userSockets.delete(oldSocketId);
+    }
+  }
+  userSockets.add(socket.id);
 
   // Join user to their personal room for direct messaging
   socket.join(`user:${socket.userId}`);
@@ -411,34 +455,27 @@ io.on("connection", (socket) => {
     }
   });
 
-  // Handle typing indicators with debouncing
-  let typingTimeouts = new Map();
-
+  // Handle typing indicators with debouncing (using global Map)
   socket.on("typing", async (data) => {
     try {
       const { conversationId } = data;
+      const typingKey = `${socket.userId}:${conversationId}`;
 
       // Verify user is participant in the conversation
       const Conversation = require("./models/Conversation");
       const conversation = await Conversation.findById(conversationId);
 
       if (!conversation) {
-        console.warn(
-          `⚠️ User ${socket.userId} tried to send typing indicator for non-existent conversation ${conversationId}`
-        );
         return;
       }
 
       if (!conversation.isParticipant(socket.userId)) {
-        console.warn(
-          `⚠️ User ${socket.userId} tried to send typing indicator for conversation ${conversationId} they are not in`
-        );
         return;
       }
 
-      // Clear existing timeout for this conversation
-      if (typingTimeouts.has(conversationId)) {
-        clearTimeout(typingTimeouts.get(conversationId));
+      // Clear existing timeout for this user+conversation
+      if (globalTypingTimeouts.has(typingKey)) {
+        clearTimeout(globalTypingTimeouts.get(typingKey));
       }
 
       // Get other participants (exclude current user)
@@ -473,10 +510,10 @@ io.on("connection", (socket) => {
             conversationId,
           });
         });
-        typingTimeouts.delete(conversationId);
+        globalTypingTimeouts.delete(typingKey);
       }, 5000);
 
-      typingTimeouts.set(conversationId, timeout);
+      globalTypingTimeouts.set(typingKey, timeout);
     } catch (error) {
       console.error(`❌ Error handling typing indicator:`, error);
     }
@@ -485,11 +522,12 @@ io.on("connection", (socket) => {
   socket.on("stop_typing", async (data) => {
     try {
       const { conversationId } = data;
+      const typingKey = `${socket.userId}:${conversationId}`;
 
       // Clear timeout if exists
-      if (typingTimeouts.has(conversationId)) {
-        clearTimeout(typingTimeouts.get(conversationId));
-        typingTimeouts.delete(conversationId);
+      if (globalTypingTimeouts.has(typingKey)) {
+        clearTimeout(globalTypingTimeouts.get(typingKey));
+        globalTypingTimeouts.delete(typingKey);
       }
 
       // Verify user is participant in the conversation
@@ -537,9 +575,35 @@ io.on("connection", (socket) => {
   socket.on("disconnect", (reason) => {
     console.log(`🔌 User ${socket.userId} disconnected: ${reason}`);
 
-    // Clear all typing timeouts for this user
-    typingTimeouts.forEach((timeout) => clearTimeout(timeout));
-    typingTimeouts.clear();
+    // Remove socket from per-user tracking
+    const sockets = userActiveSockets.get(socket.userId);
+    if (sockets) {
+      sockets.delete(socket.id);
+      if (sockets.size === 0) {
+        userActiveSockets.delete(socket.userId);
+      }
+    }
+
+    // Clear all typing timeouts for this user (global map, keyed by userId:conversationId)
+    for (const [key, timeout] of globalTypingTimeouts) {
+      if (key.startsWith(`${socket.userId}:`)) {
+        clearTimeout(timeout);
+        globalTypingTimeouts.delete(key);
+      }
+    }
+
+    // Stop any browser streams for this user
+    try {
+      if (browserStreamService && browserStreamService.streams) {
+        for (const [sessionId, stream] of browserStreamService.streams) {
+          if (stream.userId === socket.userId) {
+            browserStreamService.stopStream(sessionId);
+          }
+        }
+      }
+    } catch (err) {
+      // Ignore cleanup errors
+    }
   });
 
   // Handle connection errors
@@ -610,6 +674,7 @@ app.use("/api/simcards", simCardRoutes);
 app.use("/api/sms", smsRoutes);
 app.use("/api/account-management", accountManagementRoutes);
 app.use("/api/gateway-devices", gatewayDeviceRoutes);
+app.use("/api/ami-agents", amiAgentRoutes);
 app.use("/api/agent-schedule", agentScheduleRoutes);
 app.use("/api/agent-call-appointments", agentCallAppointmentRoutes);
 app.use("/api/call-change-requests", callChangeRequestRoutes);
@@ -675,6 +740,15 @@ server.listen(PORT, () => {
     } catch (error) {
       console.error("❌ Failed to initialize browser stream service:", error);
     }
+
+    // Initialize AMI service for real-time agent tracking
+    try {
+      const amiService = require("./services/amiService");
+      amiService.initialize(io);
+      console.log("✅ AMI service initialized");
+    } catch (error) {
+      console.error("❌ Failed to initialize AMI service:", error);
+    }
   }
 });
 
@@ -703,6 +777,15 @@ process.on("SIGTERM", async () => {
     console.log("✅ Browser stream service stopped");
   } catch (error) {
     console.error("❌ Error stopping browser stream service:", error);
+  }
+
+  // Shutdown AMI service
+  try {
+    const amiService = require("./services/amiService");
+    amiService.shutdown();
+    console.log("✅ AMI service stopped");
+  } catch (error) {
+    console.error("❌ Error stopping AMI service:", error);
   }
 
   server.close(() => {

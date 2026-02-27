@@ -1753,6 +1753,133 @@ const resetDeclaration = async (req, res) => {
   }
 };
 
+/**
+ * Get filler call declarations with filters (for deposit calls page)
+ * GET /call-declarations/fillers
+ */
+const getFillerDeclarations = async (req, res) => {
+  try {
+    const {
+      page = 1,
+      limit = 50,
+      accountManager,
+      assignedAgent,
+      status,
+      startDate,
+      endDate,
+      search,
+    } = req.query;
+
+    const userId = req.user.id;
+    const userRole = req.user.role;
+
+    const query = {
+      isActive: true,
+      callCategory: "filler",
+    };
+
+    // Role-based filtering
+    if (userRole === "agent") {
+      query.agent = userId;
+    } else if (userRole === "affiliate_manager") {
+      if (assignedAgent) {
+        query.agent = assignedAgent;
+      }
+      query.affiliateManager = userId;
+    } else if (userRole === "admin") {
+      if (accountManager) {
+        query.affiliateManager = accountManager;
+      }
+      if (assignedAgent) {
+        query.agent = assignedAgent;
+      }
+    }
+
+    if (status) {
+      query.status = status;
+    }
+
+    if (startDate || endDate) {
+      query.callDate = {};
+      if (startDate) query.callDate.$gte = new Date(startDate);
+      if (endDate) query.callDate.$lte = new Date(endDate);
+    }
+
+    if (search) {
+      const searchRegex = new RegExp(search, "i");
+
+      // Search leads by email, phone, first name, last name
+      const matchingLeads = await Lead.find({
+        $or: [
+          { newEmail: searchRegex },
+          { newPhone: searchRegex },
+          { firstName: searchRegex },
+          { lastName: searchRegex },
+        ],
+      }).select("_id").lean();
+      const leadIds = matchingLeads.map((l) => l._id);
+
+      // Search agents by fullName
+      const matchingAgents = await User.find({
+        fullName: searchRegex,
+        role: "agent",
+      }).select("_id").lean();
+      const agentIds = matchingAgents.map((u) => u._id);
+
+      // Search affiliate managers by fullName (admin only)
+      let amIds = [];
+      if (userRole === "admin") {
+        const matchingAMs = await User.find({
+          fullName: searchRegex,
+          role: "affiliate_manager",
+        }).select("_id").lean();
+        amIds = matchingAMs.map((u) => u._id);
+      }
+
+      const searchConditions = [
+        { sourceNumber: searchRegex },
+        { destinationNumber: searchRegex },
+        { description: searchRegex },
+      ];
+      if (leadIds.length > 0) searchConditions.push({ lead: { $in: leadIds } });
+      if (agentIds.length > 0) searchConditions.push({ agent: { $in: agentIds } });
+      if (amIds.length > 0) searchConditions.push({ affiliateManager: { $in: amIds } });
+
+      query.$or = searchConditions;
+    }
+
+    const total = await AgentCallDeclaration.countDocuments(query);
+
+    const declarations = await AgentCallDeclaration.find(query)
+      .populate("agent", "fullName email fourDigitCode")
+      .populate("reviewedBy", "fullName email")
+      .populate("affiliateManager", "fullName email")
+      .populate("lead", "firstName lastName newEmail newPhone")
+      .sort({ callDate: -1 })
+      .skip((parseInt(page) - 1) * parseInt(limit))
+      .limit(parseInt(limit))
+      .lean();
+
+    res.json({
+      success: true,
+      data: declarations,
+      pagination: {
+        current: parseInt(page),
+        pages: Math.ceil(total / parseInt(limit)),
+        total,
+        limit: parseInt(limit),
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching filler declarations:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch filler declarations",
+      error: error.message,
+    });
+  }
+};
+
 module.exports = {
   fetchCDRCalls,
   fetchAgentCDRCalls,
@@ -1775,4 +1902,5 @@ module.exports = {
   addCallExpenseToAffiliateManager,
   removeCallExpenseFromAffiliateManager,
   resetDeclaration,
+  getFillerDeclarations,
 };

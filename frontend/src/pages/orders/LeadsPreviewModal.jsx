@@ -468,7 +468,12 @@ const LeadsPreviewModal = ({
                     </TableCell>
                   </TableRow>
                 ) : (
-                  modal.leads.map((originalLead, index) => {
+                  [...modal.leads].sort((a, b) => {
+                    const typePriority = { ftd: 0, filler: 1, cold: 2 };
+                    const typeA = getDisplayLeadType(getLeadWithOrderMetadata(a, modal.order));
+                    const typeB = getDisplayLeadType(getLeadWithOrderMetadata(b, modal.order));
+                    return (typePriority[typeA] ?? 3) - (typePriority[typeB] ?? 3);
+                  }).map((originalLead, index) => {
                     // Merge order metadata into lead for correct deposit/shaved status
                     const lead = getLeadWithOrderMetadata(originalLead, modal.order);
                     const leadType = getDisplayLeadType(lead);
@@ -518,6 +523,7 @@ const LeadsPreviewModal = ({
                           hover={!isRemoved}
                           sx={{
                             "& td": { py: 0.5 },
+                            ...(!isRemoved && { "&:hover": { backgroundColor: (theme) => `${alpha(theme.palette.primary.main, 0.08)} !important` } }),
                             ...(highlightLeadId && lead._id === highlightLeadId && !isRemoved && {
                               backgroundColor: (theme) => alpha(theme.palette.warning.main, 0.15),
                               "&:hover": { backgroundColor: (theme) => `${alpha(theme.palette.warning.main, 0.22)} !important` },
