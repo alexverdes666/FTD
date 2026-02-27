@@ -267,6 +267,9 @@ class AmiService extends EventEmitter {
       lead = await this._lookupLead(src);
     }
 
+    // Recording filename from cdr_pbx "record" column (e.g. 20260226-124258-+34636389300-34672147742-1772102578.37131)
+    const recordFile = (row.record || "").toString().replace(/\.mp3$/i, "");
+
     return {
       _source: "cdr_db",
       extension: agentExt,
@@ -290,6 +293,7 @@ class AmiService extends EventEmitter {
       leadId: lead?._id || null,
       leadCountry: lead?.country || null,
       timestamp: row.calldate ? new Date(row.calldate).toISOString() : "",
+      recordFile: recordFile || "",
     };
   }
 

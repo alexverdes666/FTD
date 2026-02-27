@@ -19,6 +19,9 @@ import {
   TableRow,
   TextField,
   InputAdornment,
+  Dialog,
+  DialogTitle,
+  DialogContent,
 } from "@mui/material";
 import {
   Refresh as RefreshIcon,
@@ -33,9 +36,12 @@ import {
   Person as PersonIcon,
   History as HistoryIcon,
   Search as SearchIcon,
+  PlayCircleOutline as PlayIcon,
+  Close as CloseIcon,
 } from "@mui/icons-material";
 import toast from "react-hot-toast";
 import amiAgentService from "../services/amiAgentService";
+import { fetchRecordingBlob } from "../services/callDeclarations";
 
 const getDisplayName = (memberName) => {
   if (!memberName) return "Unknown";
@@ -452,6 +458,30 @@ const CallHistoryTab = ({ history }) => {
   const [dateTo, setDateTo] = useState("");
   const [durFrom, setDurFrom] = useState("");
   const [durTo, setDurTo] = useState("");
+  const [playingEntry, setPlayingEntry] = useState(null);
+  const [audioUrl, setAudioUrl] = useState(null);
+  const [audioLoading, setAudioLoading] = useState(false);
+
+  const handlePlayRecording = async (entry) => {
+    setPlayingEntry(entry);
+    setAudioUrl(null);
+    setAudioLoading(true);
+    try {
+      const url = await fetchRecordingBlob(entry.recordFile);
+      setAudioUrl(url);
+    } catch (err) {
+      console.error("Failed to load recording:", err);
+      setAudioUrl(null);
+    } finally {
+      setAudioLoading(false);
+    }
+  };
+
+  const handleCloseRecording = () => {
+    if (audioUrl) URL.revokeObjectURL(audioUrl);
+    setPlayingEntry(null);
+    setAudioUrl(null);
+  };
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
@@ -624,6 +654,7 @@ const CallHistoryTab = ({ history }) => {
               <TableCell sx={{ fontWeight: 700, fontSize: "0.75rem" }}>Duration</TableCell>
               <TableCell sx={{ fontWeight: 700, fontSize: "0.75rem" }}>Billable</TableCell>
               <TableCell sx={{ fontWeight: 700, fontSize: "0.75rem" }}>Status</TableCell>
+              <TableCell sx={{ fontWeight: 700, fontSize: "0.75rem", width: 50 }}>Rec</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -676,12 +707,21 @@ const CallHistoryTab = ({ history }) => {
                       }}
                     />
                   </TableCell>
+                  <TableCell sx={{ px: 0.5 }}>
+                    {entry.recordFile && (
+                      <Tooltip title="Play recording">
+                        <IconButton size="small" onClick={() => handlePlayRecording(entry)} sx={{ p: 0.5 }}>
+                          <PlayIcon sx={{ fontSize: 18, color: "#6366f1" }} />
+                        </IconButton>
+                      </Tooltip>
+                    )}
+                  </TableCell>
                 </TableRow>
               );
             })}
             {filtered.length === 0 && (
               <TableRow>
-                <TableCell colSpan={7} align="center" sx={{ py: 3 }}>
+                <TableCell colSpan={8} align="center" sx={{ py: 3 }}>
                   <Typography variant="body2" sx={{ color: "#9ca3af" }}>
                     No records match the current filters
                   </Typography>
@@ -691,6 +731,57 @@ const CallHistoryTab = ({ history }) => {
           </TableBody>
         </Table>
       </TableContainer>
+
+      {/* Recording Playback Dialog */}
+      <Dialog open={!!playingEntry} onClose={handleCloseRecording} maxWidth="sm" fullWidth>
+        <DialogTitle>
+          <Box display="flex" alignItems="center" justifyContent="space-between">
+            <Box display="flex" alignItems="center" gap={1}>
+              <PlayIcon color="primary" />
+              <Typography variant="h6">Call Recording</Typography>
+            </Box>
+            <IconButton size="small" onClick={handleCloseRecording}>
+              <CloseIcon />
+            </IconButton>
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          {playingEntry && (
+            <Box sx={{ py: 1 }}>
+              <Box display="flex" gap={3} mb={2}>
+                <Box>
+                  <Typography variant="caption" color="text.secondary">Agent</Typography>
+                  <Typography variant="body2">{playingEntry.agentName || playingEntry.extension}</Typography>
+                </Box>
+                <Box>
+                  <Typography variant="caption" color="text.secondary">Phone</Typography>
+                  <Typography variant="body2" sx={{ fontFamily: "monospace" }}>{playingEntry.phone || "-"}</Typography>
+                </Box>
+                <Box>
+                  <Typography variant="caption" color="text.secondary">Duration</Typography>
+                  <Typography variant="body2">{typeof playingEntry.duration === "number" ? formatDuration(playingEntry.duration) : "-"}</Typography>
+                </Box>
+                <Box>
+                  <Typography variant="caption" color="text.secondary">Date</Typography>
+                  <Typography variant="body2">
+                    {playingEntry.startTime ? new Date(playingEntry.startTime).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "-"}
+                  </Typography>
+                </Box>
+              </Box>
+              {audioLoading ? (
+                <Box display="flex" justifyContent="center" alignItems="center" py={2}>
+                  <CircularProgress size={24} sx={{ mr: 1 }} />
+                  <Typography variant="body2" color="text.secondary">Loading recording...</Typography>
+                </Box>
+              ) : audioUrl ? (
+                <audio controls autoPlay src={audioUrl} style={{ width: "100%" }} />
+              ) : (
+                <Typography variant="body2" color="error">Failed to load recording</Typography>
+              )}
+            </Box>
+          )}
+        </DialogContent>
+      </Dialog>
     </Box>
   );
 };
