@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Box,
   Typography,
@@ -17,6 +17,8 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  TextField,
+  InputAdornment,
 } from "@mui/material";
 import {
   Refresh as RefreshIcon,
@@ -30,6 +32,7 @@ import {
   LinkOff as LinkOffIcon,
   Person as PersonIcon,
   History as HistoryIcon,
+  Search as SearchIcon,
 } from "@mui/icons-material";
 import toast from "react-hot-toast";
 import amiAgentService from "../services/amiAgentService";
@@ -428,7 +431,80 @@ const dispositionConfig = {
   CONGESTION: { label: "Congestion", bgcolor: "#fef3c7", color: "#d97706" },
 };
 
+// Parse "mm:ss" or "hh:mm:ss" or plain seconds string into total seconds
+const parseDurationInput = (val) => {
+  if (!val) return null;
+  const trimmed = val.trim();
+  // plain number = seconds
+  if (/^\d+$/.test(trimmed)) return parseInt(trimmed, 10);
+  // mm:ss
+  const mmss = trimmed.match(/^(\d+):(\d{1,2})$/);
+  if (mmss) return parseInt(mmss[1], 10) * 60 + parseInt(mmss[2], 10);
+  // hh:mm:ss
+  const hhmmss = trimmed.match(/^(\d+):(\d{1,2}):(\d{1,2})$/);
+  if (hhmmss) return parseInt(hhmmss[1], 10) * 3600 + parseInt(hhmmss[2], 10) * 60 + parseInt(hhmmss[3], 10);
+  return null;
+};
+
 const CallHistoryTab = ({ history }) => {
+  const [search, setSearch] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [durFrom, setDurFrom] = useState("");
+  const [durTo, setDurTo] = useState("");
+
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase().trim();
+    const dfrom = dateFrom ? new Date(dateFrom).getTime() : null;
+    const dto = dateTo ? new Date(dateTo).getTime() : null;
+    const durFromSec = parseDurationInput(durFrom);
+    const durToSec = parseDurationInput(durTo);
+
+    return history.filter((entry) => {
+      // Text search
+      if (q) {
+        const agent = (entry.agentName || entry.extension || "").toLowerCase();
+        const phone = (entry.phone || "").toLowerCase();
+        const lead = `${entry.leadName || ""} ${entry.leadEmail || ""} ${entry.leadCountry || ""}`.toLowerCase();
+        const status = (entry.disposition || "").toLowerCase();
+        const callType = (entry.callType || "").toLowerCase();
+        if (
+          !agent.includes(q) &&
+          !phone.includes(q) &&
+          !lead.includes(q) &&
+          !status.includes(q) &&
+          !callType.includes(q)
+        ) return false;
+      }
+
+      // Date range filter
+      if (dfrom || dto) {
+        const entryTime = entry.startTime ? new Date(entry.startTime).getTime() : 0;
+        if (dfrom && entryTime < dfrom) return false;
+        if (dto && entryTime > dto) return false;
+      }
+
+      // Duration range filter (uses total duration in seconds)
+      if (durFromSec !== null || durToSec !== null) {
+        const dur = typeof entry.duration === "number" ? entry.duration : 0;
+        if (durFromSec !== null && dur < durFromSec) return false;
+        if (durToSec !== null && dur > durToSec) return false;
+      }
+
+      return true;
+    });
+  }, [history, search, dateFrom, dateTo, durFrom, durTo]);
+
+  const hasActiveFilters = search || dateFrom || dateTo || durFrom || durTo;
+
+  const clearFilters = () => {
+    setSearch("");
+    setDateFrom("");
+    setDateTo("");
+    setDurFrom("");
+    setDurTo("");
+  };
+
   if (history.length === 0) {
     return (
       <Alert severity="info" sx={{ mt: 2 }}>
@@ -437,76 +513,185 @@ const CallHistoryTab = ({ history }) => {
     );
   }
 
+  const labelSx = { fontSize: "0.7rem", color: "#6b7280", fontWeight: 600, mb: 0.25 };
+  const inputSx = { fontSize: "0.8rem" };
+
   return (
-    <TableContainer component={Paper} variant="outlined" sx={{ mt: 2 }}>
-      <Table size="small">
-        <TableHead>
-          <TableRow sx={{ bgcolor: "#f9fafb" }}>
-            <TableCell sx={{ fontWeight: 700, fontSize: "0.75rem" }}>Agent</TableCell>
-            <TableCell sx={{ fontWeight: 700, fontSize: "0.75rem" }}>Phone</TableCell>
-            <TableCell sx={{ fontWeight: 700, fontSize: "0.75rem" }}>Lead</TableCell>
-            <TableCell sx={{ fontWeight: 700, fontSize: "0.75rem" }}>Started</TableCell>
-            <TableCell sx={{ fontWeight: 700, fontSize: "0.75rem" }}>Duration</TableCell>
-            <TableCell sx={{ fontWeight: 700, fontSize: "0.75rem" }}>Billable</TableCell>
-            <TableCell sx={{ fontWeight: 700, fontSize: "0.75rem" }}>Status</TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {history.map((entry, idx) => {
-            const disp = dispositionConfig[entry.disposition] || { label: entry.disposition || "Unknown", bgcolor: "#f3f4f6", color: "#6b7280" };
-            return (
-              <TableRow key={idx} sx={{ "&:nth-of-type(odd)": { bgcolor: "#fafafa" } }}>
-                <TableCell sx={{ fontSize: "0.75rem" }}>{entry.agentName || entry.extension}</TableCell>
-                <TableCell sx={{ fontSize: "0.75rem", fontFamily: "monospace" }}>{entry.phone || "-"}</TableCell>
-                <TableCell sx={{ fontSize: "0.75rem" }}>
-                  {entry.leadName ? (
-                    <Box>
-                      <Typography variant="caption" sx={{ fontWeight: 600, fontSize: "0.75rem" }}>
-                        {entry.leadName}
-                      </Typography>
-                      {entry.leadEmail && (
-                        <Typography variant="caption" sx={{ fontSize: "0.65rem", color: "#6b7280", display: "block" }}>
-                          {entry.leadEmail}
+    <Box sx={{ mt: 2 }}>
+      {/* Filters row */}
+      <Paper variant="outlined" sx={{ p: 1.5, mb: 1.5, borderRadius: 2 }}>
+        <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap", alignItems: "flex-end" }}>
+          {/* Text search */}
+          <Box sx={{ flex: 1, minWidth: 200 }}>
+            <Typography sx={labelSx}>Search</Typography>
+            <TextField
+              size="small"
+              fullWidth
+              placeholder="Agent, phone, lead, status..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon sx={{ fontSize: 16, color: "#9ca3af" }} />
+                  </InputAdornment>
+                ),
+                sx: inputSx,
+              }}
+            />
+          </Box>
+
+          {/* Date From */}
+          <Box sx={{ minWidth: 180 }}>
+            <Typography sx={labelSx}>Started From</Typography>
+            <TextField
+              size="small"
+              fullWidth
+              type="datetime-local"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              InputProps={{ sx: inputSx }}
+              inputProps={{ step: 1 }}
+            />
+          </Box>
+
+          {/* Date To */}
+          <Box sx={{ minWidth: 180 }}>
+            <Typography sx={labelSx}>Started To</Typography>
+            <TextField
+              size="small"
+              fullWidth
+              type="datetime-local"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              InputProps={{ sx: inputSx }}
+              inputProps={{ step: 1 }}
+            />
+          </Box>
+
+          {/* Duration From */}
+          <Box sx={{ minWidth: 110 }}>
+            <Typography sx={labelSx}>Duration From</Typography>
+            <TextField
+              size="small"
+              fullWidth
+              placeholder="e.g. 1:30"
+              value={durFrom}
+              onChange={(e) => setDurFrom(e.target.value)}
+              InputProps={{ sx: inputSx }}
+            />
+          </Box>
+
+          {/* Duration To */}
+          <Box sx={{ minWidth: 110 }}>
+            <Typography sx={labelSx}>Duration To</Typography>
+            <TextField
+              size="small"
+              fullWidth
+              placeholder="e.g. 10:00"
+              value={durTo}
+              onChange={(e) => setDurTo(e.target.value)}
+              InputProps={{ sx: inputSx }}
+            />
+          </Box>
+
+          {/* Clear + count */}
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1, pb: 0.5 }}>
+            {hasActiveFilters && (
+              <Chip
+                label="Clear"
+                size="small"
+                onClick={clearFilters}
+                onDelete={clearFilters}
+                sx={{ fontWeight: 600, fontSize: "0.7rem", height: 26 }}
+              />
+            )}
+            <Typography variant="caption" sx={{ color: "#6b7280", whiteSpace: "nowrap" }}>
+              {filtered.length} / {history.length}
+            </Typography>
+          </Box>
+        </Box>
+      </Paper>
+
+      <TableContainer component={Paper} variant="outlined">
+        <Table size="small">
+          <TableHead>
+            <TableRow sx={{ bgcolor: "#f9fafb" }}>
+              <TableCell sx={{ fontWeight: 700, fontSize: "0.75rem" }}>Agent</TableCell>
+              <TableCell sx={{ fontWeight: 700, fontSize: "0.75rem" }}>Phone</TableCell>
+              <TableCell sx={{ fontWeight: 700, fontSize: "0.75rem" }}>Lead</TableCell>
+              <TableCell sx={{ fontWeight: 700, fontSize: "0.75rem" }}>Started</TableCell>
+              <TableCell sx={{ fontWeight: 700, fontSize: "0.75rem" }}>Duration</TableCell>
+              <TableCell sx={{ fontWeight: 700, fontSize: "0.75rem" }}>Billable</TableCell>
+              <TableCell sx={{ fontWeight: 700, fontSize: "0.75rem" }}>Status</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {filtered.map((entry, idx) => {
+              const disp = dispositionConfig[entry.disposition] || { label: entry.disposition || "Unknown", bgcolor: "#f3f4f6", color: "#6b7280" };
+              return (
+                <TableRow key={idx} sx={{ "&:nth-of-type(odd)": { bgcolor: "#fafafa" } }}>
+                  <TableCell sx={{ fontSize: "0.75rem" }}>{entry.agentName || entry.extension}</TableCell>
+                  <TableCell sx={{ fontSize: "0.75rem", fontFamily: "monospace" }}>{entry.phone || "-"}</TableCell>
+                  <TableCell sx={{ fontSize: "0.75rem" }}>
+                    {entry.leadName ? (
+                      <Box>
+                        <Typography variant="caption" sx={{ fontWeight: 600, fontSize: "0.75rem" }}>
+                          {entry.leadName}
                         </Typography>
-                      )}
-                      {entry.leadCountry && (
-                        <Typography variant="caption" sx={{ fontSize: "0.6rem", color: "#9ca3af", display: "block" }}>
-                          {entry.leadCountry}
-                        </Typography>
-                      )}
-                    </Box>
-                  ) : (
-                    <Typography variant="caption" sx={{ color: "#9ca3af", fontSize: "0.7rem" }}>-</Typography>
-                  )}
-                </TableCell>
-                <TableCell sx={{ fontSize: "0.75rem" }}>
-                  {entry.startTime ? new Date(entry.startTime).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "-"}
-                </TableCell>
-                <TableCell sx={{ fontSize: "0.75rem", fontFamily: "monospace" }}>
-                  {typeof entry.duration === "number" ? formatDuration(entry.duration) : entry.duration || "-"}
-                </TableCell>
-                <TableCell sx={{ fontSize: "0.75rem", fontFamily: "monospace" }}>
-                  {typeof entry.billsec === "number" ? formatDuration(entry.billsec) : "-"}
-                </TableCell>
-                <TableCell>
-                  <Chip
-                    size="small"
-                    label={disp.label}
-                    sx={{
-                      height: 20,
-                      fontSize: "0.65rem",
-                      fontWeight: 600,
-                      bgcolor: disp.bgcolor,
-                      color: disp.color,
-                    }}
-                  />
+                        {entry.leadEmail && (
+                          <Typography variant="caption" sx={{ fontSize: "0.65rem", color: "#6b7280", display: "block" }}>
+                            {entry.leadEmail}
+                          </Typography>
+                        )}
+                        {entry.leadCountry && (
+                          <Typography variant="caption" sx={{ fontSize: "0.6rem", color: "#9ca3af", display: "block" }}>
+                            {entry.leadCountry}
+                          </Typography>
+                        )}
+                      </Box>
+                    ) : (
+                      <Typography variant="caption" sx={{ color: "#9ca3af", fontSize: "0.7rem" }}>-</Typography>
+                    )}
+                  </TableCell>
+                  <TableCell sx={{ fontSize: "0.75rem" }}>
+                    {entry.startTime ? new Date(entry.startTime).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "-"}
+                  </TableCell>
+                  <TableCell sx={{ fontSize: "0.75rem", fontFamily: "monospace" }}>
+                    {typeof entry.duration === "number" ? formatDuration(entry.duration) : entry.duration || "-"}
+                  </TableCell>
+                  <TableCell sx={{ fontSize: "0.75rem", fontFamily: "monospace" }}>
+                    {typeof entry.billsec === "number" ? formatDuration(entry.billsec) : "-"}
+                  </TableCell>
+                  <TableCell>
+                    <Chip
+                      size="small"
+                      label={disp.label}
+                      sx={{
+                        height: 20,
+                        fontSize: "0.65rem",
+                        fontWeight: 600,
+                        bgcolor: disp.bgcolor,
+                        color: disp.color,
+                      }}
+                    />
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+            {filtered.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={7} align="center" sx={{ py: 3 }}>
+                  <Typography variant="body2" sx={{ color: "#9ca3af" }}>
+                    No records match the current filters
+                  </Typography>
                 </TableCell>
               </TableRow>
-            );
-          })}
-        </TableBody>
-      </Table>
-    </TableContainer>
+            )}
+          </TableBody>
+        </Table>
+      </TableContainer>
+    </Box>
   );
 };
 

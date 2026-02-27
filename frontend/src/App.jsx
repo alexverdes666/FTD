@@ -481,7 +481,7 @@ function AppContent() {
             <Route
               path="ami-agents"
               element={
-                <ProtectedRoute allowedRoles={["admin"]}>
+                <ProtectedRoute allowedRoles={["admin", "affiliate_manager"]}>
                   <LazyPage><AmiAgentsPage /></LazyPage>
                 </ProtectedRoute>
               }
