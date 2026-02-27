@@ -43,17 +43,17 @@ class AmiService extends EventEmitter {
     this.pollInterval = null;
 
     // AMI credentials
-    this.host = "188.126.10.151";
-    this.port = 5038;
-    this.username = "evolvs";
-    this.password = "evolvs@1";
+    this.host = process.env.AMI_HOST || "188.126.10.151";
+    this.port = parseInt(process.env.AMI_PORT, 10) || 5038;
+    this.username = process.env.AMI_USERNAME || "evolvs";
+    this.password = process.env.AMI_PASSWORD || "evolvs@1";
 
     // MySQL CDR database
     this.cdrDbConfig = {
-      host: "188.126.10.151",
-      port: 5039,
-      user: "evlovs",
-      password: "XxUzALcqynY8PXqd",
+      host: process.env.CDR_DB_HOST || "188.126.10.151",
+      port: parseInt(process.env.CDR_DB_PORT, 10) || 5039,
+      user: process.env.CDR_DB_USER || "evlovs",
+      password: process.env.CDR_DB_PASSWORD || "XxUzALcqynY8PXqd",
       connectTimeout: 10000,
     };
   }
@@ -174,9 +174,8 @@ class AmiService extends EventEmitter {
         if (record) records.push(record);
       }
 
-      // Merge with any existing event-tracked history (event-tracked at front)
-      const eventTracked = this.callHistory.filter((h) => h._source === "event");
-      this.callHistory = [...eventTracked, ...records].slice(0, this.maxHistorySize);
+      // Only CDR database records - no event-tracked merging
+      this.callHistory = records.slice(0, this.maxHistorySize);
 
       // Broadcast
       if (this.io) {
@@ -228,10 +227,11 @@ class AmiService extends EventEmitter {
 
   async _cdrRowToRecord(row) {
     // Custom PBX CDR table structure:
-    //   Incoming: src = phone number, dst = agent extension
-    //   Outgoing: src = agent extension, dst = phone number
+    //   Incoming: src = caller displayed number, dst = agent extension, line1 = actual SIM/line number
+    //   Outgoing: src = agent extension, dst = phone number dialed
     const src = (row.src || "").toString();
     const dst = (row.dst || "").toString();
+    const line1 = (row.line1 || "").toString();
     const callType = (row.call_type || "").toLowerCase();
 
     // Determine agent extension and phone number based on call type
@@ -245,10 +245,11 @@ class AmiService extends EventEmitter {
         phone = dst;
       }
     } else {
-      // incoming/local: dst is the agent extension, src is the phone
+      // incoming/local: dst is the agent extension
+      // Use line1 (actual SIM/line) as phone if available, otherwise fall back to src
       if (/^\d{2,4}$/.test(dst) && !isTrunk(dst)) {
         agentExt = dst;
-        phone = src;
+        phone = line1 || src;
       }
     }
 
@@ -256,10 +257,14 @@ class AmiService extends EventEmitter {
 
     const agentInfo = this.agentMap.get(agentExt);
 
-    // Lead lookup (cached)
+    // Lead lookup (cached) - try line1 first for incoming, then src
     let lead = null;
     if (phone) {
       lead = await this._lookupLead(phone);
+    }
+    // If no lead found with line1, try src for incoming calls
+    if (!lead && callType !== "outgoing" && line1 && src) {
+      lead = await this._lookupLead(src);
     }
 
     return {
@@ -269,6 +274,7 @@ class AmiService extends EventEmitter {
       src,
       dst,
       phone,
+      line1,
       callType,
       disposition: row.disposition || "",
       duration: parseInt(row.duration, 10) || 0,
@@ -559,6 +565,13 @@ class AmiService extends EventEmitter {
   _handleEvent(event) {
     const eventName = event["Event"];
 
+    // Debug: log call-related events that involve channels
+    if (["Newchannel", "Newstate", "Hangup", "DialBegin", "DialEnd", "BridgeEnter", "DeviceStateChange"].includes(eventName)) {
+      const ch = event["Channel"] || event["Device"] || "";
+      const dst = event["DestChannel"] || "";
+      console.log(`📞 AMI [${eventName}]: ch=${ch} dst=${dst} state=${event["ChannelStateDesc"] || event["State"] || ""} callerID=${event["CallerIDNum"] || ""} connected=${event["ConnectedLineNum"] || ""}`);
+    }
+
     switch (eventName) {
       // SIP peer list response
       case "PeerEntry":
@@ -568,7 +581,20 @@ class AmiService extends EventEmitter {
         this._broadcastAllStates();
         break;
 
-      // Peer registration changes
+      // PJSIP endpoint list response
+      case "EndpointList":
+        this._handlePjsipEndpoint(event);
+        break;
+      case "EndpointListComplete":
+        this._broadcastAllStates();
+        break;
+
+      // PJSIP contact status (registration)
+      case "ContactStatus":
+        this._handleContactStatus(event);
+        break;
+
+      // Peer registration changes (SIP + PJSIP)
       case "PeerStatus":
         this._handlePeerStatus(event);
         break;
@@ -627,6 +653,9 @@ class AmiService extends EventEmitter {
     // Get all SIP peers
     this._sendAction({ Action: "SIPpeers", ActionID: "init_peers" });
 
+    // Also request PJSIP endpoints
+    this._sendAction({ Action: "PJSIPShowEndpoints", ActionID: "init_pjsip" });
+
     // Get all active channels after a short delay (peers need to load first)
     setTimeout(() => {
       this._sendAction({ Action: "CoreShowChannels", ActionID: "init_channels" });
@@ -666,14 +695,16 @@ class AmiService extends EventEmitter {
       callerIdName: existing?.callerIdName || "",
       channel: existing?.channel || "",
       talkingTo: existing?.talkingTo || "",
+      direction: existing?.direction || null,
+      callStartTime: existing?.callStartTime || null,
       timestamp: new Date().toISOString(),
     });
   }
 
   _handlePeerStatus(event) {
-    // event.Peer = "SIP/602"
+    // event.Peer = "SIP/602" or "PJSIP/30"
     const peerStr = event["Peer"] || "";
-    const name = peerStr.replace(/^SIP\//i, "");
+    const name = peerStr.replace(/^(?:PJSIP|SIP)\//i, "");
     if (!name || isTrunk(name)) return;
 
     const peerStatus = event["PeerStatus"] || "";
@@ -700,17 +731,105 @@ class AmiService extends EventEmitter {
     this._broadcastAllStates();
   }
 
+  // ===== PJSIP handling =====
+
+  _handlePjsipEndpoint(event) {
+    // EndpointList event from PJSIPShowEndpoints
+    const name = event["ObjectName"] || event["Endpoint"] || "";
+    if (!name || isTrunk(name)) return;
+
+    const deviceState = (event["DeviceState"] || "").toUpperCase();
+
+    let registrationState = "offline";
+    let state = "unavailable";
+    if (deviceState === "NOT_INUSE" || deviceState === "IDLE") {
+      registrationState = "online";
+      state = "free";
+    } else if (deviceState === "INUSE" || deviceState === "BUSY" || deviceState === "RINGING" || deviceState === "RINGINUSE") {
+      registrationState = "online";
+      state = deviceState === "RINGING" || deviceState === "RINGINUSE" ? "calling" : "talking";
+    } else if (deviceState === "UNAVAILABLE" || deviceState === "INVALID") {
+      registrationState = "offline";
+      state = "unavailable";
+    }
+
+    const existing = this.peers.get(name);
+    this.peers.set(name, {
+      ...(existing || {}),
+      name,
+      registrationState,
+      state: existing?.state && existing.state !== "free" && existing.state !== "unavailable" ? existing.state : state,
+      callerIdNum: existing?.callerIdNum || "",
+      callerIdName: existing?.callerIdName || "",
+      channel: existing?.channel || "",
+      talkingTo: existing?.talkingTo || "",
+      direction: existing?.direction || null,
+      callStartTime: existing?.callStartTime || null,
+      timestamp: new Date().toISOString(),
+    });
+
+    console.log(`🔌 AMI: PJSIP endpoint "${name}" deviceState=${deviceState} -> reg=${registrationState} state=${state}`);
+  }
+
+  _handleContactStatus(event) {
+    // PJSIP ContactStatus event - tracks registration
+    const uri = event["URI"] || "";
+    const aor = event["AOR"] || "";
+    const contactStatus = event["ContactStatus"] || "";
+    const name = aor || "";
+    if (!name || isTrunk(name)) return;
+
+    const peer = this._ensurePeer(name);
+    if (!peer) return;
+
+    if (contactStatus === "Created" || contactStatus === "Updated" || contactStatus === "Reachable") {
+      peer.registrationState = "online";
+      if (peer.state === "unavailable") peer.state = "free";
+    } else if (contactStatus === "Removed" || contactStatus === "Unreachable") {
+      peer.registrationState = "offline";
+      peer.state = "unavailable";
+    }
+
+    peer.timestamp = new Date().toISOString();
+    this.peers.set(name, peer);
+    this._broadcastAllStates();
+  }
+
   // ===== Channel/Call event handling =====
 
   _extractPeerFromChannel(channel) {
     // Channel = "SIP/602-00001234" -> "602"
+    // Channel = "PJSIP/30-00001234" -> "30"
+    // Channel = "Local/xxx@context-xxx" -> null (skip local channels)
     if (!channel) return null;
-    const match = channel.match(/^SIP\/([^-]+)/i);
+    const match = channel.match(/^(?:PJSIP|SIP)\/([^-]+)/i);
     if (match) {
       const name = match[1];
       return isTrunk(name) ? null : name;
     }
     return null;
+  }
+
+  _ensurePeer(name) {
+    if (!name || isTrunk(name)) return null;
+    if (!this.peers.has(name)) {
+      this.peers.set(name, {
+        name,
+        ip: null,
+        port: "0",
+        registrationState: "online",
+        state: "free",
+        callerIdNum: "",
+        callerIdName: "",
+        channel: "",
+        talkingTo: "",
+        direction: null,
+        callStartTime: null,
+        lead: null,
+        timestamp: new Date().toISOString(),
+      });
+    }
+    return this.peers.get(name);
   }
 
   _handleNewChannel(event) {
@@ -728,14 +847,19 @@ class AmiService extends EventEmitter {
       linkedId: event["Linkedid"] || "",
     });
 
-    if (peerName && this.peers.has(peerName)) {
-      const peer = this.peers.get(peerName);
-      if (peer.registrationState !== "offline") {
+    if (peerName) {
+      const peer = this._ensurePeer(peerName);
+      if (peer && peer.registrationState !== "offline") {
         const wasIdle = peer.state === "free" || peer.state === "unavailable";
         peer.state = "calling";
         peer.channel = channel;
         peer.callerIdNum = event["CallerIDNum"] || "";
         peer.callerIdName = event["CallerIDName"] || "";
+        // Determine direction: if CallerIDNum matches the peer extension, it's outbound
+        const callerNum = event["CallerIDNum"] || "";
+        if (callerNum === peerName) {
+          peer.direction = "outbound";
+        }
         if (wasIdle) peer.callStartTime = new Date().toISOString();
         peer.timestamp = new Date().toISOString();
         this.peers.set(peerName, peer);
@@ -758,9 +882,9 @@ class AmiService extends EventEmitter {
       this.activeChannels.set(channel, ch);
     }
 
-    if (peerName && this.peers.has(peerName)) {
-      const peer = this.peers.get(peerName);
-      if (peer.registrationState === "offline") return;
+    if (peerName) {
+      const peer = this._ensurePeer(peerName);
+      if (!peer || peer.registrationState === "offline") return;
 
       if (stateDesc === "up") {
         peer.state = "talking";
@@ -768,6 +892,11 @@ class AmiService extends EventEmitter {
         if (!peer.callStartTime) peer.callStartTime = new Date().toISOString();
       } else if (stateDesc === "ringing" || stateDesc === "ring") {
         peer.state = "calling";
+        // If state is ringing and callerIdNum matches peer, it's inbound ringing
+        const connectedNum = event["ConnectedLineNum"] || "";
+        if (connectedNum && connectedNum !== peerName) {
+          peer.direction = "inbound";
+        }
         if (!peer.callStartTime) peer.callStartTime = new Date().toISOString();
       }
 
@@ -799,18 +928,13 @@ class AmiService extends EventEmitter {
       }
 
       if (!hasOtherChannels && peer.registrationState !== "offline") {
-        // Record call history entry before clearing peer state
-        const phone = peer.talkingTo || peer.callerIdNum || "";
-        if (peer.callStartTime && (peer.state === "talking" || peer.state === "calling")) {
-          this._recordCallFromEvent(peerName, peer, event);
-        }
-
         peer.state = "free";
         peer.callerIdNum = "";
         peer.callerIdName = "";
         peer.channel = "";
         peer.talkingTo = "";
         peer.callStartTime = null;
+        peer.direction = null;
         peer.lead = null;
       }
 
@@ -820,98 +944,37 @@ class AmiService extends EventEmitter {
     }
   }
 
-  // Build a call history record from our own tracked channel events
-  async _recordCallFromEvent(peerName, peer, hangupEvent) {
-    const endTime = new Date().toISOString();
-    const startTime = peer.callStartTime;
-    const durationSec = Math.round((Date.now() - new Date(startTime).getTime()) / 1000);
-    const phone = peer.talkingTo || peer.callerIdNum || "";
-    const cause = hangupEvent["Cause"] || "";
-    const causeTxt = (hangupEvent["Cause-txt"] || "").toUpperCase();
-
-    // Determine disposition from hangup cause
-    let disposition = "ANSWERED";
-    if (peer.state === "calling") {
-      // Never reached "talking" state
-      if (causeTxt.includes("BUSY")) disposition = "BUSY";
-      else if (causeTxt.includes("CONGESTION")) disposition = "CONGESTION";
-      else disposition = "NO ANSWER";
-    }
-
-    // Billable seconds: only if the call was actually answered (talking state)
-    const billsec = peer.state === "talking" ? durationSec : 0;
-
-    const agentInfo = this.agentMap.get(peerName);
-
-    // Lead lookup
-    let lead = peer.lead;
-    if (!lead && phone) {
-      lead = await this._lookupLead(phone);
-      if (!lead && peer.callerIdName) {
-        const alias = this._parseAlias(peer.callerIdName);
-        if (alias.email) lead = await this._lookupLeadByEmail(alias.email);
-        if (!lead && alias.phone) lead = await this._lookupLead(alias.phone);
-      }
-    }
-
-    const record = {
-      _source: "event",
-      extension: peerName,
-      agentName: agentInfo?.fullName || peerName,
-      src: peerName,
-      dst: phone,
-      phone,
-      disposition,
-      duration: durationSec,
-      billsec,
-      startTime,
-      answerTime: peer.state === "talking" ? startTime : "",
-      endTime,
-      leadName: lead?.fullName || null,
-      leadEmail: lead?.newEmail || null,
-      leadId: lead?._id || null,
-      leadCountry: lead?.country || null,
-      timestamp: endTime,
-    };
-
-    this.callHistory.unshift(record);
-    if (this.callHistory.length > this.maxHistorySize) {
-      this.callHistory = this.callHistory.slice(0, this.maxHistorySize);
-    }
-
-    // Broadcast updated history
-    if (this.io) {
-      this.io.to("admin:ami-agents").emit("ami_call_history", this.callHistory);
-    }
-  }
-
   _handleDialBegin(event) {
     const destChannel = event["DestChannel"] || "";
     const destPeer = this._extractPeerFromChannel(destChannel);
 
-    if (destPeer && this.peers.has(destPeer)) {
-      const peer = this.peers.get(destPeer);
-      if (peer.registrationState !== "offline") {
+    if (destPeer) {
+      const peer = this._ensurePeer(destPeer);
+      if (peer && peer.registrationState !== "offline") {
         peer.state = "calling";
         peer.channel = destChannel;
         peer.callerIdNum = event["CallerIDNum"] || event["ConnectedLineNum"] || "";
         peer.callerIdName = event["CallerIDName"] || event["ConnectedLineName"] || "";
+        peer.direction = "inbound";
+        if (!peer.callStartTime) peer.callStartTime = new Date().toISOString();
         peer.timestamp = new Date().toISOString();
         this.peers.set(destPeer, peer);
         this._broadcastAllStates();
       }
     }
 
-    // Also update the source peer
+    // Also update the source peer (the one making the call)
     const srcChannel = event["Channel"] || "";
     const srcPeer = this._extractPeerFromChannel(srcChannel);
-    if (srcPeer && this.peers.has(srcPeer)) {
-      const peer = this.peers.get(srcPeer);
-      if (peer.registrationState !== "offline") {
+    if (srcPeer) {
+      const peer = this._ensurePeer(srcPeer);
+      if (peer && peer.registrationState !== "offline") {
         peer.state = "calling";
         peer.channel = srcChannel;
         peer.callerIdNum = event["DestCallerIDNum"] || "";
         peer.callerIdName = event["DestCallerIDName"] || "";
+        peer.direction = "outbound";
+        if (!peer.callStartTime) peer.callStartTime = new Date().toISOString();
         peer.timestamp = new Date().toISOString();
         this.peers.set(srcPeer, peer);
         this._broadcastAllStates();
@@ -945,6 +1008,8 @@ class AmiService extends EventEmitter {
         peer.callerIdName = "";
         peer.channel = "";
         peer.talkingTo = "";
+        peer.callStartTime = null;
+        peer.direction = null;
         peer.timestamp = new Date().toISOString();
         this.peers.set(destPeer, peer);
         this._broadcastAllStates();
@@ -956,14 +1021,15 @@ class AmiService extends EventEmitter {
     const channel = event["Channel"] || "";
     const peerName = this._extractPeerFromChannel(channel);
 
-    if (peerName && this.peers.has(peerName)) {
-      const peer = this.peers.get(peerName);
-      if (peer.registrationState !== "offline") {
+    if (peerName) {
+      const peer = this._ensurePeer(peerName);
+      if (peer && peer.registrationState !== "offline") {
         peer.state = "talking";
         peer.channel = channel;
         peer.callerIdNum = event["ConnectedLineNum"] || event["CallerIDNum"] || peer.callerIdNum;
         peer.callerIdName = event["ConnectedLineName"] || event["CallerIDName"] || peer.callerIdName;
         peer.talkingTo = event["ConnectedLineNum"] || "";
+        if (!peer.callStartTime) peer.callStartTime = new Date().toISOString();
         peer.timestamp = new Date().toISOString();
         this.peers.set(peerName, peer);
         this._broadcastAllStates();
@@ -973,13 +1039,14 @@ class AmiService extends EventEmitter {
 
   _handleDeviceStateChange(event) {
     const device = event["Device"] || "";
-    // Device = "SIP/602" -> "602"
-    const name = device.replace(/^SIP\//i, "");
+    // Device = "SIP/602" or "PJSIP/30" -> "602" or "30"
+    const name = device.replace(/^(?:PJSIP|SIP)\//i, "");
     if (!name || isTrunk(name)) return;
-    if (!this.peers.has(name)) return;
+
+    const peer = this._ensurePeer(name);
+    if (!peer) return;
 
     const stateStr = (event["State"] || "").toUpperCase();
-    const peer = this.peers.get(name);
     if (peer.registrationState === "offline") return;
 
     if (stateStr.includes("NOT_INUSE") || stateStr === "IDLE") {
@@ -994,6 +1061,8 @@ class AmiService extends EventEmitter {
         peer.callerIdName = "";
         peer.channel = "";
         peer.talkingTo = "";
+        peer.callStartTime = null;
+        peer.direction = null;
       }
     } else if (stateStr.includes("RINGING") || stateStr === "RING") {
       peer.state = "calling";
@@ -1065,12 +1134,24 @@ class AmiService extends EventEmitter {
         peer.callerIdNum = inCall.connectedLineNum || inCall.callerIdNum || "";
         peer.callerIdName = inCall.connectedLineName || inCall.callerIdName || "";
         peer.talkingTo = inCall.connectedLineNum || "";
+        // Preserve existing direction if set, otherwise try to determine from channel data
+        if (!peer.direction) {
+          // If callerIdNum matches the peer name, peer originated the call
+          if (inCall.callerIdNum === name) {
+            peer.direction = "outbound";
+          } else if (inCall.connectedLineNum && inCall.connectedLineNum !== name) {
+            peer.direction = "inbound";
+          }
+        }
+        if (!peer.callStartTime) peer.callStartTime = new Date().toISOString();
       } else {
         peer.state = "free";
         peer.callerIdNum = "";
         peer.callerIdName = "";
         peer.channel = "";
         peer.talkingTo = "";
+        peer.callStartTime = null;
+        peer.direction = null;
       }
       peer.timestamp = new Date().toISOString();
     }
@@ -1079,67 +1160,11 @@ class AmiService extends EventEmitter {
   // ===== CDR (Call Detail Record) from cdr_manager =====
 
   async _handleCdrEvent(event) {
-    console.log("📞 AMI: CDR event received:", JSON.stringify(event).substring(0, 300));
-    const src = event["Source"] || "";
-    const dst = event["Destination"] || "";
-    const channel = event["Channel"] || "";
-    const dstChannel = event["DestinationChannel"] || "";
-    const disposition = event["Disposition"] || "";
-    const duration = parseInt(event["Duration"], 10) || 0;
-    const billsec = parseInt(event["BillableSeconds"], 10) || 0;
-    const startTime = event["StartTime"] || "";
-    const answerTime = event["AnswerTime"] || "";
-    const endTime = event["EndTime"] || "";
-
-    // Determine which is the agent extension
-    const srcPeer = this._extractPeerFromChannel(channel);
-    const dstPeer = this._extractPeerFromChannel(dstChannel);
-    const agentExt = (srcPeer && !isTrunk(srcPeer)) ? srcPeer : (dstPeer && !isTrunk(dstPeer)) ? dstPeer : null;
-
-    if (!agentExt) return; // Not an agent call
-
-    const agentInfo = this.agentMap.get(agentExt);
-    const phone = agentExt === srcPeer ? dst : src;
-
-    // Look up lead
-    let lead = null;
-    if (phone) {
-      lead = await this._lookupLead(phone);
-      if (!lead) {
-        const alias = this._parseAlias(event["CallerID"] || "");
-        if (alias.email) lead = await this._lookupLeadByEmail(alias.email);
-        if (!lead && alias.phone) lead = await this._lookupLead(alias.phone);
-      }
-    }
-
-    const record = {
-      extension: agentExt,
-      agentName: agentInfo?.fullName || agentExt,
-      src,
-      dst,
-      phone,
-      disposition,
-      duration,
-      billsec,
-      startTime,
-      answerTime,
-      endTime,
-      leadName: lead?.fullName || null,
-      leadEmail: lead?.newEmail || null,
-      leadId: lead?._id || null,
-      leadCountry: lead?.country || null,
-      timestamp: new Date().toISOString(),
-    };
-
-    this.callHistory.unshift(record);
-    if (this.callHistory.length > this.maxHistorySize) {
-      this.callHistory = this.callHistory.slice(0, this.maxHistorySize);
-    }
-
-    // Broadcast updated history
-    if (this.io) {
-      this.io.to("admin:ami-agents").emit("ami_call_history", this.callHistory);
-    }
+    // CDR event received from AMI - trigger a fresh poll from the database
+    // instead of tracking separately (avoids duplication)
+    console.log("📞 AMI: CDR event received, triggering DB poll");
+    // Small delay to let the DB commit the record
+    setTimeout(() => this._loadNewCdrs(), 3000);
   }
 
   getCallHistory() {

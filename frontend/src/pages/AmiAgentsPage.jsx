@@ -24,6 +24,9 @@ import {
   Phone as PhoneIcon,
   PhoneInTalk as PhoneInTalkIcon,
   PhoneMissed as PhoneMissedIcon,
+  PhoneCallback as PhoneCallbackIcon,
+  CallMade as CallMadeIcon,
+  CallReceived as CallReceivedIcon,
   LinkOff as LinkOffIcon,
   Person as PersonIcon,
   History as HistoryIcon,
@@ -304,6 +307,109 @@ const AgentBox = ({ agent }) => {
   );
 };
 
+const LiveCallBox = ({ agent }) => {
+  const extensionName = getDisplayName(agent.memberName || agent.name);
+  const displayName = agent.agentName || extensionName;
+  const alias = parseAlias(agent.callerIdName, agent.talkingTo || agent.callerIdNum);
+  const phone = alias.phone || agent.talkingTo || "Unknown";
+  const isCalling = agent.state === "calling";
+  const isOutbound = agent.direction === "outbound" || (!agent.direction && agent.state === "calling");
+
+  const borderColor = isCalling ? "#fdba74" : "#86efac";
+  const bgColor = isCalling ? "#fff7ed" : "#f0fdf4";
+  const accentColor = isCalling ? "#f97316" : "#22c55e";
+  const glowColor = isCalling ? "rgba(249, 115, 22, 0.25)" : "rgba(34, 197, 94, 0.2)";
+
+  return (
+    <Paper
+      elevation={0}
+      sx={{
+        px: 2,
+        py: 1.5,
+        borderRadius: 2,
+        border: `2px solid ${borderColor}`,
+        bgcolor: bgColor,
+        boxShadow: `0 0 12px ${glowColor}`,
+        display: "flex",
+        alignItems: "center",
+        gap: 2,
+        minWidth: 280,
+        animation: isCalling ? "pulseCall 1.5s infinite" : "none",
+        "@keyframes pulseCall": {
+          "0%": { boxShadow: `0 0 8px ${glowColor}` },
+          "50%": { boxShadow: `0 0 20px ${glowColor}, 0 0 32px ${glowColor}` },
+          "100%": { boxShadow: `0 0 8px ${glowColor}` },
+        },
+      }}
+    >
+      {/* Direction icon */}
+      <Box
+        sx={{
+          width: 36,
+          height: 36,
+          borderRadius: "50%",
+          bgcolor: accentColor,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          flexShrink: 0,
+        }}
+      >
+        {isOutbound ? (
+          <CallMadeIcon sx={{ color: "#fff", fontSize: 20 }} />
+        ) : (
+          <CallReceivedIcon sx={{ color: "#fff", fontSize: 20 }} />
+        )}
+      </Box>
+
+      {/* Info */}
+      <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+          <Typography variant="body2" sx={{ fontWeight: 700, color: "#1f2937" }}>
+            {displayName}
+          </Typography>
+          <Typography variant="caption" sx={{ color: "#6b7280" }}>
+            Ext. {extensionName}
+          </Typography>
+        </Box>
+        <Typography variant="body2" sx={{ fontFamily: "monospace", fontWeight: 600, color: "#374151", fontSize: "0.85rem" }}>
+          {phone}
+        </Typography>
+      </Box>
+
+      {/* Status + timer */}
+      <Box sx={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 0.25 }}>
+        <Chip
+          label={isOutbound ? "Outbound" : "Inbound"}
+          size="small"
+          sx={{
+            height: 20,
+            fontSize: "0.65rem",
+            fontWeight: 600,
+            bgcolor: "white",
+            border: `1px solid ${borderColor}`,
+            color: accentColor,
+          }}
+        />
+        <Chip
+          label={isCalling ? "Ringing" : "Talking"}
+          size="small"
+          sx={{
+            height: 20,
+            fontSize: "0.65rem",
+            fontWeight: 600,
+            bgcolor: accentColor,
+            color: "white",
+          }}
+        />
+        {agent.callStartTime && (
+          <LiveTimer startTime={agent.callStartTime} color={accentColor} />
+        )}
+      </Box>
+    </Paper>
+  );
+};
+
 // Format seconds to mm:ss or hh:mm:ss
 const formatDuration = (seconds) => {
   if (!seconds || seconds < 0) return "0:00";
@@ -549,6 +655,32 @@ const AmiAgentsPage = () => {
                 <AgentBox key={agent.name} agent={agent} />
               ))}
             </Box>
+          )}
+
+          {/* Live Calls Section */}
+          {!loading && agents.filter((a) => a.state === "calling" || a.state === "talking").length > 0 && (
+            <>
+              <Divider sx={{ my: 2.5 }} />
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.5 }}>
+                <PhoneCallbackIcon sx={{ color: "#f97316", fontSize: 20 }} />
+                <Typography variant="subtitle1" sx={{ fontWeight: 700, color: "#1f2937" }}>
+                  Live Calls
+                </Typography>
+                <Chip
+                  label={agents.filter((a) => a.state === "calling" || a.state === "talking").length}
+                  size="small"
+                  sx={{ height: 20, fontSize: "0.7rem", fontWeight: 700, bgcolor: "#f97316", color: "#fff" }}
+                />
+              </Box>
+              <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
+                {agents
+                  .filter((a) => a.state === "calling" || a.state === "talking")
+                  .sort((a, b) => (a.state === "calling" ? -1 : 1) - (b.state === "calling" ? -1 : 1))
+                  .map((agent) => (
+                    <LiveCallBox key={`live-${agent.name}`} agent={agent} />
+                  ))}
+              </Box>
+            </>
           )}
         </>
       )}
