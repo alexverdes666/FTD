@@ -132,6 +132,52 @@ const depositCallSchema = new Schema({
     ref: 'AgentCallDeclaration',
     default: null
   },
+  // Deposit status tracks whether the deposit itself is confirmed or still pending
+  depositStatus: {
+    type: String,
+    enum: ['pending', 'confirmed'],
+    default: 'pending'
+  },
+  // Track if the lead was deleted/removed from the order (show with strikethrough)
+  isDeleted: {
+    type: Boolean,
+    default: false
+  },
+  deletedAt: {
+    type: Date,
+    default: null
+  },
+  deletedReason: {
+    type: String,
+    trim: true,
+    default: ''
+  },
+  // History of lead replacements (when a lead is replaced, old info is preserved here)
+  leadHistory: [{
+    leadId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Lead'
+    },
+    ftdName: { type: String, trim: true },
+    ftdEmail: { type: String, trim: true },
+    ftdPhone: { type: String, trim: true },
+    action: {
+      type: String,
+      enum: ['replaced', 'deleted', 'added'],
+      required: true
+    },
+    replacedBy: {
+      type: Schema.Types.ObjectId,
+      ref: 'User',
+      default: null
+    },
+    replacedAt: {
+      type: Date,
+      default: Date.now
+    },
+    reason: { type: String, trim: true, default: '' },
+    _id: false
+  }],
   // Overall status
   status: {
     type: String,

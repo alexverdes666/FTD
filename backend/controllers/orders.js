@@ -1310,6 +1310,47 @@ const handleManualSelectionOrder = async (req, res, next) => {
 
     await Promise.all(updatePromises);
 
+    // Auto-create DepositCall records for all FTD leads (with pending deposit status)
+    try {
+      const DepositCall = require("../models/DepositCall");
+      const ftdManualLeads = manualLeads.filter((ml) => ml.leadType === "ftd");
+
+      if (ftdManualLeads.length > 0) {
+        const depositCallOps = ftdManualLeads.map((ml) => {
+          const lead = leadMap.get(ml.leadId);
+          return {
+            insertOne: {
+              document: {
+                leadId: lead._id,
+                orderId: order._id,
+                clientBrokerId: lead.assignedClientBrokers?.[0] || null,
+                accountManager:
+                  req.user.role === "affiliate_manager" ? req.user._id : null,
+                assignedAgent: ml.agentId || lead.assignedAgent || null,
+                ftdName: `${lead.firstName} ${lead.lastName}`,
+                ftdEmail: lead.newEmail,
+                ftdPhone: lead.newPhone,
+                depositStatus: "pending",
+                createdBy: req.user._id,
+              },
+            },
+          };
+        });
+        await DepositCall.bulkWrite(depositCallOps, { ordered: false }).catch(
+          (err) => {
+            if (err.code !== 11000 && !err.writeErrors?.every((e) => e.code === 11000)) {
+              console.error("[MANUAL-ORDER] Error creating deposit calls:", err);
+            }
+          }
+        );
+        console.log(
+          `[MANUAL-ORDER] Created ${ftdManualLeads.length} deposit call records for order ${order._id}`
+        );
+      }
+    } catch (depositCallErr) {
+      console.error("[MANUAL-ORDER] Error creating deposit calls:", depositCallErr);
+    }
+
     // Populate the order for response
     const populatedOrder = await Order.findById(order._id)
       .populate(
@@ -3070,6 +3111,51 @@ exports.createOrder = async (req, res, next) => {
     order.leadsMetadata = leadsMetadata; // Make sure metadata is on the document
     await order.save();
 
+    // Auto-create DepositCall records for all FTD leads (with pending deposit status)
+    try {
+      const DepositCall = require("../models/DepositCall");
+      const ftdLeadsForDeposit = pulledLeads.filter((lead) => {
+        const meta = leadsMetadata.find(
+          (m) => m.leadId.toString() === lead._id.toString()
+        );
+        return meta && meta.orderedAs === "ftd";
+      });
+
+      if (ftdLeadsForDeposit.length > 0) {
+        const depositCallOps = ftdLeadsForDeposit.map((lead) => ({
+          insertOne: {
+            document: {
+              leadId: lead._id,
+              orderId: order._id,
+              clientBrokerId: lead.assignedClientBrokers?.[0] || null,
+              accountManager:
+                req.user.role === "affiliate_manager" ? req.user._id : null,
+              assignedAgent: lead.assignedAgent || null,
+              ftdName: `${lead.firstName} ${lead.lastName}`,
+              ftdEmail: lead.newEmail,
+              ftdPhone: lead.newPhone,
+              depositStatus: "pending",
+              createdBy: req.user._id,
+            },
+          },
+        }));
+        await DepositCall.bulkWrite(depositCallOps, { ordered: false }).catch(
+          (err) => {
+            // Ignore duplicate key errors (E11000) - deposit call already exists
+            if (err.code !== 11000 && !err.writeErrors?.every((e) => e.code === 11000)) {
+              console.error("[ORDER-CREATE] Error creating deposit calls:", err);
+            }
+          }
+        );
+        console.log(
+          `[ORDER-CREATE] Created ${ftdLeadsForDeposit.length} deposit call records for order ${order._id}`
+        );
+      }
+    } catch (depositCallErr) {
+      // Non-blocking: deposit call creation failure should not break order creation
+      console.error("[ORDER-CREATE] Error creating deposit calls:", depositCallErr);
+    }
+
     // Populate the order with lead details
     const populatedOrder = await Order.findById(order._id)
       .populate("requester", "fullName email role")
@@ -4447,6 +4533,35 @@ exports.cancelLeadFromOrder = async (req, res, next) => {
     // Save both documents
     await Promise.all([lead.save(), order.save()]);
 
+    // Sync DepositCall: mark as deleted with history
+    if (leadType === "ftd") {
+      try {
+        const DepositCall = require("../models/DepositCall");
+        const depositCall = await DepositCall.findOne({ leadId: lead._id, orderId });
+        if (depositCall) {
+          // Push deletion event to history
+          if (!depositCall.leadHistory) depositCall.leadHistory = [];
+          depositCall.leadHistory.push({
+            leadId: lead._id,
+            ftdName: depositCall.ftdName,
+            ftdEmail: depositCall.ftdEmail,
+            ftdPhone: depositCall.ftdPhone,
+            action: "deleted",
+            replacedBy: req.user._id,
+            replacedAt: new Date(),
+            reason: reason || "Lead removed from order",
+          });
+          depositCall.isDeleted = true;
+          depositCall.deletedAt = new Date();
+          depositCall.deletedReason = reason || "Lead removed from order";
+          await depositCall.save();
+          console.log(`[CANCEL-LEAD] Marked deposit call ${depositCall._id} as deleted`);
+        }
+      } catch (dcErr) {
+        console.error("[CANCEL-LEAD] Error syncing deposit call:", dcErr);
+      }
+    }
+
     // Populate the updated order for response
     await order.populate([
       { path: "requester", select: "fullName email role" },
@@ -5173,6 +5288,61 @@ exports.changeFTDInOrder = async (req, res, next) => {
         `[CHANGE-FTD-DEBUG] Successfully replaced lead ${leadId} with ${newLead._id} in order ${orderId}`
       );
 
+      // Sync DepositCall: update the record to reflect the FTD swap, keeping history
+      if (!isFillerOrder) {
+        try {
+          const DepositCall = require("../models/DepositCall");
+          let depositCall = await DepositCall.findOne({ leadId: oldLead._id, orderId });
+
+          if (depositCall) {
+            if (!depositCall.leadHistory) depositCall.leadHistory = [];
+            depositCall.leadHistory.push({
+              leadId: oldLead._id,
+              ftdName: depositCall.ftdName,
+              ftdEmail: depositCall.ftdEmail,
+              ftdPhone: depositCall.ftdPhone,
+              action: "replaced",
+              replacedBy: req.user._id,
+              replacedAt: new Date(),
+              reason: "FTD swap",
+            });
+            depositCall.leadId = newLead._id;
+            depositCall.ftdName = `${newLead.firstName} ${newLead.lastName}`;
+            depositCall.ftdEmail = newLead.newEmail;
+            depositCall.ftdPhone = newLead.newPhone;
+            depositCall.assignedAgent = newLead.assignedAgent || depositCall.assignedAgent;
+            await depositCall.save();
+          } else {
+            await DepositCall.create({
+              leadId: newLead._id,
+              orderId,
+              clientBrokerId: newLead.assignedClientBrokers?.[0] || null,
+              accountManager: req.user.role === "affiliate_manager" ? req.user._id : null,
+              assignedAgent: newLead.assignedAgent || null,
+              ftdName: `${newLead.firstName} ${newLead.lastName}`,
+              ftdEmail: newLead.newEmail,
+              ftdPhone: newLead.newPhone,
+              depositStatus: "pending",
+              createdBy: req.user._id,
+              leadHistory: [{
+                leadId: oldLead._id,
+                ftdName: `${oldLead.firstName} ${oldLead.lastName}`,
+                ftdEmail: oldLead.newEmail,
+                ftdPhone: oldLead.newPhone,
+                action: "replaced",
+                replacedBy: req.user._id,
+                replacedAt: new Date(),
+                reason: "FTD swap",
+              }],
+            }).catch((err) => {
+              if (err.code !== 11000) console.error("[CHANGE-FTD] Error creating deposit call:", err);
+            });
+          }
+        } catch (dcErr) {
+          console.error("[CHANGE-FTD] Error syncing deposit call:", dcErr);
+        }
+      }
+
       res.status(200).json({
         success: true,
         message: `${leadTypeLabel} lead successfully changed`,
@@ -5468,6 +5638,72 @@ exports.convertLeadTypeInOrder = async (req, res, next) => {
 
     // Save the order and lead
     await Promise.all([order.save(), lead.save()]);
+
+    // Sync DepositCall based on type conversion
+    try {
+      const DepositCall = require("../models/DepositCall");
+      if (currentOrderedAs === "ftd" && newOrderedAs === "filler") {
+        // Converting FTD to Filler: mark deposit call as deleted
+        const depositCall = await DepositCall.findOne({ leadId: lead._id, orderId });
+        if (depositCall) {
+          if (!depositCall.leadHistory) depositCall.leadHistory = [];
+          depositCall.leadHistory.push({
+            leadId: lead._id,
+            ftdName: depositCall.ftdName,
+            ftdEmail: depositCall.ftdEmail,
+            ftdPhone: depositCall.ftdPhone,
+            action: "deleted",
+            replacedBy: req.user._id,
+            replacedAt: new Date(),
+            reason: "Lead type converted from FTD to Filler",
+          });
+          depositCall.isDeleted = true;
+          depositCall.deletedAt = new Date();
+          depositCall.deletedReason = "Lead type converted from FTD to Filler";
+          await depositCall.save();
+        }
+      } else if (currentOrderedAs === "filler" && newOrderedAs === "ftd") {
+        // Converting Filler to FTD: create or restore deposit call
+        let depositCall = await DepositCall.findOne({ leadId: lead._id, orderId });
+        if (depositCall) {
+          // Restore if it was deleted
+          if (depositCall.isDeleted) {
+            depositCall.isDeleted = false;
+            depositCall.deletedAt = null;
+            depositCall.deletedReason = "";
+            if (!depositCall.leadHistory) depositCall.leadHistory = [];
+            depositCall.leadHistory.push({
+              leadId: lead._id,
+              ftdName: depositCall.ftdName,
+              ftdEmail: depositCall.ftdEmail,
+              ftdPhone: depositCall.ftdPhone,
+              action: "added",
+              replacedBy: req.user._id,
+              replacedAt: new Date(),
+              reason: "Lead type converted from Filler to FTD",
+            });
+            await depositCall.save();
+          }
+        } else {
+          await DepositCall.create({
+            leadId: lead._id,
+            orderId,
+            clientBrokerId: lead.assignedClientBrokers?.[0] || null,
+            accountManager: req.user.role === "affiliate_manager" ? req.user._id : null,
+            assignedAgent: lead.assignedAgent || null,
+            ftdName: `${lead.firstName} ${lead.lastName}`,
+            ftdEmail: lead.newEmail,
+            ftdPhone: lead.newPhone,
+            depositStatus: "pending",
+            createdBy: req.user._id,
+          }).catch((err) => {
+            if (err.code !== 11000) console.error("[CONVERT-LEAD-TYPE] Error creating deposit call:", err);
+          });
+        }
+      }
+    } catch (dcErr) {
+      console.error("[CONVERT-LEAD-TYPE] Error syncing deposit call:", dcErr);
+    }
 
     console.log(`[CONVERT-LEAD-TYPE] ===== CONVERSION COMPLETE =====`);
 
@@ -6189,6 +6425,60 @@ exports.addLeadsToOrder = async (req, res, next) => {
 
     await order.save();
 
+    // Auto-create DepositCall records for newly added FTD leads
+    try {
+      const DepositCall = require("../models/DepositCall");
+      const ftdAdded = leadsToAdd.filter((ld) => {
+        const leadType = ld.leadType || leadMap.get(ld.leadId)?.leadType;
+        return leadType === "ftd";
+      });
+
+      if (ftdAdded.length > 0) {
+        const depositCallOps = ftdAdded.map((ld) => {
+          const lead = leadMap.get(ld.leadId);
+          return {
+            insertOne: {
+              document: {
+                leadId: lead._id,
+                orderId: order._id,
+                clientBrokerId: lead.assignedClientBrokers?.[0] || null,
+                accountManager:
+                  req.user.role === "affiliate_manager" ? req.user._id : null,
+                assignedAgent: ld.agentId || lead.assignedAgent || null,
+                ftdName: `${lead.firstName} ${lead.lastName}`,
+                ftdEmail: lead.newEmail,
+                ftdPhone: lead.newPhone,
+                depositStatus: "pending",
+                createdBy: req.user._id,
+                leadHistory: [{
+                  leadId: lead._id,
+                  ftdName: `${lead.firstName} ${lead.lastName}`,
+                  ftdEmail: lead.newEmail,
+                  ftdPhone: lead.newPhone,
+                  action: "added",
+                  replacedBy: req.user._id,
+                  replacedAt: new Date(),
+                  reason: reason || "Lead added to existing order",
+                }],
+              },
+            },
+          };
+        });
+        await DepositCall.bulkWrite(depositCallOps, { ordered: false }).catch(
+          (err) => {
+            if (err.code !== 11000 && !err.writeErrors?.every((e) => e.code === 11000)) {
+              console.error("[ORDER-ADD-LEADS] Error creating deposit calls:", err);
+            }
+          }
+        );
+        console.log(
+          `[ORDER-ADD-LEADS] Created ${ftdAdded.length} deposit call records for added leads`
+        );
+      }
+    } catch (depositCallErr) {
+      console.error("[ORDER-ADD-LEADS] Error creating deposit calls:", depositCallErr);
+    }
+
     // Populate the order for response
     const populatedOrder = await Order.findById(order._id)
       .populate("leads", "firstName lastName newEmail newPhone country leadType")
@@ -6769,6 +7059,68 @@ exports.replaceLeadInOrder = async (req, res, next) => {
 
     console.log(`[REPLACE-LEAD] Successfully replaced lead ${leadId} with ${newLeadId} in order ${orderId}`);
 
+    // Sync DepositCall: update the record to reflect the replacement, keeping history
+    if (orderedAs === "ftd") {
+      try {
+        const DepositCall = require("../models/DepositCall");
+        let depositCall = await DepositCall.findOne({ leadId: oldLead._id, orderId });
+
+        if (depositCall) {
+          // Push old lead info to history
+          if (!depositCall.leadHistory) depositCall.leadHistory = [];
+          depositCall.leadHistory.push({
+            leadId: oldLead._id,
+            ftdName: depositCall.ftdName,
+            ftdEmail: depositCall.ftdEmail,
+            ftdPhone: depositCall.ftdPhone,
+            action: "replaced",
+            replacedBy: req.user._id,
+            replacedAt: new Date(),
+            reason: reason || "Lead replaced",
+          });
+
+          // Update to new lead info
+          depositCall.leadId = newLead._id;
+          depositCall.ftdName = `${newLead.firstName} ${newLead.lastName}`;
+          depositCall.ftdEmail = newLead.newEmail;
+          depositCall.ftdPhone = newLead.newPhone;
+          depositCall.assignedAgent = newLead.assignedAgent || depositCall.assignedAgent;
+          await depositCall.save();
+          console.log(`[REPLACE-LEAD] Updated deposit call ${depositCall._id} with new lead`);
+        } else {
+          // Create a new deposit call for the replacement lead
+          await DepositCall.create({
+            leadId: newLead._id,
+            orderId,
+            clientBrokerId: newLead.assignedClientBrokers?.[0] || null,
+            accountManager: req.user.role === "affiliate_manager" ? req.user._id : null,
+            assignedAgent: newLead.assignedAgent || null,
+            ftdName: `${newLead.firstName} ${newLead.lastName}`,
+            ftdEmail: newLead.newEmail,
+            ftdPhone: newLead.newPhone,
+            depositStatus: "pending",
+            createdBy: req.user._id,
+            leadHistory: [{
+              leadId: oldLead._id,
+              ftdName: `${oldLead.firstName} ${oldLead.lastName}`,
+              ftdEmail: oldLead.newEmail,
+              ftdPhone: oldLead.newPhone,
+              action: "replaced",
+              replacedBy: req.user._id,
+              replacedAt: new Date(),
+              reason: reason || "Lead replaced",
+            }],
+          }).catch((err) => {
+            if (err.code !== 11000) {
+              console.error("[REPLACE-LEAD] Error creating deposit call:", err);
+            }
+          });
+        }
+      } catch (dcErr) {
+        console.error("[REPLACE-LEAD] Error syncing deposit call:", dcErr);
+      }
+    }
+
     // Populate the order for response
     const populatedOrder = await Order.findById(orderId)
       .populate("leads", "firstName lastName newEmail newPhone country leadType assignedAgent depositConfirmed shaved")
@@ -6986,6 +7338,34 @@ exports.restoreLeadToOrder = async (req, res, next) => {
 
     // Save both documents
     await Promise.all([lead.save(), order.save()]);
+
+    // Sync DepositCall: un-mark deleted when lead is restored
+    if (leadType === "ftd") {
+      try {
+        const DepositCall = require("../models/DepositCall");
+        const depositCall = await DepositCall.findOne({ leadId: lead._id, orderId });
+        if (depositCall && depositCall.isDeleted) {
+          depositCall.isDeleted = false;
+          depositCall.deletedAt = null;
+          depositCall.deletedReason = "";
+          if (!depositCall.leadHistory) depositCall.leadHistory = [];
+          depositCall.leadHistory.push({
+            leadId: lead._id,
+            ftdName: depositCall.ftdName,
+            ftdEmail: depositCall.ftdEmail,
+            ftdPhone: depositCall.ftdPhone,
+            action: "added",
+            replacedBy: req.user._id,
+            replacedAt: new Date(),
+            reason: "Lead restored to order",
+          });
+          await depositCall.save();
+          console.log(`[RESTORE-LEAD] Un-deleted deposit call ${depositCall._id}`);
+        }
+      } catch (dcErr) {
+        console.error("[RESTORE-LEAD] Error syncing deposit call:", dcErr);
+      }
+    }
 
     // Populate the updated order for response
     await order.populate([
@@ -7277,6 +7657,41 @@ exports.undoLeadReplacement = async (req, res, next) => {
     await session.endSession();
 
     console.log(`[UNDO-REPLACE] Successfully undid replacement in order ${orderId}`);
+
+    // Sync DepositCall: revert to old lead, keeping history
+    if (orderedAs === "ftd") {
+      try {
+        const DepositCall = require("../models/DepositCall");
+        // Find deposit call by newLead (current) since we updated it during replacement
+        let depositCall = await DepositCall.findOne({ leadId: newLead._id, orderId });
+
+        if (depositCall) {
+          // Push current (new) lead info to history as we're reverting
+          if (!depositCall.leadHistory) depositCall.leadHistory = [];
+          depositCall.leadHistory.push({
+            leadId: newLead._id,
+            ftdName: depositCall.ftdName,
+            ftdEmail: depositCall.ftdEmail,
+            ftdPhone: depositCall.ftdPhone,
+            action: "replaced",
+            replacedBy: req.user._id,
+            replacedAt: new Date(),
+            reason: "Lead replacement undone",
+          });
+
+          // Revert to old lead
+          depositCall.leadId = oldLead._id;
+          depositCall.ftdName = `${oldLead.firstName} ${oldLead.lastName}`;
+          depositCall.ftdEmail = oldLead.newEmail;
+          depositCall.ftdPhone = oldLead.newPhone;
+          depositCall.assignedAgent = oldLead.assignedAgent || depositCall.assignedAgent;
+          await depositCall.save();
+          console.log(`[UNDO-REPLACE] Reverted deposit call ${depositCall._id} to old lead`);
+        }
+      } catch (dcErr) {
+        console.error("[UNDO-REPLACE] Error syncing deposit call:", dcErr);
+      }
+    }
 
     // Populate the order for response
     const populatedOrder = await Order.findById(orderId)

@@ -1232,6 +1232,7 @@ exports.syncConfirmedDeposits = async (req, res, next) => {
               meta.depositConfirmedBy || null;
             depositCall.depositConfirmedAt =
               meta.depositConfirmedAt || null;
+            depositCall.depositStatus = "confirmed";
             changed = true;
           }
           if (!depositCall.accountManager && meta.depositConfirmedBy) {
@@ -1275,6 +1276,7 @@ exports.syncConfirmedDeposits = async (req, res, next) => {
             depositConfirmed: true,
             depositConfirmedBy: meta.depositConfirmedBy || null,
             depositConfirmedAt: meta.depositConfirmedAt || null,
+            depositStatus: "confirmed",
             createdBy: req.user.id,
           });
           created++;
@@ -1415,6 +1417,100 @@ exports.createCustomDepositCall = async (req, res, next) => {
       success: true,
       message: "Custom deposit call record created successfully",
       data: populated,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Sync ALL ordered FTDs into DepositCall records (not just confirmed ones)
+// Creates deposit calls with 'pending' status for FTDs that don't have one yet
+exports.syncOrderedFTDs = async (req, res, next) => {
+  try {
+    // Only admin can sync
+    if (req.user.role !== "admin") {
+      return res.status(403).json({
+        success: false,
+        message: "Only admins can sync ordered FTDs",
+      });
+    }
+
+    // Find all non-cancelled orders with FTD leads
+    const orders = await Order.find({
+      status: { $ne: "cancelled" },
+      "leadsMetadata.orderedAs": "ftd",
+    })
+      .populate("requester", "role")
+      .lean();
+
+    let created = 0;
+    let skipped = 0;
+
+    for (const order of orders) {
+      const ftdMetadata = (order.leadsMetadata || []).filter(
+        (meta) => meta.orderedAs === "ftd"
+      );
+
+      for (const meta of ftdMetadata) {
+        const leadId = meta.leadId;
+
+        // Check if deposit call already exists
+        const existing = await DepositCall.findOne({
+          leadId,
+          orderId: order._id,
+        });
+        if (existing) {
+          skipped++;
+          continue;
+        }
+
+        // Find the lead
+        const lead = await Lead.findById(leadId);
+        if (!lead) {
+          skipped++;
+          continue;
+        }
+
+        try {
+          const isConfirmed = meta.depositConfirmed === true;
+          await DepositCall.create({
+            leadId: lead._id,
+            orderId: order._id,
+            clientBrokerId:
+              lead.assignedClientBrokers?.[0] ||
+              order.selectedClientBrokers?.[0] ||
+              null,
+            accountManager:
+              isConfirmed
+                ? meta.depositConfirmedBy || null
+                : order.requester?.role === "affiliate_manager"
+                  ? order.requester._id || null
+                  : null,
+            assignedAgent: lead.assignedAgent || null,
+            ftdName: `${lead.firstName} ${lead.lastName}`,
+            ftdEmail: lead.newEmail,
+            ftdPhone: lead.newPhone,
+            depositConfirmed: isConfirmed,
+            depositConfirmedBy: isConfirmed ? meta.depositConfirmedBy : null,
+            depositConfirmedAt: isConfirmed ? meta.depositConfirmedAt : null,
+            depositStatus: isConfirmed ? "confirmed" : "pending",
+            createdBy: req.user.id,
+          });
+          created++;
+        } catch (err) {
+          if (err.code === 11000) {
+            skipped++;
+          } else {
+            console.error("[SYNC-FTD] Error creating deposit call:", err);
+          }
+        }
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `Synced ordered FTDs: ${created} created, ${skipped} skipped (already exist)`,
+      data: { created, skipped, ordersScanned: orders.length },
     });
   } catch (error) {
     next(error);

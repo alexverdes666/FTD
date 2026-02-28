@@ -641,6 +641,17 @@ const DepositCallsPage = () => {
     }
   };
 
+  // Sync ALL ordered FTDs into deposit call records (admin only)
+  const handleSyncOrderedFTDs = async () => {
+    try {
+      const result = await depositCallsService.syncOrderedFTDs();
+      toast.success(result.message || 'Sync complete');
+      fetchDepositCalls();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to sync ordered FTDs');
+    }
+  };
+
   // Network dialog handlers
   const handleOpenClientNetworksDialog = useCallback((networks, leadName) => {
     setClientNetworksDialog({
@@ -951,6 +962,13 @@ const DepositCallsPage = () => {
                 </IconButton>
               </Tooltip>
             )}
+            {isAdmin && (
+              <Tooltip title="Sync ALL ordered FTDs (creates pending records)">
+                <IconButton onClick={handleSyncOrderedFTDs} color="warning" size="small">
+                  <ListIcon />
+                </IconButton>
+              </Tooltip>
+            )}
             <Tooltip title="Refresh">
               <IconButton onClick={() => { fetchDepositCalls(); if (tabValue === 1) fetchCalendarEvents(); if (tabValue === 2) fetchFillerDeclarations(); }} color="primary" size="small">
                 <RefreshIcon />
@@ -1139,16 +1157,19 @@ const DepositCallsPage = () => {
                   </TableHead>
                   <TableBody>
                     {depositCalls.map((dc) => (
-                      <TableRow key={dc._id} hover sx={dc.isCustomRecord ? { borderLeft: '3px solid', borderLeftColor: 'error.main' } : undefined}>
+                      <TableRow key={dc._id} hover sx={{
+                        ...(dc.isCustomRecord ? { borderLeft: '3px solid', borderLeftColor: 'error.main' } : {}),
+                        ...(dc.isDeleted ? { opacity: 0.6, bgcolor: 'grey.50' } : {}),
+                      }}>
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>
                           {dc.isCustomRecord && dc.customNote ? (
                             <Tooltip title={dc.customNote}>
-                              <Typography fontWeight="medium" sx={{ fontFamily: 'monospace', fontSize: '0.6rem' }}>
+                              <Typography fontWeight="medium" sx={{ fontFamily: 'monospace', fontSize: '0.6rem', ...(dc.isDeleted ? { textDecoration: 'line-through' } : {}) }}>
                                 {dc.orderId?._id ? dc.orderId._id.toString().slice(-8) : dc.customNote.length > 12 ? dc.customNote.slice(0, 12) + '...' : dc.customNote}
                               </Typography>
                             </Tooltip>
                           ) : (
-                            <Typography fontWeight="medium" sx={{ fontFamily: 'monospace', fontSize: '0.6rem' }}>
+                            <Typography fontWeight="medium" sx={{ fontFamily: 'monospace', fontSize: '0.6rem', ...(dc.isDeleted ? { textDecoration: 'line-through' } : {}) }}>
                               {dc.orderId?._id ? dc.orderId._id.toString().slice(-8) : '-'}
                             </Typography>
                           )}
@@ -1179,34 +1200,54 @@ const DepositCallsPage = () => {
                           <Typography sx={{ fontSize: '0.55rem' }}>{dc.accountManager?.fullName || '-'}</Typography>
                         </TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                          <Typography sx={{ fontSize: '0.6rem', fontWeight: 500 }}>
-                            {dc.ftdName || `${dc.leadId?.firstName} ${dc.leadId?.lastName}`}
-                          </Typography>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                            <Typography sx={{ fontSize: '0.6rem', fontWeight: 500, ...(dc.isDeleted ? { textDecoration: 'line-through', color: 'text.disabled' } : {}) }}>
+                              {dc.ftdName || `${dc.leadId?.firstName} ${dc.leadId?.lastName}`}
+                            </Typography>
+                            {dc.isDeleted && (
+                              <Tooltip title={`Removed: ${dc.deletedReason || 'Lead removed from order'}${dc.deletedAt ? ` (${new Date(dc.deletedAt).toLocaleString()})` : ''}`}>
+                                <Chip label="Removed" size="small" color="error" variant="outlined" sx={{ height: 14, fontSize: '0.45rem', '& .MuiChip-label': { px: 0.3 } }} />
+                              </Tooltip>
+                            )}
+                            {dc.leadHistory && dc.leadHistory.length > 0 && (
+                              <Tooltip title={
+                                dc.leadHistory.map((h, i) =>
+                                  `${i + 1}. ${h.action === 'replaced' ? 'Replaced' : h.action === 'deleted' ? 'Removed' : 'Added'}: ${h.ftdName} (${h.ftdEmail})${h.reason ? ` - ${h.reason}` : ''} [${new Date(h.replacedAt).toLocaleDateString()}]`
+                                ).join('\n')
+                              }>
+                                <Chip label={`${dc.leadHistory.length} prev`} size="small" variant="outlined" color="info" sx={{ height: 14, fontSize: '0.45rem', cursor: 'pointer', '& .MuiChip-label': { px: 0.3 } }} />
+                              </Tooltip>
+                            )}
+                          </Box>
                           {dc.assignedAgent && (
-                            <Typography sx={{ fontSize: '0.55rem', color: 'text.secondary' }}>
+                            <Typography sx={{ fontSize: '0.55rem', color: 'text.secondary', ...(dc.isDeleted ? { textDecoration: 'line-through' } : {}) }}>
                               {dc.assignedAgent.fullName}
                             </Typography>
                           )}
                         </TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap', maxWidth: 100, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                           <Tooltip title={dc.ftdEmail || dc.leadId?.newEmail || '-'}>
-                            <Typography sx={{ fontSize: '0.6rem' }}>
+                            <Typography sx={{ fontSize: '0.6rem', ...(dc.isDeleted ? { textDecoration: 'line-through', color: 'text.disabled' } : {}) }}>
                               {dc.ftdEmail || dc.leadId?.newEmail || '-'}
                             </Typography>
                           </Tooltip>
                         </TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                          <Typography sx={{ fontSize: '0.5rem' }}>
+                          <Typography sx={{ fontSize: '0.5rem', ...(dc.isDeleted ? { textDecoration: 'line-through', color: 'text.disabled' } : {}) }}>
                             {formatPhoneWithCountryCode(dc.ftdPhone || dc.leadId?.newPhone, dc.leadId?.country || dc.lead?.country) || '-'}
                           </Typography>
                         </TableCell>
                         <TableCell sx={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
-                          {dc.depositConfirmed ? (
+                          {dc.isDeleted ? (
+                            <Tooltip title={`Removed: ${dc.deletedReason || 'Lead removed'}`}>
+                              <Chip label="Removed" size="small" color="error" variant="outlined" sx={{ height: 16, fontSize: '0.5rem', textDecoration: 'line-through', '& .MuiChip-label': { px: 0.3 } }} />
+                            </Tooltip>
+                          ) : dc.depositConfirmed || dc.depositStatus === 'confirmed' ? (
                             <Tooltip title={dc.depositConfirmedAt ? `Confirmed: ${new Date(dc.depositConfirmedAt).toLocaleString()}` : 'Deposit Confirmed'}>
                               <VerifiedIcon color="success" sx={{ fontSize: 14 }} />
                             </Tooltip>
                           ) : (
-                            <Chip label="Pending" size="small" variant="outlined" sx={{ height: 16, fontSize: '0.55rem' }} />
+                            <Chip label="Pending" size="small" color="warning" variant="outlined" sx={{ height: 16, fontSize: '0.55rem' }} />
                           )}
                         </TableCell>
                         {/* Deposit Call Declaration column */}

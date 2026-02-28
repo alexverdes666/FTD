@@ -4703,12 +4703,14 @@ exports.confirmDeposit = async (req, res, next) => {
         depositConfirmed: true,
         depositConfirmedBy: userId,
         depositConfirmedAt: new Date(),
+        depositStatus: "confirmed",
         createdBy: userId,
       });
     } else {
       depositCall.depositConfirmed = true;
       depositCall.depositConfirmedBy = userId;
       depositCall.depositConfirmedAt = new Date();
+      depositCall.depositStatus = "confirmed";
       depositCall.accountManager = userId;
       await depositCall.save();
     }
@@ -4978,6 +4980,7 @@ exports.unconfirmDeposit = async (req, res, next) => {
       depositCall.depositConfirmedBy = null;
       depositCall.depositConfirmedAt = null;
       depositCall.depositCallDeclaration = null;
+      depositCall.depositStatus = "pending";
       await depositCall.save();
     }
 

@@ -91,6 +91,17 @@ const depositCallsService = {
     }
   },
 
+  // Sync ALL ordered FTDs into deposit call records (admin only)
+  syncOrderedFTDs: async () => {
+    try {
+      const response = await api.post("/deposit-calls/sync-ordered-ftds");
+      return response.data;
+    } catch (error) {
+      console.error("Error syncing ordered FTDs:", error);
+      throw error;
+    }
+  },
+
   // Sync approved call declarations into deposit call records (admin only)
   syncApprovedDeclarations: async () => {
     try {
