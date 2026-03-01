@@ -19,6 +19,16 @@ const searchCache = new Map();
 const CACHE_TTL = 60000; // 1 minute
 const MAX_CACHE_SIZE = 100;
 
+// Periodically evict stale search cache entries
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, val] of searchCache) {
+    if (now - val.timestamp > CACHE_TTL) {
+      searchCache.delete(key);
+    }
+  }
+}, CACHE_TTL);
+
 /**
  * Parse advanced search query
  * Supports: "exact phrase", type:lead, status:active, country:US, from:2024-01-01, to:2024-12-31

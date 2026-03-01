@@ -39,7 +39,6 @@ import {
 import {
   Search as SearchIcon,
   Refresh as RefreshIcon,
-  Sync as SyncIcon,
   Verified as VerifiedIcon,
   CalendarMonth as CalendarIcon,
   TableChart as TableIcon,
@@ -50,7 +49,6 @@ import {
   Phone as PhoneIcon,
   Email as EmailIcon,
   Person as PersonIcon,
-  FormatListBulleted as ListIcon,
   FilterList as FilterListIcon,
   ExpandMore as ExpandMoreIcon,
   Add as AddIcon,
@@ -619,39 +617,6 @@ const DepositCallsPage = () => {
     }
   };
 
-  // Sync confirmed deposits from orders (admin only)
-  const handleSyncConfirmedDeposits = async () => {
-    try {
-      const result = await depositCallsService.syncConfirmedDeposits();
-      toast.success(result.message || 'Sync complete');
-      fetchDepositCalls();
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to sync confirmed deposits');
-    }
-  };
-
-  // Sync approved declarations into deposit call records (admin only)
-  const handleSyncApprovedDeclarations = async () => {
-    try {
-      const result = await depositCallsService.syncApprovedDeclarations();
-      toast.success(result.message || 'Sync complete');
-      fetchDepositCalls();
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to sync approved declarations');
-    }
-  };
-
-  // Sync ALL ordered FTDs into deposit call records (admin only)
-  const handleSyncOrderedFTDs = async () => {
-    try {
-      const result = await depositCallsService.syncOrderedFTDs();
-      toast.success(result.message || 'Sync complete');
-      fetchDepositCalls();
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to sync ordered FTDs');
-    }
-  };
-
   // Network dialog handlers
   const handleOpenClientNetworksDialog = useCallback((networks, leadName) => {
     setClientNetworksDialog({
@@ -948,27 +913,7 @@ const DepositCallsPage = () => {
                 </IconButton>
               </Tooltip>
             )}
-            {isAdmin && (
-              <Tooltip title="Sync approved declarations into call slots">
-                <IconButton onClick={handleSyncApprovedDeclarations} color="success" size="small">
-                  <VerifiedIcon />
-                </IconButton>
-              </Tooltip>
-            )}
-            {isAdmin && (
-              <Tooltip title="Sync confirmed deposits from orders">
-                <IconButton onClick={handleSyncConfirmedDeposits} color="secondary" size="small">
-                  <SyncIcon />
-                </IconButton>
-              </Tooltip>
-            )}
-            {isAdmin && (
-              <Tooltip title="Sync ALL ordered FTDs (creates pending records)">
-                <IconButton onClick={handleSyncOrderedFTDs} color="warning" size="small">
-                  <ListIcon />
-                </IconButton>
-              </Tooltip>
-            )}
+
             <Tooltip title="Refresh">
               <IconButton onClick={() => { fetchDepositCalls(); if (tabValue === 1) fetchCalendarEvents(); if (tabValue === 2) fetchFillerDeclarations(); }} color="primary" size="small">
                 <RefreshIcon />

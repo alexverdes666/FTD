@@ -369,9 +369,10 @@ depositCallSchema.methods.markCallRejected = function(callNumber, userId, notes 
 depositCallSchema.statics.getUpcomingAppointments = function(startDate, endDate, filters = {}) {
   const query = {
     status: 'active',
+    isDeleted: { $ne: true },
     $or: []
   };
-  
+
   // Add date range filter for each call slot
   for (let i = 1; i <= 10; i++) {
     query.$or.push({
@@ -403,9 +404,10 @@ depositCallSchema.statics.getUpcomingAppointments = function(startDate, endDate,
 depositCallSchema.statics.getPendingApprovals = function(accountManagerId = null) {
   const query = {
     status: 'active',
+    isDeleted: { $ne: true },
     $or: []
   };
-  
+
   // Check each call slot for pending_approval status
   for (let i = 1; i <= 10; i++) {
     query.$or.push({ [`call${i}.status`]: 'pending_approval' });

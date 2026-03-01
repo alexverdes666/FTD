@@ -28,6 +28,12 @@ const SKIP_ROUTES = [
   "/api/auth/logout",
   "/api/two-factor", // Already logged by 2FA system
   "/socket.io",
+  "/api/user-activity", // Heartbeat/presence pings - extremely high volume, no security value
+  "/api/orders/check-fulfillment", // Routine automated check
+  "/api/call-declarations/preview-bonus", // Read-only preview
+  "/api/notifications", // Read receipts
+  "/api/qr-auth", // QR session creation (already covered by auth system)
+  "/api/sticky-notes", // Low-value sticky note edits
 ];
 
 // Sensitive fields to redact in logs

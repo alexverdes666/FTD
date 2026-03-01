@@ -76,7 +76,6 @@ const OrderDetailPanel = ({
   onLeadMouseLeave,
   onOpenApplyFine,
   onOpenRemoveLead,
-  onOpenBrowserDialog,
   setCopyPreferencesOpen,
   processingLeads,
   setNotification,

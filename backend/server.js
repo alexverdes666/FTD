@@ -25,10 +25,7 @@ const clientBrokerRoutes = require("./routes/clientBrokers");
 const pspRoutes = require("./routes/psps");
 const cardIssuerRoutes = require("./routes/cardIssuers");
 const campaignRoutes = require("./routes/campaigns");
-const testRoutes = require("./routes/test");
 
-const guiBrowserRoutes = require("./routes/gui-browser");
-const fingerprintBrowserRoutes = require("./routes/fingerprint-browser");
 const agentBonusRoutes = require("./routes/agentBonuses");
 const agentCallCountsRoutes = require("./routes/agentCallCounts");
 const agentFineRoutes = require("./routes/agentFines");
@@ -75,8 +72,6 @@ const { deviceDetectionMiddleware } = require("./middleware/deviceDetection");
 const SessionCleanupService = require("./services/sessionCleanupService");
 const AgentScraperService = require("./services/agentScraperService");
 const schedulerService = require("./services/scheduler");
-const fingerprintBrowserService = require("./services/fingerprintBrowserService");
-const browserStreamService = require("./services/browserStreamService");
 const { createProxyMiddleware } = require("http-proxy-middleware");
 
 // Connect to MongoDB
@@ -200,7 +195,8 @@ app.use((req, res, next) => {
 app.use(
   fileUpload({
     limits: { fileSize: 50 * 1024 * 1024 },
-    useTempFiles: false,
+    useTempFiles: true,
+    tempFileDir: require("os").tmpdir(),
     abortOnLimit: true,
     responseOnLimit: "File size limit has been reached",
     debug: false,
@@ -284,6 +280,18 @@ const socketAuthCache = new LRUCache({
 
 // --- Global typing timeouts keyed by `userId:conversationId` ---
 const globalTypingTimeouts = new Map();
+
+// Safety net: evict orphaned typing timeouts every 30s (handles missed disconnects)
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, entry] of globalTypingTimeouts) {
+    // Typing timeouts should never last more than 10 seconds
+    if (entry.createdAt && now - entry.createdAt > 10000) {
+      clearTimeout(entry.timeout);
+      globalTypingTimeouts.delete(key);
+    }
+  }
+}, 30000);
 
 // --- Track active sockets per user (prevents zombie socket accumulation) ---
 const userActiveSockets = new Map(); // userId -> Set<socketId>
@@ -475,7 +483,7 @@ io.on("connection", (socket) => {
 
       // Clear existing timeout for this user+conversation
       if (globalTypingTimeouts.has(typingKey)) {
-        clearTimeout(globalTypingTimeouts.get(typingKey));
+        clearTimeout(globalTypingTimeouts.get(typingKey).timeout);
       }
 
       // Get other participants (exclude current user)
@@ -513,7 +521,7 @@ io.on("connection", (socket) => {
         globalTypingTimeouts.delete(typingKey);
       }, 5000);
 
-      globalTypingTimeouts.set(typingKey, timeout);
+      globalTypingTimeouts.set(typingKey, { timeout, createdAt: Date.now() });
     } catch (error) {
       console.error(`❌ Error handling typing indicator:`, error);
     }
@@ -526,7 +534,7 @@ io.on("connection", (socket) => {
 
       // Clear timeout if exists
       if (globalTypingTimeouts.has(typingKey)) {
-        clearTimeout(globalTypingTimeouts.get(typingKey));
+        clearTimeout(globalTypingTimeouts.get(typingKey).timeout);
         globalTypingTimeouts.delete(typingKey);
       }
 
@@ -585,25 +593,13 @@ io.on("connection", (socket) => {
     }
 
     // Clear all typing timeouts for this user (global map, keyed by userId:conversationId)
-    for (const [key, timeout] of globalTypingTimeouts) {
+    for (const [key, entry] of globalTypingTimeouts) {
       if (key.startsWith(`${socket.userId}:`)) {
-        clearTimeout(timeout);
+        clearTimeout(entry.timeout);
         globalTypingTimeouts.delete(key);
       }
     }
 
-    // Stop any browser streams for this user
-    try {
-      if (browserStreamService && browserStreamService.streams) {
-        for (const [sessionId, stream] of browserStreamService.streams) {
-          if (stream.userId === socket.userId) {
-            browserStreamService.stopStream(sessionId);
-          }
-        }
-      }
-    } catch (err) {
-      // Ignore cleanup errors
-    }
   });
 
   // Handle connection errors
@@ -644,10 +640,6 @@ app.use("/api/client-brokers", clientBrokerRoutes);
 app.use("/api/psps", pspRoutes);
 app.use("/api/card-issuers", cardIssuerRoutes);
 app.use("/api/campaigns", campaignRoutes);
-app.use("/api/test", testRoutes);
-
-app.use("/api/gui-browser", guiBrowserRoutes);
-app.use("/api/fingerprint-browser", fingerprintBrowserRoutes);
 app.use("/api/agent-bonuses", agentBonusRoutes);
 app.use("/api/agent-call-counts", agentCallCountsRoutes);
 app.use("/api/agent-fines", agentFineRoutes);
@@ -725,22 +717,6 @@ server.listen(PORT, () => {
       console.error("❌ Failed to initialize scheduler service:", error);
     }
 
-    // Initialize fingerprint browser service
-    try {
-      fingerprintBrowserService.initialize();
-      console.log("✅ Fingerprint browser service initialized");
-    } catch (error) {
-      console.error("❌ Failed to initialize fingerprint browser service:", error);
-    }
-
-    // Initialize browser stream service with Socket.IO
-    try {
-      browserStreamService.initialize(io);
-      console.log("✅ Browser stream service initialized");
-    } catch (error) {
-      console.error("❌ Failed to initialize browser stream service:", error);
-    }
-
     // Initialize AMI service for real-time agent tracking
     try {
       const amiService = require("./services/amiService");
@@ -761,22 +737,6 @@ process.on("SIGTERM", async () => {
     console.log("✅ Scheduler service stopped");
   } catch (error) {
     console.error("❌ Error stopping scheduler service:", error);
-  }
-
-  // Shutdown fingerprint browser service
-  try {
-    await fingerprintBrowserService.shutdown();
-    console.log("✅ Fingerprint browser service stopped");
-  } catch (error) {
-    console.error("❌ Error stopping fingerprint browser service:", error);
-  }
-
-  // Shutdown browser stream service
-  try {
-    browserStreamService.shutdown();
-    console.log("✅ Browser stream service stopped");
-  } catch (error) {
-    console.error("❌ Error stopping browser stream service:", error);
   }
 
   // Shutdown AMI service

@@ -3,8 +3,6 @@ const Order = require("../models/Order");
 const DepositCall = require("../models/DepositCall");
 const CallChangeRequest = require("../models/CallChangeRequest");
 const RefundAssignment = require("../models/RefundAssignment");
-const Fingerprint = require("../models/Fingerprint");
-
 /**
  * Create a backup of a lead before deletion
  * @param {Object} lead - The lead document to backup (should be populated)
@@ -22,11 +20,10 @@ const createDeletedLeadBackup = async (lead, userId, deletionType, reason, activ
     }).select("_id leadsMetadata createdAt");
 
     // Find traces in other collections
-    const [depositCalls, callChangeRequests, refundAssignments, fingerprint] = await Promise.all([
+    const [depositCalls, callChangeRequests, refundAssignments] = await Promise.all([
       DepositCall.find({ leadId: lead._id }).lean(),
       CallChangeRequest.find({ leadId: lead._id }).lean(),
       RefundAssignment.find({ leadId: lead._id }).lean(),
-      Fingerprint.findOne({ leadId: lead._id }).lean(),
     ]);
 
     // Extract order references
@@ -52,7 +49,7 @@ const createDeletedLeadBackup = async (lead, userId, deletionType, reason, activ
         depositCalls: depositCalls || [],
         callChangeRequests: callChangeRequests || [],
         refundAssignments: refundAssignments || [],
-        fingerprints: fingerprint ? [fingerprint] : [],
+        fingerprints: [],
         clientBrokerAssignments:
           lead.clientBrokerHistory
             ?.map((h) => h.clientBroker?.name || h.clientBroker)

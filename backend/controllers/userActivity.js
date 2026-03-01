@@ -11,6 +11,17 @@ const User = require('../models/User');
 // In-memory store for real-time updates (Socket.IO will broadcast these)
 const liveActivityCache = new Map();
 
+// Evict stale entries every 5 minutes (handles users who disconnect without ending session)
+setInterval(() => {
+  const now = Date.now();
+  const STALE_THRESHOLD = 10 * 60 * 1000; // 10 minutes without update
+  for (const [key, val] of liveActivityCache) {
+    if (val.lastActivityAt && now - new Date(val.lastActivityAt).getTime() > STALE_THRESHOLD) {
+      liveActivityCache.delete(key);
+    }
+  }
+}, 5 * 60 * 1000);
+
 /**
  * Start a new activity session
  * POST /api/user-activity/session/start

@@ -64,7 +64,6 @@ import CopyPreferencesDialog, {
   copyLeadsWithPreferences,
 } from "../components/CopyPreferencesDialog";
 import ReplaceLeadDialog from "../components/ReplaceLeadDialog";
-import RemoteBrowserDialog from "../components/RemoteBrowserDialog";
 import ApplyAgentFineDialog from "../components/ApplyAgentFineDialog";
 
 // Extracted modules from orders/ subdirectory
@@ -227,12 +226,6 @@ const OrdersPage = () => {
   // Actions menu state for leads preview modal
   const [previewActionsMenu, setPreviewActionsMenu] = useState({
     anchorEl: null,
-    lead: null,
-  });
-
-  // Remote Browser Dialog State
-  const [browserDialog, setBrowserDialog] = useState({
-    open: false,
     lead: null,
   });
 
@@ -3498,7 +3491,7 @@ const OrdersPage = () => {
             onLeadMouseLeave={handleLeadMouseLeave}
             onOpenApplyFine={handleOpenApplyFineDialog}
             onOpenRemoveLead={handleOpenRemoveLeadDialog}
-            onOpenBrowserDialog={(lead) => setBrowserDialog({ open: true, lead })}
+
             setCopyPreferencesOpen={setCopyPreferencesOpen}
             processingLeads={processingLeads}
             setNotification={setNotification}
@@ -3587,15 +3580,6 @@ const OrdersPage = () => {
       />
       )}
 
-
-      {/* Remote Browser Dialog */}
-      {browserDialog.open && (
-      <RemoteBrowserDialog
-        open
-        onClose={() => setBrowserDialog({ open: false, lead: null })}
-        lead={browserDialog.lead}
-      />
-      )}
 
       {/* Apply Agent Fine Dialog */}
       {applyFineDialog.open && (
@@ -4102,7 +4086,6 @@ const OrdersPage = () => {
         onCopyToClipboard={handleCopyToClipboard}
         onOpenApplyFine={handleOpenApplyFineDialog}
         onOpenRemoveLead={handleOpenRemoveLeadDialog}
-        onOpenBrowserDialog={(lead) => setBrowserDialog({ open: true, lead })}
         onOpenClientBrokersDialog={handleOpenClientBrokersDialog}
         onOpenClientNetworksDialog={handleOpenClientNetworksDialog}
         onOpenOurNetworksDialog={handleOpenOurNetworksDialog}

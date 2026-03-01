@@ -384,6 +384,11 @@ const deviceDetectionLogSchema = new mongoose.Schema(
 );
 
 // ============================================
+// TTL INDEX - Auto-delete logs older than 90 days
+// ============================================
+deviceDetectionLogSchema.index({ createdAt: 1 }, { expireAfterSeconds: 90 * 24 * 60 * 60 });
+
+// ============================================
 // INDEXES FOR PERFORMANCE
 // ============================================
 deviceDetectionLogSchema.index({ createdAt: -1 });

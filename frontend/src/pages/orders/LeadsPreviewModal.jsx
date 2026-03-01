@@ -41,12 +41,9 @@ import {
   Restore as RestoreIcon,
   Undo as UndoIcon,
   VerifiedUser as VerifiedUserIcon,
-  Launch as LaunchIcon,
   Gavel as GavelIcon,
 } from "@mui/icons-material";
 import DocumentPreview from "../../components/DocumentPreview";
-import SessionAccessButton from "../../components/SessionAccessButton";
-import SessionStatusChip from "../../components/SessionStatusChip";
 import { formatPhoneWithCountryCode } from "../../utils/phoneUtils";
 import {
   getDisplayLeadType,
@@ -93,7 +90,6 @@ const LeadsPreviewModal = ({
   onCopyToClipboard,
   onOpenApplyFine,
   onOpenRemoveLead,
-  onOpenBrowserDialog,
   // Display info dialogs
   onOpenClientBrokersDialog,
   onOpenClientNetworksDialog,
@@ -1275,20 +1271,6 @@ const LeadsPreviewModal = ({
                   )
                 )}
 
-                {/* Open Browser Session */}
-                {(leadType === "ftd" || leadType === "filler") && (
-                  <MenuItem
-                    onClick={() => {
-                      onOpenBrowserDialog(lead);
-                      onClosePreviewActionsMenu();
-                    }}
-                  >
-                    <ListItemIcon>
-                      <LaunchIcon fontSize="small" color="success" />
-                    </ListItemIcon>
-                    Open Browser
-                  </MenuItem>
-                )}
 
                 {/* Delete - Available to all users */}
                 <>

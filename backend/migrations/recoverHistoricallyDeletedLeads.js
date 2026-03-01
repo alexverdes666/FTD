@@ -5,7 +5,6 @@ const Order = require("../models/Order");
 const DepositCall = require("../models/DepositCall");
 const CallChangeRequest = require("../models/CallChangeRequest");
 const RefundAssignment = require("../models/RefundAssignment");
-const Fingerprint = require("../models/Fingerprint");
 const ActivityLog = require("../models/ActivityLog");
 
 require("dotenv").config();
@@ -131,12 +130,11 @@ async function recoverHistoricallyDeletedLeads() {
         console.log(`  - Found in ${orderReferences.length} orders`);
 
         // Search for traces in other collections
-        const [depositCalls, callChangeRequests, refundAssignments, fingerprint, activityLogs] =
+        const [depositCalls, callChangeRequests, refundAssignments, activityLogs] =
           await Promise.all([
             DepositCall.find({ leadId: leadId }).lean(),
             CallChangeRequest.find({ leadId: leadId }).lean(),
             RefundAssignment.find({ leadId: leadId }).lean(),
-            Fingerprint.findOne({ leadId: leadId }).lean(),
             ActivityLog.find({
               $or: [
                 { "requestBody.id": leadIdStr },
@@ -153,7 +151,6 @@ async function recoverHistoricallyDeletedLeads() {
         console.log(`    - Deposit calls: ${depositCalls.length}`);
         console.log(`    - Call change requests: ${callChangeRequests.length}`);
         console.log(`    - Refund assignments: ${refundAssignments.length}`);
-        console.log(`    - Fingerprints: ${fingerprint ? 1 : 0}`);
         console.log(`    - Activity logs: ${activityLogs.length}`);
 
         // Try to extract basic info from deposit calls (has denormalized data)

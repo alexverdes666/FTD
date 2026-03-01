@@ -63,9 +63,25 @@ class AmiService extends EventEmitter {
     this._loadAgentMap();
     // Refresh agent map every 60s
     this.agentMapInterval = setInterval(() => this._loadAgentMap(), 60000);
+    // Evict stale lead cache entries every 60s to prevent unbounded memory growth
+    this.leadCacheCleanupInterval = setInterval(() => this._cleanLeadCache(), 60000);
     this.connect();
     this._initCdrDatabase();
     console.log("✅ AMI Service initialized");
+  }
+
+  _cleanLeadCache() {
+    const now = Date.now();
+    let evicted = 0;
+    for (const [key, val] of this.leadCache) {
+      if (now - val.ts > this.leadCacheTTL) {
+        this.leadCache.delete(key);
+        evicted++;
+      }
+    }
+    if (evicted > 0) {
+      console.log(`[AMI] Evicted ${evicted} stale lead cache entries (${this.leadCache.size} remaining)`);
+    }
   }
 
   async _initCdrDatabase() {

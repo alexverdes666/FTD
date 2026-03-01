@@ -35,6 +35,7 @@ const collections = {
 };
 
 const cache = new Map();
+const loadingPromises = new Map(); // Prevent concurrent loads for the same collection
 
 async function loadCollection(name) {
   const config = collections[name];
@@ -49,7 +50,18 @@ async function getDocs(name) {
   if (entry && Date.now() - entry.timestamp < CACHE_TTL) {
     return entry.docs;
   }
-  return loadCollection(name);
+  // Deduplicate concurrent loads - same pattern as leadSearchCache
+  if (loadingPromises.has(name)) {
+    await loadingPromises.get(name);
+    return cache.get(name)?.docs || [];
+  }
+  const promise = loadCollection(name);
+  loadingPromises.set(name, promise);
+  try {
+    return await promise;
+  } finally {
+    loadingPromises.delete(name);
+  }
 }
 
 async function searchCollection(name, keyword) {

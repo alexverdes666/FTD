@@ -38,7 +38,7 @@ exports.getDepositCalls = async (req, res, next) => {
       search,
     } = req.query;
 
-    const query = {};
+    const query = { isDeleted: { $ne: true } };
 
     // Helper: cast to ObjectId for aggregation compatibility
     // Mongoose .find() auto-casts strings to ObjectIds, but aggregation $match does NOT
@@ -1215,8 +1215,19 @@ exports.syncConfirmedDeposits = async (req, res, next) => {
         (meta) => meta.depositConfirmed
       );
 
+      // Build a set of removed lead IDs for this order
+      const removedLeadIds = new Set(
+        (order.removedLeads || []).map((r) => r.leadId.toString())
+      );
+
       for (const meta of confirmedEntries) {
         const leadId = meta.leadId;
+
+        // Skip leads that were removed from the order
+        if (removedLeadIds.has(leadId.toString())) {
+          skipped++;
+          continue;
+        }
 
         // Check if DepositCall already exists
         let depositCall = await DepositCall.findOne({
@@ -1445,21 +1456,47 @@ exports.syncOrderedFTDs = async (req, res, next) => {
 
     let created = 0;
     let skipped = 0;
+    let markedDeleted = 0;
 
     for (const order of orders) {
       const ftdMetadata = (order.leadsMetadata || []).filter(
         (meta) => meta.orderedAs === "ftd"
       );
 
+      // Build a set of removed lead IDs for this order
+      const removedLeadIds = new Set(
+        (order.removedLeads || []).map((r) => r.leadId.toString())
+      );
+
       for (const meta of ftdMetadata) {
         const leadId = meta.leadId;
+        const isRemoved = removedLeadIds.has(leadId.toString());
 
         // Check if deposit call already exists
         const existing = await DepositCall.findOne({
           leadId,
           orderId: order._id,
         });
+
         if (existing) {
+          // If the lead was removed from the order, mark the existing record as deleted
+          if (isRemoved && !existing.isDeleted) {
+            const removedInfo = (order.removedLeads || []).find(
+              (r) => r.leadId.toString() === leadId.toString()
+            );
+            existing.isDeleted = true;
+            existing.deletedAt = removedInfo?.removedAt || new Date();
+            existing.deletedReason = removedInfo?.reason || "Lead removed from order";
+            await existing.save();
+            markedDeleted++;
+          } else {
+            skipped++;
+          }
+          continue;
+        }
+
+        // Skip creating new records for removed leads
+        if (isRemoved) {
           skipped++;
           continue;
         }
@@ -1509,8 +1546,8 @@ exports.syncOrderedFTDs = async (req, res, next) => {
 
     res.status(200).json({
       success: true,
-      message: `Synced ordered FTDs: ${created} created, ${skipped} skipped (already exist)`,
-      data: { created, skipped, ordersScanned: orders.length },
+      message: `Synced ordered FTDs: ${created} created, ${skipped} skipped, ${markedDeleted} marked as deleted`,
+      data: { created, skipped, markedDeleted, ordersScanned: orders.length },
     });
   } catch (error) {
     next(error);
