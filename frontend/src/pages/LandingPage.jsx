@@ -34,6 +34,7 @@ import { yupResolver } from "@hookform/resolvers/yup";
 import * as yup from "yup";
 import { motion } from "framer-motion";
 import api from "../services/api";
+import { normalizePhone } from "../utils/phoneUtils";
 
 const countryCodes = [
   { code: "+1", country: "US/Canada" },
@@ -279,7 +280,7 @@ const LandingPage = () => {
           lastName: data.lastName,
           email: data.email,
           prefix: data.prefix,
-          phone: data.phone,
+          phone: normalizePhone(data.phone, data.prefix),
           campaign: data.campaign,
           ourNetwork: data.ourNetwork,
           submissionMode: 'external'
@@ -329,7 +330,7 @@ const LandingPage = () => {
         lastName: data.lastName,
         email: data.email,
         prefix: data.prefix,
-        phone: data.phone,
+        phone: normalizePhone(data.phone, data.prefix),
         campaign: data.campaign,
         ourNetwork: data.ourNetwork,
         submissionMode: 'external'

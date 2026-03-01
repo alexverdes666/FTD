@@ -1,14 +1,15 @@
-import {
+const {
   parsePhoneNumber,
   getCountries,
   getCountryCallingCode,
-} from "libphonenumber-js/max";
+} = require("libphonenumber-js/max");
 
 // Build lookup maps dynamically from libphonenumber's metadata (245 countries)
 const NAME_TO_ISO = {};
 const PREFIX_TO_ISO = {};
-const ISO_TO_PREFIX = {};
 
+// Intl.DisplayNames gives us country name -> ISO for every locale
+// We build a lowercase name -> ISO map so "canada" -> "CA", "united kingdom" -> "GB", etc.
 const displayNames = new Intl.DisplayNames(["en"], { type: "region" });
 for (const iso of getCountries()) {
   try {
@@ -17,34 +18,25 @@ for (const iso of getCountries()) {
   } catch (e) {
     // skip
   }
-  const prefix = "+" + getCountryCallingCode(iso);
-  ISO_TO_PREFIX[iso] = prefix;
-  if (!PREFIX_TO_ISO[prefix]) PREFIX_TO_ISO[prefix] = iso;
+  const callingCode = "+" + getCountryCallingCode(iso);
+  // First country wins for shared prefixes (e.g. +1 -> US)
+  if (!PREFIX_TO_ISO[callingCode]) {
+    PREFIX_TO_ISO[callingCode] = iso;
+  }
 }
 
 /**
- * Resolve a country name or phone prefix to an ISO code.
+ * Resolve a country name or phone prefix to an ISO 3166-1 alpha-2 code.
  */
 function resolveIso(countryOrPrefix) {
   if (!countryOrPrefix) return null;
+  // Direct ISO code (2 uppercase letters)
   if (/^[A-Z]{2}$/.test(countryOrPrefix)) return countryOrPrefix;
+  // Prefix like "+34"
   if (countryOrPrefix.startsWith("+")) return PREFIX_TO_ISO[countryOrPrefix] || null;
+  // Country name (case-insensitive)
   return NAME_TO_ISO[countryOrPrefix.toLowerCase()] || null;
 }
-
-export const getCountryCode = (country) => {
-  if (!country) return "";
-  const iso = resolveIso(country);
-  return iso ? ISO_TO_PREFIX[iso] || "" : "";
-};
-
-export const formatPhoneWithCountryCode = (phone, country) => {
-  if (!phone) return "N/A";
-  const code = getCountryCode(country);
-  if (!code) return phone;
-  const normalized = normalizePhone(phone, country);
-  return `${code} ${normalized}`;
-};
 
 /**
  * Normalizes a phone number by stripping a duplicated country code prefix.
@@ -55,7 +47,7 @@ export const formatPhoneWithCountryCode = (phone, country) => {
  * @param {string} countryOrPrefix - Country name, ISO code, or prefix (e.g. "Canada", "CA", "+1")
  * @returns {string} The national (local) phone number, digits only
  */
-export const normalizePhone = (phone, countryOrPrefix) => {
+function normalizePhone(phone, countryOrPrefix) {
   if (!phone) return "";
 
   const cleaned = phone.replace(/\D/g, "");
@@ -68,6 +60,7 @@ export const normalizePhone = (phone, countryOrPrefix) => {
   const prefixDigits = getCountryCallingCode(isoCode);
 
   try {
+    // Try to parse as a national number for the given country
     let nationalParsed;
     try {
       nationalParsed = parsePhoneNumber(cleaned, isoCode);
@@ -76,6 +69,7 @@ export const normalizePhone = (phone, countryOrPrefix) => {
     }
     const isValidNational = nationalParsed && nationalParsed.isValid();
 
+    // If it starts with the country code digits, also try as international
     if (prefixDigits && cleaned.startsWith(prefixDigits)) {
       let intlParsed;
       try {
@@ -84,6 +78,7 @@ export const normalizePhone = (phone, countryOrPrefix) => {
         // ignore
       }
 
+      // Check the parsed country shares the same calling code (handles +1 -> US/CA/etc.)
       const isValidIntl =
         intlParsed &&
         intlParsed.isValid() &&
@@ -103,6 +98,7 @@ export const normalizePhone = (phone, countryOrPrefix) => {
       }
     }
 
+    // Handle "00" international dialing prefix
     if (prefixDigits && cleaned.startsWith("00" + prefixDigits)) {
       try {
         const intlParsed = parsePhoneNumber("+" + cleaned.substring(2));
@@ -122,4 +118,6 @@ export const normalizePhone = (phone, countryOrPrefix) => {
   }
 
   return cleaned;
-};
+}
+
+module.exports = { normalizePhone };

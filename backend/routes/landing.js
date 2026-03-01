@@ -5,6 +5,7 @@ const path = require("path");
 const Lead = require("../models/Lead");
 const externalApiService = require("../services/externalApiService");
 const leadSearchCache = require("../services/leadSearchCache");
+const { normalizePhone } = require("../utils/phoneNormalizer");
 const router = express.Router();
 
 // Configuration endpoint to get/set external API settings
@@ -289,8 +290,11 @@ router.post(
         });
       }
 
-      const { firstName, lastName, email, prefix, phone, submissionMode } = req.body;
-      
+      const { firstName, lastName, email, prefix, phone: rawPhone, submissionMode } = req.body;
+
+      // Normalize phone to strip duplicated country code prefix
+      const phone = normalizePhone(rawPhone, prefix);
+
       // Determine submission mode
       const mode = submissionMode || 
                   req.query.mode || 

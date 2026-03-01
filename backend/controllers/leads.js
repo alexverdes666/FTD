@@ -16,6 +16,7 @@ const sessionSecurity = require("../utils/sessionSecurity");
 const LeadAuditLog = require("../models/LeadAuditLog");
 const leadSearchCache = require("../services/leadSearchCache");
 const referenceCache = require("../services/referenceCache");
+const { normalizePhone } = require("../utils/phoneNormalizer");
 
 // S3 client for resolving verification photo URLs
 const s3Client = new S3Client({
@@ -1626,9 +1627,12 @@ exports.updateLead = async (req, res, next) => {
       trackChange("oldEmail", lead.oldEmail, oldEmail);
       lead.oldEmail = oldEmail;
     }
-    if (newPhone && newPhone !== lead.newPhone) {
-      trackChange("newPhone", lead.newPhone, newPhone);
-      lead.newPhone = newPhone;
+    if (newPhone) {
+      const normalizedNewPhone = normalizePhone(newPhone, lead.prefix || lead.country);
+      if (normalizedNewPhone !== lead.newPhone) {
+        trackChange("newPhone", lead.newPhone, normalizedNewPhone);
+        lead.newPhone = normalizedNewPhone;
+      }
     }
     if (oldPhone !== undefined && oldPhone !== lead.oldPhone) {
       trackChange("oldPhone", lead.oldPhone, oldPhone);
@@ -1982,12 +1986,13 @@ exports.createLead = async (req, res, next) => {
         ],
       });
     }
+    const normalizedPhone = normalizePhone(newPhone, req.body.prefix || country);
     const leadData = {
       firstName,
       lastName,
       newEmail,
       oldEmail,
-      newPhone,
+      newPhone: normalizedPhone,
       oldPhone,
       country,
       leadType,
@@ -2286,6 +2291,10 @@ exports.importLeads = async (req, res, next) => {
         if (sinValue && sinValue.trim().length > 0) {
           leadData.sin = sinValue.trim();
         }
+      }
+      // Normalize phone to strip duplicated country code prefix
+      if (leadData.newPhone && (leadData.prefix || leadData.country)) {
+        leadData.newPhone = normalizePhone(leadData.newPhone, leadData.prefix || leadData.country);
       }
       return leadData;
     });

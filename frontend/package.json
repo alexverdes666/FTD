@@ -23,6 +23,7 @@
     "html2canvas": "^1.4.1",
     "jspreadsheet-ce": "^5.0.4",
     "jsuites": "^6.0.3",
+    "libphonenumber-js": "^1.12.38",
     "lodash.debounce": "^4.0.8",
     "qrcode.react": "^3.1.0",
     "react": "^18.2.0",
