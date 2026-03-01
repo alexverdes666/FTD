@@ -42,6 +42,8 @@ import {
   Undo as UndoIcon,
   VerifiedUser as VerifiedUserIcon,
   Gavel as GavelIcon,
+  Block as ClosedNetworkIcon,
+  Label as SetStatusIcon,
 } from "@mui/icons-material";
 import DocumentPreview from "../../components/DocumentPreview";
 import { formatPhoneWithCountryCode } from "../../utils/phoneUtils";
@@ -83,6 +85,8 @@ const LeadsPreviewModal = ({
   onUnconfirmDeposit,
   onMarkAsShaved,
   onUnmarkAsShaved,
+  onMarkAsClosedNetwork,
+  onUnmarkAsClosedNetwork,
   onOpenChangeFTD,
   onOpenReplaceLead,
   onConvertLeadType,
@@ -267,7 +271,7 @@ const LeadsPreviewModal = ({
             <Table
               size="small"
               stickyHeader
-              sx={{ tableLayout: "auto", minWidth: 900 }}
+              sx={{ tableLayout: "auto", minWidth: 900, border: "1px solid rgba(100,150,255,0.4)", "& td, & th": { border: "1px solid rgba(100,150,255,0.4)" } }}
             >
               <TableHead>
                 <TableRow>
@@ -289,6 +293,20 @@ const LeadsPreviewModal = ({
                       />
                     </TableCell>
                   )}
+                  <TableCell
+                    sx={{
+                      fontWeight: "bold",
+                      backgroundColor: "grey.100",
+                      whiteSpace: "nowrap",
+                      py: 0.5,
+                      px: 0.5,
+                      fontSize: "0.75rem",
+                      textAlign: "center",
+                      width: 52,
+                    }}
+                  >
+                    Type
+                  </TableCell>
                   <TableCell
                     sx={{
                       fontWeight: "bold",
@@ -360,33 +378,7 @@ const LeadsPreviewModal = ({
                       fontSize: "0.75rem",
                     }}
                   >
-                    ID Front
-                  </TableCell>
-                  <TableCell
-                    sx={{
-                      fontWeight: "bold",
-                      backgroundColor: "grey.100",
-                      whiteSpace: "nowrap",
-                      textAlign: "center",
-                      py: 0.5,
-                      px: 0.5,
-                      fontSize: "0.75rem",
-                    }}
-                  >
-                    ID Back
-                  </TableCell>
-                  <TableCell
-                    sx={{
-                      fontWeight: "bold",
-                      backgroundColor: "grey.100",
-                      whiteSpace: "nowrap",
-                      textAlign: "center",
-                      py: 0.5,
-                      px: 0.5,
-                      fontSize: "0.75rem",
-                    }}
-                  >
-                    Selfie
+                    Docs
                   </TableCell>
                   <TableCell
                     sx={{
@@ -473,21 +465,7 @@ const LeadsPreviewModal = ({
                     // Merge order metadata into lead for correct deposit/shaved status
                     const lead = getLeadWithOrderMetadata(originalLead, modal.order);
                     const leadType = getDisplayLeadType(lead);
-                    // Extract document URLs from documents array
-                    const documents = Array.isArray(lead.documents) ? lead.documents : [];
-                    const idFrontDoc = documents.find(
-                      (doc) =>
-                        doc.description?.toLowerCase().includes("id front") &&
-                        !doc.description?.toLowerCase().includes("selfie")
-                    );
-                    const idBackDoc = documents.find(
-                      (doc) =>
-                        doc.description?.toLowerCase().includes("id back") &&
-                        !doc.description?.toLowerCase().includes("selfie")
-                    );
-                    const selfieDoc = documents.find((doc) =>
-                      doc.description?.toLowerCase().includes("selfie")
-                    );
+                    const documents = Array.isArray(lead.documents) ? lead.documents.filter(doc => doc.url) : [];
 
                     // Check if lead is removed
                     const removedInfo = modal.order?.removedLeads?.find(
@@ -548,6 +526,29 @@ const LeadsPreviewModal = ({
                             />
                           </TableCell>
                         )}
+                        {/* Type */}
+                        <TableCell sx={{ py: 0.5, px: 0.5, textAlign: "center", width: 52 }}>
+                          <Chip
+                            label={leadType?.toUpperCase() || "N/A"}
+                            size="small"
+                            color={
+                              leadType === "ftd"
+                                ? "success"
+                                : leadType === "filler"
+                                ? "warning"
+                                : leadType === "cold"
+                                ? "info"
+                                : "default"
+                            }
+                            sx={{
+                              height: 18,
+                              fontSize: "0.6rem",
+                              "& .MuiChip-label": {
+                                padding: "0 4px",
+                              },
+                            }}
+                          />
+                        </TableCell>
                         {/* Name */}
                         <TableCell sx={{ py: 0.5, px: 1, position: "relative" }}>
                           {/* IPQS Validation Success Indicator - overlays on top */}
@@ -572,40 +573,12 @@ const LeadsPreviewModal = ({
                               <CheckCircleIcon sx={{ color: "success.main", fontSize: 32 }} />
                             </Box>
                           )}
-                          <Box
-                            sx={{
-                              display: "flex",
-                              alignItems: "center",
-                              gap: 0.5,
-                            }}
+                          <Typography
+                            variant="body2"
+                            sx={{ whiteSpace: "nowrap", fontSize: "0.75rem" }}
                           >
-                            <Chip
-                              label={leadType?.toUpperCase() || "N/A"}
-                              size="small"
-                              color={
-                                leadType === "ftd"
-                                  ? "success"
-                                  : leadType === "filler"
-                                  ? "warning"
-                                  : leadType === "cold"
-                                  ? "info"
-                                  : "default"
-                              }
-                              sx={{
-                                height: 18,
-                                fontSize: "0.6rem",
-                                "& .MuiChip-label": {
-                                  padding: "0 4px",
-                                },
-                              }}
-                            />
-                            <Typography
-                              variant="body2"
-                              sx={{ whiteSpace: "nowrap", fontSize: "0.75rem" }}
-                            >
-                              {lead.firstName} {lead.lastName}
-                            </Typography>
-                          </Box>
+                            {lead.firstName} {lead.lastName}
+                          </Typography>
                         </TableCell>
                         {/* Status */}
                         <TableCell sx={{ py: 0.5, px: 1 }}>
@@ -685,11 +658,25 @@ const LeadsPreviewModal = ({
                                 }}
                               />
                             )}
-                            {!lead.depositConfirmed && !lead.shaved && !isRemoved && (
+                            {lead.closedNetwork && !isRemoved && (
+                              <Chip
+                                label="Closed Net"
+                                size="small"
+                                color="warning"
+                                sx={{
+                                  height: 18,
+                                  fontSize: "0.6rem",
+                                  "& .MuiChip-label": {
+                                    padding: "0 4px",
+                                  },
+                                }}
+                              />
+                            )}
+                            {!lead.depositConfirmed && !lead.shaved && !lead.closedNetwork && !isRemoved && (
                               <Typography
                                 variant="body2"
                                 color="text.secondary"
-                                sx={{ fontSize: "0.75rem" }}
+                                sx={{ fontSize: "0.75rem", width: "100%", textAlign: "center" }}
                               >
                                 -
                               </Typography>
@@ -699,6 +686,7 @@ const LeadsPreviewModal = ({
                         {/* Phone */}
                         <TableCell sx={{ py: 0.5, px: 1 }}>
                           {(() => {
+                            const phoneValue = formatPhoneWithCountryCode(lead.newPhone || lead.phone, lead.country);
                             const phoneStatus = lead.ipqsValidation?.summary?.phoneStatus;
                             const statusConfig = phoneStatus ? getIPQSStatusConfig(phoneStatus) : null;
                             return (
@@ -712,6 +700,7 @@ const LeadsPreviewModal = ({
                                   sx={{
                                     whiteSpace: "nowrap",
                                     fontSize: "0.75rem",
+                                    ...(!phoneValue && { textAlign: "center" }),
                                     ...(statusConfig && {
                                       backgroundColor: `${statusConfig.bgcolor} !important`,
                                       color: "#212121 !important",
@@ -724,7 +713,7 @@ const LeadsPreviewModal = ({
                                     textDecoration: isRemoved ? "line-through !important" : "none",
                                   }}
                                 >
-                                  {formatPhoneWithCountryCode(lead.newPhone || lead.phone, lead.country) || "-"}
+                                  {phoneValue || "-"}
                                 </Typography>
                               </Tooltip>
                             );
@@ -733,6 +722,7 @@ const LeadsPreviewModal = ({
                         {/* Email */}
                         <TableCell sx={{ py: 0.5, px: 1 }}>
                           {(() => {
+                            const emailValue = lead.newEmail || lead.email;
                             const emailStatus = lead.ipqsValidation?.summary?.emailStatus;
                             const statusConfig = emailStatus ? getIPQSStatusConfig(emailStatus) : null;
                             return (
@@ -748,6 +738,7 @@ const LeadsPreviewModal = ({
                                     maxWidth: 180,
                                     overflow: "hidden",
                                     textOverflow: "ellipsis",
+                                    ...(!emailValue && { textAlign: "center" }),
                                     ...(statusConfig && {
                                       backgroundColor: `${statusConfig.bgcolor} !important`,
                                       color: "#212121 !important",
@@ -760,7 +751,7 @@ const LeadsPreviewModal = ({
                                     textDecoration: isRemoved ? "line-through !important" : "none",
                                   }}
                                 >
-                                  {lead.newEmail || lead.email || "-"}
+                                  {emailValue || "-"}
                                 </Typography>
                               </Tooltip>
                             );
@@ -770,79 +761,34 @@ const LeadsPreviewModal = ({
                         <TableCell sx={{ py: 0.5, px: 1 }}>
                           <Typography
                             variant="body2"
-                            sx={{ whiteSpace: "nowrap", fontSize: "0.75rem" }}
+                            sx={{ whiteSpace: "nowrap", fontSize: "0.75rem", ...(!lead.assignedAgent?.fullName && { textAlign: "center" }) }}
                           >
                             {lead.assignedAgent?.fullName || "-"}
                           </Typography>
                         </TableCell>
-                        {/* ID Front */}
+                        {/* Documents */}
                         <TableCell align="center" sx={{ py: 0.5, px: 0.5 }}>
-                          {idFrontDoc?.url ? (
-                            <DocumentPreview
-                              url={idFrontDoc.url}
-                              type="ID Front"
-                              forceImage
-                            >
-                              <ImageIcon
-                                sx={{
-                                  fontSize: 16,
-                                  color: "primary.main",
-                                  cursor: "pointer",
-                                }}
-                              />
-                            </DocumentPreview>
-                          ) : (
-                            <Typography
-                              variant="body2"
-                              color="text.secondary"
-                              sx={{ fontSize: "0.75rem" }}
-                            >
-                              -
-                            </Typography>
-                          )}
-                        </TableCell>
-                        {/* ID Back */}
-                        <TableCell align="center" sx={{ py: 0.5, px: 0.5 }}>
-                          {idBackDoc?.url ? (
-                            <DocumentPreview
-                              url={idBackDoc.url}
-                              type="ID Back"
-                              forceImage
-                            >
-                              <ImageIcon
-                                sx={{
-                                  fontSize: 16,
-                                  color: "primary.main",
-                                  cursor: "pointer",
-                                }}
-                              />
-                            </DocumentPreview>
-                          ) : (
-                            <Typography
-                              variant="body2"
-                              color="text.secondary"
-                              sx={{ fontSize: "0.75rem" }}
-                            >
-                              -
-                            </Typography>
-                          )}
-                        </TableCell>
-                        {/* Selfie */}
-                        <TableCell align="center" sx={{ py: 0.5, px: 0.5 }}>
-                          {selfieDoc?.url ? (
-                            <DocumentPreview
-                              url={selfieDoc.url}
-                              type="Selfie"
-                              forceImage
-                            >
-                              <ImageIcon
-                                sx={{
-                                  fontSize: 16,
-                                  color: "primary.main",
-                                  cursor: "pointer",
-                                }}
-                              />
-                            </DocumentPreview>
+                          {documents.length > 0 ? (
+                            <Box sx={{ display: "flex", gap: 0.25, justifyContent: "center" }}>
+                              {documents.map((doc, idx) => (
+                                <DocumentPreview
+                                  key={idx}
+                                  url={doc.url}
+                                  type={doc.description || `Doc ${idx + 1}`}
+                                  forceImage
+                                >
+                                  <Tooltip title={doc.description || `Doc ${idx + 1}`} arrow placement="top">
+                                    <ImageIcon
+                                      sx={{
+                                        fontSize: 16,
+                                        color: "primary.main",
+                                        cursor: "pointer",
+                                      }}
+                                    />
+                                  </Tooltip>
+                                </DocumentPreview>
+                              ))}
+                            </Box>
                           ) : (
                             <Typography
                               variant="body2"
@@ -862,19 +808,23 @@ const LeadsPreviewModal = ({
                               gap: 0.5,
                             }}
                           >
-                            <Typography
-                              variant="body2"
-                              sx={{ whiteSpace: "nowrap", fontSize: "0.75rem" }}
-                            >
-                              {(lead.clientBrokerHistory?.length > 0
+                            {(() => {
+                              const brokerValue = (lead.clientBrokerHistory?.length > 0
                                 ? (lead.clientBrokerHistory.find(h => h.orderId === modal.orderId || h.orderId?._id === modal.orderId) || lead.clientBrokerHistory[lead.clientBrokerHistory.length - 1])?.clientBroker?.name
                                 : null) ||
                                 (lead.assignedClientBrokers?.length > 0
                                   ? lead.assignedClientBrokers[lead.assignedClientBrokers.length - 1]?.name
                                   : null) ||
-                                lead.clientBroker ||
-                                "-"}
+                                lead.clientBroker;
+                              return (
+                              <Typography
+                              variant="body2"
+                              sx={{ whiteSpace: "nowrap", fontSize: "0.75rem", ...(!brokerValue && { width: "100%", textAlign: "center" }) }}
+                            >
+                              {brokerValue || "-"}
                             </Typography>
+                              );
+                            })()}
                             {lead.assignedClientBrokers &&
                               lead.assignedClientBrokers.length > 0 && (
                                 <Tooltip title="View all client brokers">
@@ -903,16 +853,20 @@ const LeadsPreviewModal = ({
                               gap: 0.5,
                             }}
                           >
-                            <Typography
-                              variant="body2"
-                              sx={{ whiteSpace: "nowrap", fontSize: "0.75rem" }}
-                            >
-                              {modal.order?.selectedClientNetwork?.name
+                            {(() => {
+                              const cnValue = modal.order?.selectedClientNetwork?.name
                                 || (lead.clientNetworkHistory?.length > 0
                                   ? (lead.clientNetworkHistory.find(h => h.orderId === modal.orderId || h.orderId?._id === modal.orderId) || lead.clientNetworkHistory[lead.clientNetworkHistory.length - 1])?.clientNetwork?.name
-                                  : null)
-                                || "-"}
-                            </Typography>
+                                  : null);
+                              return (
+                                <Typography
+                                  variant="body2"
+                                  sx={{ whiteSpace: "nowrap", fontSize: "0.75rem", ...(!cnValue && { width: "100%", textAlign: "center" }) }}
+                                >
+                                  {cnValue || "-"}
+                                </Typography>
+                              );
+                            })()}
                             {lead.clientNetworkHistory &&
                               lead.clientNetworkHistory.length > 0 && (
                                 <Tooltip title="View all client networks">
@@ -941,16 +895,20 @@ const LeadsPreviewModal = ({
                               gap: 0.5,
                             }}
                           >
-                            <Typography
-                              variant="body2"
-                              sx={{ whiteSpace: "nowrap", fontSize: "0.75rem" }}
-                            >
-                              {modal.order?.selectedOurNetwork?.name
+                            {(() => {
+                              const onValue = modal.order?.selectedOurNetwork?.name
                                 || (lead.ourNetworkHistory?.length > 0
                                   ? (lead.ourNetworkHistory.find(h => h.orderId === modal.orderId || h.orderId?._id === modal.orderId) || lead.ourNetworkHistory[lead.ourNetworkHistory.length - 1])?.ourNetwork?.name
-                                  : null)
-                                || "-"}
-                            </Typography>
+                                  : null);
+                              return (
+                                <Typography
+                                  variant="body2"
+                                  sx={{ whiteSpace: "nowrap", fontSize: "0.75rem", ...(!onValue && { width: "100%", textAlign: "center" }) }}
+                                >
+                                  {onValue || "-"}
+                                </Typography>
+                              );
+                            })()}
                             {lead.ourNetworkHistory &&
                               lead.ourNetworkHistory.length > 0 && (
                                 <Tooltip title="View all our networks">
@@ -979,16 +937,20 @@ const LeadsPreviewModal = ({
                               gap: 0.5,
                             }}
                           >
-                            <Typography
-                              variant="body2"
-                              sx={{ whiteSpace: "nowrap", fontSize: "0.75rem" }}
-                            >
-                              {modal.order?.selectedCampaign?.name
+                            {(() => {
+                              const campValue = modal.order?.selectedCampaign?.name
                                 || (lead.campaignHistory?.length > 0
                                   ? (lead.campaignHistory.find(h => h.orderId === modal.orderId || h.orderId?._id === modal.orderId) || lead.campaignHistory[lead.campaignHistory.length - 1])?.campaign?.name
-                                  : null)
-                                || "-"}
-                            </Typography>
+                                  : null);
+                              return (
+                                <Typography
+                                  variant="body2"
+                                  sx={{ whiteSpace: "nowrap", fontSize: "0.75rem", ...(!campValue && { width: "100%", textAlign: "center" }) }}
+                                >
+                                  {campValue || "-"}
+                                </Typography>
+                              );
+                            })()}
                             {lead.campaignHistory &&
                               lead.campaignHistory.length > 0 && (
                                 <Tooltip title="View all campaigns">
@@ -1238,37 +1200,79 @@ const LeadsPreviewModal = ({
                   )
                 )}
 
-                {/* Mark/Unmark as Shaved - for FTD/Filler with confirmed deposit */}
-                {isFtdOrFiller && lead.depositConfirmed && (
-                  lead.shaved ? (
-                    user.role === "admin" && (
-                      <MenuItem
-                        onClick={() => {
-                          onUnmarkAsShaved(lead, modal.orderId);
-                          onClosePreviewActionsMenu();
-                        }}
-                      >
-                        <ListItemIcon>
-                          <ShavedIcon fontSize="small" color="warning" />
-                        </ListItemIcon>
-                        Unmark as Shaved
-                      </MenuItem>
-                    )
-                  ) : (
-                    user.role !== "lead_manager" && (
+                {/* Set Status - for FTD/Filler with confirmed deposit */}
+                {isFtdOrFiller && lead.depositConfirmed && user.role !== "lead_manager" && (
+                  <>
+                    <Divider />
+                    <MenuItem disabled sx={{ opacity: "1 !important", py: 0.25, minHeight: 0 }}>
+                      <ListItemIcon>
+                        <SetStatusIcon fontSize="small" color="action" />
+                      </ListItemIcon>
+                      <Typography variant="caption" color="text.secondary" fontWeight={600}>
+                        Set Status
+                      </Typography>
+                    </MenuItem>
+                    {/* Mark/Unmark as Shaved */}
+                    {lead.shaved ? (
+                      user.role === "admin" && (
+                        <MenuItem
+                          onClick={() => {
+                            onUnmarkAsShaved(lead, modal.orderId);
+                            onClosePreviewActionsMenu();
+                          }}
+                          sx={{ pl: 4 }}
+                        >
+                          <ListItemIcon>
+                            <ShavedIcon fontSize="small" color="warning" />
+                          </ListItemIcon>
+                          Unmark as Shaved
+                        </MenuItem>
+                      )
+                    ) : (
                       <MenuItem
                         onClick={() => {
                           onMarkAsShaved(lead, modal.orderId);
                           onClosePreviewActionsMenu();
                         }}
+                        sx={{ pl: 4 }}
                       >
                         <ListItemIcon>
                           <ShavedIcon fontSize="small" color="error" />
                         </ListItemIcon>
                         Mark as Shaved
                       </MenuItem>
-                    )
-                  )
+                    )}
+                    {/* Mark/Unmark as Closed Network */}
+                    {lead.closedNetwork ? (
+                      user.role === "admin" && (
+                        <MenuItem
+                          onClick={() => {
+                            onUnmarkAsClosedNetwork(lead, modal.orderId);
+                            onClosePreviewActionsMenu();
+                          }}
+                          sx={{ pl: 4 }}
+                        >
+                          <ListItemIcon>
+                            <ClosedNetworkIcon fontSize="small" color="warning" />
+                          </ListItemIcon>
+                          Unmark Closed Network
+                        </MenuItem>
+                      )
+                    ) : (
+                      <MenuItem
+                        onClick={() => {
+                          onMarkAsClosedNetwork(lead, modal.orderId);
+                          onClosePreviewActionsMenu();
+                        }}
+                        sx={{ pl: 4 }}
+                      >
+                        <ListItemIcon>
+                          <ClosedNetworkIcon fontSize="small" color="warning" />
+                        </ListItemIcon>
+                        Mark as Closed Network
+                      </MenuItem>
+                    )}
+                  </>
                 )}
 
 

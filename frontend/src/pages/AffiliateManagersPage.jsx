@@ -778,6 +778,7 @@ const AffiliateManagersPage = () => {
                       <TableCell align="right" sx={{ color: "warning.main" }}>Fixed Exp.</TableCell>
                       <TableCell align="center">FTDs</TableCell>
                       <TableCell align="center">Shaved</TableCell>
+                      <TableCell align="center">Closed Net</TableCell>
                       <TableCell align="center">Verified</TableCell>
                       <TableCell align="center">Fillers</TableCell>
                       <TableCell align="center">1st</TableCell>
@@ -867,6 +868,11 @@ const AffiliateManagersPage = () => {
                           <TableCell align="center">
                             <Typography variant="body2" color="error.main">
                               {summary.shavedFTDs || 0}
+                            </Typography>
+                          </TableCell>
+                          <TableCell align="center">
+                            <Typography variant="body2" color="warning.main">
+                              {summary.closedNetworkFTDs || 0}
                             </Typography>
                           </TableCell>
                           <TableCell align="center">

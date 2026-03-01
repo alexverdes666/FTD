@@ -748,6 +748,8 @@ const OrdersPage = () => {
     handleMarkAsShaved,
     handleConfirmMarkAsShaved,
     handleUnmarkAsShaved,
+    handleMarkAsClosedNetwork,
+    handleUnmarkAsClosedNetwork,
     handleUndoAction,
     handleRestoreLead,
     handleUndoReplacementFromMenu,
@@ -814,6 +816,9 @@ const OrdersPage = () => {
       shavedRefundsManager: metadata.shavedRefundsManager,
       shavedManagerAssignedBy: metadata.shavedManagerAssignedBy,
       shavedManagerAssignedAt: metadata.shavedManagerAssignedAt,
+      closedNetwork: metadata.closedNetwork || false,
+      closedNetworkBy: metadata.closedNetworkBy,
+      closedNetworkAt: metadata.closedNetworkAt,
     };
   }, []);
 
@@ -3482,6 +3487,8 @@ const OrdersPage = () => {
             onUnconfirmDeposit={handleUnconfirmDeposit}
             onMarkAsShaved={handleMarkAsShaved}
             onUnmarkAsShaved={handleUnmarkAsShaved}
+            onMarkAsClosedNetwork={handleMarkAsClosedNetwork}
+            onUnmarkAsClosedNetwork={handleUnmarkAsClosedNetwork}
             onOpenChangeFTD={handleOpenChangeFTDDialog}
             onOpenReplaceLead={handleOpenReplaceLeadDialog}
             onConvertLeadType={handleConvertLeadType}
@@ -4050,6 +4057,8 @@ const OrdersPage = () => {
         onUnconfirmDeposit={handleUnconfirmDeposit}
         onMarkAsShaved={handleMarkAsShaved}
         onUnmarkAsShaved={handleUnmarkAsShaved}
+        onMarkAsClosedNetwork={handleMarkAsClosedNetwork}
+        onUnmarkAsClosedNetwork={handleUnmarkAsClosedNetwork}
         user={user}
       />
 
@@ -4079,6 +4088,8 @@ const OrdersPage = () => {
         onUnconfirmDeposit={handleUnconfirmDeposit}
         onMarkAsShaved={handleMarkAsShaved}
         onUnmarkAsShaved={handleUnmarkAsShaved}
+        onMarkAsClosedNetwork={handleMarkAsClosedNetwork}
+        onUnmarkAsClosedNetwork={handleUnmarkAsClosedNetwork}
         onOpenChangeFTD={handleOpenChangeFTDDialog}
         onOpenReplaceLead={handleOpenReplaceLeadDialog}
         onConvertLeadType={handleConvertLeadType}

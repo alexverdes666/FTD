@@ -49,6 +49,8 @@ const {
   unconfirmDeposit,
   markAsShaved,
   unmarkAsShaved,
+  markAsClosedNetwork,
+  unmarkAsClosedNetwork,
   assignSimCardToLeads,
   getGlobalLeadAuditLogs,
   batchValidateIPQS,
@@ -680,6 +682,20 @@ router.put(
   "/:id/unmark-shaved",
   [protect, authorize("admin")],
   unmarkAsShaved
+);
+
+// Mark lead as closed network
+router.put(
+  "/:id/mark-closed-network",
+  [protect, authorize("admin", "affiliate_manager")],
+  markAsClosedNetwork
+);
+
+// Unmark lead as closed network (admin only)
+router.put(
+  "/:id/unmark-closed-network",
+  [protect, authorize("admin")],
+  unmarkAsClosedNetwork
 );
 
 // Assign SIM card to FTD leads

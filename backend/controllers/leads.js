@@ -5311,6 +5311,232 @@ exports.unmarkAsShaved = async (req, res, next) => {
   }
 };
 
+// Mark lead as closed network (network closed, deposit not counted)
+exports.markAsClosedNetwork = async (req, res, next) => {
+  try {
+    const leadId = req.params.id;
+    const userId = req.user._id;
+    const userRole = req.user.role;
+    const { orderId } = req.body;
+
+    // Only admin and affiliate_manager can mark as closed network
+    if (userRole !== "admin" && userRole !== "affiliate_manager") {
+      return res.status(403).json({
+        success: false,
+        message: "Only admins and affiliate managers can mark leads as closed network",
+      });
+    }
+
+    // Validate orderId is provided
+    if (!orderId) {
+      return res.status(400).json({
+        success: false,
+        message: "Order ID is required for marking as closed network",
+      });
+    }
+
+    const lead = await Lead.findById(leadId);
+    if (!lead) {
+      return res.status(404).json({
+        success: false,
+        message: "Lead not found",
+      });
+    }
+
+    // Check if lead is FTD type
+    if (lead.leadType !== "ftd") {
+      return res.status(400).json({
+        success: false,
+        message: "Only FTD leads can be marked as closed network",
+      });
+    }
+
+    // Find the order
+    const Order = require("../models/Order");
+    const order = await Order.findById(orderId);
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found",
+      });
+    }
+
+    // Find the lead's metadata entry in the order
+    const leadMetadataIndex = order.leadsMetadata.findIndex(
+      (meta) => meta.leadId.toString() === leadId
+    );
+
+    if (leadMetadataIndex === -1) {
+      return res.status(400).json({
+        success: false,
+        message: "Lead is not part of this order",
+      });
+    }
+
+    const leadMetadata = order.leadsMetadata[leadMetadataIndex];
+
+    // Check if deposit is confirmed in this order
+    if (!leadMetadata.depositConfirmed) {
+      return res.status(400).json({
+        success: false,
+        message: "Please confirm the deposit first before marking as closed network",
+      });
+    }
+
+    // Affiliate managers can only set once
+    if (userRole === "affiliate_manager" && leadMetadata.closedNetwork) {
+      return res.status(403).json({
+        success: false,
+        message: "This lead is already marked as closed network for this order. Only admins can modify this.",
+      });
+    }
+
+    // Update the order's leadsMetadata
+    order.leadsMetadata[leadMetadataIndex].closedNetwork = true;
+    order.leadsMetadata[leadMetadataIndex].closedNetworkBy = userId;
+    order.leadsMetadata[leadMetadataIndex].closedNetworkAt = new Date();
+
+    // Add audit log to order
+    const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+                     req.headers['x-real-ip'] ||
+                     req.connection?.remoteAddress ||
+                     req.socket?.remoteAddress ||
+                     'unknown';
+    if (!order.auditLog) {
+      order.auditLog = [];
+    }
+    order.auditLog.push({
+      action: "closed_network",
+      leadId: lead._id,
+      leadEmail: lead.newEmail,
+      performedBy: userId,
+      performedAt: new Date(),
+      ipAddress: clientIp,
+      details: `Lead ${lead.firstName} ${lead.lastName} (${lead.newEmail}) marked as closed network by ${req.user.fullName || req.user.email}`,
+    });
+
+    await order.save();
+
+    // Populate for response
+    await order.populate("leadsMetadata.closedNetworkBy", "fullName email");
+    await lead.populate("assignedAgent", "fullName email fourDigitCode");
+
+    const updatedMetadata = order.leadsMetadata[leadMetadataIndex];
+
+    res.status(200).json({
+      success: true,
+      message: "Lead marked as closed network successfully",
+      data: {
+        ...lead.toObject(),
+        orderMetadata: updatedMetadata,
+      },
+    });
+  } catch (error) {
+    console.error("Error marking lead as closed network:", error);
+    next(error);
+  }
+};
+
+// Unmark lead as closed network (admin only)
+exports.unmarkAsClosedNetwork = async (req, res, next) => {
+  try {
+    const leadId = req.params.id;
+    const userRole = req.user.role;
+    const { orderId } = req.body;
+
+    // Only admin can unmark closed network
+    if (userRole !== "admin") {
+      return res.status(403).json({
+        success: false,
+        message: "Only admins can unmark leads as closed network",
+      });
+    }
+
+    if (!orderId) {
+      return res.status(400).json({
+        success: false,
+        message: "Order ID is required for unmarking as closed network",
+      });
+    }
+
+    const lead = await Lead.findById(leadId);
+    if (!lead) {
+      return res.status(404).json({
+        success: false,
+        message: "Lead not found",
+      });
+    }
+
+    const Order = require("../models/Order");
+    const order = await Order.findById(orderId);
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found",
+      });
+    }
+
+    const leadMetadataIndex = order.leadsMetadata.findIndex(
+      (meta) => meta.leadId.toString() === leadId
+    );
+
+    if (leadMetadataIndex === -1) {
+      return res.status(400).json({
+        success: false,
+        message: "Lead is not part of this order",
+      });
+    }
+
+    if (!order.leadsMetadata[leadMetadataIndex].closedNetwork) {
+      return res.status(400).json({
+        success: false,
+        message: "Lead is not marked as closed network for this order",
+      });
+    }
+
+    // Clear closed network fields
+    order.leadsMetadata[leadMetadataIndex].closedNetwork = false;
+    order.leadsMetadata[leadMetadataIndex].closedNetworkBy = null;
+    order.leadsMetadata[leadMetadataIndex].closedNetworkAt = null;
+
+    // Add audit log
+    const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+                     req.headers['x-real-ip'] ||
+                     req.connection?.remoteAddress ||
+                     req.socket?.remoteAddress ||
+                     'unknown';
+    if (!order.auditLog) {
+      order.auditLog = [];
+    }
+    order.auditLog.push({
+      action: "unclosed_network",
+      leadId: lead._id,
+      leadEmail: lead.newEmail,
+      performedBy: req.user._id,
+      performedAt: new Date(),
+      ipAddress: clientIp,
+      details: `Lead ${lead.firstName} ${lead.lastName} (${lead.newEmail}) unmarked as closed network by ${req.user.fullName || req.user.email}`,
+    });
+
+    await order.save();
+    await lead.populate("assignedAgent", "fullName email fourDigitCode");
+
+    const updatedMetadata = order.leadsMetadata[leadMetadataIndex];
+
+    res.status(200).json({
+      success: true,
+      message: "Lead unmarked as closed network successfully",
+      data: {
+        ...lead.toObject(),
+        orderMetadata: updatedMetadata,
+      },
+    });
+  } catch (error) {
+    console.error("Error unmarking lead as closed network:", error);
+    next(error);
+  }
+};
+
 // Assign SIM cards to FTD leads
 exports.assignSimCardToLeads = async (req, res, next) => {
   try {

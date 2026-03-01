@@ -96,6 +96,10 @@ backendAPI.interceptors.response.use(
     return response;
   },
   (error) => {
+    // Don't log canceled requests (AbortController) - they are expected
+    if (error.code === "ERR_CANCELED") {
+      return Promise.reject(error);
+    }
     console.error("Backend API Response Error:", {
       url: error.config?.url,
       status: error.response?.status,

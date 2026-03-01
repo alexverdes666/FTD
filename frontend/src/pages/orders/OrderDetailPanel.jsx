@@ -377,6 +377,7 @@ const OrderDetailPanel = ({
                                           {isRemoved && <Chip label="Removed" size="small" sx={{ height: 18, fontSize: "0.6rem", bgcolor: "grey.500", color: "white" }} />}
                                           {lead.depositConfirmed && !isRemoved && <Chip label="Deposit" size="small" color="success" sx={{ height: 18, fontSize: "0.6rem" }} />}
                                           {lead.shaved && !isRemoved && <Chip label="Shaved" size="small" color="error" sx={{ height: 18, fontSize: "0.6rem" }} />}
+                                          {lead.closedNetwork && !isRemoved && <Chip label="Closed Net" size="small" color="warning" sx={{ height: 18, fontSize: "0.6rem" }} />}
                                         </Box>
                                         <ChevronRightIcon
                                           sx={{

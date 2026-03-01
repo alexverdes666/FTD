@@ -36,6 +36,7 @@ import {
   Cached as ChangeIcon,
   Call as CallIcon,
   ContentCut as ShavedIcon,
+  Block as ClosedNetworkIcon,
   History as HistoryIcon,
   Add as AddIcon,
   Remove as RemoveIcon,
@@ -61,6 +62,8 @@ const LeadQuickView = ({
   onUnconfirmDeposit,
   onMarkAsShaved,
   onUnmarkAsShaved,
+  onMarkAsClosedNetwork,
+  onUnmarkAsClosedNetwork,
   userRole,
   readOnly = false,
 }) => {
@@ -392,6 +395,57 @@ const LeadQuickView = ({
                       color="error"
                     >
                       Mark as Shaved
+                    </Button>
+                  )
+                )}
+              </span>
+            </Tooltip>
+          )}
+
+          {/* Closed Network Button - only for FTD with confirmed deposit */}
+          {isFtdOrFiller && lead.depositConfirmed && (
+            <Tooltip
+              title={
+                lead.closedNetwork
+                  ? userRole === "admin"
+                    ? "Click to unmark as closed network"
+                    : "Lead is marked as closed network"
+                  : "Mark as closed network"
+              }
+            >
+              <span>
+                {lead.closedNetwork ? (
+                  userRole === "admin" && onUnmarkAsClosedNetwork ? (
+                    <Button
+                      size="small"
+                      startIcon={<ClosedNetworkIcon />}
+                      onClick={() => onUnmarkAsClosedNetwork(lead)}
+                      variant="contained"
+                      color="warning"
+                    >
+                      Unmark Closed Net
+                    </Button>
+                  ) : (
+                    <Button
+                      size="small"
+                      startIcon={<ClosedNetworkIcon />}
+                      variant="contained"
+                      color="warning"
+                      disabled
+                    >
+                      Closed Network
+                    </Button>
+                  )
+                ) : (
+                  onMarkAsClosedNetwork && (
+                    <Button
+                      size="small"
+                      startIcon={<ClosedNetworkIcon />}
+                      onClick={() => onMarkAsClosedNetwork(lead)}
+                      variant="outlined"
+                      color="warning"
+                    >
+                      Mark Closed Network
                     </Button>
                   )
                 )}

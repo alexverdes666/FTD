@@ -31,6 +31,8 @@ export default function AssignedLeadsModal({
   onUnconfirmDeposit,
   onMarkAsShaved,
   onUnmarkAsShaved,
+  onMarkAsClosedNetwork,
+  onUnmarkAsClosedNetwork,
   user,
 }) {
   if (!modal.open) return null;
@@ -109,6 +111,16 @@ export default function AssignedLeadsModal({
                   onUnmarkAsShaved={
                     user?.role === "admin"
                       ? (lead) => onUnmarkAsShaved(lead, orderId)
+                      : undefined
+                  }
+                  onMarkAsClosedNetwork={
+                    user?.role !== "lead_manager"
+                      ? (lead) => onMarkAsClosedNetwork(lead, orderId)
+                      : undefined
+                  }
+                  onUnmarkAsClosedNetwork={
+                    user?.role === "admin"
+                      ? (lead) => onUnmarkAsClosedNetwork(lead, orderId)
                       : undefined
                   }
                   userRole={user?.role}

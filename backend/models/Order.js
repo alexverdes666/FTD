@@ -118,6 +118,10 @@ const orderSchema = new Schema(
       shavedRefundsManager: { type: SchemaTypes.ObjectId, ref: "User" },
       shavedManagerAssignedBy: { type: SchemaTypes.ObjectId, ref: "User" },
       shavedManagerAssignedAt: { type: Date },
+      // Closed Network tracking for this order (per-order, not per-lead)
+      closedNetwork: { type: Boolean, default: false },
+      closedNetworkBy: { type: SchemaTypes.ObjectId, ref: "User" },
+      closedNetworkAt: { type: Date },
       _id: false
     }],
     // Track leads that have been removed from the order (soft delete)
@@ -226,6 +230,8 @@ const orderSchema = new Schema(
           "deposit_unconfirmed",
           "shaved",
           "unshaved",
+          "closed_network",
+          "unclosed_network",
           "campaign_changed",
           "our_network_changed",
           "client_network_changed"

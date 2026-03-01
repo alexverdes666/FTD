@@ -122,6 +122,15 @@ db.once("open", () => {
     } catch (error) {
       console.error("❌ Failed to warm up lead search cache:", error);
     }
+
+    // Initialize AMI service after MongoDB is connected (needs User.find())
+    try {
+      const amiService = require("./services/amiService");
+      amiService.initialize(io);
+      console.log("✅ AMI service initialized");
+    } catch (error) {
+      console.error("❌ Failed to initialize AMI service:", error);
+    }
   }
 });
 app.use(
@@ -717,14 +726,6 @@ server.listen(PORT, () => {
       console.error("❌ Failed to initialize scheduler service:", error);
     }
 
-    // Initialize AMI service for real-time agent tracking
-    try {
-      const amiService = require("./services/amiService");
-      amiService.initialize(io);
-      console.log("✅ AMI service initialized");
-    } catch (error) {
-      console.error("❌ Failed to initialize AMI service:", error);
-    }
   }
 });
 

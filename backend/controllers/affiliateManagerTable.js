@@ -789,11 +789,12 @@ exports.getAffiliateManagerSummary = async (req, res, next) => {
       }
       const orders = await Order.find(orderQuery).select("leads leadsMetadata");
 
-      // Count FTDs, Fillers, and Shaved FTDs from orders
-      // Shaved status is tracked per-order in leadsMetadata, not on the Lead model
+      // Count FTDs, Fillers, Shaved FTDs, and Closed Network FTDs from orders
+      // Shaved/closedNetwork status is tracked per-order in leadsMetadata, not on the Lead model
       let totalFTDs = 0;
       let totalFillers = 0;
       let shavedFTDs = 0;
+      let closedNetworkFTDs = 0;
 
       for (const order of orders) {
         if (order.leadsMetadata && order.leadsMetadata.length > 0) {
@@ -803,6 +804,10 @@ exports.getAffiliateManagerSummary = async (req, res, next) => {
               // Check if this FTD is marked as shaved in this order
               if (metadata.shaved === true) {
                 shavedFTDs++;
+              }
+              // Check if this FTD is marked as closed network in this order
+              if (metadata.closedNetwork === true) {
+                closedNetworkFTDs++;
               }
             } else if (metadata.orderedAs === "filler") {
               totalFillers++;
@@ -876,8 +881,9 @@ exports.getAffiliateManagerSummary = async (req, res, next) => {
         managerEmail: manager.email,
         totalFTDs,
         shavedFTDs,
+        closedNetworkFTDs,
         totalFillers,
-        totalVerifiedFTDs: totalFTDs - shavedFTDs,
+        totalVerifiedFTDs: totalFTDs - shavedFTDs - closedNetworkFTDs,
         totalMoneyIn,
         totalMoneyExpenses,
         totalCommissionsAM: 0,

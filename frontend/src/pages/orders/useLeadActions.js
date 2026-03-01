@@ -1360,6 +1360,196 @@ const useLeadActions = ({
     [fetchOrders, hoveredOrderId, expandedRowData]
   );
 
+  // Mark as Closed Network Handler
+  const handleMarkAsClosedNetwork = useCallback(
+    async (lead, orderId) => {
+      const targetOrderId = orderId || hoveredOrderId;
+
+      if (!targetOrderId) {
+        setNotification({
+          message: "Order context is required to mark as closed network",
+          severity: "error",
+        });
+        return;
+      }
+
+      if (!window.confirm(`Are you sure you want to mark ${lead.firstName} ${lead.lastName} as closed network?`)) {
+        return;
+      }
+
+      try {
+        const response = await api.put(`/leads/${lead._id}/mark-closed-network`, {
+          orderId: targetOrderId,
+        });
+
+        const orderMetadata = response.data.data?.orderMetadata || {};
+
+        const updatedLeadData = {
+          closedNetwork: orderMetadata.closedNetwork || true,
+          closedNetworkBy: orderMetadata.closedNetworkBy || user,
+          closedNetworkAt: orderMetadata.closedNetworkAt || new Date().toISOString(),
+        };
+
+        setAssignedLeadsModal((prev) => ({
+          ...prev,
+          leads: prev.leads.map((l) =>
+            l._id === lead._id ? { ...l, ...updatedLeadData } : l
+          ),
+        }));
+
+        setLeadsPreviewModal((prev) => {
+          let updatedOrder = prev.order;
+          if (updatedOrder && updatedOrder.leadsMetadata) {
+            updatedOrder = {
+              ...updatedOrder,
+              leadsMetadata: updatedOrder.leadsMetadata.map((meta) =>
+                meta.leadId === lead._id || meta.leadId?._id === lead._id
+                  ? { ...meta, ...orderMetadata }
+                  : meta
+              ),
+            };
+          }
+          return {
+            ...prev,
+            leads: prev.leads.map((l) =>
+              l._id === lead._id ? { ...l, ...updatedLeadData } : l
+            ),
+            order: updatedOrder,
+          };
+        });
+
+        if (targetOrderId && expandedRowData[targetOrderId]) {
+          setExpandedRowData((prev) => {
+            const orderData = prev[targetOrderId];
+            if (!orderData) return prev;
+            return {
+              ...prev,
+              [targetOrderId]: {
+                ...orderData,
+                leads: orderData.leads?.map((l) =>
+                  l._id === lead._id ? { ...l, ...updatedLeadData } : l
+                ),
+                leadsMetadata: orderData.leadsMetadata?.map((meta) =>
+                  meta.leadId === lead._id || meta.leadId?._id === lead._id
+                    ? { ...meta, ...orderMetadata }
+                    : meta
+                ),
+              },
+            };
+          });
+        }
+
+        setNotification({
+          message: "Lead marked as closed network successfully",
+          severity: "success",
+        });
+
+        fetchOrders();
+      } catch (err) {
+        console.error("Error marking lead as closed network:", err);
+        setNotification({
+          message: err.response?.data?.message || "Failed to mark lead as closed network",
+          severity: "error",
+        });
+      }
+    },
+    [fetchOrders, hoveredOrderId, expandedRowData, user]
+  );
+
+  // Unmark as Closed Network Handler (admin only)
+  const handleUnmarkAsClosedNetwork = useCallback(
+    async (lead, orderId) => {
+      const targetOrderId = orderId || hoveredOrderId;
+
+      if (!targetOrderId) {
+        setNotification({
+          message: "Order context is required to unmark as closed network",
+          severity: "error",
+        });
+        return;
+      }
+
+      if (!window.confirm(`Are you sure you want to unmark ${lead.firstName} ${lead.lastName} as closed network?`)) {
+        return;
+      }
+
+      try {
+        await api.put(`/leads/${lead._id}/unmark-closed-network`, {
+          orderId: targetOrderId,
+        });
+
+        const updatedLeadData = {
+          closedNetwork: false,
+          closedNetworkBy: null,
+          closedNetworkAt: null,
+        };
+
+        setAssignedLeadsModal((prev) => ({
+          ...prev,
+          leads: prev.leads.map((l) =>
+            l._id === lead._id ? { ...l, ...updatedLeadData } : l
+          ),
+        }));
+
+        setLeadsPreviewModal((prev) => {
+          let updatedOrder = prev.order;
+          if (updatedOrder && updatedOrder.leadsMetadata) {
+            updatedOrder = {
+              ...updatedOrder,
+              leadsMetadata: updatedOrder.leadsMetadata.map((meta) =>
+                meta.leadId === lead._id || meta.leadId?._id === lead._id
+                  ? { ...meta, ...updatedLeadData }
+                  : meta
+              ),
+            };
+          }
+          return {
+            ...prev,
+            leads: prev.leads.map((l) =>
+              l._id === lead._id ? { ...l, ...updatedLeadData } : l
+            ),
+            order: updatedOrder,
+          };
+        });
+
+        if (targetOrderId && expandedRowData[targetOrderId]) {
+          setExpandedRowData((prev) => {
+            const orderData = prev[targetOrderId];
+            if (!orderData) return prev;
+            return {
+              ...prev,
+              [targetOrderId]: {
+                ...orderData,
+                leads: orderData.leads?.map((l) =>
+                  l._id === lead._id ? { ...l, ...updatedLeadData } : l
+                ),
+                leadsMetadata: orderData.leadsMetadata?.map((meta) =>
+                  meta.leadId === lead._id || meta.leadId?._id === lead._id
+                    ? { ...meta, ...updatedLeadData }
+                    : meta
+                ),
+              },
+            };
+          });
+        }
+
+        setNotification({
+          message: "Lead unmarked as closed network successfully",
+          severity: "success",
+        });
+
+        fetchOrders();
+      } catch (err) {
+        console.error("Error unmarking lead as closed network:", err);
+        setNotification({
+          message: err.response?.data?.message || "Failed to unmark lead as closed network",
+          severity: "error",
+        });
+      }
+    },
+    [fetchOrders, hoveredOrderId, expandedRowData]
+  );
+
   return {
     handleConfirmDeposit,
     handleCardIssuerSelect,
@@ -1370,6 +1560,8 @@ const useLeadActions = ({
     handleMarkAsShaved,
     handleConfirmMarkAsShaved,
     handleUnmarkAsShaved,
+    handleMarkAsClosedNetwork,
+    handleUnmarkAsClosedNetwork,
     handleUndoAction,
     handleRestoreLead,
     handleUndoReplacementFromMenu,
