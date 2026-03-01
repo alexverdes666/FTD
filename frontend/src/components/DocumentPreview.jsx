@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Box, Paper, Typography, Modal, IconButton, Portal, CircularProgress } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import CloseIcon from '@mui/icons-material/Close';
 import ImageIcon from '@mui/icons-material/Image';
 import BrokenImageIcon from '@mui/icons-material/BrokenImage';
+import CancelIcon from '@mui/icons-material/Cancel';
 
 // Global image cache to track preloaded images across all DocumentPreview instances
 const imageCache = new Map(); // url -> 'loading' | 'loaded' | 'error'
@@ -179,29 +180,26 @@ const DocumentPreview = ({ url, type, children, forceImage = false }) => {
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [imageLoading, setImageLoading] = useState(true);
   const [imageError, setImageError] = useState(false);
-  const preloadedRef = useRef(false);
-  
+
   // Get the direct image URL - memoized to prevent unnecessary recalculations
   const directUrl = useMemo(() => getDirectImageUrl(url), [url]);
-  
+
   // Check if this URL is considered an image
   const isImage = useMemo(() => {
-    return forceImage || 
-      url?.match(/\.(jpg|jpeg|png|gif|webp)$/i) || 
-      url?.startsWith('data:image/') || 
-      url?.includes('cloudinary') || 
-      url?.includes('imgur') || 
-      url?.includes('blob') || 
+    return forceImage ||
+      url?.match(/\.(jpg|jpeg|png|gif|webp)$/i) ||
+      url?.startsWith('data:image/') ||
+      url?.includes('cloudinary') ||
+      url?.includes('imgur') ||
+      url?.includes('blob') ||
       url?.includes('s3.');
   }, [url, forceImage]);
 
   // Preload image on mount and sync with cache
   useEffect(() => {
-    if (!directUrl || !isImage || preloadedRef.current) return;
-    
-    preloadedRef.current = true;
-    
-    // Check if already in cache
+    if (!directUrl || !isImage) return;
+
+    // Check if already resolved in cache
     const cachedStatus = imageCache.get(directUrl);
     if (cachedStatus === 'loaded') {
       setImageLoading(false);
@@ -212,8 +210,8 @@ const DocumentPreview = ({ url, type, children, forceImage = false }) => {
       setImageError(true);
       return;
     }
-    
-    // Subscribe to cache updates
+
+    // Subscribe to cache updates for in-progress or new preloads
     const unsubscribe = subscribeToImageCache(directUrl, (status) => {
       if (status === 'loaded') {
         setImageLoading(false);
@@ -223,33 +221,14 @@ const DocumentPreview = ({ url, type, children, forceImage = false }) => {
         setImageError(true);
       }
     });
-    
+
     // Start preloading if not already in progress
     if (!cachedStatus) {
       preloadImage(directUrl);
     }
-    
+
     return unsubscribe;
   }, [directUrl, isImage]);
-
-  // Sync loading state with cache when preview opens
-  useEffect(() => {
-    if (showPreview && directUrl && isImage) {
-      const cachedStatus = imageCache.get(directUrl);
-      if (cachedStatus === 'loaded') {
-        setImageLoading(false);
-        setImageError(false);
-      } else if (cachedStatus === 'error') {
-        setImageLoading(false);
-        setImageError(true);
-      } else if (!cachedStatus) {
-        // Start loading if not in cache yet
-        setImageLoading(true);
-        setImageError(false);
-        preloadImage(directUrl);
-      }
-    }
-  }, [showPreview, directUrl, isImage]);
 
   const handleMouseEnter = (event) => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -384,6 +363,25 @@ const DocumentPreview = ({ url, type, children, forceImage = false }) => {
   // If children are provided, use them; otherwise fall back to default rendering
   const renderTrigger = () => {
     if (children) {
+      // Show error badge overlay on children when image failed to load
+      if (imageError) {
+        return (
+          <Box sx={{ position: 'relative', display: 'inline-flex' }}>
+            {children}
+            <CancelIcon
+              sx={{
+                position: 'absolute',
+                top: -4,
+                right: -4,
+                fontSize: 10,
+                color: 'error.main',
+                backgroundColor: 'background.paper',
+                borderRadius: '50%',
+              }}
+            />
+          </Box>
+        );
+      }
       return children;
     }
     if (isImage) {
