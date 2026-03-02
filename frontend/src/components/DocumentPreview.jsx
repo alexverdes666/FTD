@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Box, Paper, Typography, Modal, IconButton, Portal, CircularProgress } from '@mui/material';
+import { Box, Paper, Typography, Modal, IconButton, Portal, CircularProgress, Tooltip } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import CloseIcon from '@mui/icons-material/Close';
 import ImageIcon from '@mui/icons-material/Image';
@@ -256,6 +256,11 @@ const DocumentPreview = ({ url, type, children, forceImage = false }) => {
 
   const handleClick = (event) => {
     event.preventDefault();
+    // If image failed to load (e.g. password-protected archive), open original URL directly
+    if (imageError && url) {
+      window.open(url, '_blank', 'noopener,noreferrer');
+      return;
+    }
     setShowModal(true);
   };
 
@@ -366,20 +371,22 @@ const DocumentPreview = ({ url, type, children, forceImage = false }) => {
       // Show error badge overlay on children when image failed to load
       if (imageError) {
         return (
-          <Box sx={{ position: 'relative', display: 'inline-flex' }}>
-            {children}
-            <CancelIcon
-              sx={{
-                position: 'absolute',
-                top: -4,
-                right: -4,
-                fontSize: 10,
-                color: 'error.main',
-                backgroundColor: 'background.paper',
-                borderRadius: '50%',
-              }}
-            />
-          </Box>
+          <Tooltip title="Click to open link in new tab" arrow>
+            <Box sx={{ position: 'relative', display: 'inline-flex' }}>
+              {children}
+              <CancelIcon
+                sx={{
+                  position: 'absolute',
+                  top: -4,
+                  right: -4,
+                  fontSize: 10,
+                  color: 'error.main',
+                  backgroundColor: 'background.paper',
+                  borderRadius: '50%',
+                }}
+              />
+            </Box>
+          </Tooltip>
         );
       }
       return children;

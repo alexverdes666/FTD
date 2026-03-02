@@ -10,9 +10,26 @@ import {
   Box,
   CircularProgress,
   Typography,
+  Divider,
+  IconButton,
+  Chip,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  InputAdornment,
 } from "@mui/material";
+import { Add as AddIcon } from "@mui/icons-material";
 import api from "../../services/api";
 import toast from "react-hot-toast";
+
+const positionOptions = [
+  { value: "finance", label: "Finance" },
+  { value: "boss", label: "Boss" },
+  { value: "manager", label: "Manager" },
+  { value: "affiliate_manager", label: "Affiliate Manager" },
+  { value: "tech_support", label: "Tech Support" },
+];
 
 const ReferenceSelector = ({
   open,
@@ -29,6 +46,10 @@ const ReferenceSelector = ({
   const [newNetworkName, setNewNetworkName] = useState("");
   const [newNetworkDescription, setNewNetworkDescription] = useState("");
   const [creating, setCreating] = useState(false);
+  const [employees, setEmployees] = useState([]);
+  const [empName, setEmpName] = useState("");
+  const [empTelegram, setEmpTelegram] = useState("");
+  const [empPosition, setEmpPosition] = useState("");
 
   useEffect(() => {
     if (open) {
@@ -38,6 +59,10 @@ const ReferenceSelector = ({
       setCreateMode(false);
       setNewNetworkName("");
       setNewNetworkDescription("");
+      setEmployees([]);
+      setEmpName("");
+      setEmpTelegram("");
+      setEmpPosition("");
     }
   }, [open]);
 
@@ -59,6 +84,25 @@ const ReferenceSelector = ({
     }
   };
 
+  const handleAddEmployee = () => {
+    if (!empName.trim() || !empPosition) return;
+    setEmployees((prev) => [
+      ...prev,
+      {
+        name: empName.trim(),
+        telegramUsername: empTelegram.replace(/^@+/, "").trim(),
+        position: empPosition,
+      },
+    ]);
+    setEmpName("");
+    setEmpTelegram("");
+    setEmpPosition("");
+  };
+
+  const handleRemoveEmployee = (index) => {
+    setEmployees((prev) => prev.filter((_, i) => i !== index));
+  };
+
   const handleSubmit = async () => {
     if (createMode) {
       if (!newNetworkName.trim()) {
@@ -72,6 +116,20 @@ const ReferenceSelector = ({
           description: newNetworkDescription.trim() || undefined,
         });
         const newNetwork = response.data.data;
+
+        // Add employees to the newly created network
+        if (employees.length > 0) {
+          const results = await Promise.allSettled(
+            employees.map((emp) =>
+              api.post(`/client-networks/${newNetwork._id}/employees`, emp)
+            )
+          );
+          const failed = results.filter((r) => r.status === "rejected").length;
+          if (failed > 0) {
+            toast.error(`Failed to add ${failed} employee(s)`);
+          }
+        }
+
         toast.success(`Network "${newNetwork.name}" created`);
         onSelect({
           clientNetworkId: newNetwork._id,
@@ -173,10 +231,89 @@ const ReferenceSelector = ({
                   setCreateMode(false);
                   setNewNetworkName("");
                   setNewNetworkDescription("");
+                  setEmployees([]);
+                  setEmpName("");
+                  setEmpTelegram("");
+                  setEmpPosition("");
                 }}
               >
                 or Select Existing Network
               </Typography>
+
+              {/* Employees Section */}
+              <Divider sx={{ my: 0.5 }} />
+              <Typography variant="subtitle2" color="text.secondary">
+                Employees (optional)
+              </Typography>
+
+              {employees.length > 0 && (
+                <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+                  {employees.map((emp, idx) => (
+                    <Chip
+                      key={idx}
+                      label={`${emp.name} - ${positionOptions.find((p) => p.value === emp.position)?.label || emp.position}${emp.telegramUsername ? ` (@${emp.telegramUsername})` : ""}`}
+                      onDelete={() => handleRemoveEmployee(idx)}
+                      size="small"
+                      variant="outlined"
+                    />
+                  ))}
+                </Box>
+              )}
+
+              <Box sx={{ display: "flex", gap: 1, alignItems: "flex-start" }}>
+                <TextField
+                  label="Name"
+                  value={empName}
+                  onChange={(e) => setEmpName(e.target.value)}
+                  size="small"
+                  sx={{ flex: 1 }}
+                  inputProps={{ maxLength: 100 }}
+                />
+                <TextField
+                  label="Telegram"
+                  value={empTelegram}
+                  onChange={(e) => setEmpTelegram(e.target.value.replace(/^@+/, ""))}
+                  size="small"
+                  sx={{ flex: 1 }}
+                  placeholder="username"
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start" sx={{ mr: 0 }}>
+                        <span style={{ fontWeight: 700, color: "#1976d2" }}>@</span>
+                      </InputAdornment>
+                    ),
+                  }}
+                  inputProps={{ maxLength: 100 }}
+                />
+              </Box>
+              <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+                <FormControl size="small" sx={{ flex: 1 }}>
+                  <InputLabel>Position</InputLabel>
+                  <Select
+                    value={empPosition}
+                    onChange={(e) => setEmpPosition(e.target.value)}
+                    label="Position"
+                  >
+                    {positionOptions.map((option) => (
+                      <MenuItem key={option.value} value={option.value}>
+                        {option.label}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+                <IconButton
+                  color="primary"
+                  onClick={handleAddEmployee}
+                  disabled={!empName.trim() || !empPosition}
+                  sx={{
+                    border: "1px solid",
+                    borderColor: !empName.trim() || !empPosition ? "action.disabled" : "primary.main",
+                    borderRadius: 1,
+                  }}
+                >
+                  <AddIcon />
+                </IconButton>
+              </Box>
             </>
           )}
           <TextField
