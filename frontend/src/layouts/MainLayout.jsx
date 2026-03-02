@@ -994,7 +994,7 @@ const MainLayout = () => {
             <Outlet />
           </Force2FASetup>
         </Box>
-        {location.pathname !== "/notes" && location.pathname !== "/orders" && location.pathname !== "/crm" && location.pathname !== "/leads" && location.pathname !== "/am-expenses" && <Footer />}
+        {location.pathname !== "/notes" && location.pathname !== "/orders" && location.pathname !== "/crm" && location.pathname !== "/leads" && location.pathname !== "/am-expenses" && !location.pathname.startsWith("/client-network/") && !location.pathname.startsWith("/client-broker/") && <Footer />}
       </Box>
 
       {/* Floating Chat Button */}

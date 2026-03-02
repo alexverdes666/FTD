@@ -189,8 +189,10 @@ exports.createPSP = async (req, res, next) => {
     });
   } catch (error) {
     if (error.code === 11000) {
+      // Re-derive name from website since the try-scoped `name` is not accessible here
+      const dupName = extractDomainName(req.body.website);
       // Find and return the existing PSP so the frontend can use it
-      const existingPsp = await PSP.findOne({ name })
+      const existingPsp = await PSP.findOne({ name: dupName })
         .populate("createdBy", "fullName email")
         .populate("cardIssuer", "name description logo");
 

@@ -729,6 +729,20 @@ server.listen(PORT, () => {
   }
 });
 
+// Prevent unhandled errors from crashing the process
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("⚠️ Unhandled Promise Rejection:", reason);
+});
+
+process.on("uncaughtException", (error) => {
+  console.error("⚠️ Uncaught Exception:", error);
+  // For truly fatal errors, exit gracefully so Render can restart
+  if (error.message?.includes("ENOMEM") || error.message?.includes("out of memory")) {
+    console.error("💀 Fatal memory error, exiting...");
+    process.exit(1);
+  }
+});
+
 process.on("SIGTERM", async () => {
   console.log("SIGTERM received. Shutting down gracefully...");
 
