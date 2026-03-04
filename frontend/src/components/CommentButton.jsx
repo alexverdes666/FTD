@@ -301,7 +301,20 @@ const CommentButton = ({ targetType, targetId, targetName }) => {
     }
   };
 
-  // Load comments when dialog opens
+  // Load count on mount, full comments when dialog opens
+  useEffect(() => {
+    const loadCount = async () => {
+      try {
+        const response = await getCommentsByTarget(targetType, targetId);
+        const unresolved = response.data.filter(comment => !comment.isResolved);
+        setUnresolvedCount(unresolved.length);
+      } catch (error) {
+        // Silently fail for count
+      }
+    };
+    loadCount();
+  }, [targetType, targetId]);
+
   useEffect(() => {
     if (open) {
       loadComments();
@@ -395,9 +408,16 @@ const CommentButton = ({ targetType, targetId, targetName }) => {
         onClick={() => setOpen(true)}
         color="primary"
         size="small"
+        sx={{ p: 0.5 }}
       >
-        <Badge badgeContent={unresolvedCount} color="error">
-          <CommentIcon />
+        <Badge
+          badgeContent={unresolvedCount}
+          color="error"
+          sx={{
+            "& .MuiBadge-badge": { fontSize: "0.6rem", minWidth: 14, height: 14, p: "0 3px" },
+          }}
+        >
+          <CommentIcon sx={{ fontSize: 16 }} />
         </Badge>
       </IconButton>
 

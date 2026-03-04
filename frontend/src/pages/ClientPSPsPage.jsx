@@ -18,7 +18,14 @@ import {
   CircularProgress,
   Link,
   InputAdornment,
+  Autocomplete,
+  Divider,
+  Menu,
+  MenuItem,
+  ListItemIcon,
+  ListItemText,
 } from "@mui/material";
+import { alpha } from "@mui/material/styles";
 import {
   Add as AddIcon,
   Edit as EditIcon,
@@ -26,6 +33,10 @@ import {
   Visibility as ViewIcon,
   Search as SearchIcon,
   Language as WebIcon,
+  CreditCard as CreditCardIcon,
+  MoreVert as MoreVertIcon,
+  ToggleOn as ActivateIcon,
+  ToggleOff as DeactivateIcon,
 } from "@mui/icons-material";
 import { DataGrid } from "@mui/x-data-grid";
 import { useForm, Controller } from "react-hook-form";
@@ -41,10 +52,14 @@ const pspSchema = yup.object({
   website: yup
     .string()
     .required("Website URL is required")
-    .max(200, "Website must be less than 200 characters"),
+    .max(200, "Website must be less than 200 characters")
+    .test("no-spaces", "Website URL must not contain spaces", (value) =>
+      value ? !/\s/.test(value) : true
+    ),
   description: yup
     .string()
     .max(500, "Description must be less than 500 characters"),
+  cardIssuer: yup.string().nullable(),
 });
 
 const ClientPSPsPage = () => {
@@ -60,8 +75,16 @@ const ClientPSPsPage = () => {
   const [showActiveOnly, setShowActiveOnly] = useState(true);
   const [openDialog, setOpenDialog] = useState(false);
   const [editingPSP, setEditingPSP] = useState(null);
+  const [cardIssuers, setCardIssuers] = useState([]);
+  const [selectedCardIssuer, setSelectedCardIssuer] = useState(null);
+  const [creatingCardIssuer, setCreatingCardIssuer] = useState(false);
+  const [menuAnchor, setMenuAnchor] = useState(null);
+  const [menuRow, setMenuRow] = useState(null);
+  const gridWrapperRef = useRef(null);
+  const [gridHeight, setGridHeight] = useState("100%");
 
   const websiteRef = useRef(null);
+  const newCardIssuerRef = useRef(null);
 
   const {
     control,
@@ -101,20 +124,72 @@ const ClientPSPsPage = () => {
     fetchPSPs();
   }, [fetchPSPs]);
 
+  // Snap grid height to exact row multiples to prevent partial row peeking
+  useEffect(() => {
+    const wrapper = gridWrapperRef.current;
+    if (!wrapper) return;
+    const ROW_HEIGHT = 36;
+    const HEADER_HEIGHT = 36;
+    const FOOTER_HEIGHT = 36;
+
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const available = entry.contentRect.height;
+        const rowSpace = available - HEADER_HEIGHT - FOOTER_HEIGHT;
+        const visibleRows = Math.floor(rowSpace / ROW_HEIGHT);
+        const snappedHeight = visibleRows * ROW_HEIGHT + HEADER_HEIGHT + FOOTER_HEIGHT;
+        setGridHeight(snappedHeight);
+      }
+    });
+    observer.observe(wrapper);
+    return () => observer.disconnect();
+  }, []);
+
+  const fetchCardIssuers = async () => {
+    try {
+      const response = await api.get("/card-issuers?limit=10000&isActive=true");
+      setCardIssuers(response.data.data || []);
+    } catch (error) {
+      console.error("Failed to fetch card issuers:", error);
+    }
+  };
+
+  const handleCreateCardIssuer = async () => {
+    const name = newCardIssuerRef.current?.value?.trim();
+    if (!name) return;
+    setCreatingCardIssuer(true);
+    try {
+      const response = await api.post("/card-issuers", { name });
+      const created = response.data.data;
+      setCardIssuers((prev) => [...prev, created]);
+      setSelectedCardIssuer(created);
+      if (newCardIssuerRef.current) newCardIssuerRef.current.value = "";
+      toast.success(`Card Issuer "${created.name}" created`);
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to create Card Issuer");
+    } finally {
+      setCreatingCardIssuer(false);
+    }
+  };
+
   const handleOpenDialog = async (psp = null) => {
     setEditingPSP(psp);
+    fetchCardIssuers();
 
     if (psp) {
       reset({
         website: psp.website || "",
         description: psp.description || "",
       });
+      setSelectedCardIssuer(psp.cardIssuer || null);
     } else {
       reset({ website: "", description: "" });
+      setSelectedCardIssuer(null);
     }
     setOpenDialog(true);
     setTimeout(() => {
       websiteRef.current?.focus();
+      if (newCardIssuerRef.current) newCardIssuerRef.current.value = "";
     }, 100);
   };
 
@@ -126,11 +201,15 @@ const ClientPSPsPage = () => {
 
   const onSubmit = async (data) => {
     try {
+      const payload = {
+        ...data,
+        cardIssuer: selectedCardIssuer?._id || null,
+      };
       if (editingPSP) {
-        await api.put(`/psps/${editingPSP._id}`, data);
+        await api.put(`/psps/${editingPSP._id}`, payload);
         toast.success("PSP updated successfully");
       } else {
-        await api.post("/psps", data);
+        await api.post("/psps", payload);
         toast.success("PSP created successfully");
       }
       handleCloseDialog();
@@ -163,6 +242,16 @@ const ClientPSPsPage = () => {
     } catch (error) {
       toast.error(error.response?.data?.message || "Failed to update status");
     }
+  };
+
+  const handleMenuOpen = (event, row) => {
+    setMenuAnchor(event.currentTarget);
+    setMenuRow(row);
+  };
+
+  const handleMenuClose = () => {
+    setMenuAnchor(null);
+    setMenuRow(null);
   };
 
   const columns = [
@@ -245,99 +334,93 @@ const ClientPSPsPage = () => {
     {
       field: "actions",
       headerName: "Actions",
-      width: 200,
-      align: "right",
-      headerAlign: "right",
+      width: 100,
+      align: "center",
+      headerAlign: "center",
       sortable: false,
       renderCell: (params) => (
         <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-          <Tooltip title="View Profile">
-            <IconButton
-              size="small"
-              onClick={() => navigate(`/psp/${params.row._id}`)}
-            >
-              <ViewIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
-          {isAdmin && (
-            <>
-              <Tooltip title="Edit">
-                <IconButton
-                  size="small"
-                  onClick={() => handleOpenDialog(params.row)}
-                >
-                  <EditIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-              <Tooltip title={params.row.isActive ? "Deactivate" : "Activate"}>
-                <Box sx={{ display: "flex", alignItems: "center" }}>
-                  <Switch
-                    size="small"
-                    checked={params.row.isActive}
-                    onChange={() => handleToggleActive(params.row)}
-                  />
-                </Box>
-              </Tooltip>
-              <Tooltip title="Delete">
-                <IconButton
-                  size="small"
-                  color="error"
-                  onClick={() => handleDelete(params.row._id)}
-                >
-                  <DeleteIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-            </>
-          )}
           <CommentButton
             targetType="psp"
             targetId={params.row._id}
             targetName={params.row.name}
           />
+          <IconButton size="small" onClick={(e) => handleMenuOpen(e, params.row)}>
+            <MoreVertIcon fontSize="small" />
+          </IconButton>
         </Box>
       ),
     },
   ];
 
   return (
-    <Box>
+    <Box sx={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
       {/* Filters */}
-      <Paper sx={{ p: 2, mb: 2 }}>
-        <Box display="flex" gap={2} flexWrap="wrap" alignItems="center">
-          <TextField
-            label="Search PSPs..."
-            variant="outlined"
+      <Box
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          gap: 0.75,
+          px: 1,
+          py: 0.5,
+          mb: 0.5,
+          background: (theme) => `linear-gradient(135deg, ${alpha(theme.palette.grey[100], 0.7)} 0%, ${alpha(theme.palette.grey[50], 0.5)} 100%)`,
+          borderBottom: "1px solid",
+          borderColor: (theme) => alpha(theme.palette.divider, 0.6),
+          minHeight: 36,
+          borderRadius: 2,
+        }}
+      >
+        <TextField
+          placeholder="Search PSPs..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          size="small"
+          sx={{
+            width: 200,
+            "& .MuiOutlinedInput-root": {
+              height: 28,
+              borderRadius: 6,
+              fontSize: "0.78rem",
+              bgcolor: "background.paper",
+              boxShadow: (theme) => `0 1px 2px ${alpha(theme.palette.grey[400], 0.15)}`,
+              "& fieldset": { border: "1px solid", borderColor: (theme) => alpha(theme.palette.grey[300], 0.7) },
+              "&:hover fieldset": { borderColor: (theme) => alpha(theme.palette.primary.main, 0.3) },
+              "&.Mui-focused fieldset": { borderColor: "primary.main", borderWidth: 1.5 },
+            },
+            "& input::placeholder": { fontSize: "0.75rem", opacity: 0.6 },
+          }}
+          InputProps={{
+            startAdornment: <SearchIcon sx={{ color: "action.active", mr: 0.5, fontSize: 15 }} />,
+          }}
+        />
+        <FormControlLabel
+          control={
+            <Switch
+              checked={showActiveOnly}
+              onChange={(e) => setShowActiveOnly(e.target.checked)}
+              size="small"
+            />
+          }
+          label="Active only"
+          sx={{ "& .MuiFormControlLabel-label": { fontSize: "0.78rem" } }}
+        />
+        <Box sx={{ flex: 1 }} />
+        {isAdmin && (
+          <Button
+            variant="contained"
             size="small"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            sx={{ minWidth: 200 }}
-            InputProps={{ endAdornment: <SearchIcon color="action" /> }}
-          />
-          <FormControlLabel
-            control={
-              <Switch
-                checked={showActiveOnly}
-                onChange={(e) => setShowActiveOnly(e.target.checked)}
-              />
-            }
-            label="Active only"
-          />
-          {isAdmin && (
-            <Box sx={{ ml: "auto" }}>
-              <Button
-                variant="contained"
-                startIcon={<AddIcon />}
-                onClick={() => handleOpenDialog()}
-              >
-                Add PSP
-              </Button>
-            </Box>
-          )}
-        </Box>
-      </Paper>
+            startIcon={<AddIcon sx={{ fontSize: 16 }} />}
+            onClick={() => handleOpenDialog()}
+            sx={{ height: 28, fontSize: "0.75rem", textTransform: "none", borderRadius: 6 }}
+          >
+            Add PSP
+          </Button>
+        )}
+      </Box>
 
       {/* DataGrid */}
-      <Paper sx={{ width: "100%" }}>
+      <Paper ref={gridWrapperRef} sx={{ flex: 1, minHeight: 0, width: "100%" }}>
         <DataGrid
           rows={psps}
           columns={columns}
@@ -348,14 +431,51 @@ const ClientPSPsPage = () => {
           onPaginationModelChange={setPagination}
           rowCount={totalRows}
           pageSizeOptions={[25, 50, 100]}
+          rowHeight={36}
+          columnHeaderHeight={36}
           disableRowSelectionOnClick
-          autoHeight
           sx={{
+            height: gridHeight,
             "& .MuiDataGrid-columnHeaders": { backgroundColor: "#f5f5f5" },
+            "& .MuiDataGrid-overlayWrapper": { minHeight: "auto" },
+            "& .MuiDataGrid-footerContainer": { minHeight: "36px !important", maxHeight: "36px !important" },
+            "& .MuiTablePagination-root": { height: 36, overflow: "hidden" },
+            "& .MuiTablePagination-toolbar": { minHeight: "36px !important", height: "36px !important", pl: 0 },
+            "& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows": { fontSize: "0.72rem" },
+            "& .MuiTablePagination-select": { fontSize: "0.72rem" },
+            "& .MuiTablePagination-actions button": { p: 0.25 },
             border: "none",
           }}
         />
       </Paper>
+
+      {/* Actions Menu */}
+      <Menu
+        anchorEl={menuAnchor}
+        open={Boolean(menuAnchor)}
+        onClose={handleMenuClose}
+      >
+        <MenuItem onClick={() => { handleMenuClose(); navigate(`/psp/${menuRow?._id}`); }}>
+          <ListItemIcon><ViewIcon fontSize="small" /></ListItemIcon>
+          <ListItemText>View Profile</ListItemText>
+        </MenuItem>
+        {isAdmin && [
+          <MenuItem key="edit" onClick={() => { handleMenuClose(); handleOpenDialog(menuRow); }}>
+            <ListItemIcon><EditIcon fontSize="small" /></ListItemIcon>
+            <ListItemText>Edit</ListItemText>
+          </MenuItem>,
+          <MenuItem key="toggle" onClick={() => { handleMenuClose(); handleToggleActive(menuRow); }}>
+            <ListItemIcon>
+              {menuRow?.isActive ? <DeactivateIcon fontSize="small" /> : <ActivateIcon fontSize="small" color="success" />}
+            </ListItemIcon>
+            <ListItemText>{menuRow?.isActive ? "Deactivate" : "Activate"}</ListItemText>
+          </MenuItem>,
+          <MenuItem key="delete" onClick={() => { handleMenuClose(); handleDelete(menuRow?._id); }} sx={{ color: "error.main" }}>
+            <ListItemIcon><DeleteIcon fontSize="small" color="error" /></ListItemIcon>
+            <ListItemText>Delete</ListItemText>
+          </MenuItem>,
+        ]}
+      </Menu>
 
       {/* Add/Edit Dialog */}
       <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
@@ -403,6 +523,57 @@ const ClientPSPsPage = () => {
                   />
                 )}
               />
+              <Autocomplete
+                options={cardIssuers}
+                getOptionLabel={(option) => option.name || ""}
+                value={selectedCardIssuer}
+                onChange={(_, newValue) => setSelectedCardIssuer(newValue)}
+                isOptionEqualToValue={(option, value) => option._id === value?._id}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Card Issuer"
+                    placeholder="Select card issuer..."
+                    InputProps={{
+                      ...params.InputProps,
+                      startAdornment: (
+                        <>
+                          <InputAdornment position="start">
+                            <CreditCardIcon color="action" />
+                          </InputAdornment>
+                          {params.InputProps.startAdornment}
+                        </>
+                      ),
+                    }}
+                  />
+                )}
+                noOptionsText="No card issuers found"
+              />
+              <Divider />
+              <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+                <TextField
+                  size="small"
+                  label="New Card Issuer"
+                  placeholder="e.g., Visa, Mastercard"
+                  inputRef={newCardIssuerRef}
+                  fullWidth
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleCreateCardIssuer();
+                    }
+                  }}
+                />
+                <Button
+                  variant="outlined"
+                  size="small"
+                  onClick={handleCreateCardIssuer}
+                  disabled={creatingCardIssuer}
+                  sx={{ whiteSpace: "nowrap" }}
+                >
+                  {creatingCardIssuer ? <CircularProgress size={18} /> : "Add New"}
+                </Button>
+              </Box>
             </Box>
           </DialogContent>
           <DialogActions>

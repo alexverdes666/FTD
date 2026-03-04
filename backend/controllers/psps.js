@@ -112,21 +112,30 @@ exports.getPSPProfile = async (req, res, next) => {
 /**
  * Extract domain name from URL
  */
+// Common second-level domains that are part of TLDs (e.g., .co.uk, .com.de)
+const SECOND_LEVEL_TLDS = new Set(["co", "com", "org", "net", "gov", "edu", "ac"]);
+
 const extractDomainName = (url) => {
   try {
+    // Strip spaces from URL
+    let cleanUrl = url.replace(/\s+/g, "");
     // Add protocol if missing
-    let urlWithProtocol = url;
-    if (!url.startsWith("http://") && !url.startsWith("https://")) {
-      urlWithProtocol = "https://" + url;
+    let urlWithProtocol = cleanUrl;
+    if (!cleanUrl.startsWith("http://") && !cleanUrl.startsWith("https://")) {
+      urlWithProtocol = "https://" + cleanUrl;
     }
     const urlObj = new URL(urlWithProtocol);
     // Get hostname and remove 'www.' prefix if present
     let domain = urlObj.hostname.replace(/^www\./, "");
-    // Remove TLD to get just the name (e.g., "stripe.com" -> "stripe")
     const parts = domain.split(".");
     if (parts.length >= 2) {
-      // Return the main domain name (before the TLD)
-      return parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
+      // Handle multi-part TLDs like .co.uk, .com.de
+      let domainIndex = parts.length - 2;
+      if (domainIndex > 0 && SECOND_LEVEL_TLDS.has(parts[domainIndex])) {
+        domainIndex--;
+      }
+      const mainDomain = parts[domainIndex];
+      return mainDomain.charAt(0).toUpperCase() + mainDomain.slice(1);
     }
     return domain.charAt(0).toUpperCase() + domain.slice(1);
   } catch (error) {

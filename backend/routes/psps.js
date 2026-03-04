@@ -34,7 +34,13 @@ router.post(
     body("website")
       .trim()
       .isLength({ min: 1, max: 2000 })
-      .withMessage("Website URL is required and must be less than 2000 characters"),
+      .withMessage("Website URL is required and must be less than 2000 characters")
+      .custom((value) => {
+        if (/\s/.test(value)) {
+          throw new Error("Website URL must not contain spaces");
+        }
+        return true;
+      }),
     body("description")
       .optional()
       .trim()
@@ -71,7 +77,13 @@ router.put(
       .optional()
       .trim()
       .isLength({ max: 2000 })
-      .withMessage("Website must be less than 2000 characters"),
+      .withMessage("Website must be less than 2000 characters")
+      .custom((value) => {
+        if (value && /\s/.test(value)) {
+          throw new Error("Website URL must not contain spaces");
+        }
+        return true;
+      }),
     body("isActive")
       .optional()
       .isBoolean()

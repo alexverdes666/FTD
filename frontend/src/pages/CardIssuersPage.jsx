@@ -13,11 +13,15 @@ import {
   DialogActions,
   Switch,
   FormControlLabel,
-  Tooltip,
   CircularProgress,
   Tabs,
   Tab,
+  Menu,
+  MenuItem,
+  ListItemIcon,
+  ListItemText,
 } from "@mui/material";
+import { alpha } from "@mui/material/styles";
 import {
   Add as AddIcon,
   Edit as EditIcon,
@@ -26,7 +30,9 @@ import {
   CreditCard as CreditCardIcon,
   CloudUpload as UploadIcon,
   Link as LinkIcon,
-  AutoAwesome as AutoAwesomeIcon,
+  MoreVert as MoreVertIcon,
+  ToggleOn as ActivateIcon,
+  ToggleOff as DeactivateIcon,
 } from "@mui/icons-material";
 import { DataGrid } from "@mui/x-data-grid";
 import { useForm, Controller } from "react-hook-form";
@@ -66,10 +72,12 @@ const CardIssuersPage = () => {
   const [editingIssuer, setEditingIssuer] = useState(null);
   const [logoInputMode, setLogoInputMode] = useState(0); // 0 = URL, 1 = Upload, 2 = AI Generate
   const [uploadingLogo, setUploadingLogo] = useState(false);
-  const [generatingLogo, setGeneratingLogo] = useState(false);
-  const [aiPrompt, setAiPrompt] = useState("");
   const [logoPreview, setLogoPreview] = useState(null);
+  const [menuAnchor, setMenuAnchor] = useState(null);
+  const [menuRow, setMenuRow] = useState(null);
   const fileInputRef = useRef(null);
+  const gridWrapperRef = useRef(null);
+  const [gridHeight, setGridHeight] = useState("100%");
 
   const nameRef = useRef(null);
 
@@ -116,11 +124,31 @@ const CardIssuersPage = () => {
     fetchCardIssuers();
   }, [fetchCardIssuers]);
 
+  // Snap grid height to exact row multiples to prevent partial row peeking
+  useEffect(() => {
+    const wrapper = gridWrapperRef.current;
+    if (!wrapper) return;
+    const ROW_HEIGHT = 36;
+    const HEADER_HEIGHT = 36;
+    const FOOTER_HEIGHT = 36;
+
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const available = entry.contentRect.height;
+        const rowSpace = available - HEADER_HEIGHT - FOOTER_HEIGHT;
+        const visibleRows = Math.floor(rowSpace / ROW_HEIGHT);
+        const snappedHeight = visibleRows * ROW_HEIGHT + HEADER_HEIGHT + FOOTER_HEIGHT;
+        setGridHeight(snappedHeight);
+      }
+    });
+    observer.observe(wrapper);
+    return () => observer.disconnect();
+  }, []);
+
   const handleOpenDialog = (issuer = null) => {
     setEditingIssuer(issuer);
     setLogoInputMode(0);
     setLogoPreview(null);
-    setAiPrompt("");
     if (issuer) {
       reset({
         name: issuer.name || "",
@@ -144,7 +172,6 @@ const CardIssuersPage = () => {
     setEditingIssuer(null);
     setLogoPreview(null);
     setLogoInputMode(0);
-    setAiPrompt("");
     reset();
   };
 
@@ -197,46 +224,6 @@ const CardIssuersPage = () => {
     }
   };
 
-  const handleGenerateLogo = async () => {
-    if (!aiPrompt.trim()) {
-      toast.error("Please enter a prompt for image generation");
-      return;
-    }
-
-    try {
-      setGeneratingLogo(true);
-      const encodedPrompt = encodeURIComponent(aiPrompt.trim());
-      const pollinationsUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=640&height=640&nologo=true&seed=${Date.now()}`;
-
-      // Fetch the generated image as a blob
-      const imageResponse = await fetch(pollinationsUrl);
-      if (!imageResponse.ok) {
-        throw new Error("Failed to generate image");
-      }
-      const blob = await imageResponse.blob();
-
-      // Upload to our backend so the image is stored on our server
-      const formData = new FormData();
-      formData.append("image", blob, "ai-generated-logo.png");
-
-      const uploadResponse = await api.post("/card-issuers/upload-logo", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-
-      if (uploadResponse.data.success) {
-        const logoUrl = uploadResponse.data.data.url;
-        setValue("logo", logoUrl);
-        setLogoPreview(logoUrl);
-        toast.success("Logo generated and saved successfully");
-      }
-    } catch (error) {
-      console.error("Error generating logo:", error);
-      toast.error(error.response?.data?.message || "Failed to generate logo");
-    } finally {
-      setGeneratingLogo(false);
-    }
-  };
-
   const onSubmit = async (data) => {
     try {
       if (editingIssuer) {
@@ -276,6 +263,16 @@ const CardIssuersPage = () => {
     } catch (error) {
       toast.error(error.response?.data?.message || "Failed to update status");
     }
+  };
+
+  const handleMenuOpen = (event, row) => {
+    setMenuAnchor(event.currentTarget);
+    setMenuRow(row);
+  };
+
+  const handleMenuClose = () => {
+    setMenuAnchor(null);
+    setMenuRow(null);
   };
 
   const columns = [
@@ -350,91 +347,93 @@ const CardIssuersPage = () => {
     {
       field: "actions",
       headerName: "Actions",
-      width: 180,
-      align: "right",
-      headerAlign: "right",
+      width: 100,
+      align: "center",
+      headerAlign: "center",
       sortable: false,
       renderCell: (params) => (
         <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-          {isAdmin && (
-            <>
-              <Tooltip title="Edit">
-                <IconButton
-                  size="small"
-                  onClick={() => handleOpenDialog(params.row)}
-                >
-                  <EditIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-              <Tooltip title={params.row.isActive ? "Deactivate" : "Activate"}>
-                <Box sx={{ display: "flex", alignItems: "center" }}>
-                  <Switch
-                    size="small"
-                    checked={params.row.isActive}
-                    onChange={() => handleToggleActive(params.row)}
-                  />
-                </Box>
-              </Tooltip>
-              <Tooltip title="Delete">
-                <IconButton
-                  size="small"
-                  color="error"
-                  onClick={() => handleDelete(params.row._id)}
-                >
-                  <DeleteIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-            </>
-          )}
           <CommentButton
             targetType="cardIssuer"
             targetId={params.row._id}
             targetName={params.row.name}
           />
+          <IconButton size="small" onClick={(e) => handleMenuOpen(e, params.row)}>
+            <MoreVertIcon fontSize="small" />
+          </IconButton>
         </Box>
       ),
     },
   ];
 
   return (
-    <Box>
+    <Box sx={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
       {/* Filters */}
-      <Paper sx={{ p: 2, mb: 2 }}>
-        <Box display="flex" gap={2} flexWrap="wrap" alignItems="center">
-          <TextField
-            label="Search Card Issuers..."
-            variant="outlined"
+      <Box
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          gap: 0.75,
+          px: 1,
+          py: 0.5,
+          mb: 0.5,
+          background: (theme) => `linear-gradient(135deg, ${alpha(theme.palette.grey[100], 0.7)} 0%, ${alpha(theme.palette.grey[50], 0.5)} 100%)`,
+          borderBottom: "1px solid",
+          borderColor: (theme) => alpha(theme.palette.divider, 0.6),
+          minHeight: 36,
+          borderRadius: 2,
+        }}
+      >
+        <TextField
+          placeholder="Search Card Issuers..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          size="small"
+          sx={{
+            width: 200,
+            "& .MuiOutlinedInput-root": {
+              height: 28,
+              borderRadius: 6,
+              fontSize: "0.78rem",
+              bgcolor: "background.paper",
+              boxShadow: (theme) => `0 1px 2px ${alpha(theme.palette.grey[400], 0.15)}`,
+              "& fieldset": { border: "1px solid", borderColor: (theme) => alpha(theme.palette.grey[300], 0.7) },
+              "&:hover fieldset": { borderColor: (theme) => alpha(theme.palette.primary.main, 0.3) },
+              "&.Mui-focused fieldset": { borderColor: "primary.main", borderWidth: 1.5 },
+            },
+            "& input::placeholder": { fontSize: "0.75rem", opacity: 0.6 },
+          }}
+          InputProps={{
+            startAdornment: <SearchIcon sx={{ color: "action.active", mr: 0.5, fontSize: 15 }} />,
+          }}
+        />
+        <FormControlLabel
+          control={
+            <Switch
+              checked={showActiveOnly}
+              onChange={(e) => setShowActiveOnly(e.target.checked)}
+              size="small"
+            />
+          }
+          label="Active only"
+          sx={{ "& .MuiFormControlLabel-label": { fontSize: "0.78rem" } }}
+        />
+        <Box sx={{ flex: 1 }} />
+        {canCreate && (
+          <Button
+            variant="contained"
             size="small"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            sx={{ minWidth: 200 }}
-            InputProps={{ endAdornment: <SearchIcon color="action" /> }}
-          />
-          <FormControlLabel
-            control={
-              <Switch
-                checked={showActiveOnly}
-                onChange={(e) => setShowActiveOnly(e.target.checked)}
-              />
-            }
-            label="Active only"
-          />
-          {canCreate && (
-            <Box sx={{ ml: "auto" }}>
-              <Button
-                variant="contained"
-                startIcon={<AddIcon />}
-                onClick={() => handleOpenDialog()}
-              >
-                Add Card Issuer
-              </Button>
-            </Box>
-          )}
-        </Box>
-      </Paper>
+            startIcon={<AddIcon sx={{ fontSize: 16 }} />}
+            onClick={() => handleOpenDialog()}
+            sx={{ height: 28, fontSize: "0.75rem", textTransform: "none", borderRadius: 6 }}
+          >
+            Add Card Issuer
+          </Button>
+        )}
+      </Box>
 
       {/* DataGrid */}
-      <Paper sx={{ width: "100%" }}>
+      <Paper ref={gridWrapperRef} sx={{ flex: 1, minHeight: 0, width: "100%" }}>
         <DataGrid
           rows={cardIssuers}
           columns={columns}
@@ -445,14 +444,47 @@ const CardIssuersPage = () => {
           onPaginationModelChange={setPagination}
           rowCount={totalRows}
           pageSizeOptions={[25, 50, 100]}
+          rowHeight={36}
+          columnHeaderHeight={36}
           disableRowSelectionOnClick
-          autoHeight
           sx={{
+            height: gridHeight,
             "& .MuiDataGrid-columnHeaders": { backgroundColor: "#f5f5f5" },
+            "& .MuiDataGrid-overlayWrapper": { minHeight: "auto" },
+            "& .MuiDataGrid-footerContainer": { minHeight: "36px !important", maxHeight: "36px !important" },
+            "& .MuiTablePagination-root": { height: 36, overflow: "hidden" },
+            "& .MuiTablePagination-toolbar": { minHeight: "36px !important", height: "36px !important", pl: 0 },
+            "& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows": { fontSize: "0.72rem" },
+            "& .MuiTablePagination-select": { fontSize: "0.72rem" },
+            "& .MuiTablePagination-actions button": { p: 0.25 },
             border: "none",
           }}
         />
       </Paper>
+
+      {/* Actions Menu */}
+      <Menu
+        anchorEl={menuAnchor}
+        open={Boolean(menuAnchor)}
+        onClose={handleMenuClose}
+      >
+        {isAdmin && [
+          <MenuItem key="edit" onClick={() => { handleMenuClose(); handleOpenDialog(menuRow); }}>
+            <ListItemIcon><EditIcon fontSize="small" /></ListItemIcon>
+            <ListItemText>Edit</ListItemText>
+          </MenuItem>,
+          <MenuItem key="toggle" onClick={() => { handleMenuClose(); handleToggleActive(menuRow); }}>
+            <ListItemIcon>
+              {menuRow?.isActive ? <DeactivateIcon fontSize="small" /> : <ActivateIcon fontSize="small" color="success" />}
+            </ListItemIcon>
+            <ListItemText>{menuRow?.isActive ? "Deactivate" : "Activate"}</ListItemText>
+          </MenuItem>,
+          <MenuItem key="delete" onClick={() => { handleMenuClose(); handleDelete(menuRow?._id); }} sx={{ color: "error.main" }}>
+            <ListItemIcon><DeleteIcon fontSize="small" color="error" /></ListItemIcon>
+            <ListItemText>Delete</ListItemText>
+          </MenuItem>,
+        ]}
+      </Menu>
 
       {/* Add/Edit Dialog */}
       <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
@@ -516,12 +548,6 @@ const CardIssuersPage = () => {
                     label="Upload"
                     sx={{ minHeight: 36, py: 0.5 }}
                   />
-                  <Tab
-                    icon={<AutoAwesomeIcon fontSize="small" />}
-                    iconPosition="start"
-                    label="AI Generate"
-                    sx={{ minHeight: 36, py: 0.5 }}
-                  />
                 </Tabs>
 
                 {logoInputMode === 0 ? (
@@ -543,7 +569,7 @@ const CardIssuersPage = () => {
                       />
                     )}
                   />
-                ) : logoInputMode === 1 ? (
+                ) : (
                   <Box>
                     <input
                       ref={fileInputRef}
@@ -563,29 +589,6 @@ const CardIssuersPage = () => {
                     </Button>
                     <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1 }}>
                       Supported formats: JPEG, PNG, GIF, WebP, SVG. Max size: 5MB.
-                    </Typography>
-                  </Box>
-                ) : (
-                  <Box>
-                    <TextField
-                      label="Image Prompt"
-                      placeholder="e.g., Generate a logo for Visa card issuer"
-                      fullWidth
-                      value={aiPrompt}
-                      onChange={(e) => setAiPrompt(e.target.value)}
-                      sx={{ mb: 1.5 }}
-                    />
-                    <Button
-                      variant="outlined"
-                      startIcon={generatingLogo ? <CircularProgress size={16} /> : <AutoAwesomeIcon />}
-                      onClick={handleGenerateLogo}
-                      disabled={generatingLogo || !aiPrompt.trim()}
-                      fullWidth
-                    >
-                      {generatingLogo ? "Generating..." : "Generate Image"}
-                    </Button>
-                    <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1 }}>
-                      Uses AI to generate an image from your text prompt.
                     </Typography>
                   </Box>
                 )}

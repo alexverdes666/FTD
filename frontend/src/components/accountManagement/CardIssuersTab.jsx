@@ -13,8 +13,11 @@ import {
   DialogActions,
   Switch,
   FormControlLabel,
-  Tooltip,
   CircularProgress,
+  Menu,
+  MenuItem,
+  ListItemIcon,
+  ListItemText,
 } from "@mui/material";
 import {
   Add as AddIcon,
@@ -22,6 +25,9 @@ import {
   Delete as DeleteIcon,
   Search as SearchIcon,
   CreditCard as CreditCardIcon,
+  MoreVert as MoreVertIcon,
+  ToggleOn as ActivateIcon,
+  ToggleOff as DeactivateIcon,
 } from "@mui/icons-material";
 import { DataGrid } from "@mui/x-data-grid";
 import { useForm, Controller } from "react-hook-form";
@@ -59,6 +65,8 @@ const CardIssuersTab = () => {
   const [showActiveOnly, setShowActiveOnly] = useState(true);
   const [openDialog, setOpenDialog] = useState(false);
   const [editingIssuer, setEditingIssuer] = useState(null);
+  const [menuAnchor, setMenuAnchor] = useState(null);
+  const [menuRow, setMenuRow] = useState(null);
 
   const nameRef = useRef(null);
 
@@ -165,6 +173,16 @@ const CardIssuersTab = () => {
     }
   };
 
+  const handleMenuOpen = (event, row) => {
+    setMenuAnchor(event.currentTarget);
+    setMenuRow(row);
+  };
+
+  const handleMenuClose = () => {
+    setMenuAnchor(null);
+    setMenuRow(null);
+  };
+
   const columns = [
     {
       field: "name",
@@ -237,47 +255,20 @@ const CardIssuersTab = () => {
     {
       field: "actions",
       headerName: "Actions",
-      width: 180,
-      align: "right",
-      headerAlign: "right",
+      width: 100,
+      align: "center",
+      headerAlign: "center",
       sortable: false,
       renderCell: (params) => (
         <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-          {isAdmin && (
-            <>
-              <Tooltip title="Edit">
-                <IconButton
-                  size="small"
-                  onClick={() => handleOpenDialog(params.row)}
-                >
-                  <EditIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-              <Tooltip title={params.row.isActive ? "Deactivate" : "Activate"}>
-                <Box sx={{ display: "flex", alignItems: "center" }}>
-                  <Switch
-                    size="small"
-                    checked={params.row.isActive}
-                    onChange={() => handleToggleActive(params.row)}
-                  />
-                </Box>
-              </Tooltip>
-              <Tooltip title="Delete">
-                <IconButton
-                  size="small"
-                  color="error"
-                  onClick={() => handleDelete(params.row._id)}
-                >
-                  <DeleteIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-            </>
-          )}
           <CommentButton
             targetType="cardIssuer"
             targetId={params.row._id}
             targetName={params.row.name}
           />
+          <IconButton size="small" onClick={(e) => handleMenuOpen(e, params.row)}>
+            <MoreVertIcon fontSize="small" />
+          </IconButton>
         </Box>
       ),
     },
@@ -340,6 +331,30 @@ const CardIssuersTab = () => {
           }}
         />
       </Paper>
+
+      {/* Actions Menu */}
+      <Menu
+        anchorEl={menuAnchor}
+        open={Boolean(menuAnchor)}
+        onClose={handleMenuClose}
+      >
+        {isAdmin && [
+          <MenuItem key="edit" onClick={() => { handleMenuClose(); handleOpenDialog(menuRow); }}>
+            <ListItemIcon><EditIcon fontSize="small" /></ListItemIcon>
+            <ListItemText>Edit</ListItemText>
+          </MenuItem>,
+          <MenuItem key="toggle" onClick={() => { handleMenuClose(); handleToggleActive(menuRow); }}>
+            <ListItemIcon>
+              {menuRow?.isActive ? <DeactivateIcon fontSize="small" /> : <ActivateIcon fontSize="small" color="success" />}
+            </ListItemIcon>
+            <ListItemText>{menuRow?.isActive ? "Deactivate" : "Activate"}</ListItemText>
+          </MenuItem>,
+          <MenuItem key="delete" onClick={() => { handleMenuClose(); handleDelete(menuRow?._id); }} sx={{ color: "error.main" }}>
+            <ListItemIcon><DeleteIcon fontSize="small" color="error" /></ListItemIcon>
+            <ListItemText>Delete</ListItemText>
+          </MenuItem>,
+        ]}
+      </Menu>
 
       {/* Add/Edit Dialog */}
       <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>

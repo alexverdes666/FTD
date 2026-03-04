@@ -18,6 +18,12 @@ import {
   CircularProgress,
   Link,
   InputAdornment,
+  Autocomplete,
+  Divider,
+  Menu,
+  MenuItem,
+  ListItemIcon,
+  ListItemText,
 } from "@mui/material";
 import {
   Add as AddIcon,
@@ -26,6 +32,10 @@ import {
   Visibility as ViewIcon,
   Search as SearchIcon,
   Language as WebIcon,
+  CreditCard as CreditCardIcon,
+  MoreVert as MoreVertIcon,
+  ToggleOn as ActivateIcon,
+  ToggleOff as DeactivateIcon,
 } from "@mui/icons-material";
 import { DataGrid } from "@mui/x-data-grid";
 import { useForm, Controller } from "react-hook-form";
@@ -41,10 +51,14 @@ const pspSchema = yup.object({
   website: yup
     .string()
     .required("Website URL is required")
-    .max(200, "Website must be less than 200 characters"),
+    .max(200, "Website must be less than 200 characters")
+    .test("no-spaces", "Website URL must not contain spaces", (value) =>
+      value ? !/\s/.test(value) : true
+    ),
   description: yup
     .string()
     .max(500, "Description must be less than 500 characters"),
+  cardIssuer: yup.string().nullable(),
 });
 
 const PSPsTab = () => {
@@ -60,8 +74,14 @@ const PSPsTab = () => {
   const [showActiveOnly, setShowActiveOnly] = useState(true);
   const [openDialog, setOpenDialog] = useState(false);
   const [editingPSP, setEditingPSP] = useState(null);
+  const [cardIssuers, setCardIssuers] = useState([]);
+  const [selectedCardIssuer, setSelectedCardIssuer] = useState(null);
+  const [creatingCardIssuer, setCreatingCardIssuer] = useState(false);
+  const [menuAnchor, setMenuAnchor] = useState(null);
+  const [menuRow, setMenuRow] = useState(null);
 
   const websiteRef = useRef(null);
+  const newCardIssuerRef = useRef(null);
 
   const {
     control,
@@ -101,20 +121,51 @@ const PSPsTab = () => {
     fetchPSPs();
   }, [fetchPSPs]);
 
+  const fetchCardIssuers = async () => {
+    try {
+      const response = await api.get("/card-issuers?limit=10000&isActive=true");
+      setCardIssuers(response.data.data || []);
+    } catch (error) {
+      console.error("Failed to fetch card issuers:", error);
+    }
+  };
+
+  const handleCreateCardIssuer = async () => {
+    const name = newCardIssuerRef.current?.value?.trim();
+    if (!name) return;
+    setCreatingCardIssuer(true);
+    try {
+      const response = await api.post("/card-issuers", { name });
+      const created = response.data.data;
+      setCardIssuers((prev) => [...prev, created]);
+      setSelectedCardIssuer(created);
+      if (newCardIssuerRef.current) newCardIssuerRef.current.value = "";
+      toast.success(`Card Issuer "${created.name}" created`);
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to create Card Issuer");
+    } finally {
+      setCreatingCardIssuer(false);
+    }
+  };
+
   const handleOpenDialog = async (psp = null) => {
     setEditingPSP(psp);
+    fetchCardIssuers();
 
     if (psp) {
       reset({
         website: psp.website || "",
         description: psp.description || "",
       });
+      setSelectedCardIssuer(psp.cardIssuer || null);
     } else {
       reset({ website: "", description: "" });
+      setSelectedCardIssuer(null);
     }
     setOpenDialog(true);
     setTimeout(() => {
       websiteRef.current?.focus();
+      if (newCardIssuerRef.current) newCardIssuerRef.current.value = "";
     }, 100);
   };
 
@@ -126,11 +177,15 @@ const PSPsTab = () => {
 
   const onSubmit = async (data) => {
     try {
+      const payload = {
+        ...data,
+        cardIssuer: selectedCardIssuer?._id || null,
+      };
       if (editingPSP) {
-        await api.put(`/psps/${editingPSP._id}`, data);
+        await api.put(`/psps/${editingPSP._id}`, payload);
         toast.success("PSP updated successfully");
       } else {
-        await api.post("/psps", data);
+        await api.post("/psps", payload);
         toast.success("PSP created successfully");
       }
       handleCloseDialog();
@@ -163,6 +218,16 @@ const PSPsTab = () => {
     } catch (error) {
       toast.error(error.response?.data?.message || "Failed to update status");
     }
+  };
+
+  const handleMenuOpen = (event, row) => {
+    setMenuAnchor(event.currentTarget);
+    setMenuRow(row);
+  };
+
+  const handleMenuClose = () => {
+    setMenuAnchor(null);
+    setMenuRow(null);
   };
 
   const columns = [
@@ -245,55 +310,20 @@ const PSPsTab = () => {
     {
       field: "actions",
       headerName: "Actions",
-      width: 200,
-      align: "right",
-      headerAlign: "right",
+      width: 100,
+      align: "center",
+      headerAlign: "center",
       sortable: false,
       renderCell: (params) => (
         <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-          <Tooltip title="View Profile">
-            <IconButton
-              size="small"
-              onClick={() => navigate(`/psp/${params.row._id}`)}
-            >
-              <ViewIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
-          {isAdmin && (
-            <>
-              <Tooltip title="Edit">
-                <IconButton
-                  size="small"
-                  onClick={() => handleOpenDialog(params.row)}
-                >
-                  <EditIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-              <Tooltip title={params.row.isActive ? "Deactivate" : "Activate"}>
-                <Box sx={{ display: "flex", alignItems: "center" }}>
-                  <Switch
-                    size="small"
-                    checked={params.row.isActive}
-                    onChange={() => handleToggleActive(params.row)}
-                  />
-                </Box>
-              </Tooltip>
-              <Tooltip title="Delete">
-                <IconButton
-                  size="small"
-                  color="error"
-                  onClick={() => handleDelete(params.row._id)}
-                >
-                  <DeleteIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-            </>
-          )}
           <CommentButton
             targetType="psp"
             targetId={params.row._id}
             targetName={params.row.name}
           />
+          <IconButton size="small" onClick={(e) => handleMenuOpen(e, params.row)}>
+            <MoreVertIcon fontSize="small" />
+          </IconButton>
         </Box>
       ),
     },
@@ -357,6 +387,34 @@ const PSPsTab = () => {
         />
       </Paper>
 
+      {/* Actions Menu */}
+      <Menu
+        anchorEl={menuAnchor}
+        open={Boolean(menuAnchor)}
+        onClose={handleMenuClose}
+      >
+        <MenuItem onClick={() => { handleMenuClose(); navigate(`/psp/${menuRow?._id}`); }}>
+          <ListItemIcon><ViewIcon fontSize="small" /></ListItemIcon>
+          <ListItemText>View Profile</ListItemText>
+        </MenuItem>
+        {isAdmin && [
+          <MenuItem key="edit" onClick={() => { handleMenuClose(); handleOpenDialog(menuRow); }}>
+            <ListItemIcon><EditIcon fontSize="small" /></ListItemIcon>
+            <ListItemText>Edit</ListItemText>
+          </MenuItem>,
+          <MenuItem key="toggle" onClick={() => { handleMenuClose(); handleToggleActive(menuRow); }}>
+            <ListItemIcon>
+              {menuRow?.isActive ? <DeactivateIcon fontSize="small" /> : <ActivateIcon fontSize="small" color="success" />}
+            </ListItemIcon>
+            <ListItemText>{menuRow?.isActive ? "Deactivate" : "Activate"}</ListItemText>
+          </MenuItem>,
+          <MenuItem key="delete" onClick={() => { handleMenuClose(); handleDelete(menuRow?._id); }} sx={{ color: "error.main" }}>
+            <ListItemIcon><DeleteIcon fontSize="small" color="error" /></ListItemIcon>
+            <ListItemText>Delete</ListItemText>
+          </MenuItem>,
+        ]}
+      </Menu>
+
       {/* Add/Edit Dialog */}
       <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
         <form onSubmit={handleSubmit(onSubmit)}>
@@ -403,6 +461,57 @@ const PSPsTab = () => {
                   />
                 )}
               />
+              <Autocomplete
+                options={cardIssuers}
+                getOptionLabel={(option) => option.name || ""}
+                value={selectedCardIssuer}
+                onChange={(_, newValue) => setSelectedCardIssuer(newValue)}
+                isOptionEqualToValue={(option, value) => option._id === value?._id}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Card Issuer"
+                    placeholder="Select card issuer..."
+                    InputProps={{
+                      ...params.InputProps,
+                      startAdornment: (
+                        <>
+                          <InputAdornment position="start">
+                            <CreditCardIcon color="action" />
+                          </InputAdornment>
+                          {params.InputProps.startAdornment}
+                        </>
+                      ),
+                    }}
+                  />
+                )}
+                noOptionsText="No card issuers found"
+              />
+              <Divider />
+              <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+                <TextField
+                  size="small"
+                  label="New Card Issuer"
+                  placeholder="e.g., Visa, Mastercard"
+                  inputRef={newCardIssuerRef}
+                  fullWidth
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleCreateCardIssuer();
+                    }
+                  }}
+                />
+                <Button
+                  variant="outlined"
+                  size="small"
+                  onClick={handleCreateCardIssuer}
+                  disabled={creatingCardIssuer}
+                  sx={{ whiteSpace: "nowrap" }}
+                >
+                  {creatingCardIssuer ? <CircularProgress size={18} /> : "Add New"}
+                </Button>
+              </Box>
             </Box>
           </DialogContent>
           <DialogActions>
