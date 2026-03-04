@@ -9,6 +9,29 @@ const CallChangeRequest = require("../models/CallChangeRequest");
 const referenceCache = require("../services/referenceCache");
 const leadSearchCache = require("../services/leadSearchCache");
 
+// Helper function to build a Set of active (non-removed) lead IDs from orders.
+// Orders must have been queried with .select("leads removedLeads").
+const getActiveLeadIds = (orders) => {
+  const activeLeadIds = new Set();
+  for (const order of orders) {
+    const removedIds = new Set();
+    if (order.removedLeads) {
+      for (const rl of order.removedLeads) {
+        removedIds.add((rl.leadId || rl).toString());
+      }
+    }
+    if (order.leads) {
+      for (const lid of order.leads) {
+        const lidStr = lid.toString();
+        if (!removedIds.has(lidStr)) {
+          activeLeadIds.add(lidStr);
+        }
+      }
+    }
+  }
+  return activeLeadIds;
+};
+
 // Helper function to merge order's leadsMetadata with populated leads
 // This ensures each lead shows the correct orderedAs value for THIS specific order
 const mergeLeadsWithMetadata = (order) => {
@@ -1003,15 +1026,8 @@ const generateDetailedReasonForLeadType = async (
       const existingNetworkOrders = await Order.find({
         selectedClientNetwork: selectedClientNetwork,
         status: { $ne: "cancelled" },
-      }).select("leads").lean();
-      const leadsInNetwork = new Set();
-      for (const eo of existingNetworkOrders) {
-        if (eo.leads) {
-          for (const lid of eo.leads) {
-            leadsInNetwork.add(lid.toString());
-          }
-        }
-      }
+      }).select("leads removedLeads").lean();
+      const leadsInNetwork = getActiveLeadIds(existingNetworkOrders);
       const beforeFilter = currentCount;
       filteredLeads = filteredLeads.filter(
         (lead) => !leadsInNetwork.has(lead._id.toString())
@@ -1038,13 +1054,8 @@ const generateDetailedReasonForLeadType = async (
       const existingBrokerOrders = await Order.find({
         selectedClientBrokers: { $in: selectedClientBrokers },
         status: { $ne: "cancelled" },
-      }).select("leads").lean();
-      const leadsWithSameBrokers = new Set();
-      for (const eo of existingBrokerOrders) {
-        if (eo.leads) {
-          for (const lid of eo.leads) leadsWithSameBrokers.add(lid.toString());
-        }
-      }
+      }).select("leads removedLeads").lean();
+      const leadsWithSameBrokers = getActiveLeadIds(existingBrokerOrders);
       const beforeFilter = currentCount;
       filteredLeads = filteredLeads.filter(
         (lead) => !leadsWithSameBrokers.has(lead._id.toString())
@@ -1132,16 +1143,9 @@ const handleManualSelectionOrder = async (req, res, next) => {
       const existingOrders = await Order.find({
         selectedClientNetwork: selectedClientNetwork,
         status: { $ne: "cancelled" },
-      }).select("leads").lean();
+      }).select("leads removedLeads").lean();
 
-      const leadsInSameNetwork = new Set();
-      for (const existingOrder of existingOrders) {
-        if (existingOrder.leads) {
-          for (const lid of existingOrder.leads) {
-            leadsInSameNetwork.add(lid.toString());
-          }
-        }
-      }
+      const leadsInSameNetwork = getActiveLeadIds(existingOrders);
 
       const conflictingLeads = foundLeads.filter((lead) =>
         leadsInSameNetwork.has(lead._id.toString())
@@ -1162,13 +1166,8 @@ const handleManualSelectionOrder = async (req, res, next) => {
       const existingBrokerOrders = await Order.find({
         selectedClientBrokers: { $in: selectedClientBrokers },
         status: { $ne: "cancelled" },
-      }).select("leads").lean();
-      const leadsWithSameBrokers = new Set();
-      for (const eo of existingBrokerOrders) {
-        if (eo.leads) {
-          for (const lid of eo.leads) leadsWithSameBrokers.add(lid.toString());
-        }
-      }
+      }).select("leads removedLeads").lean();
+      const leadsWithSameBrokers = getActiveLeadIds(existingBrokerOrders);
       const brokerConflictLeads = foundLeads.filter((lead) =>
         leadsWithSameBrokers.has(lead._id.toString())
       );
@@ -1508,15 +1507,9 @@ exports.createOrder = async (req, res, next) => {
       const existingOrders = await Order.find({
         selectedClientNetwork: selectedClientNetwork,
         status: { $ne: "cancelled" },
-      }).select("leads").lean();
+      }).select("leads removedLeads").lean();
 
-      for (const order of existingOrders) {
-        if (order.leads) {
-          for (const leadId of order.leads) {
-            leadsAlreadyInSameClientNetwork.add(leadId.toString());
-          }
-        }
-      }
+      leadsAlreadyInSameClientNetwork = getActiveLeadIds(existingOrders);
       console.log(
         `[ORDER-DEDUP] Found ${leadsAlreadyInSameClientNetwork.size} leads already in ${existingOrders.length} orders with same client network - these will be excluded`
       );
@@ -1529,15 +1522,9 @@ exports.createOrder = async (req, res, next) => {
       const existingBrokerOrders = await Order.find({
         selectedClientBrokers: { $in: selectedClientBrokers },
         status: { $ne: "cancelled" },
-      }).select("leads").lean();
+      }).select("leads removedLeads").lean();
 
-      for (const order of existingBrokerOrders) {
-        if (order.leads) {
-          for (const leadId of order.leads) {
-            leadsAlreadyWithSameBrokers.add(leadId.toString());
-          }
-        }
-      }
+      leadsAlreadyWithSameBrokers = getActiveLeadIds(existingBrokerOrders);
       console.log(
         `[ORDER-DEDUP] Found ${leadsAlreadyWithSameBrokers.size} leads already in ${existingBrokerOrders.length} orders with same client brokers - these will be excluded`
       );
@@ -4999,16 +4986,9 @@ exports.changeFTDInOrder = async (req, res, next) => {
         const existingNetworkOrders = await Order.find({
           selectedClientNetwork: networkToCheck,
           status: { $ne: "cancelled" },
-        }).select("leads").lean();
+        }).select("leads removedLeads").lean();
 
-        const leadsInSameNetwork = new Set();
-        for (const eo of existingNetworkOrders) {
-          if (eo.leads) {
-            for (const lid of eo.leads) {
-              leadsInSameNetwork.add(lid.toString());
-            }
-          }
-        }
+        const leadsInSameNetwork = getActiveLeadIds(existingNetworkOrders);
 
         filteredFTDLeads = filteredFTDLeads.filter(
           (lead) => !leadsInSameNetwork.has(lead._id.toString())
@@ -5035,13 +5015,8 @@ exports.changeFTDInOrder = async (req, res, next) => {
         const existingBrokerOrders = await Order.find({
           selectedClientBrokers: { $in: clientBrokersToCheck },
           status: { $ne: "cancelled" },
-        }).select("leads").lean();
-        const leadsWithSameBrokers = new Set();
-        for (const eo of existingBrokerOrders) {
-          if (eo.leads) {
-            for (const lid of eo.leads) leadsWithSameBrokers.add(lid.toString());
-          }
-        }
+        }).select("leads removedLeads").lean();
+        const leadsWithSameBrokers = getActiveLeadIds(existingBrokerOrders);
         filteredFTDLeads = filteredFTDLeads.filter(
           (lead) => !leadsWithSameBrokers.has(lead._id.toString())
         );
@@ -5796,13 +5771,8 @@ exports.checkOrderFulfillment = async (req, res, next) => {
         const existingNetworkOrders = await Order.find({
           selectedClientNetwork: selectedClientNetwork,
           status: { $ne: "cancelled" },
-        }).select("leads").lean();
-        const networkExcludedIds = new Set();
-        for (const eo of existingNetworkOrders) {
-          if (eo.leads) {
-            for (const lid of eo.leads) networkExcludedIds.add(lid.toString());
-          }
-        }
+        }).select("leads removedLeads").lean();
+        const networkExcludedIds = getActiveLeadIds(existingNetworkOrders);
         if (networkExcludedIds.size > 0) {
           const currentExcluded = baseQuery._id?.$nin || [];
           baseQuery._id = {
@@ -5816,13 +5786,8 @@ exports.checkOrderFulfillment = async (req, res, next) => {
         const existingBrokerOrders = await Order.find({
           selectedClientBrokers: { $in: selectedClientBrokers },
           status: { $ne: "cancelled" },
-        }).select("leads").lean();
-        const brokerExcludedIds = new Set();
-        for (const eo of existingBrokerOrders) {
-          if (eo.leads) {
-            for (const lid of eo.leads) brokerExcludedIds.add(lid.toString());
-          }
-        }
+        }).select("leads removedLeads").lean();
+        const brokerExcludedIds = getActiveLeadIds(existingBrokerOrders);
         if (brokerExcludedIds.size > 0) {
           const currentExcluded = baseQuery._id?.$nin || [];
           baseQuery._id = {
@@ -6204,16 +6169,9 @@ exports.addLeadsToOrder = async (req, res, next) => {
       const existingOrders = await Order.find({
         selectedClientNetwork: networkId,
         status: { $ne: "cancelled" },
-      }).select("leads").lean();
+      }).select("leads removedLeads").lean();
 
-      const leadsInSameNetwork = new Set();
-      for (const existingOrder of existingOrders) {
-        if (existingOrder.leads) {
-          for (const lid of existingOrder.leads) {
-            leadsInSameNetwork.add(lid.toString());
-          }
-        }
-      }
+      const leadsInSameNetwork = getActiveLeadIds(existingOrders);
 
       const conflictingLeads = foundLeads.filter((lead) =>
         leadsInSameNetwork.has(lead._id.toString())
@@ -6235,13 +6193,8 @@ exports.addLeadsToOrder = async (req, res, next) => {
       const existingBrokerOrders = await Order.find({
         selectedClientBrokers: { $in: brokerIds },
         status: { $ne: "cancelled" },
-      }).select("leads").lean();
-      const leadsWithSameBrokers = new Set();
-      for (const eo of existingBrokerOrders) {
-        if (eo.leads) {
-          for (const lid of eo.leads) leadsWithSameBrokers.add(lid.toString());
-        }
-      }
+      }).select("leads removedLeads").lean();
+      const leadsWithSameBrokers = getActiveLeadIds(existingBrokerOrders);
       const brokerConflictLeads = foundLeads.filter((lead) =>
         leadsWithSameBrokers.has(lead._id.toString())
       );
@@ -6617,16 +6570,9 @@ exports.getAvailableLeadsForReplacement = async (req, res, next) => {
       const existingOrders = await Order.find({
         selectedClientNetwork: networkId,
         status: { $ne: "cancelled" },
-      }).select("leads").lean();
+      }).select("leads removedLeads").lean();
 
-      const leadsInSameNetwork = new Set();
-      for (const existingOrder of existingOrders) {
-        if (existingOrder.leads) {
-          for (const lid of existingOrder.leads) {
-            leadsInSameNetwork.add(lid.toString());
-          }
-        }
-      }
+      const leadsInSameNetwork = getActiveLeadIds(existingOrders);
 
       if (leadsInSameNetwork.size > 0) {
         const currentExcluded = baseQuery._id?.$nin || [];
@@ -6643,13 +6589,8 @@ exports.getAvailableLeadsForReplacement = async (req, res, next) => {
       const existingBrokerOrders = await Order.find({
         selectedClientBrokers: { $in: brokerIds },
         status: { $ne: "cancelled" },
-      }).select("leads").lean();
-      const leadsWithSameBrokers = new Set();
-      for (const eo of existingBrokerOrders) {
-        if (eo.leads) {
-          for (const lid of eo.leads) leadsWithSameBrokers.add(lid.toString());
-        }
-      }
+      }).select("leads removedLeads").lean();
+      const leadsWithSameBrokers = getActiveLeadIds(existingBrokerOrders);
       if (leadsWithSameBrokers.size > 0) {
         const currentExcluded = baseQuery._id?.$nin || [];
         const brokerExcludedIds = [...leadsWithSameBrokers].map(
@@ -6879,16 +6820,9 @@ exports.replaceLeadInOrder = async (req, res, next) => {
       const existingOrders = await Order.find({
         selectedClientNetwork: networkId,
         status: { $ne: "cancelled" },
-      }).select("leads").lean();
+      }).select("leads removedLeads").lean();
 
-      const leadsInSameNetwork = new Set();
-      for (const existingOrder of existingOrders) {
-        if (existingOrder.leads) {
-          for (const lid of existingOrder.leads) {
-            leadsInSameNetwork.add(lid.toString());
-          }
-        }
-      }
+      const leadsInSameNetwork = getActiveLeadIds(existingOrders);
 
       if (leadsInSameNetwork.has(newLeadId)) {
         const ClientNetwork = require("../models/ClientNetwork");
@@ -6906,13 +6840,8 @@ exports.replaceLeadInOrder = async (req, res, next) => {
       const existingBrokerOrders = await Order.find({
         selectedClientBrokers: { $in: brokerIds },
         status: { $ne: "cancelled" },
-      }).select("leads").lean();
-      const leadsWithSameBrokers = new Set();
-      for (const eo of existingBrokerOrders) {
-        if (eo.leads) {
-          for (const lid of eo.leads) leadsWithSameBrokers.add(lid.toString());
-        }
-      }
+      }).select("leads removedLeads").lean();
+      const leadsWithSameBrokers = getActiveLeadIds(existingBrokerOrders);
       if (leadsWithSameBrokers.has(newLeadId)) {
         return res.status(400).json({
           success: false,
