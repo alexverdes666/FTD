@@ -166,7 +166,7 @@ class AmiService extends EventEmitter {
       // Load CDR records that involve agent extensions (short src or dst = extension)
       const [rows] = await this.cdrPool.query(
         `SELECT * FROM \`${this.cdrTableName}\`
-         WHERE calldate >= DATE_SUB(NOW(), INTERVAL 1 YEAR)
+         WHERE calldate >= DATE_SUB(NOW(), INTERVAL 3 MONTH)
            AND ((dst REGEXP '^[0-9]{2,4}$' AND call_type = 'incoming')
              OR (src REGEXP '^[0-9]{2,4}$' AND call_type = 'outgoing'))
          ORDER BY calldate DESC`
