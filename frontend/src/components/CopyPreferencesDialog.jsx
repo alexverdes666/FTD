@@ -31,6 +31,8 @@ import api from "../services/api";
 const AVAILABLE_FIELDS = [
   { id: "leadType", label: "Lead Type", description: "FTD, Filler, or Cold" },
   { id: "fullName", label: "Full Name", description: "Lead's full name" },
+  { id: "firstName", label: "First Name", description: "Lead's first name" },
+  { id: "lastName", label: "Last Name", description: "Lead's last name" },
   { id: "newEmail", label: "Email", description: "Lead's email address" },
   { id: "newPhone", label: "Phone", description: "Lead's phone number" },
   { id: "country", label: "Country", description: "Lead's country" },
@@ -521,6 +523,10 @@ export const copyLeadsWithPreferences = (
             : lead.leadType?.toUpperCase() || "";
         case "fullName":
           return `${lead.firstName || ""} ${lead.lastName || ""}`.trim();
+        case "firstName":
+          return lead.firstName || "";
+        case "lastName":
+          return lead.lastName || "";
         case "newEmail":
           return lead.newEmail || lead.email || "";
         case "newPhone":

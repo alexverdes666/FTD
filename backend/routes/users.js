@@ -189,7 +189,7 @@ router.put(
       
       // Validate fields
       const validFields = [
-        "leadType", "fullName", "newEmail", "newPhone", "country",
+        "leadType", "fullName", "firstName", "lastName", "newEmail", "newPhone", "country",
         "address", "assignedAgent", "ourNetwork", "campaign",
         "clientNetwork", "clientBrokers", "requester", "createdAt", "plannedDate",
         "dob", "documents"
