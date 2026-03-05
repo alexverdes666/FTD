@@ -31,7 +31,7 @@ class AmiService extends EventEmitter {
     this.leadCacheTTL = 30000; // 30s cache per phone lookup
     this.pendingLeadLookups = new Set(); // avoid duplicate concurrent lookups
     this.callHistory = []; // Recent CDR records from the PBX
-    this.maxHistorySize = 1000;
+    this.maxHistorySize = 15000;
     this.cdrPool = null;
     this.cdrPollInterval = null;
     this.lastCdrTimestamp = null; // Track last fetched CDR to get only new ones
@@ -166,9 +166,10 @@ class AmiService extends EventEmitter {
       // Load CDR records that involve agent extensions (short src or dst = extension)
       const [rows] = await this.cdrPool.query(
         `SELECT * FROM \`${this.cdrTableName}\`
-         WHERE (dst REGEXP '^[0-9]{2,4}$' AND call_type = 'incoming')
-            OR (src REGEXP '^[0-9]{2,4}$' AND call_type = 'outgoing')
-         ORDER BY calldate DESC LIMIT 500`
+         WHERE calldate >= DATE_SUB(NOW(), INTERVAL 1 YEAR)
+           AND ((dst REGEXP '^[0-9]{2,4}$' AND call_type = 'incoming')
+             OR (src REGEXP '^[0-9]{2,4}$' AND call_type = 'outgoing'))
+         ORDER BY calldate DESC`
       );
 
       if (rows.length === 0) {
@@ -191,7 +192,7 @@ class AmiService extends EventEmitter {
       }
 
       // Only CDR database records - no event-tracked merging
-      this.callHistory = records.slice(0, this.maxHistorySize);
+      this.callHistory = records;
 
       // Broadcast
       if (this.io) {
