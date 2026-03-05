@@ -22,6 +22,7 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
+  TablePagination,
 } from "@mui/material";
 import {
   Refresh as RefreshIcon,
@@ -461,6 +462,8 @@ const CallHistoryTab = ({ history }) => {
   const [playingEntry, setPlayingEntry] = useState(null);
   const [audioUrl, setAudioUrl] = useState(null);
   const [audioLoading, setAudioLoading] = useState(false);
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(50);
 
   const handlePlayRecording = async (entry) => {
     setPlayingEntry(entry);
@@ -524,6 +527,14 @@ const CallHistoryTab = ({ history }) => {
       return true;
     });
   }, [history, search, dateFrom, dateTo, durFrom, durTo]);
+
+  // Reset page when filters change
+  useEffect(() => { setPage(0); }, [search, dateFrom, dateTo, durFrom, durTo]);
+
+  const paginatedRows = useMemo(() => {
+    const start = page * rowsPerPage;
+    return filtered.slice(start, start + rowsPerPage);
+  }, [filtered, page, rowsPerPage]);
 
   const hasActiveFilters = search || dateFrom || dateTo || durFrom || durTo;
 
@@ -658,7 +669,7 @@ const CallHistoryTab = ({ history }) => {
             </TableRow>
           </TableHead>
           <TableBody>
-            {filtered.map((entry, idx) => {
+            {paginatedRows.map((entry, idx) => {
               const disp = dispositionConfig[entry.disposition] || { label: entry.disposition || "Unknown", bgcolor: "#f3f4f6", color: "#6b7280" };
               return (
                 <TableRow key={idx} sx={{ "&:nth-of-type(odd)": { bgcolor: "#fafafa" } }}>
@@ -719,7 +730,7 @@ const CallHistoryTab = ({ history }) => {
                 </TableRow>
               );
             })}
-            {filtered.length === 0 && (
+            {paginatedRows.length === 0 && (
               <TableRow>
                 <TableCell colSpan={8} align="center" sx={{ py: 3 }}>
                   <Typography variant="body2" sx={{ color: "#9ca3af" }}>
@@ -731,6 +742,16 @@ const CallHistoryTab = ({ history }) => {
           </TableBody>
         </Table>
       </TableContainer>
+      <TablePagination
+        component="div"
+        count={filtered.length}
+        page={page}
+        onPageChange={(e, newPage) => setPage(newPage)}
+        rowsPerPage={rowsPerPage}
+        onRowsPerPageChange={(e) => { setRowsPerPage(parseInt(e.target.value, 10)); setPage(0); }}
+        rowsPerPageOptions={[50, 100, 250, 500]}
+        sx={{ ".MuiTablePagination-selectLabel, .MuiTablePagination-displayedRows": { fontSize: "0.75rem" } }}
+      />
 
       {/* Recording Playback Dialog */}
       <Dialog open={!!playingEntry} onClose={handleCloseRecording} maxWidth="sm" fullWidth>
