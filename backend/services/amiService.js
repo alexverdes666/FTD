@@ -361,11 +361,19 @@ class AmiService extends EventEmitter {
         "firstName lastName newEmail newPhone country status"
       ).lean();
 
-      // If not found with full number, try matching last 10 digits
+      // If not found with full number, try matching last 10 then 9 digits
+      // (9-digit fallback handles countries like Spain where national numbers are 9 digits)
       if (!lead && normalized.length >= 10) {
         const lastDigits = normalized.slice(-10);
         lead = await Lead.findOne(
           { newPhone: { $regex: lastDigits + "$", $options: "i" } },
+          "firstName lastName newEmail newPhone country status"
+        ).lean();
+      }
+      if (!lead && normalized.length >= 10) {
+        const lastNine = normalized.slice(-9);
+        lead = await Lead.findOne(
+          { newPhone: { $regex: lastNine + "$", $options: "i" } },
           "firstName lastName newEmail newPhone country status"
         ).lean();
       }
