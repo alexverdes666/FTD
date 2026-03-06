@@ -20,6 +20,8 @@ const useOrdersData = ({ user, searchParams, setSearchParams, setNotification })
       emailSearch: "",
       createdMonth: "",
       createdYear: "",
+      leadTypes: [],
+      leadTypesOnly: false,
     };
   });
 
@@ -61,6 +63,18 @@ const useOrdersData = ({ user, searchParams, setSearchParams, setNotification })
         limit: rowsPerPage,
       });
       Object.entries(debouncedFilters).forEach(([key, value]) => {
+        if (key === "leadTypes") {
+          if (Array.isArray(value) && value.length > 0) {
+            params.append("leadTypes", value.join(","));
+          }
+          return;
+        }
+        if (key === "leadTypesOnly") {
+          if (value && debouncedFilters.leadTypes?.length > 0) {
+            params.append("leadTypesOnly", "true");
+          }
+          return;
+        }
         if (value) {
           // Skip search queries shorter than 2 characters
           if ((key === "search" || key === "emailSearch") && value.trim().length < 2) {
@@ -125,12 +139,17 @@ const useOrdersData = ({ user, searchParams, setSearchParams, setNotification })
   );
 
   const clearFilters = useCallback(() => {
-    setFilters({ search: "", emailSearch: "", startDate: "", endDate: "", createdMonth: "", createdYear: "" });
+    setFilters({ search: "", emailSearch: "", startDate: "", endDate: "", createdMonth: "", createdYear: "", leadTypes: [], leadTypesOnly: false });
     setPage(0);
   }, []);
 
   const activeFilterCount = useMemo(() => {
-    return Object.entries(filters).filter(([key, value]) => key !== "search" && value !== "").length;
+    return Object.entries(filters).filter(([key, value]) => {
+      if (key === "search") return false;
+      if (key === "leadTypes") return Array.isArray(value) && value.length > 0;
+      if (key === "leadTypesOnly") return false; // counted with leadTypes
+      return value !== "";
+    }).length;
   }, [filters]);
 
   return {

@@ -34,6 +34,8 @@ import {
   Popper,
   Divider,
   alpha,
+  Checkbox,
+  ListItemText,
 } from "@mui/material";
 import {
   Add as AddIcon,
@@ -121,7 +123,7 @@ const OrdersPage = () => {
   const {
     orders, setOrders,
     loading, searching,
-    page, rowsPerPage, totalOrders,
+    page, setPage, rowsPerPage, totalOrders,
     filters, setFilters, debouncedFilters,
     fetchOrders,
     handleChangePage, handleChangeRowsPerPage, handleFilterChange,
@@ -3206,6 +3208,55 @@ const OrdersPage = () => {
               {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i).map((y) => (
                 <MenuItem key={y} value={String(y)} sx={{ fontSize: "0.8rem" }}>{y}</MenuItem>
               ))}
+            </Select>
+          </FormControl>
+          {/* Lead Types */}
+          <FormControl size="small" sx={{ minWidth: 90, "& .MuiOutlinedInput-root": { height: 28, borderRadius: 6, fontSize: "0.75rem", bgcolor: "background.paper", boxShadow: (theme) => `0 1px 2px ${alpha(theme.palette.grey[400], 0.15)}`, "& fieldset": { borderColor: (theme) => alpha(theme.palette.grey[300], 0.7) }, "&:hover fieldset": { borderColor: (theme) => alpha(theme.palette.primary.main, 0.3) } } }}>
+            <Select
+              multiple
+              value={filters.leadTypes}
+              onChange={(e) => {
+                const value = e.target.value;
+                setFilters((prev) => ({ ...prev, leadTypes: typeof value === "string" ? value.split(",") : value }));
+                setPage(0);
+              }}
+              displayEmpty
+              renderValue={(selected) => {
+                if (!selected || selected.length === 0) return "Lead Type";
+                const labels = selected.map((v) => v.toUpperCase());
+                return labels.join(", ") + (filters.leadTypesOnly ? " only" : "");
+              }}
+              sx={{
+                "& .MuiSelect-select": { py: 0, pl: 1, pr: "24px !important", display: "flex", alignItems: "center", lineHeight: "28px", fontSize: "0.7rem" },
+                "& .MuiSelect-icon": { right: 2, fontSize: 18 },
+                color: filters.leadTypes.length > 0 ? "primary.main" : "text.disabled",
+                fontWeight: filters.leadTypes.length > 0 ? 600 : 400,
+              }}
+              MenuProps={{ PaperProps: { sx: { maxHeight: 280 } } }}
+            >
+              {["ftd", "filler", "cold"].map((type) => (
+                <MenuItem key={type} value={type} sx={{ fontSize: "0.8rem", py: 0.25 }}>
+                  <Checkbox checked={filters.leadTypes.includes(type)} size="small" sx={{ p: 0.25, mr: 0.5 }} />
+                  <ListItemText primary={type.toUpperCase()} primaryTypographyProps={{ fontSize: "0.8rem" }} />
+                </MenuItem>
+              ))}
+              <Divider sx={{ my: 0.5 }} />
+              <MenuItem
+                dense
+                sx={{ fontSize: "0.8rem", py: 0.25 }}
+                onClickCapture={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  setFilters((prev) => ({ ...prev, leadTypesOnly: !prev.leadTypesOnly }));
+                  setPage(0);
+                }}
+              >
+                <Checkbox checked={filters.leadTypesOnly} size="small" sx={{ p: 0.25, mr: 0.5 }} />
+                <ListItemText
+                  primary="Only selected"
+                  primaryTypographyProps={{ fontSize: "0.75rem", fontStyle: "italic", color: filters.leadTypesOnly ? "primary.main" : "text.secondary" }}
+                />
+              </MenuItem>
             </Select>
           </FormControl>
           {/* Clear filters */}

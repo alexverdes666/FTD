@@ -3210,7 +3210,7 @@ exports.getOrders = async (req, res, next) => {
         errors: errors.array(),
       });
     }
-    const { page = 1, limit = 10, startDate, endDate, search, emailSearch, createdMonth, createdYear } = req.query;
+    const { page = 1, limit = 10, startDate, endDate, search, emailSearch, createdMonth, createdYear, leadTypes, leadTypesOnly } = req.query;
     let query = {};
     // Admin and lead_manager can see all orders; others see only their own
     if (req.user.role !== "admin" && req.user.role !== "lead_manager") {
@@ -3233,6 +3233,52 @@ exports.getOrders = async (req, res, next) => {
         const from = new Date(year, 0, 1);
         const to = new Date(year, 11, 31, 23, 59, 59, 999);
         query.createdAt = { $gte: from, $lte: to };
+      }
+    }
+
+    // Lead types filter (excludes removed leads)
+    if (leadTypes && leadTypes.trim()) {
+      const types = leadTypes.split(",").map((t) => t.trim().toLowerCase()).filter((t) => ["ftd", "filler", "cold"].includes(t));
+      if (types.length > 0) {
+        if (!query.$and) query.$and = [];
+        // Build $expr to get active lead types (leadsMetadata minus removedLeads)
+        // activeTypes = orderedAs values from leadsMetadata where leadId is NOT in removedLeads
+        const activeTypesExpr = {
+          $filter: {
+            input: { $ifNull: ["$leadsMetadata", []] },
+            as: "meta",
+            cond: {
+              $not: {
+                $in: [
+                  "$$meta.leadId",
+                  { $map: { input: { $ifNull: ["$removedLeads", []] }, as: "rl", in: "$$rl.leadId" } },
+                ],
+              },
+            },
+          },
+        };
+        const activeOrderedAs = { $map: { input: activeTypesExpr, as: "am", in: "$$am.orderedAs" } };
+
+        if (leadTypesOnly === "true") {
+          // "Only selected" mode: order must contain ALL selected types and NONE of the unselected types (among active leads)
+          for (const type of types) {
+            query.$and.push({ $expr: { $in: [type, activeOrderedAs] } });
+          }
+          const excludedTypes = ["ftd", "filler", "cold"].filter((t) => !types.includes(t));
+          for (const type of excludedTypes) {
+            query.$and.push({ $expr: { $not: { $in: [type, activeOrderedAs] } } });
+          }
+        } else {
+          // "Contains" mode: orders must contain at least one of the selected types (among active leads)
+          query.$and.push({
+            $expr: {
+              $gt: [
+                { $size: { $setIntersection: [activeOrderedAs, types] } },
+                0,
+              ],
+            },
+          });
+        }
       }
     }
 
