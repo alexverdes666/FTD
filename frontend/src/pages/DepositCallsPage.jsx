@@ -34,7 +34,12 @@ import {
   Tabs,
   Tab,
   Divider,
-  Badge
+  Badge,
+  Checkbox,
+  List,
+  ListItem,
+  ListItemIcon,
+  ListItemText
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -52,7 +57,9 @@ import {
   FilterList as FilterListIcon,
   ExpandMore as ExpandMoreIcon,
   Add as AddIcon,
-  PlayCircleOutline as PlayIcon
+  PlayCircleOutline as PlayIcon,
+  Delete as DeleteIcon,
+  AdminPanelSettings as AdminIcon
 } from '@mui/icons-material';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -64,7 +71,7 @@ import toast from 'react-hot-toast';
 import { formatPhoneWithCountryCode } from '../utils/phoneUtils';
 import { formatDateTimeBG, formatFullDateTimeBG, formatDateBG, formatShortDateBG, formatTimeBG } from '../utils/dateUtils';
 import CallDeclarationApprovalDialog from '../components/CallDeclarationApprovalDialog';
-import { getFillerDeclarations, fetchRecordingBlob } from '../services/callDeclarations';
+import { getFillerDeclarations, fetchRecordingBlob, fetchAgentShortCalls } from '../services/callDeclarations';
 
 // Call status colors
 const getStatusColor = (status) => {
@@ -82,9 +89,20 @@ const getStatusColor = (status) => {
 // Format date for display (Bulgarian timezone)
 const formatDateTime = (date) => formatDateTimeBG(date);
 
+// Admin call color
+const ADMIN_CALL_COLOR = '#ed6c02'; // orange/amber
+
+// Format duration from seconds to M:SS or H:MM:SS
+const formatDurationShort = (seconds) => {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  return `${m}:${String(s).padStart(2, '0')}`;
+};
 
 // Call Cell Component
-const CallCell = ({ call, callNumber, depositCall, declaration, onSchedule, onMarkDone, onApprove, onReject, onMarkAnswered, onMarkRejected, onViewDeclaration, isAdmin, isAM, isAgent }) => {
+const CallCell = ({ call, callNumber, depositCall, declaration, onSchedule, onMarkDone, onApprove, onReject, onMarkAnswered, onMarkRejected, onViewDeclaration, onAdminFill, onAdminRemove, onAdminCallsDetail, isAdmin, isAM, isAgent }) => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [expectedDate, setExpectedDate] = useState(call?.expectedDate ? new Date(call.expectedDate) : null);
   const [notes, setNotes] = useState('');
@@ -109,9 +127,34 @@ const CallCell = ({ call, callNumber, depositCall, declaration, onSchedule, onMa
   const canMarkDone = isAgent || isAM || isAdmin;
   const canApprove = (isAM || isAdmin) && call?.status === 'pending_approval';
 
+  const adminCalls = call?.adminCalls || [];
+  const hasAdminCalls = adminCalls.length > 0;
+
   return (
     <TableCell sx={{ p: '2px 4px' }}>
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: '2px', alignItems: 'center', minWidth: 48 }}>
+        {/* Admin-added calls display */}
+        {hasAdminCalls && (
+          <Chip
+            label={adminCalls.length === 1
+              ? formatDurationShort(adminCalls[0].callDuration)
+              : `${adminCalls.length} calls`
+            }
+            size="small"
+            onClick={() => onAdminCallsDetail(adminCalls, depositCall, callNumber)}
+            sx={{
+              fontSize: '0.5rem',
+              height: 15,
+              bgcolor: ADMIN_CALL_COLOR,
+              color: 'white',
+              cursor: 'pointer',
+              '& .MuiChip-label': { px: 0.5 },
+              '& .MuiChip-deleteIcon': { fontSize: '0.7rem', color: 'rgba(255,255,255,0.7)' },
+            }}
+            onDelete={isAdmin ? () => onAdminRemove(depositCall._id, callNumber) : undefined}
+            deleteIcon={isAdmin ? <DeleteIcon /> : undefined}
+          />
+        )}
         {call?.status === 'pending' && declaration?.status === 'pending' ? (
           <Tooltip title="Agent declared this call — click to review">
             <Chip
@@ -122,17 +165,40 @@ const CallCell = ({ call, callNumber, depositCall, declaration, onSchedule, onMa
               sx={{ fontSize: '0.5rem', height: 15, cursor: 'pointer', '& .MuiChip-label': { px: 0.5 } }}
             />
           </Tooltip>
-        ) : call?.status === 'pending' ? (
-          <Button
-            size="small"
-            variant="outlined"
-            color="primary"
-            onClick={() => setDialogOpen(true)}
-            disabled={!canSchedule}
-            sx={{ fontSize: '0.55rem', py: 0, px: 0.5, minWidth: 'auto', lineHeight: 1.4 }}
-          >
-            Schedule
-          </Button>
+        ) : call?.status === 'pending' && !hasAdminCalls ? (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: '1px', alignItems: 'center' }}>
+            <Button
+              size="small"
+              variant="outlined"
+              color="primary"
+              onClick={() => setDialogOpen(true)}
+              disabled={!canSchedule}
+              sx={{ fontSize: '0.55rem', py: 0, px: 0.5, minWidth: 'auto', lineHeight: 1.4 }}
+            >
+              Schedule
+            </Button>
+            {isAdmin && depositCall.assignedAgent && (
+              <Button
+                size="small"
+                variant="text"
+                onClick={() => onAdminFill(depositCall, callNumber)}
+                sx={{ fontSize: '0.45rem', py: 0, px: 0.3, minWidth: 'auto', lineHeight: 1.2, color: ADMIN_CALL_COLOR }}
+              >
+                Fill
+              </Button>
+            )}
+          </Box>
+        ) : call?.status === 'pending' && hasAdminCalls ? (
+          isAdmin && depositCall.assignedAgent ? (
+            <Button
+              size="small"
+              variant="text"
+              onClick={() => onAdminFill(depositCall, callNumber)}
+              sx={{ fontSize: '0.45rem', py: 0, px: 0.3, minWidth: 'auto', lineHeight: 1.2, color: ADMIN_CALL_COLOR }}
+            >
+              +Add
+            </Button>
+          ) : null
         ) : call?.status === 'scheduled' ? (
           <>
             <Typography sx={{ fontSize: '0.55rem', lineHeight: 1.2, color: 'info.main', fontWeight: 'bold' }}>
@@ -334,6 +400,21 @@ const DepositCallsPage = () => {
   const [customRecordNote, setCustomRecordNote] = useState('');
   const [customRecordDate, setCustomRecordDate] = useState('');
   const [customRecordCreating, setCustomRecordCreating] = useState(false);
+
+  // Admin Calls Detail Dialog State (view + play recordings)
+  const [adminCallsDetailOpen, setAdminCallsDetailOpen] = useState(false);
+  const [adminCallsDetailData, setAdminCallsDetailData] = useState(null); // { calls, depositCall, callSlot }
+  const [adminCallsPlayingIdx, setAdminCallsPlayingIdx] = useState(null);
+  const [adminCallsAudioUrl, setAdminCallsAudioUrl] = useState(null);
+  const [adminCallsAudioLoading, setAdminCallsAudioLoading] = useState(false);
+
+  // Admin Fill Dialog State
+  const [adminFillOpen, setAdminFillOpen] = useState(false);
+  const [adminFillTarget, setAdminFillTarget] = useState(null); // { depositCall, callSlot }
+  const [adminFillCalls, setAdminFillCalls] = useState([]); // CDR short calls
+  const [adminFillLoading, setAdminFillLoading] = useState(false);
+  const [adminFillSelected, setAdminFillSelected] = useState([]); // selected call indices
+  const [adminFillSaving, setAdminFillSaving] = useState(false);
 
   // Client Networks Display Dialog State
   const [clientNetworksDialog, setClientNetworksDialog] = useState({
@@ -608,6 +689,125 @@ const DepositCallsPage = () => {
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to mark call as rejected');
     }
+  };
+
+  // Admin calls detail handlers
+  const handleOpenAdminCallsDetail = useCallback((adminCalls, depositCall, callSlot) => {
+    setAdminCallsDetailData({ calls: adminCalls, depositCall, callSlot });
+    setAdminCallsDetailOpen(true);
+    setAdminCallsPlayingIdx(null);
+    setAdminCallsAudioUrl(null);
+  }, []);
+
+  const handlePlayAdminRecording = useCallback(async (index, recordFile) => {
+    if (adminCallsPlayingIdx === index) {
+      // Toggle off
+      if (adminCallsAudioUrl) URL.revokeObjectURL(adminCallsAudioUrl);
+      setAdminCallsPlayingIdx(null);
+      setAdminCallsAudioUrl(null);
+      return;
+    }
+    if (adminCallsAudioUrl) URL.revokeObjectURL(adminCallsAudioUrl);
+    setAdminCallsPlayingIdx(index);
+    setAdminCallsAudioUrl(null);
+    if (!recordFile) return;
+    setAdminCallsAudioLoading(true);
+    try {
+      const url = await fetchRecordingBlob(recordFile);
+      setAdminCallsAudioUrl(url);
+    } catch (err) {
+      toast.error('Failed to load recording');
+    } finally {
+      setAdminCallsAudioLoading(false);
+    }
+  }, [adminCallsPlayingIdx, adminCallsAudioUrl]);
+
+  const handleCloseAdminCallsDetail = useCallback(() => {
+    if (adminCallsAudioUrl) URL.revokeObjectURL(adminCallsAudioUrl);
+    setAdminCallsDetailOpen(false);
+    setAdminCallsDetailData(null);
+    setAdminCallsPlayingIdx(null);
+    setAdminCallsAudioUrl(null);
+  }, [adminCallsAudioUrl]);
+
+  // Admin fill handlers
+  const handleAdminFill = useCallback(async (depositCall, callSlot) => {
+    const agentId = depositCall.assignedAgent?._id || depositCall.assignedAgent;
+    if (!agentId) {
+      toast.error('No agent assigned to this deposit call');
+      return;
+    }
+    setAdminFillTarget({ depositCall, callSlot });
+    setAdminFillSelected([]);
+    setAdminFillOpen(true);
+    setAdminFillLoading(true);
+    try {
+      const leadPhone = depositCall.ftdPhone || depositCall.leadId?.newPhone || '';
+      const leadEmail = depositCall.ftdEmail || depositCall.leadId?.newEmail || '';
+      const data = await fetchAgentShortCalls(agentId, 3, leadPhone, leadEmail);
+      setAdminFillCalls(data?.calls || []);
+    } catch (err) {
+      toast.error('Failed to fetch agent short calls');
+      setAdminFillCalls([]);
+    } finally {
+      setAdminFillLoading(false);
+    }
+  }, []);
+
+  const handleAdminFillSave = async () => {
+    if (!adminFillTarget || adminFillSelected.length === 0) return;
+    setAdminFillSaving(true);
+    try {
+      const selectedCalls = adminFillSelected.map(idx => {
+        const call = adminFillCalls[idx];
+        return {
+          callDate: call.callDate,
+          callDuration: call.callDuration,
+          sourceNumber: call.sourceNumber || '',
+          destinationNumber: call.destinationNumber || '',
+          recordFile: call.recordFile || '',
+        };
+      });
+      await depositCallsService.adminDeclareCalls(
+        adminFillTarget.depositCall._id,
+        adminFillTarget.callSlot,
+        selectedCalls
+      );
+      toast.success('Admin calls added successfully');
+      setAdminFillOpen(false);
+      setAdminFillTarget(null);
+      setAdminFillSelected([]);
+      fetchDepositCalls();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to add admin calls');
+    } finally {
+      setAdminFillSaving(false);
+    }
+  };
+
+  const handleAdminRemoveCalls = async (depositCallId, callSlot) => {
+    try {
+      await depositCallsService.adminRemoveCalls(depositCallId, callSlot);
+      toast.success('Admin calls removed');
+      fetchDepositCalls();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to remove admin calls');
+    }
+  };
+
+  const handleAdminFillClose = () => {
+    setAdminFillOpen(false);
+    setAdminFillTarget(null);
+    setAdminFillSelected([]);
+    setAdminFillCalls([]);
+  };
+
+  const toggleAdminFillSelection = (index) => {
+    setAdminFillSelected(prev =>
+      prev.includes(index)
+        ? prev.filter(i => i !== index)
+        : [...prev, index]
+    );
   };
 
   // Network dialog handlers
@@ -1201,7 +1401,41 @@ const DepositCallsPage = () => {
                               />
                             </Tooltip>
                           ) : (
-                            <Typography sx={{ fontSize: '0.55rem', color: 'text.secondary' }}>-</Typography>
+                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: '2px', alignItems: 'center' }}>
+                              {dc.depositAdminCalls?.length > 0 ? (
+                                  <Chip
+                                    label={dc.depositAdminCalls.length === 1
+                                      ? formatDurationShort(dc.depositAdminCalls[0].callDuration)
+                                      : `${dc.depositAdminCalls.length} calls`
+                                    }
+                                    size="small"
+                                    onClick={() => handleOpenAdminCallsDetail(dc.depositAdminCalls, dc, 'deposit')}
+                                    sx={{
+                                      fontSize: '0.5rem',
+                                      height: 15,
+                                      bgcolor: ADMIN_CALL_COLOR,
+                                      color: 'white',
+                                      cursor: 'pointer',
+                                      '& .MuiChip-label': { px: 0.5 },
+                                      '& .MuiChip-deleteIcon': { fontSize: '0.7rem', color: 'rgba(255,255,255,0.7)' },
+                                    }}
+                                    onDelete={isAdmin ? () => handleAdminRemoveCalls(dc._id, 'deposit') : undefined}
+                                    deleteIcon={isAdmin ? <DeleteIcon /> : undefined}
+                                  />
+                              ) : (
+                                <Typography sx={{ fontSize: '0.55rem', color: 'text.secondary' }}>-</Typography>
+                              )}
+                              {isAdmin && dc.assignedAgent && (
+                                <Button
+                                  size="small"
+                                  variant="text"
+                                  onClick={() => handleAdminFill(dc, 'deposit')}
+                                  sx={{ fontSize: '0.45rem', py: 0, px: 0.3, minWidth: 'auto', lineHeight: 1.2, color: ADMIN_CALL_COLOR }}
+                                >
+                                  {dc.depositAdminCalls?.length > 0 ? '+Add' : 'Fill'}
+                                </Button>
+                              )}
+                            </Box>
                           )}
                         </TableCell>
                         {[1,2,3,4,5,6,7,8,9,10].map(num => (
@@ -1218,6 +1452,9 @@ const DepositCallsPage = () => {
                             onMarkAnswered={handleMarkAnswered}
                             onMarkRejected={handleMarkRejected}
                             onViewDeclaration={setSelectedDeclaration}
+                            onAdminFill={handleAdminFill}
+                            onAdminRemove={handleAdminRemoveCalls}
+                            onAdminCallsDetail={handleOpenAdminCallsDetail}
                             isAdmin={isAdmin}
                             isAM={isAM}
                             isAgent={isAgent}
@@ -1878,6 +2115,193 @@ const DepositCallsPage = () => {
             disabled={!customRecordLead || customRecordCreating}
           >
             {customRecordCreating ? <CircularProgress size={20} /> : 'Create'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Admin Calls Detail Dialog */}
+      <Dialog
+        open={adminCallsDetailOpen}
+        onClose={handleCloseAdminCallsDetail}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          <Box display="flex" alignItems="center" justifyContent="space-between">
+            <Box display="flex" alignItems="center" gap={1}>
+              <AdminIcon sx={{ color: ADMIN_CALL_COLOR }} />
+              <Box>
+                <Typography variant="h6">
+                  Admin Calls — {adminCallsDetailData?.callSlot === 'deposit' ? 'Deposit Call' : `C${adminCallsDetailData?.callSlot}`}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  {adminCallsDetailData?.depositCall?.ftdName} | {adminCallsDetailData?.depositCall?.assignedAgent?.fullName || ''}
+                </Typography>
+              </Box>
+            </Box>
+            <IconButton size="small" onClick={handleCloseAdminCallsDetail}>
+              <RejectIcon />
+            </IconButton>
+          </Box>
+        </DialogTitle>
+        <DialogContent dividers>
+          {adminCallsDetailData?.calls?.map((ac, idx) => (
+            <Box
+              key={idx}
+              sx={{
+                p: 1.5,
+                mb: 1,
+                borderRadius: 1,
+                border: '1px solid',
+                borderColor: adminCallsPlayingIdx === idx ? ADMIN_CALL_COLOR : 'grey.200',
+                bgcolor: adminCallsPlayingIdx === idx ? 'action.hover' : 'transparent',
+              }}
+            >
+              <Box display="flex" alignItems="center" gap={1.5} mb={adminCallsPlayingIdx === idx ? 1 : 0}>
+                <Chip
+                  label={formatDurationShort(ac.callDuration)}
+                  size="small"
+                  sx={{ bgcolor: ADMIN_CALL_COLOR, color: 'white', fontWeight: 'bold', fontSize: '0.75rem' }}
+                />
+                <Box sx={{ flex: 1 }}>
+                  <Typography variant="body2" fontFamily="monospace">
+                    {ac.destinationNumber || ac.sourceNumber || '—'}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {ac.callDate ? formatDateTime(ac.callDate) : '—'}
+                    {ac.addedByName ? ` · Added by ${ac.addedByName}` : ''}
+                  </Typography>
+                </Box>
+                {ac.recordFile && (
+                  <IconButton
+                    size="small"
+                    onClick={() => handlePlayAdminRecording(idx, ac.recordFile)}
+                    sx={{ color: adminCallsPlayingIdx === idx ? ADMIN_CALL_COLOR : 'primary.main' }}
+                  >
+                    <PlayIcon />
+                  </IconButton>
+                )}
+              </Box>
+              {adminCallsPlayingIdx === idx && (
+                <Box sx={{ mt: 1 }}>
+                  {adminCallsAudioLoading ? (
+                    <Box display="flex" alignItems="center" gap={1} py={0.5}>
+                      <CircularProgress size={18} />
+                      <Typography variant="caption" color="text.secondary">Loading recording...</Typography>
+                    </Box>
+                  ) : adminCallsAudioUrl ? (
+                    <audio controls autoPlay src={adminCallsAudioUrl} style={{ width: '100%', height: 36 }} />
+                  ) : !ac.recordFile ? (
+                    <Typography variant="caption" color="text.secondary">No recording available</Typography>
+                  ) : (
+                    <Typography variant="caption" color="error">Failed to load recording</Typography>
+                  )}
+                </Box>
+              )}
+            </Box>
+          ))}
+        </DialogContent>
+      </Dialog>
+
+      {/* Admin Fill Dialog */}
+      <Dialog
+        open={adminFillOpen}
+        onClose={handleAdminFillClose}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>
+          <Box display="flex" alignItems="center" gap={1}>
+            <AdminIcon sx={{ color: ADMIN_CALL_COLOR }} />
+            <Box>
+              <Typography variant="h6">
+                Admin Fill — {adminFillTarget?.callSlot === 'deposit' ? 'Deposit Call' : `Call ${adminFillTarget?.callSlot}`}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                FTD: {adminFillTarget?.depositCall?.ftdName} | Agent: {adminFillTarget?.depositCall?.assignedAgent?.fullName || 'N/A'}
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                Select short calls (&lt;15 min) from agent's CDR history. These will NOT count as bonus.
+              </Typography>
+            </Box>
+          </Box>
+        </DialogTitle>
+        <DialogContent dividers>
+          {adminFillLoading ? (
+            <Box display="flex" justifyContent="center" alignItems="center" py={4}>
+              <CircularProgress />
+            </Box>
+          ) : adminFillCalls.length === 0 ? (
+            <Box sx={{ textAlign: 'center', py: 4 }}>
+              <Typography variant="body1" color="text.secondary">
+                No short calls found for this agent in the last 3 months
+              </Typography>
+            </Box>
+          ) : (
+            <>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                {adminFillCalls.length} short call{adminFillCalls.length !== 1 ? 's' : ''} found. Select calls to add:
+              </Typography>
+              <List dense sx={{ maxHeight: 400, overflow: 'auto' }}>
+                {adminFillCalls.map((call, index) => (
+                  <ListItem
+                    key={index}
+                    dense
+                    button
+                    onClick={() => toggleAdminFillSelection(index)}
+                    sx={{
+                      bgcolor: adminFillSelected.includes(index) ? 'action.selected' : 'transparent',
+                      borderRadius: 1,
+                      mb: 0.5,
+                      border: '1px solid',
+                      borderColor: adminFillSelected.includes(index) ? ADMIN_CALL_COLOR : 'grey.200',
+                    }}
+                  >
+                    <ListItemIcon sx={{ minWidth: 36 }}>
+                      <Checkbox
+                        checked={adminFillSelected.includes(index)}
+                        size="small"
+                        sx={{ '&.Mui-checked': { color: ADMIN_CALL_COLOR } }}
+                      />
+                    </ListItemIcon>
+                    <ListItemText
+                      primary={
+                        <Box display="flex" alignItems="center" gap={1}>
+                          <Chip
+                            label={call.formattedDuration || formatDurationShort(call.callDuration)}
+                            size="small"
+                            sx={{ bgcolor: ADMIN_CALL_COLOR, color: 'white', fontSize: '0.7rem', height: 20 }}
+                          />
+                          <Typography variant="body2" fontFamily="monospace" sx={{ fontSize: '0.75rem' }}>
+                            {call.lineNumber || call.email || call.destinationNumber || '—'}
+                          </Typography>
+                        </Box>
+                      }
+                      secondary={
+                        <Typography variant="caption" color="text.secondary">
+                          {call.callDate ? formatDateTime(call.callDate) : 'N/A'}
+                          {call.sourceNumber ? ` | From: ${call.sourceNumber}` : ''}
+                        </Typography>
+                      }
+                    />
+                  </ListItem>
+                ))}
+              </List>
+            </>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Typography variant="body2" sx={{ mr: 'auto', ml: 1, color: ADMIN_CALL_COLOR, fontWeight: 500 }}>
+            {adminFillSelected.length} call{adminFillSelected.length !== 1 ? 's' : ''} selected
+          </Typography>
+          <Button onClick={handleAdminFillClose}>Cancel</Button>
+          <Button
+            variant="contained"
+            onClick={handleAdminFillSave}
+            disabled={adminFillSelected.length === 0 || adminFillSaving}
+            sx={{ bgcolor: ADMIN_CALL_COLOR, '&:hover': { bgcolor: '#e65100' } }}
+          >
+            {adminFillSaving ? <CircularProgress size={20} /> : 'Add Calls'}
           </Button>
         </DialogActions>
       </Dialog>

@@ -1638,3 +1638,132 @@ exports.syncApprovedDeclarations = async (req, res, next) => {
     next(error);
   }
 };
+
+// Admin-only: Add short calls (< 15 min) to a call slot to fill blank spaces
+// These calls have no bonus and are displayed with a different color
+exports.adminDeclareCalls = async (req, res, next) => {
+  try {
+    if (req.user.role !== "admin") {
+      return res.status(403).json({
+        success: false,
+        message: "Admin access required",
+      });
+    }
+
+    const { id } = req.params;
+    const { callSlot, calls } = req.body;
+
+    if (
+      callSlot === undefined ||
+      callSlot === null ||
+      !calls ||
+      !Array.isArray(calls) ||
+      calls.length === 0
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "callSlot and calls array are required",
+      });
+    }
+
+    const depositCall = await DepositCall.findById(id);
+    if (!depositCall) {
+      return res.status(404).json({
+        success: false,
+        message: "Deposit call not found",
+      });
+    }
+
+    // Get admin user name
+    const adminUser = await User.findById(req.user.id).select("fullName");
+    const adminName = adminUser?.fullName || "Admin";
+
+    const adminCalls = calls.map((call) => ({
+      callDate: call.callDate,
+      callDuration: call.callDuration,
+      sourceNumber: call.sourceNumber || "",
+      destinationNumber: call.destinationNumber || "",
+      recordFile: call.recordFile || "",
+      addedBy: req.user.id,
+      addedByName: adminName,
+      addedAt: new Date(),
+    }));
+
+    if (callSlot === "deposit") {
+      if (!depositCall.depositAdminCalls) depositCall.depositAdminCalls = [];
+      depositCall.depositAdminCalls.push(...adminCalls);
+    } else {
+      const num = parseInt(callSlot);
+      if (isNaN(num) || num < 1 || num > 10) {
+        return res.status(400).json({
+          success: false,
+          message: 'callSlot must be "deposit" or a number 1-10',
+        });
+      }
+      const field = `call${num}`;
+      if (!depositCall[field].adminCalls) depositCall[field].adminCalls = [];
+      depositCall[field].adminCalls.push(...adminCalls);
+    }
+
+    await depositCall.save();
+
+    res.json({
+      success: true,
+      message: "Admin calls added successfully",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Admin-only: Remove all admin-added calls from a call slot
+exports.adminRemoveCalls = async (req, res, next) => {
+  try {
+    if (req.user.role !== "admin") {
+      return res.status(403).json({
+        success: false,
+        message: "Admin access required",
+      });
+    }
+
+    const { id } = req.params;
+    const { callSlot } = req.body;
+
+    if (callSlot === undefined || callSlot === null) {
+      return res.status(400).json({
+        success: false,
+        message: "callSlot is required",
+      });
+    }
+
+    const depositCall = await DepositCall.findById(id);
+    if (!depositCall) {
+      return res.status(404).json({
+        success: false,
+        message: "Deposit call not found",
+      });
+    }
+
+    if (callSlot === "deposit") {
+      depositCall.depositAdminCalls = [];
+    } else {
+      const num = parseInt(callSlot);
+      if (isNaN(num) || num < 1 || num > 10) {
+        return res.status(400).json({
+          success: false,
+          message: 'callSlot must be "deposit" or a number 1-10',
+        });
+      }
+      depositCall[`call${num}`].adminCalls = [];
+    }
+
+    await depositCall.save();
+
+    res.json({
+      success: true,
+      message: "Admin calls removed successfully",
+    });
+  } catch (error) {
+    next(error);
+  }
+};

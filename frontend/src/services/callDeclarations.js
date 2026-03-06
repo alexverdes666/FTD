@@ -38,6 +38,28 @@ export const fetchAgentCDRCalls = async (agentId, months = 3, leadPhone = null, 
 };
 
 /**
+ * Fetch short CDR calls (< 15 min) for a specific agent, filtered by lead phone/email
+ * @param {string} agentId - The agent's user ID
+ * @param {number} months - Number of months to fetch (default 3)
+ * @param {string} leadPhone - Lead phone to filter by
+ * @param {string} leadEmail - Lead email to filter by
+ */
+export const fetchAgentShortCalls = async (agentId, months = 3, leadPhone = null, leadEmail = null) => {
+  try {
+    const params = { months, shortOnly: "true" };
+    if (leadPhone) params.leadPhone = leadPhone;
+    if (leadEmail) params.leadEmail = leadEmail;
+    const response = await api.get(`/call-declarations/cdr/${agentId}`, {
+      params,
+    });
+    return response.data.data;
+  } catch (error) {
+    console.error("Error fetching agent short calls:", error);
+    throw error;
+  }
+};
+
+/**
  * Find leads by phone number or email (for auto-fill in declaration dialog)
  * @param {string} phone - Phone number to search
  * @param {string} email - Email to search (fallback)

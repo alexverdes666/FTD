@@ -231,8 +231,9 @@ const fetchAgentCDRCalls = async (req, res) => {
   try {
     const { agentId } = req.params;
     const months = parseInt(req.query.months) || 3;
-    const { leadPhone, leadEmail, includeDeclared } = req.query;
+    const { leadPhone, leadEmail, includeDeclared, shortOnly } = req.query;
     const showDeclared = includeDeclared === "true";
+    const showShortOnly = shortOnly === "true";
 
     // Get the agent's fourDigitCode
     const agent = await User.findById(agentId).select("fourDigitCode fullName");
@@ -245,8 +246,10 @@ const fetchAgentCDRCalls = async (req, res) => {
 
     const agentCode = cdrService.extractAgentCode(agent.fourDigitCode);
     const allCalls = await cdrService.fetchCDRCalls(agentCode, months);
-    const longCalls = cdrService.filterLongCalls(allCalls);
-    const parsedCalls = longCalls.map(cdrService.parseCallRecord);
+    const filteredCalls = showShortOnly
+      ? cdrService.filterShortCalls(allCalls)
+      : cdrService.filterLongCalls(allCalls);
+    const parsedCalls = filteredCalls.map(cdrService.parseCallRecord);
 
     // Check existing declarations for this agent
     const declaredCalls = await AgentCallDeclaration.find({

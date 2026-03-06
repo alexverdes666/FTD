@@ -1,6 +1,43 @@
 const mongoose = require('mongoose');
 const { Schema, model } = mongoose;
 
+// Schema for admin-added short calls (< 15 min, no bonus, added by admin to fill blank slots)
+const adminCallSchema = new Schema({
+  callDate: {
+    type: Date,
+    required: true
+  },
+  callDuration: {
+    type: Number,
+    required: true
+  },
+  sourceNumber: {
+    type: String,
+    default: ''
+  },
+  destinationNumber: {
+    type: String,
+    default: ''
+  },
+  recordFile: {
+    type: String,
+    default: ''
+  },
+  addedBy: {
+    type: Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  },
+  addedByName: {
+    type: String,
+    default: ''
+  },
+  addedAt: {
+    type: Date,
+    default: Date.now
+  }
+}, { _id: false });
+
 // Schema for individual call slots (1-10)
 const callSlotSchema = new Schema({
   expectedDate: {
@@ -38,7 +75,9 @@ const callSlotSchema = new Schema({
     type: String,
     trim: true,
     default: ''
-  }
+  },
+  // Admin-added short calls (< 15 min, no bonus)
+  adminCalls: [adminCallSchema]
 }, { _id: false });
 
 const depositCallSchema = new Schema({
@@ -138,6 +177,8 @@ const depositCallSchema = new Schema({
     enum: ['pending', 'confirmed'],
     default: 'pending'
   },
+  // Admin-added short calls for the deposit call column (< 15 min, no bonus)
+  depositAdminCalls: [adminCallSchema],
   // Track if the lead was deleted/removed from the order (show with strikethrough)
   isDeleted: {
     type: Boolean,

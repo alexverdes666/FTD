@@ -238,6 +238,33 @@ const depositCallsService = {
       throw error;
     }
   },
+  // Admin-only: Add short calls to fill blank call slots
+  adminDeclareCalls: async (depositCallId, callSlot, calls) => {
+    try {
+      const response = await api.post(
+        `/deposit-calls/${depositCallId}/admin-declare`,
+        { callSlot, calls }
+      );
+      return response.data;
+    } catch (error) {
+      console.error("Error adding admin calls:", error);
+      throw error;
+    }
+  },
+
+  // Admin-only: Remove admin-added calls from a slot
+  adminRemoveCalls: async (depositCallId, callSlot) => {
+    try {
+      const response = await api.post(
+        `/deposit-calls/${depositCallId}/admin-remove-calls`,
+        { callSlot }
+      );
+      return response.data;
+    } catch (error) {
+      console.error("Error removing admin calls:", error);
+      throw error;
+    }
+  },
 };
 
 export default depositCallsService;

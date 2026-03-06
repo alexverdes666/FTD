@@ -102,6 +102,22 @@ const filterLongCalls = (calls) => {
 };
 
 /**
+ * Filter calls to only include those < 15 minutes (for admin fill feature)
+ * @param {Array} calls - Array of call records from CDR API
+ * @returns {Array} - Filtered array of short calls
+ */
+const filterShortCalls = (calls) => {
+  if (!Array.isArray(calls)) {
+    return [];
+  }
+
+  return calls.filter((call) => {
+    const duration = parseInt(call.billsec || call.duration || 0, 10);
+    return duration > 0 && duration < MIN_CALL_DURATION;
+  });
+};
+
+/**
  * Calculate bonus for a call
  * @param {string} callType - Type of call (deposit, first_call, etc.)
  * @param {number} duration - Duration in seconds
@@ -226,6 +242,7 @@ const getCallTypes = () => {
 module.exports = {
   fetchCDRCalls,
   filterLongCalls,
+  filterShortCalls,
   calculateBonus,
   generateCdrCallId,
   parseCallRecord,

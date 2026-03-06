@@ -63,4 +63,10 @@ router.post("/:id/mark-answered", depositCallsController.markCallAnswered);
 // Mark call as rejected (final status - FTD rejected)
 router.post("/:id/mark-rejected", depositCallsController.markCallRejected);
 
+// Admin-only: Add short calls to fill blank slots (no bonus)
+router.post("/:id/admin-declare", depositCallsController.adminDeclareCalls);
+
+// Admin-only: Remove admin-added calls from a slot
+router.post("/:id/admin-remove-calls", depositCallsController.adminRemoveCalls);
+
 module.exports = router;
