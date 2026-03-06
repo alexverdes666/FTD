@@ -62,6 +62,7 @@ import depositCallsService from '../services/depositCallsService';
 import api from '../services/api';
 import toast from 'react-hot-toast';
 import { formatPhoneWithCountryCode } from '../utils/phoneUtils';
+import { formatDateTimeBG, formatFullDateTimeBG, formatDateBG, formatShortDateBG, formatTimeBG } from '../utils/dateUtils';
 import CallDeclarationApprovalDialog from '../components/CallDeclarationApprovalDialog';
 import { getFillerDeclarations, fetchRecordingBlob } from '../services/callDeclarations';
 
@@ -78,16 +79,8 @@ const getStatusColor = (status) => {
   }
 };
 
-// Format date for display
-const formatDateTime = (date) => {
-  if (!date) return '-';
-  return new Date(date).toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  });
-};
+// Format date for display (Bulgarian timezone)
+const formatDateTime = (date) => formatDateTimeBG(date);
 
 
 // Call Cell Component
@@ -1122,9 +1115,9 @@ const DepositCallsPage = () => {
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>
                           <Typography sx={{ fontSize: '0.6rem', color: 'text.secondary' }}>
                             {dc.orderId?.createdAt
-                              ? new Date(dc.orderId.createdAt).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+                              ? formatDateTimeBG(dc.orderId.createdAt)
                               : dc.customDate
-                                ? new Date(dc.customDate).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                                ? formatShortDateBG(dc.customDate)
                                 : '-'}
                           </Typography>
                         </TableCell>
@@ -1150,14 +1143,14 @@ const DepositCallsPage = () => {
                               {dc.ftdName || `${dc.leadId?.firstName} ${dc.leadId?.lastName}`}
                             </Typography>
                             {dc.isDeleted && (
-                              <Tooltip title={`Removed: ${dc.deletedReason || 'Lead removed from order'}${dc.deletedAt ? ` (${new Date(dc.deletedAt).toLocaleString()})` : ''}`}>
+                              <Tooltip title={`Removed: ${dc.deletedReason || 'Lead removed from order'}${dc.deletedAt ? ` (${formatFullDateTimeBG(dc.deletedAt)})` : ''}`}>
                                 <Chip label="Removed" size="small" color="error" variant="outlined" sx={{ height: 14, fontSize: '0.45rem', '& .MuiChip-label': { px: 0.3 } }} />
                               </Tooltip>
                             )}
                             {dc.leadHistory && dc.leadHistory.length > 0 && (
                               <Tooltip title={
                                 dc.leadHistory.map((h, i) =>
-                                  `${i + 1}. ${h.action === 'replaced' ? 'Replaced' : h.action === 'deleted' ? 'Removed' : 'Added'}: ${h.ftdName} (${h.ftdEmail})${h.reason ? ` - ${h.reason}` : ''} [${new Date(h.replacedAt).toLocaleDateString()}]`
+                                  `${i + 1}. ${h.action === 'replaced' ? 'Replaced' : h.action === 'deleted' ? 'Removed' : 'Added'}: ${h.ftdName} (${h.ftdEmail})${h.reason ? ` - ${h.reason}` : ''} [${formatDateBG(h.replacedAt)}]`
                                 ).join('\n')
                               }>
                                 <Chip label={`${dc.leadHistory.length} prev`} size="small" variant="outlined" color="info" sx={{ height: 14, fontSize: '0.45rem', cursor: 'pointer', '& .MuiChip-label': { px: 0.3 } }} />
@@ -1188,7 +1181,7 @@ const DepositCallsPage = () => {
                               <Chip label="Removed" size="small" color="error" variant="outlined" sx={{ height: 16, fontSize: '0.5rem', textDecoration: 'line-through', '& .MuiChip-label': { px: 0.3 } }} />
                             </Tooltip>
                           ) : dc.depositConfirmed || dc.depositStatus === 'confirmed' ? (
-                            <Tooltip title={dc.depositConfirmedAt ? `Confirmed: ${new Date(dc.depositConfirmedAt).toLocaleString()}` : 'Deposit Confirmed'}>
+                            <Tooltip title={dc.depositConfirmedAt ? `Confirmed: ${formatFullDateTimeBG(dc.depositConfirmedAt)}` : 'Deposit Confirmed'}>
                               <VerifiedIcon color="success" sx={{ fontSize: 14 }} />
                             </Tooltip>
                           ) : (
@@ -1261,7 +1254,7 @@ const DepositCallsPage = () => {
               <ChevronLeftIcon />
             </IconButton>
             <Typography variant="h5" fontWeight="bold" sx={{ minWidth: 200, textAlign: 'center' }}>
-              {currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+              {currentDate.toLocaleDateString('en-US', { timeZone: 'Europe/Sofia', month: 'long', year: 'numeric' })}
             </Typography>
             <IconButton onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1))} color="primary">
               <ChevronRightIcon />
@@ -1306,11 +1299,12 @@ const DepositCallsPage = () => {
               <Box display="flex" justifyContent="space-between" alignItems="center">
                 <Box>
                   <Typography variant="h6" fontWeight="bold">
-                    {selectedDay?.date?.toLocaleDateString('en-US', { 
-                      weekday: 'long', 
-                      month: 'long', 
-                      day: 'numeric', 
-                      year: 'numeric' 
+                    {selectedDay?.date?.toLocaleDateString('en-US', {
+                      timeZone: 'Europe/Sofia',
+                      weekday: 'long',
+                      month: 'long',
+                      day: 'numeric',
+                      year: 'numeric'
                     })}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
@@ -1351,10 +1345,7 @@ const DepositCallsPage = () => {
                         <Grid item xs={12} sm={2}>
                           <Box sx={{ textAlign: { xs: 'left', sm: 'center' } }}>
                             <Typography variant="h6" color="primary.main" fontWeight="bold">
-                              {new Date(event.start).toLocaleTimeString('en-US', { 
-                                hour: '2-digit', 
-                                minute: '2-digit' 
-                              })}
+                              {formatTimeBG(event.start)}
                             </Typography>
                             <Chip 
                               label={`Call ${event.callNumber}`} 
@@ -1506,7 +1497,7 @@ const DepositCallsPage = () => {
                         </TableCell>
                         <TableCell>
                           <Typography variant="body2">
-                            {decl.callDate ? new Date(decl.callDate).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'N/A'}
+                            {decl.callDate ? formatDateTimeBG(decl.callDate) : 'N/A'}
                           </Typography>
                         </TableCell>
                         <TableCell>
@@ -1599,7 +1590,7 @@ const DepositCallsPage = () => {
                 <Box>
                   <Typography variant="caption" color="text.secondary">Date</Typography>
                   <Typography variant="body2">
-                    {recordingDeclaration.callDate ? new Date(recordingDeclaration.callDate).toLocaleString() : 'N/A'}
+                    {recordingDeclaration.callDate ? formatFullDateTimeBG(recordingDeclaration.callDate) : 'N/A'}
                   </Typography>
                 </Box>
                 <Box>
@@ -1685,7 +1676,7 @@ const DepositCallsPage = () => {
                       <TableCell>
                         <Typography variant="body2" color="text.secondary">
                           {entry.assignedAt
-                            ? new Date(entry.assignedAt).toLocaleString()
+                            ? formatFullDateTimeBG(entry.assignedAt)
                             : "-"}
                         </Typography>
                       </TableCell>
@@ -1741,7 +1732,7 @@ const DepositCallsPage = () => {
                       <TableCell>
                         <Typography variant="body2" color="text.secondary">
                           {entry.assignedAt
-                            ? new Date(entry.assignedAt).toLocaleString()
+                            ? formatFullDateTimeBG(entry.assignedAt)
                             : "-"}
                         </Typography>
                       </TableCell>

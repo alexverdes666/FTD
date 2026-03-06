@@ -1128,7 +1128,7 @@ const LeadsPreviewModal = ({
                 {/* Assign to Agent */}
                 <MenuItem
                   onClick={() => {
-                    onOpenAssignLead(lead);
+                    onOpenAssignLead(lead, modal.orderId);
                     onClosePreviewActionsMenu();
                   }}
                 >

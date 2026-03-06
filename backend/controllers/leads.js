@@ -3870,7 +3870,7 @@ exports.accessLeadSession = async (req, res, next) => {
 // Assign leads to agent
 exports.assignLeadsToAgent = async (req, res, next) => {
   try {
-    const { leadIds, agentId } = req.body;
+    const { leadIds, agentId, orderId } = req.body;
 
     if (!leadIds || !Array.isArray(leadIds) || leadIds.length === 0) {
       return res.status(400).json({
@@ -3954,11 +3954,21 @@ exports.assignLeadsToAgent = async (req, res, next) => {
           lead.unassignFromAgent();
           await lead.save();
 
-          // Add audit log to associated order if exists
-          if (lead.orderId) {
+          // Update per-order agent in leadsMetadata (only when orderId is explicitly provided from orders page)
+          if (orderId) {
             const Order = require("../models/Order");
-            const order = await Order.findById(lead.orderId);
+            const order = await Order.findById(orderId);
             if (order) {
+              // Update leadsMetadata with new agent assignment for this order only
+              if (order.leadsMetadata && Array.isArray(order.leadsMetadata)) {
+                const metaIndex = order.leadsMetadata.findIndex(
+                  (m) => m.leadId.toString() === lead._id.toString()
+                );
+                if (metaIndex !== -1) {
+                  order.leadsMetadata[metaIndex].assignedAgent = null;
+                  order.leadsMetadata[metaIndex].assignedAgentAt = null;
+                }
+              }
               const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
                                req.headers['x-real-ip'] ||
                                req.connection?.remoteAddress ||
@@ -4021,11 +4031,21 @@ exports.assignLeadsToAgent = async (req, res, next) => {
           const assignmentResult = lead.assignToAgent(agentId, true);
           await assignmentResult.lead.save();
 
-          // Add audit log to associated order if exists
-          if (lead.orderId) {
+          // Update per-order agent in leadsMetadata (only when orderId is explicitly provided from orders page)
+          if (orderId) {
             const Order = require("../models/Order");
-            const order = await Order.findById(lead.orderId);
+            const order = await Order.findById(orderId);
             if (order) {
+              // Update leadsMetadata with new agent assignment for this order only
+              if (order.leadsMetadata && Array.isArray(order.leadsMetadata)) {
+                const metaIndex = order.leadsMetadata.findIndex(
+                  (m) => m.leadId.toString() === lead._id.toString()
+                );
+                if (metaIndex !== -1) {
+                  order.leadsMetadata[metaIndex].assignedAgent = agent._id;
+                  order.leadsMetadata[metaIndex].assignedAgentAt = new Date();
+                }
+              }
               const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
                                req.headers['x-real-ip'] ||
                                req.connection?.remoteAddress ||

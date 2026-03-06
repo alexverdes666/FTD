@@ -33,18 +33,18 @@ const getActiveLeadIds = (orders) => {
 };
 
 // Helper function to merge order's leadsMetadata with populated leads
-// This ensures each lead shows the correct orderedAs value for THIS specific order
+// This ensures each lead shows the correct orderedAs value and per-order agent for THIS specific order
 const mergeLeadsWithMetadata = (order) => {
   if (!order.leadsMetadata || !order.leads) return order;
 
   // Convert order to plain object if it's a mongoose document
   const orderObj = order.toObject ? order.toObject() : order;
 
-  // Create a map of leadId -> orderedAs from metadata
+  // Create a map of leadId -> metadata from leadsMetadata
   const metadataMap = new Map();
   if (orderObj.leadsMetadata && Array.isArray(orderObj.leadsMetadata)) {
     orderObj.leadsMetadata.forEach((meta) => {
-      metadataMap.set(meta.leadId.toString(), meta.orderedAs);
+      metadataMap.set(meta.leadId.toString(), meta);
     });
   }
 
@@ -57,8 +57,18 @@ const mergeLeadsWithMetadata = (order) => {
       const leadObj = lead.toObject ? lead.toObject() : lead;
       const leadId = leadObj._id ? leadObj._id.toString() : lead.toString();
 
-      if (metadataMap.has(leadId)) {
-        leadObj.orderedAs = metadataMap.get(leadId);
+      const meta = metadataMap.get(leadId);
+      if (meta) {
+        if (meta.orderedAs) {
+          leadObj.orderedAs = meta.orderedAs;
+        }
+        // Override with per-order agent if set (preserves historical agent assignment)
+        if (meta.assignedAgent) {
+          leadObj.assignedAgent = meta.assignedAgent;
+          if (meta.assignedAgentAt) {
+            leadObj.assignedAgentAt = meta.assignedAgentAt;
+          }
+        }
       }
       return leadObj;
     });
@@ -1359,7 +1369,8 @@ const handleManualSelectionOrder = async (req, res, next) => {
       .populate("requester", "fullName email")
       .populate("selectedClientNetwork", "name")
       .populate("selectedOurNetwork", "name")
-      .populate("selectedCampaign", "name");
+      .populate("selectedCampaign", "name")
+      .populate("leadsMetadata.assignedAgent", "fullName email fourDigitCode");
 
     console.log(
       `[MANUAL-ORDER] Created order ${order._id} with ${manualLeads.length} manually selected leads`
@@ -2238,7 +2249,7 @@ exports.createOrder = async (req, res, next) => {
         pulledLeads.push(...appliedFTDLeads);
         fulfilled.ftd = appliedFTDLeads.length;
         appliedFTDLeads.forEach((lead) => {
-          leadsMetadata.push({ leadId: lead._id, orderedAs: "ftd" });
+          leadsMetadata.push({ leadId: lead._id, orderedAs: "ftd", assignedAgent: lead.assignedAgent || null, assignedAgentAt: lead.assignedAgentAt || null });
         });
         console.log(
           `[FTD-DEBUG] Final result: ${appliedFTDLeads.length} FTD leads added to order`
@@ -2387,7 +2398,7 @@ exports.createOrder = async (req, res, next) => {
         fulfilled.ftd = appliedFTDLeads.length;
         // Track metadata for each FTD lead
         appliedFTDLeads.forEach((lead) => {
-          leadsMetadata.push({ leadId: lead._id, orderedAs: "ftd" });
+          leadsMetadata.push({ leadId: lead._id, orderedAs: "ftd", assignedAgent: lead.assignedAgent || null, assignedAgentAt: lead.assignedAgentAt || null });
         });
         console.log(
           `[FTD-DEBUG] Final result: ${appliedFTDLeads.length} FTD leads added to order`
@@ -2636,7 +2647,7 @@ exports.createOrder = async (req, res, next) => {
         pulledLeads.push(...fillerLeads);
         fulfilled.filler = fillerLeads.length;
         fillerLeads.forEach((lead) => {
-          leadsMetadata.push({ leadId: lead._id, orderedAs: "filler" });
+          leadsMetadata.push({ leadId: lead._id, orderedAs: "filler", assignedAgent: lead.assignedAgent || null, assignedAgentAt: lead.assignedAgentAt || null });
         });
         console.log(
           `[FILLER-DEBUG] Final result: ${fillerLeads.length} filler leads added to order`
@@ -2763,7 +2774,7 @@ exports.createOrder = async (req, res, next) => {
         fulfilled.filler = selectedFillerLeads.length;
         // Track metadata - these FTD leads should display as "filler" in this order
         selectedFillerLeads.forEach((lead) => {
-          leadsMetadata.push({ leadId: lead._id, orderedAs: "filler" });
+          leadsMetadata.push({ leadId: lead._id, orderedAs: "filler", assignedAgent: lead.assignedAgent || null, assignedAgentAt: lead.assignedAgentAt || null });
         });
         console.log(
           `[FILLER-DEBUG] Final result: ${selectedFillerLeads.length} FTD leads tracked as fillers added to order`
@@ -2846,7 +2857,7 @@ exports.createOrder = async (req, res, next) => {
         fulfilled.cold = appliedColdLeads.length;
         // Track metadata for each cold lead
         appliedColdLeads.forEach((lead) => {
-          leadsMetadata.push({ leadId: lead._id, orderedAs: "cold" });
+          leadsMetadata.push({ leadId: lead._id, orderedAs: "cold", assignedAgent: lead.assignedAgent || null, assignedAgentAt: lead.assignedAgentAt || null });
         });
       }
     }
@@ -3146,6 +3157,7 @@ exports.createOrder = async (req, res, next) => {
     // Populate the order with lead details
     const populatedOrder = await Order.findById(order._id)
       .populate("requester", "fullName email role")
+      .populate("leadsMetadata.assignedAgent", "fullName email fourDigitCode")
       .populate({
         path: "leads",
         select:
@@ -3352,6 +3364,7 @@ exports.getOrders = async (req, res, next) => {
           .populate("selectedOurNetwork", "name description")
           .populate("selectedClientNetwork", "name description")
           .populate("selectedClientBrokers", "name domain description")
+          .populate("leadsMetadata.assignedAgent", "fullName email fourDigitCode")
           .populate({
             path: "leads",
             select:
@@ -3401,6 +3414,7 @@ exports.getOrders = async (req, res, next) => {
         .populate("selectedOurNetwork", "name description")
         .populate("selectedClientNetwork", "name description")
         .populate("selectedClientBrokers", "name domain description")
+        .populate("leadsMetadata.assignedAgent", "fullName email fourDigitCode")
         .populate({
           path: "leads",
           select:
@@ -3485,7 +3499,8 @@ exports.getOrderById = async (req, res, next) => {
       .populate("selectedClientNetwork", "name description")
       .populate("selectedClientBrokers", "name domain description")
       .populate("auditLog.performedBy", "fullName email")
-      .populate("removedLeads.removedBy", "fullName email");
+      .populate("removedLeads.removedBy", "fullName email")
+      .populate("leadsMetadata.assignedAgent", "fullName email fourDigitCode");
 
     // Only populate full lead details if not in lightweight mode
     const panel = req.query.panel === "true";
@@ -5247,6 +5262,9 @@ exports.changeFTDInOrder = async (req, res, next) => {
 
               // Preserve the orderedAs value (e.g., 'filler' or 'ftd') for the replacement lead
               order.leadsMetadata[metadataIndex].leadId = newLead._id;
+              // Snapshot the new lead's current agent assignment
+              order.leadsMetadata[metadataIndex].assignedAgent = newLead.assignedAgent || null;
+              order.leadsMetadata[metadataIndex].assignedAgentAt = newLead.assignedAgentAt || null;
               console.log(
                 `[CHANGE-FTD-DEBUG] Updated leadsMetadata: preserved orderedAs='${order.leadsMetadata[metadataIndex].orderedAs}' for new lead`
               );
@@ -6326,6 +6344,8 @@ exports.addLeadsToOrder = async (req, res, next) => {
       order.leadsMetadata.push({
         leadId: leadData.leadId,
         orderedAs: leadType,
+        assignedAgent: lead.assignedAgent || null,
+        assignedAgentAt: lead.assignedAgentAt || null,
       });
 
       // Add audit log entry for each lead added
@@ -6438,7 +6458,8 @@ exports.addLeadsToOrder = async (req, res, next) => {
       .populate("requester", "fullName email")
       .populate("selectedClientNetwork", "name")
       .populate("selectedOurNetwork", "name")
-      .populate("selectedCampaign", "name");
+      .populate("selectedCampaign", "name")
+      .populate("leadsMetadata.assignedAgent", "fullName email fourDigitCode");
 
     const resultOrder = mergeLeadsWithMetadata(populatedOrder);
 

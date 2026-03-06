@@ -122,6 +122,9 @@ const orderSchema = new Schema(
       closedNetwork: { type: Boolean, default: false },
       closedNetworkBy: { type: SchemaTypes.ObjectId, ref: "User" },
       closedNetworkAt: { type: Date },
+      // Per-order agent assignment (snapshot at time of assignment)
+      assignedAgent: { type: SchemaTypes.ObjectId, ref: "User", default: null },
+      assignedAgentAt: { type: Date },
       _id: false
     }],
     // Track leads that have been removed from the order (soft delete)

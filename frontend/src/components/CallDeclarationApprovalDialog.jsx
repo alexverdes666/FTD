@@ -25,6 +25,7 @@ import {
   RestartAlt as ResetIcon,
 } from '@mui/icons-material';
 import { approveDeclaration, rejectDeclaration, fetchRecordingBlob } from '../services/callDeclarations';
+import { formatFullDateTimeBG } from '../utils/dateUtils';
 
 const CallDeclarationApprovalDialog = ({ open, onClose, declaration, onDeclarationUpdated, onReset, isAdmin }) => {
   const [loading, setLoading] = useState(false);
@@ -64,10 +65,7 @@ const CallDeclarationApprovalDialog = ({ open, onClose, declaration, onDeclarati
 
   if (!declaration) return null;
 
-  const formatDate = (dateStr) => {
-    if (!dateStr) return 'N/A';
-    return new Date(dateStr).toLocaleString();
-  };
+  const formatDate = (dateStr) => formatFullDateTimeBG(dateStr);
 
   const formatCurrency = (value) => `$${Number(value).toFixed(2)}`;
 

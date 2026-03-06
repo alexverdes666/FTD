@@ -4,7 +4,11 @@
  */
 
 const { MongoClient } = require("mongodb");
+const dns = require("dns");
 require("dotenv").config();
+
+// Use Google DNS to resolve SRV records (fixes local DNS issues)
+dns.setServers(["8.8.8.8", "8.8.4.4"]);
 
 const SOURCE_DB = "test";
 const TARGET_DB = "test_local";

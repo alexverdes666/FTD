@@ -39,11 +39,12 @@ const assignmentSchema = yup.object({
   agentId: yup.string().required('Please select an agent or choose to unassign'),
 });
 
-const AssignLeadToAgentDialog = ({ 
-  open, 
-  onClose, 
+const AssignLeadToAgentDialog = ({
+  open,
+  onClose,
   lead,  // Can be a single lead object OR array of leads
-  onSuccess 
+  orderId, // Optional: when assigning from orders context, updates only this order
+  onSuccess
 }) => {
   const [loading, setLoading] = useState(false);
   const [agents, setAgents] = useState([]);
@@ -126,9 +127,10 @@ const AssignLeadToAgentDialog = ({
       const isUnassigning = data.agentId === 'UNASSIGN';
       
       // Use the correct API endpoint for agent assignment
-      const response = await api.post('/leads/assign-to-agent', { 
-        leadIds, 
-        agentId: isUnassigning ? null : data.agentId 
+      const response = await api.post('/leads/assign-to-agent', {
+        leadIds,
+        agentId: isUnassigning ? null : data.agentId,
+        orderId: orderId || undefined,
       });
       
       // Use the full agents list (not filtered) to get agent name

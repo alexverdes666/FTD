@@ -27,6 +27,7 @@ import {
   Close as CloseIcon,
 } from '@mui/icons-material';
 import { fetchRecordingBlob } from '../services/callDeclarations';
+import { formatDateBG } from '../utils/dateUtils';
 
 const CallDeclarationsTable = ({
   declarations = [],
@@ -37,10 +38,7 @@ const CallDeclarationsTable = ({
   showAgent = false,
   emptyMessage = "No declarations found"
 }) => {
-  const formatDate = (dateStr) => {
-    if (!dateStr) return 'N/A';
-    return new Date(dateStr).toLocaleDateString();
-  };
+  const formatDate = (dateStr) => formatDateBG(dateStr);
 
   const formatCurrency = (value) => `$${Number(value).toFixed(2)}`;
 
