@@ -444,7 +444,7 @@ const MainLayout = () => {
               path: "/agent-comments",
             },
             {
-              text: "PBX Agents",
+              text: "Live Monit.",
               icon: <HeadsetIcon />,
               path: "/ami-agents",
             },
@@ -512,7 +512,7 @@ const MainLayout = () => {
               path: "/agent-comments",
             },
             {
-              text: "PBX Agents",
+              text: "Live Monit.",
               icon: <HeadsetIcon />,
               path: "/ami-agents",
             },
