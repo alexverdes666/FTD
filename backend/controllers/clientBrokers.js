@@ -89,6 +89,17 @@ exports.createClientBroker = async (req, res, next) => {
     }
     const { name, domain, description } = req.body;
 
+    // Case-insensitive duplicate check
+    const existing = await ClientBroker.findOne({
+      name: { $regex: new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
+    });
+    if (existing) {
+      return res.status(400).json({
+        success: false,
+        message: `Client broker name '${name}' already exists`,
+      });
+    }
+
     const brokerData = {
       name,
       description,
@@ -160,6 +171,20 @@ exports.updateClientBroker = async (req, res, next) => {
       description: clientBroker.description,
       isActive: clientBroker.isActive,
     };
+
+    // Case-insensitive duplicate check on rename
+    if (name !== undefined && name.toLowerCase() !== clientBroker.name.toLowerCase()) {
+      const existing = await ClientBroker.findOne({
+        _id: { $ne: clientBroker._id },
+        name: { $regex: new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
+      });
+      if (existing) {
+        return res.status(400).json({
+          success: false,
+          message: `Client broker name '${name}' already exists`,
+        });
+      }
+    }
 
     if (name !== undefined) clientBroker.name = name;
     if (domain !== undefined) {

@@ -36,6 +36,7 @@ import {
   alpha,
   Checkbox,
   ListItemText,
+  Menu,
 } from "@mui/material";
 import {
   Add as AddIcon,
@@ -49,6 +50,7 @@ import {
   FilterListOff as FilterListOffIcon,
   Inbox as InboxIcon,
   AlternateEmail as EmailSearchIcon,
+  ArrowDropDown as ArrowDropDownIcon,
 } from "@mui/icons-material";
 import { useForm } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
@@ -193,6 +195,15 @@ const OrdersPage = () => {
     loading: false,
     enriching: false,
   });
+
+  // Requester filter dropdown state
+  const [requesterAnchor, setRequesterAnchor] = useState(null);
+  const [availableRequesters, setAvailableRequesters] = useState([]);
+  useEffect(() => {
+    if (user?.role === "admin" || user?.role === "lead_manager") {
+      api.get("/orders/requesters").then((res) => setAvailableRequesters(res.data.data || [])).catch(() => {});
+    }
+  }, [user?.role]);
 
   // IPQS validation success state (tracks leadIds that were just successfully validated)
   const [ipqsValidationSuccess, setIpqsValidationSuccess] = useState([]);
@@ -3422,7 +3433,52 @@ const OrdersPage = () => {
                   Order ID
                 </TableCell>
                 <TableCell sx={{ display: { xs: "none", md: "table-cell" }, textAlign: "center", width: orderPanelId ? "11%" : "13%" }}>
-                  Requester
+                  <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    Requester
+                    {(user?.role === "admin" || user?.role === "lead_manager") && (
+                      <IconButton
+                        size="small"
+                        onClick={(e) => setRequesterAnchor(e.currentTarget)}
+                        sx={{ p: 0, ml: 0.25 }}
+                      >
+                        <ArrowDropDownIcon sx={{ fontSize: 18, color: filters.requesters.length > 0 ? "warning.main" : "primary.main" }} />
+                      </IconButton>
+                    )}
+                  </Box>
+                  <Menu
+                    anchorEl={requesterAnchor}
+                    open={Boolean(requesterAnchor)}
+                    onClose={() => setRequesterAnchor(null)}
+                    PaperProps={{ sx: { maxHeight: 300, minWidth: 180 } }}
+                  >
+                    {filters.requesters.length > 0 && (
+                      <MenuItem
+                        dense
+                        onClick={() => { setFilters((prev) => ({ ...prev, requesters: [] })); setPage(0); setRequesterAnchor(null); }}
+                        sx={{ fontSize: "0.75rem", color: "error.main", fontStyle: "italic" }}
+                      >
+                        Clear filter
+                      </MenuItem>
+                    )}
+                    {availableRequesters.map((r) => (
+                      <MenuItem
+                        key={r._id}
+                        dense
+                        onClick={() => {
+                          setFilters((prev) => {
+                            const current = prev.requesters;
+                            const next = current.includes(r._id) ? current.filter((id) => id !== r._id) : [...current, r._id];
+                            return { ...prev, requesters: next };
+                          });
+                          setPage(0);
+                        }}
+                        sx={{ fontSize: "0.8rem", py: 0.25 }}
+                      >
+                        <Checkbox checked={filters.requesters.includes(r._id)} size="small" sx={{ p: 0.25, mr: 0.5 }} />
+                        <ListItemText primary={r.fullName} primaryTypographyProps={{ fontSize: "0.8rem" }} />
+                      </MenuItem>
+                    ))}
+                  </Menu>
                 </TableCell>
                 <TableCell sx={{ display: { xs: "none", md: "table-cell" }, textAlign: "center", width: orderPanelId ? "8%" : "10%" }}>
                   CN

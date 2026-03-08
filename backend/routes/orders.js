@@ -33,6 +33,7 @@ const {
   validateOrderLeadsIPQS,
   getOrderValidationResults,
   validateSingleLeadIPQS,
+  getOrderRequesters,
 } = require("../controllers/orders");
 const router = express.Router();
 
@@ -200,6 +201,7 @@ router.get(
   getOrders
 );
 router.get("/stats", [protect, canViewOrders], getOrderStats);
+router.get("/requesters", [protect, canViewOrders], getOrderRequesters);
 router.get("/:id", [protect, canViewOrders], getOrderById);
 router.put("/:id", [
   protect,

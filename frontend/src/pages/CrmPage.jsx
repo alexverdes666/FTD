@@ -8,6 +8,7 @@ import {
   Tab,
   TextField,
   InputAdornment,
+  IconButton,
   Table,
   TableBody,
   TableCell,
@@ -17,14 +18,42 @@ import {
   TablePagination,
   Chip,
   CircularProgress,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Button,
+  MenuItem,
+  Divider,
+  FormControl,
+  InputLabel,
+  Select,
 } from "@mui/material";
 import {
   Search as SearchIcon,
   Hub as NetworkIcon,
   Business as BrokerIcon,
+  Add as AddIcon,
 } from "@mui/icons-material";
+import { useForm, Controller } from "react-hook-form";
+import { yupResolver } from "@hookform/resolvers/yup";
+import * as yup from "yup";
 import api from "../services/api";
 import toast from "react-hot-toast";
+
+const brokerSchema = yup.object({
+  name: yup.string().required("Name is required").max(100, "Name must be less than 100 characters"),
+  domain: yup.string().max(200, "Domain must be less than 200 characters"),
+  description: yup.string().max(500, "Description must be less than 500 characters"),
+});
+
+const positionOptions = [
+  { value: "finance", label: "Finance" },
+  { value: "boss", label: "Boss" },
+  { value: "manager", label: "Manager" },
+  { value: "affiliate_manager", label: "Affiliate Manager" },
+  { value: "tech_support", label: "Tech Support" },
+];
 
 const compactTableSx = {
   tableLayout: "fixed",
@@ -64,6 +93,104 @@ const CrmPage = () => {
   const location = useLocation();
   const [tab, setTab] = useState(location.state?.tab ?? 0);
   const [search, setSearch] = useState("");
+  const [openDialog, setOpenDialog] = useState(false);
+  const [creating, setCreating] = useState(false);
+
+  // Network dialog state (matches ReferenceSelector design)
+  const [newNetworkName, setNewNetworkName] = useState("");
+  const [newNetworkDescription, setNewNetworkDescription] = useState("");
+  const [employees, setEmployees] = useState([]);
+  const [empName, setEmpName] = useState("");
+  const [empTelegram, setEmpTelegram] = useState("");
+  const [empPosition, setEmpPosition] = useState("");
+
+  const brokerForm = useForm({
+    resolver: yupResolver(brokerSchema),
+    defaultValues: { name: "", domain: "", description: "" },
+  });
+
+  const handleOpenDialog = () => {
+    if (tab === 0) {
+      setNewNetworkName("");
+      setNewNetworkDescription("");
+      setEmployees([]);
+      setEmpName("");
+      setEmpTelegram("");
+      setEmpPosition("");
+    } else {
+      brokerForm.reset({ name: "", domain: "", description: "" });
+    }
+    setOpenDialog(true);
+  };
+
+  const handleCloseDialog = () => {
+    setOpenDialog(false);
+  };
+
+  const handleAddEmployee = () => {
+    if (!empName.trim() || !empPosition) return;
+    setEmployees((prev) => [
+      ...prev,
+      {
+        name: empName.trim(),
+        telegramUsername: empTelegram.replace(/^@+/, "").trim(),
+        position: empPosition,
+      },
+    ]);
+    setEmpName("");
+    setEmpTelegram("");
+    setEmpPosition("");
+  };
+
+  const handleRemoveEmployee = (index) => {
+    setEmployees((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleNetworkSubmit = async () => {
+    if (!newNetworkName.trim()) {
+      toast.error("Please enter a network name");
+      return;
+    }
+    try {
+      setCreating(true);
+      const response = await api.post("/client-networks", {
+        name: newNetworkName.trim(),
+        description: newNetworkDescription.trim() || undefined,
+      });
+      const newNetwork = response.data.data;
+
+      if (employees.length > 0) {
+        const results = await Promise.allSettled(
+          employees.map((emp) =>
+            api.post(`/client-networks/${newNetwork._id}/employees`, emp)
+          )
+        );
+        const failed = results.filter((r) => r.status === "rejected").length;
+        if (failed > 0) {
+          toast.error(`Failed to add ${failed} employee(s)`);
+        }
+      }
+
+      toast.success(`Network "${newNetwork.name}" created`);
+      handleCloseDialog();
+      fetchNetworks(1);
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to create network");
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const onBrokerSubmit = async (data) => {
+    try {
+      await api.post("/client-brokers", data);
+      toast.success("Broker created successfully");
+      handleCloseDialog();
+      fetchBrokers(1);
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to create broker");
+    }
+  };
 
   // Client Networks state
   const [networks, setNetworks] = useState([]);
@@ -176,21 +303,37 @@ const CrmPage = () => {
             <Tab icon={<NetworkIcon sx={{ fontSize: 16 }} />} iconPosition="start" label="Client Networks" />
             <Tab icon={<BrokerIcon sx={{ fontSize: 16 }} />} iconPosition="start" label="Client Brokers" />
           </Tabs>
-          <TextField
-            size="small"
-            placeholder="Search..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            onKeyDown={handleSearchKeyDown}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon sx={{ fontSize: 16 }} />
-                </InputAdornment>
-              ),
-            }}
-            sx={{ width: 220, "& .MuiInputBase-root": { height: 30, fontSize: "0.8rem" } }}
-          />
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+            <TextField
+              size="small"
+              placeholder="Search..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={handleSearchKeyDown}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon sx={{ fontSize: 16 }} />
+                  </InputAdornment>
+                ),
+              }}
+              sx={{ width: 220, "& .MuiInputBase-root": { height: 30, fontSize: "0.8rem", borderRadius: "20px" } }}
+            />
+            <IconButton
+              size="small"
+              color="primary"
+              onClick={handleOpenDialog}
+              sx={{
+                width: 30,
+                height: 30,
+                bgcolor: "primary.main",
+                color: "#fff",
+                "&:hover": { bgcolor: "primary.dark" },
+              }}
+            >
+              <AddIcon sx={{ fontSize: 18 }} />
+            </IconButton>
+          </Box>
         </Box>
       </Paper>
 
@@ -383,6 +526,176 @@ const CrmPage = () => {
           )}
         </Paper>
       )}
+      {/* Add Network Dialog */}
+      <Dialog open={openDialog && tab === 0} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
+        <DialogTitle>Add Client Network</DialogTitle>
+        <DialogContent>
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 2, pt: 1 }}>
+            <TextField
+              label="Network Name"
+              value={newNetworkName}
+              onChange={(e) => setNewNetworkName(e.target.value)}
+              fullWidth
+              required
+              placeholder="Enter new network name..."
+              inputProps={{ maxLength: 100 }}
+            />
+            <TextField
+              label="Description (optional)"
+              value={newNetworkDescription}
+              onChange={(e) => setNewNetworkDescription(e.target.value)}
+              fullWidth
+              multiline
+              rows={2}
+              placeholder="Add a description..."
+              inputProps={{ maxLength: 500 }}
+            />
+
+            {/* Employees Section */}
+            <Divider sx={{ my: 0.5 }} />
+            <Typography variant="subtitle2" color="text.secondary">
+              Employees (optional)
+            </Typography>
+
+            {employees.length > 0 && (
+              <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+                {employees.map((emp, idx) => (
+                  <Chip
+                    key={idx}
+                    label={`${emp.name} - ${positionOptions.find((p) => p.value === emp.position)?.label || emp.position}${emp.telegramUsername ? ` (@${emp.telegramUsername})` : ""}`}
+                    onDelete={() => handleRemoveEmployee(idx)}
+                    size="small"
+                    variant="outlined"
+                  />
+                ))}
+              </Box>
+            )}
+
+            <Box sx={{ display: "flex", gap: 1, alignItems: "flex-start" }}>
+              <TextField
+                label="Name"
+                value={empName}
+                onChange={(e) => setEmpName(e.target.value)}
+                size="small"
+                sx={{ flex: 1 }}
+                inputProps={{ maxLength: 100 }}
+              />
+              <TextField
+                label="Telegram"
+                value={empTelegram}
+                onChange={(e) => setEmpTelegram(e.target.value.replace(/^@+/, ""))}
+                size="small"
+                sx={{ flex: 1 }}
+                placeholder="username"
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start" sx={{ mr: 0 }}>
+                      <span style={{ fontWeight: 700, color: "#1976d2" }}>@</span>
+                    </InputAdornment>
+                  ),
+                }}
+                inputProps={{ maxLength: 100 }}
+              />
+            </Box>
+            <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+              <FormControl size="small" sx={{ flex: 1 }}>
+                <InputLabel>Position</InputLabel>
+                <Select
+                  value={empPosition}
+                  onChange={(e) => setEmpPosition(e.target.value)}
+                  label="Position"
+                >
+                  {positionOptions.map((option) => (
+                    <MenuItem key={option.value} value={option.value}>
+                      {option.label}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <IconButton
+                color="primary"
+                onClick={handleAddEmployee}
+                disabled={!empName.trim() || !empPosition}
+                sx={{
+                  border: "1px solid",
+                  borderColor: !empName.trim() || !empPosition ? "action.disabled" : "primary.main",
+                  borderRadius: 1,
+                }}
+              >
+                <AddIcon />
+              </IconButton>
+            </Box>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseDialog} disabled={creating}>Cancel</Button>
+          <Button
+            onClick={handleNetworkSubmit}
+            variant="contained"
+            disabled={creating || !newNetworkName.trim()}
+          >
+            {creating ? <CircularProgress size={20} /> : "Create"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Add Broker Dialog */}
+      <Dialog open={openDialog && tab === 1} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
+        <form onSubmit={brokerForm.handleSubmit(onBrokerSubmit)}>
+          <DialogTitle>Add Client Broker</DialogTitle>
+          <DialogContent>
+            <Box sx={{ display: "flex", flexDirection: "column", gap: 2, pt: 1 }}>
+              <Controller
+                name="name"
+                control={brokerForm.control}
+                render={({ field }) => (
+                  <TextField
+                    {...field}
+                    label="Broker Name"
+                    fullWidth
+                    error={!!brokerForm.formState.errors.name}
+                    helperText={brokerForm.formState.errors.name?.message}
+                  />
+                )}
+              />
+              <Controller
+                name="domain"
+                control={brokerForm.control}
+                render={({ field }) => (
+                  <TextField
+                    {...field}
+                    label="Domain/Website"
+                    fullWidth
+                    error={!!brokerForm.formState.errors.domain}
+                    helperText={brokerForm.formState.errors.domain?.message}
+                  />
+                )}
+              />
+              <Controller
+                name="description"
+                control={brokerForm.control}
+                render={({ field }) => (
+                  <TextField
+                    {...field}
+                    label="Description"
+                    fullWidth
+                    multiline
+                    rows={3}
+                    error={!!brokerForm.formState.errors.description}
+                    helperText={brokerForm.formState.errors.description?.message}
+                  />
+                )}
+              />
+            </Box>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={handleCloseDialog}>Cancel</Button>
+            <Button type="submit" variant="contained" disabled={brokerForm.formState.isSubmitting}>
+              {brokerForm.formState.isSubmitting ? <CircularProgress size={20} /> : "Create"}
+            </Button>
+          </DialogActions>
+        </form>
+      </Dialog>
     </Box>
   );
 };

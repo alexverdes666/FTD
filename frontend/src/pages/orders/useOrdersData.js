@@ -22,6 +22,7 @@ const useOrdersData = ({ user, searchParams, setSearchParams, setNotification })
       createdYear: "",
       leadTypes: [],
       leadTypesOnly: false,
+      requesters: [],
     };
   });
 
@@ -72,6 +73,12 @@ const useOrdersData = ({ user, searchParams, setSearchParams, setNotification })
         if (key === "leadTypesOnly") {
           if (value && debouncedFilters.leadTypes?.length > 0) {
             params.append("leadTypesOnly", "true");
+          }
+          return;
+        }
+        if (key === "requesters") {
+          if (Array.isArray(value) && value.length > 0) {
+            params.append("requesters", value.join(","));
           }
           return;
         }
@@ -139,7 +146,7 @@ const useOrdersData = ({ user, searchParams, setSearchParams, setNotification })
   );
 
   const clearFilters = useCallback(() => {
-    setFilters({ search: "", emailSearch: "", startDate: "", endDate: "", createdMonth: "", createdYear: "", leadTypes: [], leadTypesOnly: false });
+    setFilters({ search: "", emailSearch: "", startDate: "", endDate: "", createdMonth: "", createdYear: "", leadTypes: [], leadTypesOnly: false, requesters: [] });
     setPage(0);
   }, []);
 
@@ -148,6 +155,7 @@ const useOrdersData = ({ user, searchParams, setSearchParams, setNotification })
       if (key === "search") return false;
       if (key === "leadTypes") return Array.isArray(value) && value.length > 0;
       if (key === "leadTypesOnly") return false; // counted with leadTypes
+      if (key === "requesters") return Array.isArray(value) && value.length > 0;
       return value !== "";
     }).length;
   }, [filters]);

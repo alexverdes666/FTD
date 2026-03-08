@@ -3210,11 +3210,18 @@ exports.getOrders = async (req, res, next) => {
         errors: errors.array(),
       });
     }
-    const { page = 1, limit = 10, startDate, endDate, search, emailSearch, createdMonth, createdYear, leadTypes, leadTypesOnly } = req.query;
+    const { page = 1, limit = 10, startDate, endDate, search, emailSearch, createdMonth, createdYear, leadTypes, leadTypesOnly, requesters: requestersParam } = req.query;
     let query = {};
     // Admin and lead_manager can see all orders; others see only their own
     if (req.user.role !== "admin" && req.user.role !== "lead_manager") {
       query.requester = req.user._id;
+    }
+    // Requester filter (admin/lead_manager only, since others already filter by own ID)
+    if (requestersParam && requestersParam.trim() && (req.user.role === "admin" || req.user.role === "lead_manager")) {
+      const requesterIds = requestersParam.split(",").map((id) => id.trim()).filter((id) => id.length > 0);
+      if (requesterIds.length > 0) {
+        query.requester = { $in: requesterIds };
+      }
     }
     if (startDate || endDate) {
       query.plannedDate = {};
@@ -8129,6 +8136,21 @@ exports.getOrderValidationResults = async (req, res, next) => {
     });
   } catch (error) {
     console.error("Error getting order validation results:", error);
+    next(error);
+  }
+};
+
+// Get distinct requesters from orders (for filter dropdown)
+exports.getOrderRequesters = async (req, res, next) => {
+  try {
+    const User = require("../models/User");
+    const requesterIds = await Order.distinct("requester");
+    const requesters = await User.find({ _id: { $in: requesterIds } })
+      .select("fullName")
+      .sort({ fullName: 1 })
+      .lean();
+    res.status(200).json({ success: true, data: requesters });
+  } catch (error) {
     next(error);
   }
 };

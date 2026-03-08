@@ -87,6 +87,17 @@ exports.createClientNetwork = async (req, res, next) => {
 
     const { name, description } = req.body;
 
+    // Case-insensitive duplicate check
+    const existing = await ClientNetwork.findOne({
+      name: { $regex: new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
+    });
+    if (existing) {
+      return res.status(400).json({
+        success: false,
+        message: "Client network name already exists",
+      });
+    }
+
     const clientNetwork = new ClientNetwork({
       name,
       description,
@@ -149,6 +160,20 @@ exports.updateClientNetwork = async (req, res, next) => {
       isActive: clientNetwork.isActive,
       dealType: clientNetwork.dealType,
     };
+
+    // Case-insensitive duplicate check on rename
+    if (name !== undefined && name.toLowerCase() !== clientNetwork.name.toLowerCase()) {
+      const existing = await ClientNetwork.findOne({
+        _id: { $ne: clientNetwork._id },
+        name: { $regex: new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
+      });
+      if (existing) {
+        return res.status(400).json({
+          success: false,
+          message: "Client network name already exists",
+        });
+      }
+    }
 
     // Apply updates
     if (name !== undefined) clientNetwork.name = name;
