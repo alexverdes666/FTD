@@ -104,7 +104,7 @@ const ApplyAgentFineDialog = ({
       <DialogTitle>
         <Box display="flex" alignItems="center" gap={1}>
           <GavelIcon color="warning" />
-          <Typography variant="h6">Apply Fine to Agent</Typography>
+          <Typography variant="h6">Apply Fine</Typography>
         </Box>
       </DialogTitle>
       <DialogContent>
@@ -120,7 +120,7 @@ const ApplyAgentFineDialog = ({
             <Grid item xs={12} sm={6}>
               <Box display="flex" alignItems="center" gap={1}>
                 <PersonIcon fontSize="small" color="primary" />
-                <Typography variant="subtitle2">Agent:</Typography>
+                <Typography variant="subtitle2">User:</Typography>
                 <Chip
                   label={agent?.fullName || 'Unknown Agent'}
                   size="small"

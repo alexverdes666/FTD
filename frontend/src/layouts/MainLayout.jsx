@@ -56,6 +56,7 @@ import {
   Handshake as CrmIcon,
   ReceiptLong as ReceiptLongIcon,
   Headset as HeadsetIcon,
+  Gavel as GavelIcon,
 } from "@mui/icons-material";
 import {
   logout,
@@ -374,6 +375,7 @@ const MainLayout = () => {
           ],
         },
         { text: "Refunds", icon: <RefundsIcon />, path: "/refunds" },
+        { text: "Fines", icon: <GavelIcon />, path: "/fines" },
         {
           text: "ERP",
           icon: <BusinessIcon />,
@@ -478,6 +480,11 @@ const MainLayout = () => {
               icon: <HistoryIcon />,
               path: "/payment-history",
             },
+            {
+              text: "Fines",
+              icon: <GavelIcon />,
+              path: "/fines",
+            },
           ],
         },
         {
@@ -580,6 +587,11 @@ const MainLayout = () => {
               icon: <HistoryIcon />,
               path: "/payment-history",
             },
+            {
+              text: "Fines",
+              icon: <GavelIcon />,
+              path: "/fines",
+            },
           ],
         },
         {
@@ -614,12 +626,14 @@ const MainLayout = () => {
             },
           ],
         },
+        { text: "Fines", icon: <GavelIcon />, path: "/fines" },
         { text: "Tickets", icon: <TicketIcon />, path: "/tickets" },
       ];
     } else if (user?.role === "refunds_manager") {
       return [
         ...commonItems,
         { text: "Refunds", icon: <RefundsIcon />, path: "/refunds" },
+        { text: "Fines", icon: <GavelIcon />, path: "/fines" },
         { text: "Tickets", icon: <TicketIcon />, path: "/tickets" },
       ];
     } else if (user?.role === "inventory_manager") {
@@ -638,11 +652,13 @@ const MainLayout = () => {
             },
           ],
         },
+        { text: "Fines", icon: <GavelIcon />, path: "/fines" },
         { text: "Tickets", icon: <TicketIcon />, path: "/tickets" },
       ];
     }
     return [
       ...commonItems,
+      { text: "Fines", icon: <GavelIcon />, path: "/fines" },
       { text: "Support Tickets", icon: <TicketIcon />, path: "/tickets" },
     ];
   };
@@ -684,6 +700,7 @@ const MainLayout = () => {
     "/verifications": "#66bb6a",
     "/lead-management": "#66bb6a",
     "/ami-agents": "#e91e63",
+    "/fines": "#ff9800",
   };
 
   // Flatten navigation items: expand all children into a single flat list

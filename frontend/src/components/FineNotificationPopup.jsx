@@ -32,11 +32,9 @@ const FineNotificationPopup = () => {
   const [fines, setFines] = useState([]);
   const [acknowledging, setAcknowledging] = useState(false);
 
-  const isAgent = user?.role === 'agent';
-
   // Fetch unacknowledged fines on mount
   const fetchUnacknowledgedFines = useCallback(async () => {
-    if (!isAuthenticated || !isAgent) return;
+    if (!isAuthenticated) return;
 
     try {
       const data = await getUnacknowledgedFines();
@@ -47,7 +45,7 @@ const FineNotificationPopup = () => {
     } catch (err) {
       console.error('Error fetching unacknowledged fines:', err);
     }
-  }, [isAuthenticated, isAgent]);
+  }, [isAuthenticated]);
 
   // Handle real-time fine_created event
   const handleFineCreated = useCallback((data) => {
@@ -64,7 +62,7 @@ const FineNotificationPopup = () => {
 
   // Set up Socket.IO listener and fetch initial data
   useEffect(() => {
-    if (!isAuthenticated || !isAgent) return;
+    if (!isAuthenticated) return;
 
     fetchUnacknowledgedFines();
 
@@ -80,7 +78,7 @@ const FineNotificationPopup = () => {
         socket.off('fine_created', handleFineCreated);
       }
     };
-  }, [isAuthenticated, isAgent, fetchUnacknowledgedFines, handleFineCreated]);
+  }, [isAuthenticated, fetchUnacknowledgedFines, handleFineCreated]);
 
   // Acknowledge the current fine and show next or close
   const handleAcknowledge = async (goToPayroll = false) => {
@@ -101,7 +99,7 @@ const FineNotificationPopup = () => {
       }
 
       if (goToPayroll) {
-        navigate('/payroll');
+        navigate('/fines');
       }
     } catch (err) {
       console.error('Error acknowledging fine:', err);
@@ -110,7 +108,7 @@ const FineNotificationPopup = () => {
     }
   };
 
-  if (!isAgent || fines.length === 0) {
+  if (fines.length === 0) {
     return null;
   }
 

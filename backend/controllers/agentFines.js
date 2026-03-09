@@ -18,7 +18,7 @@ const getAllAgentFines = async (req, res) => {
       if (month) matchQuery.fineMonth = month;
       
       fines = await AgentFine.find(matchQuery)
-        .populate("agent", "fullName email")
+        .populate("agent", "fullName email role")
         .populate("imposedBy", "fullName email")
         .populate("resolvedBy", "fullName email")
         .sort({ imposedDate: -1 });
@@ -27,9 +27,10 @@ const getAllAgentFines = async (req, res) => {
       fines = await AgentFine.getAllActiveFines();
     }
     
-    // If user is an agent, filter to show only their own fines
+    // Non-admin/manager users only see their own fines
     let filteredFines = fines;
-    if (req.user.role === 'agent') {
+    const isManagerOrAdmin = req.user.role === 'admin' || req.user.role === 'affiliate_manager';
+    if (!isManagerOrAdmin) {
       filteredFines = fines.filter(fine => fine.agent._id.toString() === req.user._id.toString());
     }
 
@@ -97,12 +98,20 @@ const createAgentFine = async (req, res) => {
     const { amount, reason, description, notes, fineMonth, fineYear, images, leadId, orderId } = req.body;
     const managerId = req.user.id;
 
-    // Validate that the agent exists
+    // Validate that the user exists
     const agent = await User.findById(agentId);
     if (!agent) {
       return res.status(404).json({
         success: false,
-        message: "Agent not found",
+        message: "User not found",
+      });
+    }
+
+    // Only admins can fine non-agent users (AMs, lead managers, etc.)
+    if (agent.role !== 'agent' && req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: "Only admins can apply fines to non-agent users",
       });
     }
 
@@ -197,7 +206,7 @@ const createAgentFine = async (req, res) => {
     }
 
     // Populate the response
-    await fine.populate("agent", "fullName email");
+    await fine.populate("agent", "fullName email role");
     await fine.populate("imposedBy", "fullName email");
     await fine.populate("images");
     if (fine.lead) {
@@ -312,7 +321,7 @@ const updateAgentFine = async (req, res) => {
     await fine.save();
 
     // Populate the response
-    await fine.populate("agent", "fullName email");
+    await fine.populate("agent", "fullName email role");
     await fine.populate("imposedBy", "fullName email");
     await fine.populate("images");
 
@@ -367,7 +376,7 @@ const resolveAgentFine = async (req, res) => {
     await fine.resolve(status, adminId, notes);
 
     // Populate the response
-    await fine.populate("agent", "fullName email");
+    await fine.populate("agent", "fullName email role");
     await fine.populate("imposedBy", "fullName email");
     await fine.populate("resolvedBy", "fullName email");
     await fine.populate("images");
@@ -485,7 +494,7 @@ const agentRespondToFine = async (req, res) => {
     }
 
     // Populate the response
-    await fine.populate("agent", "fullName email");
+    await fine.populate("agent", "fullName email role");
     await fine.populate("imposedBy", "fullName email");
     await fine.populate("images");
     await fine.populate("agentResponse.images");
@@ -566,7 +575,7 @@ const adminDecideFine = async (req, res) => {
     }
 
     // Populate the response
-    await fine.populate("agent", "fullName email");
+    await fine.populate("agent", "fullName email role");
     await fine.populate("imposedBy", "fullName email");
     await fine.populate("adminDecision.decidedBy", "fullName email");
     await fine.populate("images");
@@ -588,10 +597,12 @@ const adminDecideFine = async (req, res) => {
   }
 };
 
-// Get fines pending agent approval (for agent's own fines)
+// Get fines pending approval (for own fines if not admin/manager)
 const getPendingApprovalFines = async (req, res) => {
   try {
-    const agentId = req.user.role === "agent" ? req.user.id : null;
+    // Admins and managers see all pending fines, other users only see their own
+    const isManagerOrAdmin = req.user.role === "admin" || req.user.role === "affiliate_manager";
+    const agentId = isManagerOrAdmin ? null : req.user.id;
 
     const fines = await AgentFine.getPendingApprovalFines(agentId);
 
