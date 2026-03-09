@@ -173,7 +173,7 @@ agentFineSchema.statics.getAgentFines = function (
   }
 
   return this.find(query)
-    .populate("agent", "fullName email")
+    .populate("agent", "fullName email role")
     .populate("imposedBy", "fullName email")
     .populate("resolvedBy", "fullName email")
     .populate("images")
@@ -187,7 +187,7 @@ agentFineSchema.statics.getAgentFines = function (
 // Static method to get all active fines
 agentFineSchema.statics.getAllActiveFines = function () {
   return this.find({ isActive: true })
-    .populate("agent", "fullName email")
+    .populate("agent", "fullName email role")
     .populate("imposedBy", "fullName email")
     .populate("resolvedBy", "fullName email")
     .populate("images")
@@ -268,7 +268,7 @@ agentFineSchema.statics.getMonthlyFines = function (agentId, year, month) {
     status: { $in: ["approved", "admin_approved"] },
     isActive: true,
   })
-    .populate("agent", "fullName email")
+    .populate("agent", "fullName email role")
     .populate("imposedBy", "fullName email")
     .populate("resolvedBy", "fullName email")
     .populate("images")
@@ -305,7 +305,7 @@ agentFineSchema.statics.getPendingApprovalFines = function (agentId = null) {
     query.agent = agentId;
   }
   return this.find(query)
-    .populate("agent", "fullName email")
+    .populate("agent", "fullName email role")
     .populate("imposedBy", "fullName email")
     .populate("images")
     .populate("agentResponse.images")
@@ -320,7 +320,7 @@ agentFineSchema.statics.getDisputedFines = function () {
     status: "disputed",
     isActive: true,
   })
-    .populate("agent", "fullName email")
+    .populate("agent", "fullName email role")
     .populate("imposedBy", "fullName email")
     .populate("images")
     .populate("agentResponse.images")
@@ -335,7 +335,7 @@ agentFineSchema.statics.getFinesByLeadId = function (leadId) {
     lead: leadId,
     isActive: true,
   })
-    .populate("agent", "fullName email")
+    .populate("agent", "fullName email role")
     .populate("imposedBy", "fullName email")
     .populate("images")
     .populate("agentResponse.images")

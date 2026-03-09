@@ -55,12 +55,12 @@ const FineDetailDialog = ({ open, onClose, fine, onFineUpdated }) => {
 
   if (!fine) return null;
 
-  const isAgent = user?.role === 'agent';
   const isAdmin = user?.role === 'admin';
   const isManager = ['admin', 'affiliate_manager'].includes(user?.role);
   const isOwnFine = fine.agent?._id === user?._id;
 
-  const canAgentRespond = isAgent && isOwnFine && fine.status === 'pending_approval';
+  // Any user who received a fine can respond to it (not just agents)
+  const canAgentRespond = isOwnFine && fine.status === 'pending_approval';
   const canAdminDecide = isAdmin && fine.status === 'disputed';
 
   const getStatusColor = (status) => {
@@ -256,7 +256,7 @@ const FineDetailDialog = ({ open, onClose, fine, onFineUpdated }) => {
           <Grid container spacing={2}>
             {/* Basic Info */}
             <Grid item xs={12} md={6}>
-              <Typography variant="subtitle2" color="text.secondary">Agent</Typography>
+              <Typography variant="subtitle2" color="text.secondary">User</Typography>
               <Typography variant="body1" gutterBottom>
                 {fine.agent?.fullName || 'N/A'}
               </Typography>

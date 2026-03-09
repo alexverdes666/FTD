@@ -42,6 +42,7 @@ import {
   updateGlobalFixedExpense,
   deleteGlobalFixedExpense,
 } from "../services/amExpenses";
+import { getAgentFines } from "../services/agentFines";
 
 // --- Fixed Expense Dialog (reused for both per-AM and global) ---
 const FixedExpenseDialog = ({ open, onClose, onSave, expense, title }) => {
@@ -147,6 +148,7 @@ const AMDetailRow = ({ row, month, year, onFixedExpenseChange, globalFixedTotal 
   const [open, setOpen] = useState(false);
   const [detail, setDetail] = useState(null);
   const [fixedExpensesList, setFixedExpensesList] = useState([]);
+  const [amFines, setAmFines] = useState([]);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState(null);
@@ -156,12 +158,14 @@ const AMDetailRow = ({ row, month, year, onFixedExpenseChange, globalFixedTotal 
     if (!open) return;
     setLoadingDetail(true);
     try {
-      const [expenseRes, fixedRes] = await Promise.all([
+      const [expenseRes, fixedRes, finesRes] = await Promise.all([
         getCalculatedExpensesForAM(row.managerId, { month, year }),
         getFixedExpenses(row.managerId, { month, year }),
+        getAgentFines(row.managerId, true, year, month).catch(() => []),
       ]);
       setDetail(expenseRes.data);
       setFixedExpensesList(fixedRes.data);
+      setAmFines(finesRes || []);
       setRateOverrides({});
     } catch (err) {
       console.error("Error loading AM detail:", err);
@@ -238,6 +242,10 @@ const AMDetailRow = ({ row, month, year, onFixedExpenseChange, globalFixedTotal 
   }, [detail, rateOverrides]);
 
   const fixedSubtotal = fixedExpensesList.reduce((sum, fe) => sum + fe.amount, 0);
+
+  // Only active fines count (approved or admin_approved)
+  const activeFines = amFines.filter(f => ['approved', 'admin_approved'].includes(f.status));
+  const finesTotal = activeFines.reduce((sum, f) => sum + f.amount, 0);
 
   const getRateValue = (key, defaultRate) => {
     return rateOverrides[key] !== undefined ? rateOverrides[key] : defaultRate;
@@ -468,6 +476,57 @@ const AMDetailRow = ({ row, month, year, onFixedExpenseChange, globalFixedTotal 
                     </Table>
                   </TableContainer>
 
+                  {/* Fines */}
+                  {amFines.length > 0 && (
+                    <>
+                      <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: "bold", mt: 2 }}>
+                        Fines
+                      </Typography>
+                      <TableContainer component={Paper} variant="outlined" sx={{ mb: 2 }}>
+                        <Table size="small">
+                          <TableHead>
+                            <TableRow>
+                              <TableCell>Reason</TableCell>
+                              <TableCell align="right">Amount</TableCell>
+                              <TableCell>Status</TableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {amFines.map((fine) => (
+                              <TableRow key={fine._id}>
+                                <TableCell>{fine.reason}</TableCell>
+                                <TableCell align="right" sx={{ color: ['approved', 'admin_approved'].includes(fine.status) ? 'error.main' : 'text.secondary' }}>
+                                  {formatCurrency(fine.amount)}
+                                </TableCell>
+                                <TableCell>
+                                  <Typography variant="caption" sx={{
+                                    color: ['approved', 'admin_approved'].includes(fine.status) ? 'error.main' :
+                                           fine.status === 'admin_rejected' ? 'success.main' : 'text.secondary'
+                                  }}>
+                                    {fine.status === 'pending_approval' ? 'Pending' :
+                                     fine.status === 'approved' ? 'Active' :
+                                     fine.status === 'disputed' ? 'Disputed' :
+                                     fine.status === 'admin_approved' ? 'Active' :
+                                     fine.status === 'admin_rejected' ? 'Dropped' : fine.status}
+                                  </Typography>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                            {activeFines.length > 0 && (
+                              <TableRow>
+                                <TableCell sx={{ fontWeight: "bold" }}>Fines Total</TableCell>
+                                <TableCell align="right" sx={{ fontWeight: "bold", color: "error.main" }}>
+                                  {formatCurrency(finesTotal)}
+                                </TableCell>
+                                <TableCell />
+                              </TableRow>
+                            )}
+                          </TableBody>
+                        </Table>
+                      </TableContainer>
+                    </>
+                  )}
+
                   {/* Grand Total */}
                   <Box
                     sx={{
@@ -481,7 +540,7 @@ const AMDetailRow = ({ row, month, year, onFixedExpenseChange, globalFixedTotal 
                   >
                     <Typography variant="h6">
                       Grand Total:{" "}
-                      {formatCurrency(autoSubtotal + fixedSubtotal + globalFixedTotal)}
+                      {formatCurrency(autoSubtotal + fixedSubtotal + globalFixedTotal + finesTotal)}
                     </Typography>
                   </Box>
                 </>

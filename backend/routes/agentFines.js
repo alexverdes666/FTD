@@ -59,7 +59,7 @@ router.put("/:fineId", isManager, updateAgentFine);
 // Acknowledge a fine notification (dismiss popup)
 router.patch("/:fineId/acknowledge", acknowledgeFine);
 
-// Agent response to fine (approve or dispute) - agent only
+// User response to fine (approve or dispute) - fine recipient only
 router.patch("/:fineId/agent-response", agentRespondToFine);
 
 // Admin decision on disputed fine (admin only)
