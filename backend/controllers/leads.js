@@ -3995,6 +3995,16 @@ exports.assignLeadsToAgent = async (req, res, next) => {
             }
           }
 
+          // Sync unassignment to DepositCall record for this lead+order
+          try {
+            const DepositCall = require("../models/DepositCall");
+            const dcFilter = { leadId: lead._id };
+            if (orderId) dcFilter.orderId = orderId;
+            await DepositCall.updateMany(dcFilter, { $set: { assignedAgent: null } });
+          } catch (dcErr) {
+            console.error("Error syncing agent unassignment to deposit calls:", dcErr);
+          }
+
           results.success.push({
             leadId,
             leadType: lead.leadType,
@@ -4076,6 +4086,16 @@ exports.assignLeadsToAgent = async (req, res, next) => {
               });
               await order.save();
             }
+          }
+
+          // Sync agent assignment to DepositCall record for this lead+order
+          try {
+            const DepositCall = require("../models/DepositCall");
+            const dcFilter = { leadId: lead._id };
+            if (orderId) dcFilter.orderId = orderId;
+            await DepositCall.updateMany(dcFilter, { $set: { assignedAgent: agent._id } });
+          } catch (dcErr) {
+            console.error("Error syncing agent to deposit calls:", dcErr);
           }
 
           const successData = {
@@ -4640,8 +4660,11 @@ exports.confirmDeposit = async (req, res, next) => {
       });
     }
 
+    // Skip phone validation for admin-combined calls (their source/dest are synthetic)
+    const isAdminCombinedCall = selectedCall.cdrCallId && selectedCall.cdrCallId.startsWith("admin-combined-");
+
     // Validate that the selected call's destination matches the lead's phone
-    if (selectedCall.destinationNumber && selectedCall.destinationNumber !== "unknown" && lead.newPhone) {
+    if (!isAdminCombinedCall && selectedCall.destinationNumber && selectedCall.destinationNumber !== "unknown" && lead.newPhone) {
       const cleanDst = selectedCall.destinationNumber.replace(/[\s\-\(\)\+]/g, "");
       const cleanLeadPhone = lead.newPhone.replace(/[\s\-\(\)\+]/g, "");
       const dstSuffix = cleanDst.length >= 7 ? cleanDst.slice(-10) : cleanDst;
@@ -4802,6 +4825,30 @@ exports.confirmDeposit = async (req, res, next) => {
       existingCdrDecl.isActive = false;
       await existingCdrDecl.save();
       console.log(`Soft-deleted existing declaration ${existingCdrDecl._id} for CDR call override during deposit confirmation`);
+
+      // Clear admin declaration reference on the DepositCall if it was admin-declared
+      if (existingCdrDecl.isAdminDeclared && existingCdrDecl.depositCallId) {
+        try {
+          const adminDC = await DepositCall.findById(existingCdrDecl.depositCallId);
+          if (adminDC) {
+            if (existingCdrDecl.callType === "deposit") {
+              adminDC.depositAdminCallDeclaration = null;
+            } else {
+              const CALL_TYPE_TO_NUM = {
+                first_call: 1, second_call: 2, third_call: 3, fourth_call: 4, fifth_call: 5,
+                sixth_call: 6, seventh_call: 7, eighth_call: 8, ninth_call: 9, tenth_call: 10,
+              };
+              const slotNum = CALL_TYPE_TO_NUM[existingCdrDecl.callType];
+              if (slotNum) {
+                adminDC[`call${slotNum}`].adminCallDeclaration = null;
+              }
+            }
+            await adminDC.save();
+          }
+        } catch (refErr) {
+          console.error("Error clearing admin declaration reference on DepositCall:", refErr);
+        }
+      }
     }
 
     // Check if a deposit declaration already exists for this lead+order

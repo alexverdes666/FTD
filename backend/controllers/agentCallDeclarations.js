@@ -279,6 +279,61 @@ const fetchAgentCDRCalls = async (req, res) => {
         };
       });
 
+    // Inject admin-combined deposit calls (for AM deposit confirmation flow)
+    // Look at DepositCall records that have admin-declared short calls in the deposit slot
+    if (showDeclared && (leadPhone || leadEmail)) {
+      const depositCallsWithAdminCalls = await DepositCall.find({
+        assignedAgent: agentId,
+        "depositAdminCalls.0": { $exists: true },
+        isDeleted: { $ne: true },
+        depositStatus: { $ne: "confirmed" },
+      })
+        .select("depositAdminCalls depositAdminCallDeclaration ftdPhone orderId leadId")
+        .lean();
+
+      for (const dc of depositCallsWithAdminCalls) {
+        const cdrCallId = `admin-combined-${dc._id}-deposit`;
+
+        // Skip if already in enrichedCalls
+        if (enrichedCalls.some((c) => c.cdrCallId === cdrCallId)) continue;
+
+        const totalDuration = dc.depositAdminCalls.reduce(
+          (sum, c) => sum + (c.callDuration || 0),
+          0
+        );
+        const earliestDate = new Date(
+          Math.min(...dc.depositAdminCalls.map((c) => new Date(c.callDate).getTime()))
+        );
+        const firstCall = dc.depositAdminCalls[0];
+
+        // Check if a declaration already exists for this combined call
+        let declStatus = null;
+        if (dc.depositAdminCallDeclaration) {
+          const existingDecl = await AgentCallDeclaration.findById(dc.depositAdminCallDeclaration)
+            .select("status")
+            .lean();
+          if (existingDecl?.isActive !== false) declStatus = existingDecl?.status;
+        }
+
+        enrichedCalls.unshift({
+          cdrCallId,
+          callDate: earliestDate,
+          callDuration: totalDuration,
+          sourceNumber: firstCall?.sourceNumber || "admin-combined",
+          destinationNumber: dc.ftdPhone || "unknown",
+          lineNumber: "",
+          email: "",
+          recordFile: "",
+          formattedDuration: cdrService.formatDuration(totalDuration),
+          isAdminCombined: true,
+          adminCombinedCallCount: dc.depositAdminCalls.length,
+          matchesLead: true,
+          declarationStatus: declStatus,
+          declaredCallType: "deposit",
+        });
+      }
+    }
+
     // Filter by lead phone/email when provided (used during deposit confirmation)
     // When includeDeclared is true, sort matching calls first instead of filtering
     if (leadPhone || leadEmail) {
@@ -301,6 +356,8 @@ const fetchAgentCDRCalls = async (req, res) => {
       };
 
       const matchesLead = (call) => {
+        // Admin-combined calls are always lead-matched (they were declared for this lead)
+        if (call.isAdminCombined) return true;
         // Try phone match against lineNumber, email, and destinationNumber
         // CDR systems store the dialed number in different fields depending on the setup
         // lineNumber is what agents see as "Phone Number" in the call bonuses table
@@ -319,7 +376,7 @@ const fetchAgentCDRCalls = async (req, res) => {
       if (showDeclared) {
         // When showing all calls, sort lead-matching calls first instead of filtering
         enrichedCalls.forEach((call) => {
-          call.matchesLead = matchesLead(call);
+          if (!call.matchesLead) call.matchesLead = matchesLead(call);
         });
         enrichedCalls.sort((a, b) => (b.matchesLead ? 1 : 0) - (a.matchesLead ? 1 : 0));
       } else {

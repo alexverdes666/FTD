@@ -16,11 +16,11 @@ const agentCallDeclarationSchema = new mongoose.Schema(
       type: Date,
       required: true,
     },
-    // Duration in seconds, minimum 900 (15 minutes)
+    // Duration in seconds (controller-level validation enforces 900+ for agent declarations)
     callDuration: {
       type: Number,
       required: true,
-      min: 900,
+      min: 0,
     },
     sourceNumber: {
       type: String,
@@ -102,6 +102,11 @@ const agentCallDeclarationSchema = new mongoose.Schema(
     isActive: {
       type: Boolean,
       default: true,
+    },
+    // Flag for admin-declared combined short calls (< 15 min each, combined into one declaration)
+    isAdminDeclared: {
+      type: Boolean,
+      default: false,
     },
     // The affiliate manager this call declaration is assigned to
     affiliateManager: {

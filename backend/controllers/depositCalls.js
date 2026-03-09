@@ -6,6 +6,11 @@ const ClientBroker = require("../models/ClientBroker");
 const AgentCallDeclaration = require("../models/AgentCallDeclaration");
 const mongoose = require("mongoose");
 const { ObjectId } = mongoose.Types;
+const cdrService = require("../services/cdrService");
+const {
+  addCallExpenseToAffiliateManager,
+  removeCallExpenseFromAffiliateManager,
+} = require("./agentCallDeclarations");
 
 // Map call types to call slot numbers on DepositCall model (same as in agentCallDeclarations controller)
 const CALL_TYPE_TO_CALL_NUMBER = {
@@ -19,6 +24,21 @@ const CALL_TYPE_TO_CALL_NUMBER = {
   eighth_call: 8,
   ninth_call: 9,
   tenth_call: 10,
+};
+
+// Reverse mapping: call slot → call type
+const CALL_SLOT_TO_CALL_TYPE = {
+  deposit: "deposit",
+  1: "first_call",
+  2: "second_call",
+  3: "third_call",
+  4: "fourth_call",
+  5: "fifth_call",
+  6: "sixth_call",
+  7: "seventh_call",
+  8: "eighth_call",
+  9: "ninth_call",
+  10: "tenth_call",
 };
 
 // Get all deposit calls with filters
@@ -1490,6 +1510,21 @@ exports.syncOrderedFTDs = async (req, res, next) => {
             await existing.save();
             markedDeleted++;
           } else {
+            // Sync assignedAgent if deposit call is missing it
+            // Prefer per-order agent from leadsMetadata, fall back to lead doc
+            if (!existing.assignedAgent) {
+              const perOrderAgent = meta.assignedAgent || null;
+              if (perOrderAgent) {
+                existing.assignedAgent = perOrderAgent;
+                await existing.save();
+              } else {
+                const leadDoc = await Lead.findById(leadId).select("assignedAgent");
+                if (leadDoc?.assignedAgent) {
+                  existing.assignedAgent = leadDoc.assignedAgent;
+                  await existing.save();
+                }
+              }
+            }
             skipped++;
           }
           continue;
@@ -1640,7 +1675,7 @@ exports.syncApprovedDeclarations = async (req, res, next) => {
 };
 
 // Admin-only: Add short calls (< 15 min) to a call slot to fill blank spaces
-// These calls have no bonus and are displayed with a different color
+// Creates an auto-approved AgentCallDeclaration with the corresponding bonus and AM expense
 exports.adminDeclareCalls = async (req, res, next) => {
   try {
     if (req.user.role !== "admin") {
@@ -1689,11 +1724,13 @@ exports.adminDeclareCalls = async (req, res, next) => {
       addedAt: new Date(),
     }));
 
+    // Determine call slot type and validate
+    let num = null;
     if (callSlot === "deposit") {
       if (!depositCall.depositAdminCalls) depositCall.depositAdminCalls = [];
       depositCall.depositAdminCalls.push(...adminCalls);
     } else {
-      const num = parseInt(callSlot);
+      num = parseInt(callSlot);
       if (isNaN(num) || num < 1 || num > 10) {
         return res.status(400).json({
           success: false,
@@ -1703,6 +1740,79 @@ exports.adminDeclareCalls = async (req, res, next) => {
       const field = `call${num}`;
       if (!depositCall[field].adminCalls) depositCall[field].adminCalls = [];
       depositCall[field].adminCalls.push(...adminCalls);
+    }
+
+    // --- Create AgentCallDeclaration with bonus + AM expense ---
+    const callType = CALL_SLOT_TO_CALL_TYPE[callSlot === "deposit" ? "deposit" : num];
+
+    if (depositCall.assignedAgent && depositCall.accountManager && callType) {
+      const cdrCallId = `admin-combined-${depositCall._id}-${callSlot}`;
+
+      // Check for existing active declaration (idempotency guard)
+      const existingDecl = await AgentCallDeclaration.findOne({
+        cdrCallId,
+        isActive: true,
+      });
+
+      if (!existingDecl) {
+        // Calculate combined call properties
+        const totalDuration = calls.reduce(
+          (sum, c) => sum + (c.callDuration || 0),
+          0
+        );
+        const earliestDate = new Date(
+          Math.min(...calls.map((c) => new Date(c.callDate).getTime()))
+        );
+        const bonusData = cdrService.calculateBonus(callType, totalDuration);
+
+        const declaration = await AgentCallDeclaration.create({
+          agent: depositCall.assignedAgent,
+          cdrCallId,
+          callDate: earliestDate,
+          callDuration: totalDuration,
+          sourceNumber: calls[0]?.sourceNumber || "admin-combined",
+          destinationNumber:
+            calls[0]?.destinationNumber || depositCall.ftdPhone || "unknown",
+          callCategory: "ftd",
+          callType,
+          description: `Admin-declared combined short calls for ${callType.replace(/_/g, " ")} slot`,
+          baseBonus: bonusData.baseBonus,
+          hourlyBonus: bonusData.hourlyBonus,
+          totalBonus: bonusData.totalBonus,
+          status: "approved",
+          reviewedBy: req.user.id,
+          reviewedAt: new Date(),
+          reviewNotes: "Auto-approved: admin-declared short calls",
+          declarationMonth: earliestDate.getMonth() + 1,
+          declarationYear: earliestDate.getFullYear(),
+          affiliateManager: depositCall.accountManager,
+          lead: depositCall.leadId,
+          orderId: depositCall.orderId || null,
+          depositCallId: depositCall._id,
+          isAdminDeclared: true,
+        });
+
+        // Add expense to affiliate manager's table
+        try {
+          await addCallExpenseToAffiliateManager(declaration);
+        } catch (expenseError) {
+          console.error(
+            "Error adding admin-declared call expense to AM:",
+            expenseError
+          );
+        }
+
+        // Store declaration reference on the DepositCall
+        if (callSlot === "deposit") {
+          depositCall.depositAdminCallDeclaration = declaration._id;
+        } else {
+          depositCall[`call${num}`].adminCallDeclaration = declaration._id;
+        }
+      }
+    } else {
+      console.warn(
+        `Skipping declaration for deposit call ${id}: missing assignedAgent or accountManager`
+      );
     }
 
     await depositCall.save();
@@ -1717,6 +1827,7 @@ exports.adminDeclareCalls = async (req, res, next) => {
 };
 
 // Admin-only: Remove all admin-added calls from a call slot
+// Reverses the associated AgentCallDeclaration and AM expense
 exports.adminRemoveCalls = async (req, res, next) => {
   try {
     if (req.user.role !== "admin") {
@@ -1744,8 +1855,12 @@ exports.adminRemoveCalls = async (req, res, next) => {
       });
     }
 
+    // Find and reverse the associated declaration
+    let declarationRef = null;
     if (callSlot === "deposit") {
+      declarationRef = depositCall.depositAdminCallDeclaration;
       depositCall.depositAdminCalls = [];
+      depositCall.depositAdminCallDeclaration = null;
     } else {
       const num = parseInt(callSlot);
       if (isNaN(num) || num < 1 || num > 10) {
@@ -1754,7 +1869,31 @@ exports.adminRemoveCalls = async (req, res, next) => {
           message: 'callSlot must be "deposit" or a number 1-10',
         });
       }
+      declarationRef = depositCall[`call${num}`].adminCallDeclaration;
       depositCall[`call${num}`].adminCalls = [];
+      depositCall[`call${num}`].adminCallDeclaration = null;
+    }
+
+    // Reverse the AgentCallDeclaration and AM expense
+    if (declarationRef) {
+      const declaration = await AgentCallDeclaration.findById(declarationRef);
+      if (declaration && declaration.isActive) {
+        if (declaration.status === "approved") {
+          try {
+            await removeCallExpenseFromAffiliateManager(declaration);
+          } catch (expenseErr) {
+            console.error(
+              "Error reversing AM expense during admin call removal:",
+              expenseErr
+            );
+          }
+        }
+        declaration.isActive = false;
+        await declaration.save();
+        console.log(
+          `Reversed admin declaration ${declaration._id} for deposit call ${id} slot ${callSlot}`
+        );
+      }
     }
 
     await depositCall.save();

@@ -322,7 +322,15 @@ export default function PspDepositDialog({
                                 color={call.callDuration >= 3600 ? "error" : call.callDuration >= 1800 ? "warning" : "default"}
                                 variant="outlined"
                               />
-                              {call.declarationStatus === "pending" && (
+                              {call.isAdminCombined && (
+                                <Chip
+                                  label={`Admin Combined${call.adminCombinedCallCount ? ` (${call.adminCombinedCallCount} calls)` : ""}`}
+                                  size="small"
+                                  color="info"
+                                  variant="filled"
+                                />
+                              )}
+                              {!call.isAdminCombined && call.declarationStatus === "pending" && (
                                 <Chip
                                   label={`Pending: ${(call.declaredCallType || "").replace(/_/g, " ")}`}
                                   size="small"
@@ -330,7 +338,7 @@ export default function PspDepositDialog({
                                   variant="filled"
                                 />
                               )}
-                              {call.declarationStatus === "approved" && (
+                              {!call.isAdminCombined && call.declarationStatus === "approved" && (
                                 <Tooltip title="Selecting this will reset the existing declaration">
                                   <Chip
                                     label={`Declared: ${(call.declaredCallType || "").replace(/_/g, " ")}`}

@@ -77,7 +77,13 @@ const callSlotSchema = new Schema({
     default: ''
   },
   // Admin-added short calls (< 15 min, no bonus)
-  adminCalls: [adminCallSchema]
+  adminCalls: [adminCallSchema],
+  // Reference to the auto-approved AgentCallDeclaration created for admin-declared calls
+  adminCallDeclaration: {
+    type: Schema.Types.ObjectId,
+    ref: 'AgentCallDeclaration',
+    default: null
+  }
 }, { _id: false });
 
 const depositCallSchema = new Schema({
@@ -177,8 +183,14 @@ const depositCallSchema = new Schema({
     enum: ['pending', 'confirmed'],
     default: 'pending'
   },
-  // Admin-added short calls for the deposit call column (< 15 min, no bonus)
+  // Admin-added short calls for the deposit call column (< 15 min)
   depositAdminCalls: [adminCallSchema],
+  // Reference to the auto-approved AgentCallDeclaration created for admin-declared deposit calls
+  depositAdminCallDeclaration: {
+    type: Schema.Types.ObjectId,
+    ref: 'AgentCallDeclaration',
+    default: null
+  },
   // Track if the lead was deleted/removed from the order (show with strikethrough)
   isDeleted: {
     type: Boolean,
