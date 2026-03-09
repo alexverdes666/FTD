@@ -262,6 +262,11 @@ class ChatService {
     this.socket.on('notification_deleted', (data) => {
       this.emit('notification:deleted', data);
     });
+
+    // Fine events (real-time fine popup for agents)
+    this.socket.on('fine_created', (data) => {
+      this.emit('fine_created', data);
+    });
   }
 
   // Disconnect from chat

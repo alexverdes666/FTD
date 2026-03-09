@@ -2,6 +2,7 @@ const FineImage = require('../models/FineImage');
 const AgentFine = require('../models/AgentFine');
 const sharp = require('sharp');
 const crypto = require('crypto');
+const fs = require('fs');
 
 // Image processing configuration
 const IMAGE_CONFIG = {
@@ -69,8 +70,13 @@ exports.uploadFineImage = async (req, res, next) => {
       });
     }
 
+    // Read file data from temp file if express-fileupload useTempFiles is enabled
+    const imageData = imageFile.tempFilePath
+      ? fs.readFileSync(imageFile.tempFilePath)
+      : imageFile.data;
+
     // Generate hash for deduplication
-    const imageHash = crypto.createHash('sha256').update(imageFile.data).digest('hex');
+    const imageHash = crypto.createHash('sha256').update(imageData).digest('hex');
 
     // Check for duplicate
     const existingImage = await FineImage.findDuplicate(imageHash, req.user._id);
@@ -85,7 +91,7 @@ exports.uploadFineImage = async (req, res, next) => {
     }
 
     // Process image with Sharp
-    let sharpInstance = sharp(imageFile.data);
+    let sharpInstance = sharp(imageData);
     const metadata = await sharpInstance.metadata();
 
     // Determine if resizing is needed

@@ -6,6 +6,7 @@ const sharp = require("sharp");
 const crypto = require("crypto");
 const path = require("path");
 const fs = require("fs").promises;
+const fsSync = require("fs");
 
 /**
  * Get all Card Issuers with pagination and filtering
@@ -300,8 +301,13 @@ exports.uploadLogo = async (req, res, next) => {
       });
     }
 
+    // Read file data from temp file if express-fileupload useTempFiles is enabled
+    const imageData = imageFile.tempFilePath
+      ? fsSync.readFileSync(imageFile.tempFilePath)
+      : imageFile.data;
+
     // Generate unique filename
-    const hash = crypto.createHash("sha256").update(imageFile.data).digest("hex").substring(0, 16);
+    const hash = crypto.createHash("sha256").update(imageData).digest("hex").substring(0, 16);
     const ext = imageFile.mimetype === "image/svg+xml" ? ".svg" : path.extname(imageFile.name) || ".png";
     const filename = `card-issuer-${hash}${ext}`;
 
@@ -312,11 +318,11 @@ exports.uploadLogo = async (req, res, next) => {
     const filePath = path.join(uploadsDir, filename);
 
     // Process image (skip for SVG)
-    let processedBuffer = imageFile.data;
+    let processedBuffer = imageData;
     if (imageFile.mimetype !== "image/svg+xml") {
       try {
         // Resize if larger than 256x256 for logos
-        processedBuffer = await sharp(imageFile.data)
+        processedBuffer = await sharp(imageData)
           .resize(256, 256, {
             fit: "inside",
             withoutEnlargement: true,
@@ -325,7 +331,7 @@ exports.uploadLogo = async (req, res, next) => {
       } catch (sharpError) {
         console.error("Sharp processing error:", sharpError);
         // Fall back to original if sharp fails
-        processedBuffer = imageFile.data;
+        processedBuffer = imageData;
       }
     }
 

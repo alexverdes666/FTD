@@ -67,16 +67,9 @@ const FineNotificationPopup = () => {
     fetchUnacknowledgedFines();
 
     chatService.on('fine_created', handleFineCreated);
-    const socket = chatService.socket;
-    if (socket) {
-      socket.on('fine_created', handleFineCreated);
-    }
 
     return () => {
       chatService.off('fine_created', handleFineCreated);
-      if (socket) {
-        socket.off('fine_created', handleFineCreated);
-      }
     };
   }, [isAuthenticated, fetchUnacknowledgedFines, handleFineCreated]);
 
