@@ -284,6 +284,56 @@ router.put(
   }
 );
 
+// Get user's deposit calls column preferences
+router.get("/preferences/deposit-calls-columns", protect, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id).select("preferences.depositCallsColumns");
+    const columns = user?.preferences?.depositCallsColumns || [];
+    res.json({ success: true, data: { columns } });
+  } catch (error) {
+    console.error("Get deposit calls columns error:", error);
+    res.status(500).json({ success: false, message: "Failed to get deposit calls columns" });
+  }
+});
+
+// Save user's deposit calls column preferences
+router.put(
+  "/preferences/deposit-calls-columns",
+  [
+    protect,
+    body("columns")
+      .isArray()
+      .withMessage("columns must be an array"),
+    body("columns.*")
+      .isString()
+      .withMessage("Each item in columns must be a string"),
+  ],
+  async (req, res) => {
+    try {
+      const { columns } = req.body;
+
+      await User.findByIdAndUpdate(
+        req.user._id,
+        { $set: { "preferences.depositCallsColumns": columns } },
+        { new: true, runValidators: true }
+      );
+
+      res.json({
+        success: true,
+        message: "Deposit calls columns saved",
+        data: { columns }
+      });
+    } catch (error) {
+      console.error("Save deposit calls columns error:", error);
+      res.status(500).json({
+        success: false,
+        message: "Failed to save deposit calls columns",
+        error: error.message
+      });
+    }
+  }
+);
+
 router.get("/:id", [protect, ownerOrAdmin], getUserById);
 router.post(
   "/",

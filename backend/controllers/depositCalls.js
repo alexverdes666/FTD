@@ -248,18 +248,22 @@ exports.getDepositCalls = async (req, res, next) => {
       await DepositCall.populate(depositCalls, [
         {
           path: "leadId",
-          select: "firstName lastName newEmail newPhone country clientNetwork ourNetwork clientNetworkHistory ourNetworkHistory",
+          select: "firstName lastName newEmail newPhone country clientNetwork ourNetwork clientNetworkHistory ourNetworkHistory assignedClientBrokers clientBrokerHistory",
           populate: [
             { path: "clientNetworkHistory.clientNetwork", select: "name" },
             { path: "ourNetworkHistory.ourNetwork", select: "name" },
+            { path: "assignedClientBrokers", select: "name" },
+            { path: "clientBrokerHistory.clientBroker", select: "name" },
           ],
         },
         {
           path: "orderId",
-          select: "createdAt plannedDate status selectedClientNetwork selectedOurNetwork",
+          select: "createdAt plannedDate status selectedClientNetwork selectedOurNetwork leadsMetadata",
           populate: [
             { path: "selectedClientNetwork", select: "name" },
             { path: "selectedOurNetwork", select: "name" },
+            { path: "leadsMetadata.depositPSP", select: "name" },
+            { path: "leadsMetadata.depositCardIssuer", select: "name" },
           ],
         },
         { path: "clientBrokerId", select: "name domain" },
@@ -284,18 +288,22 @@ exports.getDepositCalls = async (req, res, next) => {
       depositCalls = await DepositCall.find(query)
         .populate({
           path: "leadId",
-          select: "firstName lastName newEmail newPhone country clientNetwork ourNetwork clientNetworkHistory ourNetworkHistory",
+          select: "firstName lastName newEmail newPhone country clientNetwork ourNetwork clientNetworkHistory ourNetworkHistory assignedClientBrokers clientBrokerHistory",
           populate: [
             { path: "clientNetworkHistory.clientNetwork", select: "name" },
             { path: "ourNetworkHistory.ourNetwork", select: "name" },
+            { path: "assignedClientBrokers", select: "name" },
+            { path: "clientBrokerHistory.clientBroker", select: "name" },
           ],
         })
         .populate({
           path: "orderId",
-          select: "createdAt plannedDate status selectedClientNetwork selectedOurNetwork",
+          select: "createdAt plannedDate status selectedClientNetwork selectedOurNetwork leadsMetadata",
           populate: [
             { path: "selectedClientNetwork", select: "name" },
             { path: "selectedOurNetwork", select: "name" },
+            { path: "leadsMetadata.depositPSP", select: "name" },
+            { path: "leadsMetadata.depositCardIssuer", select: "name" },
           ],
         })
         .populate("clientBrokerId", "name domain")
@@ -1510,20 +1518,34 @@ exports.syncOrderedFTDs = async (req, res, next) => {
             await existing.save();
             markedDeleted++;
           } else {
-            // Sync assignedAgent if deposit call is missing it
-            // Prefer per-order agent from leadsMetadata, fall back to lead doc
-            if (!existing.assignedAgent) {
-              const perOrderAgent = meta.assignedAgent || null;
-              if (perOrderAgent) {
-                existing.assignedAgent = perOrderAgent;
-                await existing.save();
-              } else {
-                const leadDoc = await Lead.findById(leadId).select("assignedAgent");
-                if (leadDoc?.assignedAgent) {
-                  existing.assignedAgent = leadDoc.assignedAgent;
-                  await existing.save();
-                }
+            // Sync denormalized fields from lead (name, email, phone, broker, agent)
+            const leadDoc = await Lead.findById(leadId).select("firstName lastName newEmail newPhone assignedAgent assignedClientBrokers clientBrokerHistory");
+            if (leadDoc) {
+              let changed = false;
+              const updatedName = `${leadDoc.firstName} ${leadDoc.lastName}`;
+              if (existing.ftdName !== updatedName) { existing.ftdName = updatedName; changed = true; }
+              if (existing.ftdEmail !== leadDoc.newEmail) { existing.ftdEmail = leadDoc.newEmail; changed = true; }
+              if (existing.ftdPhone !== leadDoc.newPhone) { existing.ftdPhone = leadDoc.newPhone; changed = true; }
+
+              if (!existing.assignedAgent) {
+                const perOrderAgent = meta.assignedAgent || leadDoc.assignedAgent || null;
+                if (perOrderAgent) { existing.assignedAgent = perOrderAgent; changed = true; }
               }
+
+              // Sync broker from lead's clientBrokerHistory (order-specific)
+              const orderIdStr = order._id.toString();
+              const histEntry = leadDoc.clientBrokerHistory?.length > 0
+                ? (leadDoc.clientBrokerHistory.find(h => h.orderId?.toString() === orderIdStr) || leadDoc.clientBrokerHistory[leadDoc.clientBrokerHistory.length - 1])
+                : null;
+              const resolvedBrokerId = histEntry?.clientBroker
+                || leadDoc.assignedClientBrokers?.[leadDoc.assignedClientBrokers.length - 1]
+                || null;
+              if (resolvedBrokerId && existing.clientBrokerId?.toString() !== resolvedBrokerId.toString()) {
+                existing.clientBrokerId = resolvedBrokerId;
+                changed = true;
+              }
+
+              if (changed) await existing.save();
             }
             skipped++;
           }
@@ -1545,13 +1567,19 @@ exports.syncOrderedFTDs = async (req, res, next) => {
 
         try {
           const isConfirmed = meta.depositConfirmed === true;
+          // Resolve broker using order-specific clientBrokerHistory (matches orders page display)
+          const orderIdStr = order._id.toString();
+          const brokerHistoryEntry = lead.clientBrokerHistory?.length > 0
+            ? (lead.clientBrokerHistory.find(h => h.orderId?.toString() === orderIdStr) || lead.clientBrokerHistory[lead.clientBrokerHistory.length - 1])
+            : null;
+          const resolvedBrokerId = brokerHistoryEntry?.clientBroker
+            || lead.assignedClientBrokers?.[0]
+            || order.selectedClientBrokers?.[0]
+            || null;
           await DepositCall.create({
             leadId: lead._id,
             orderId: order._id,
-            clientBrokerId:
-              lead.assignedClientBrokers?.[0] ||
-              order.selectedClientBrokers?.[0] ||
-              null,
+            clientBrokerId: resolvedBrokerId,
             accountManager:
               isConfirmed
                 ? meta.depositConfirmedBy || null

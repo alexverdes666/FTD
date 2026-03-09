@@ -140,6 +140,11 @@ const userSchema = new mongoose.Schema({
     sidebarNavOrder: {
       type: [String],
       default: []
+    },
+    // Deposit calls page visible columns
+    depositCallsColumns: {
+      type: [String],
+      default: []
     }
   }
 }, {

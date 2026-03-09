@@ -36,7 +36,9 @@ import {
   List,
   ListItem,
   ListItemIcon,
-  ListItemText
+  ListItemText,
+  Popover,
+  FormControlLabel
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -53,7 +55,8 @@ import {
   Add as AddIcon,
   PlayCircleOutline as PlayIcon,
   Delete as DeleteIcon,
-  AdminPanelSettings as AdminIcon
+  AdminPanelSettings as AdminIcon,
+  ViewColumn as ViewColumnIcon
 } from '@mui/icons-material';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -66,6 +69,7 @@ import { formatPhoneWithCountryCode } from '../utils/phoneUtils';
 import { formatDateTimeBG, formatFullDateTimeBG, formatDateBG, formatShortDateBG } from '../utils/dateUtils';
 import CallDeclarationApprovalDialog from '../components/CallDeclarationApprovalDialog';
 import { getFillerDeclarations, fetchRecordingBlob, fetchAgentShortCalls } from '../services/callDeclarations';
+import { loadColumns, loadColumnsFromCache, saveColumns } from '../utils/depositCallsColumns';
 
 // Call status colors
 const getStatusColor = (status) => {
@@ -85,6 +89,30 @@ const formatDateTime = (date) => formatDateTimeBG(date);
 
 // Admin call color
 const ADMIN_CALL_COLOR = '#ed6c02'; // orange/amber
+
+// Column definitions for table visibility toggle
+const ALL_COLUMNS = [
+  { id: 'order', label: 'Order', defaultVisible: true },
+  { id: 'orderCreated', label: 'Order Created', defaultVisible: true },
+  { id: 'broker', label: 'Broker', defaultVisible: true },
+  { id: 'clientNet', label: 'Client Net', defaultVisible: true },
+  { id: 'ourNet', label: 'Our Net', defaultVisible: true },
+  { id: 'am', label: 'AM', defaultVisible: true },
+  { id: 'ftdName', label: 'FTD Name', defaultVisible: true },
+  { id: 'email', label: 'Email', defaultVisible: true },
+  { id: 'phone', label: 'Phone', defaultVisible: true },
+  { id: 'psp', label: 'PSP', defaultVisible: false },
+  { id: 'cardIssuer', label: 'Card Issuer', defaultVisible: false },
+  { id: 'deposit', label: 'Dep.', defaultVisible: true },
+  { id: 'depositCall', label: 'Dep. Call', defaultVisible: true },
+  ...Array.from({ length: 10 }, (_, i) => ({ id: `call${i + 1}`, label: `C${i + 1}`, defaultVisible: true })),
+];
+
+const DEFAULT_VISIBLE_COLUMNS = ALL_COLUMNS.filter(c => c.defaultVisible).map(c => c.id);
+
+const getInitialColumns = () => {
+  return loadColumnsFromCache() || DEFAULT_VISIBLE_COLUMNS;
+};
 
 // Format duration from seconds to M:SS or H:MM:SS
 const formatDurationShort = (seconds) => {
@@ -415,6 +443,37 @@ const DepositCallsPage = () => {
     networks: [],
     leadName: "",
   });
+
+  // Column visibility
+  const [visibleColumns, setVisibleColumns] = useState(getInitialColumns);
+  const [colAnchorEl, setColAnchorEl] = useState(null);
+
+  // Load column preferences from DB on mount
+  useEffect(() => {
+    loadColumns().then(cols => {
+      if (cols) setVisibleColumns(cols);
+    });
+  }, []);
+
+  const toggleColumn = (colId) => {
+    setVisibleColumns(prev => {
+      const next = prev.includes(colId) ? prev.filter(c => c !== colId) : [...prev, colId];
+      saveColumns(next);
+      return next;
+    });
+  };
+
+  const isColVisible = (colId) => visibleColumns.includes(colId);
+
+  // Helper to get PSP/Card Issuer from order leadsMetadata
+  const getLeadMetadata = (dc) => {
+    if (!dc.orderId?.leadsMetadata) return null;
+    const leadId = dc.leadId?._id || dc.leadId;
+    return dc.orderId.leadsMetadata.find(m => {
+      const mLeadId = m.leadId?._id || m.leadId;
+      return mLeadId?.toString() === leadId?.toString();
+    });
+  };
 
   // Fetch filter options
   useEffect(() => {
@@ -966,12 +1025,61 @@ const DepositCallsPage = () => {
               </Tooltip>
             )}
 
+            {tabValue === 0 && (
+              <Tooltip title="Select columns">
+                <IconButton onClick={(e) => setColAnchorEl(e.currentTarget)} color="primary" size="small">
+                  <ViewColumnIcon />
+                </IconButton>
+              </Tooltip>
+            )}
+
             <Tooltip title="Refresh">
               <IconButton onClick={() => { fetchDepositCalls(); if (tabValue === 1) fetchFillerDeclarations(); }} color="primary" size="small">
                 <RefreshIcon />
               </IconButton>
             </Tooltip>
           </Box>
+
+          {/* Column Visibility Popover */}
+          <Popover
+            open={Boolean(colAnchorEl)}
+            anchorEl={colAnchorEl}
+            onClose={() => setColAnchorEl(null)}
+            anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+            transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+          >
+            <Box sx={{ p: 1.5, minWidth: 200 }}>
+              <Typography variant="subtitle2" sx={{ mb: 1, px: 1 }}>Visible Columns</Typography>
+              <List dense disablePadding>
+                {ALL_COLUMNS.map(col => (
+                  <ListItem key={col.id} disablePadding sx={{ px: 0.5 }}>
+                    <FormControlLabel
+                      control={
+                        <Checkbox
+                          size="small"
+                          checked={isColVisible(col.id)}
+                          onChange={() => toggleColumn(col.id)}
+                        />
+                      }
+                      label={<Typography variant="body2">{col.label}</Typography>}
+                      sx={{ m: 0 }}
+                    />
+                  </ListItem>
+                ))}
+              </List>
+              <Box sx={{ display: 'flex', gap: 1, mt: 1, px: 0.5 }}>
+                <Button size="small" onClick={() => {
+                  const all = ALL_COLUMNS.map(c => c.id);
+                  setVisibleColumns(all);
+                  saveColumns(all);
+                }}>All</Button>
+                <Button size="small" onClick={() => {
+                  setVisibleColumns(DEFAULT_VISIBLE_COLUMNS);
+                  saveColumns(DEFAULT_VISIBLE_COLUMNS);
+                }}>Reset</Button>
+              </Box>
+            </Box>
+          </Popover>
         </Box>
         <Collapse in={filtersOpen && tabValue !== 1}>
           <Divider />
@@ -1134,19 +1242,21 @@ const DepositCallsPage = () => {
                 }}>
                   <TableHead>
                     <TableRow>
-                      <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', fontSize: '0.6rem' }}>Order</TableCell>
-                      <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', fontSize: '0.6rem' }}>Order Created</TableCell>
-                      <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', fontSize: '0.6rem' }}>Broker</TableCell>
-                      <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', fontSize: '0.6rem' }}>Client Net</TableCell>
-                      <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', fontSize: '0.6rem' }}>Our Net</TableCell>
-                      <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', fontSize: '0.6rem' }}>AM</TableCell>
-                      <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', fontSize: '0.6rem' }}>FTD Name</TableCell>
-                      <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', fontSize: '0.6rem' }}>Email</TableCell>
-                      <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', fontSize: '0.6rem' }}>Phone</TableCell>
-                      <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', textAlign: 'center', fontSize: '0.6rem' }}>Dep.</TableCell>
-                      <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', textAlign: 'center', fontSize: '0.6rem' }}>Dep. Call</TableCell>
+                      {isColVisible('order') && <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', fontSize: '0.6rem' }}>Order</TableCell>}
+                      {isColVisible('orderCreated') && <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', fontSize: '0.6rem' }}>Order Created</TableCell>}
+                      {isColVisible('broker') && <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', fontSize: '0.6rem' }}>Broker</TableCell>}
+                      {isColVisible('clientNet') && <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', fontSize: '0.6rem' }}>Client Net</TableCell>}
+                      {isColVisible('ourNet') && <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', fontSize: '0.6rem' }}>Our Net</TableCell>}
+                      {isColVisible('am') && <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', fontSize: '0.6rem' }}>AM</TableCell>}
+                      {isColVisible('ftdName') && <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', fontSize: '0.6rem' }}>FTD Name</TableCell>}
+                      {isColVisible('email') && <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', fontSize: '0.6rem' }}>Email</TableCell>}
+                      {isColVisible('phone') && <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', fontSize: '0.6rem' }}>Phone</TableCell>}
+                      {isColVisible('psp') && <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', fontSize: '0.6rem' }}>PSP</TableCell>}
+                      {isColVisible('cardIssuer') && <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', fontSize: '0.6rem' }}>Card Issuer</TableCell>}
+                      {isColVisible('deposit') && <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', textAlign: 'center', fontSize: '0.6rem' }}>Dep.</TableCell>}
+                      {isColVisible('depositCall') && <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', textAlign: 'center', fontSize: '0.6rem' }}>Dep. Call</TableCell>}
                       {[1,2,3,4,5,6,7,8,9,10].map(num => (
-                        <TableCell key={num} sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', textAlign: 'center', fontSize: '0.6rem' }}>
+                        isColVisible(`call${num}`) && <TableCell key={num} sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', textAlign: 'center', fontSize: '0.6rem' }}>
                           C{num}
                         </TableCell>
                       ))}
@@ -1158,6 +1268,7 @@ const DepositCallsPage = () => {
                         ...(dc.isCustomRecord ? { borderLeft: '3px solid', borderLeftColor: 'error.main' } : {}),
                         ...(dc.isDeleted ? { opacity: 0.6, bgcolor: 'grey.50' } : {}),
                       }}>
+                        {isColVisible('order') && (
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>
                           {dc.isCustomRecord && dc.customNote ? (
                             <Tooltip title={dc.customNote}>
@@ -1171,6 +1282,8 @@ const DepositCallsPage = () => {
                             </Typography>
                           )}
                         </TableCell>
+                        )}
+                        {isColVisible('orderCreated') && (
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>
                           <Typography sx={{ fontSize: '0.6rem', color: 'text.secondary' }}>
                             {dc.orderId?.createdAt
@@ -1180,22 +1293,41 @@ const DepositCallsPage = () => {
                                 : '-'}
                           </Typography>
                         </TableCell>
+                        )}
+                        {isColVisible('broker') && (
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                          <Typography sx={{ fontSize: '0.55rem' }}>{dc.clientBrokerId?.name || '-'}</Typography>
+                          <Typography sx={{ fontSize: '0.55rem' }}>{(() => {
+                            const lead = dc.leadId;
+                            const orderId = dc.orderId?._id;
+                            return (lead?.clientBrokerHistory?.length > 0
+                              ? (lead.clientBrokerHistory.find(h => h.orderId === orderId || h.orderId?._id === orderId) || lead.clientBrokerHistory[lead.clientBrokerHistory.length - 1])?.clientBroker?.name
+                              : null)
+                              || (lead?.assignedClientBrokers?.length > 0 ? lead.assignedClientBrokers[lead.assignedClientBrokers.length - 1]?.name : null)
+                              || dc.clientBrokerId?.name
+                              || '-';
+                          })()}</Typography>
                         </TableCell>
+                        )}
+                        {isColVisible('clientNet') && (
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>
                           <Typography sx={{ fontSize: '0.55rem' }}>
                             {dc.orderId?.selectedClientNetwork?.name || '-'}
                           </Typography>
                         </TableCell>
+                        )}
+                        {isColVisible('ourNet') && (
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>
                           <Typography sx={{ fontSize: '0.55rem' }}>
                             {dc.orderId?.selectedOurNetwork?.name || '-'}
                           </Typography>
                         </TableCell>
+                        )}
+                        {isColVisible('am') && (
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>
                           <Typography sx={{ fontSize: '0.55rem' }}>{dc.accountManager?.fullName || '-'}</Typography>
                         </TableCell>
+                        )}
+                        {isColVisible('ftdName') && (
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                             <Typography sx={{ fontSize: '0.6rem', fontWeight: 500, ...(dc.isDeleted ? { textDecoration: 'line-through', color: 'text.disabled' } : {}) }}>
@@ -1222,6 +1354,8 @@ const DepositCallsPage = () => {
                             </Typography>
                           )}
                         </TableCell>
+                        )}
+                        {isColVisible('email') && (
                         <TableCell sx={{ whiteSpace: 'nowrap', maxWidth: 100, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                           <Tooltip title={dc.ftdEmail || dc.leadId?.newEmail || '-'}>
                             <Typography sx={{ fontSize: '0.6rem', ...(dc.isDeleted ? { textDecoration: 'line-through', color: 'text.disabled' } : {}) }}>
@@ -1229,11 +1363,29 @@ const DepositCallsPage = () => {
                             </Typography>
                           </Tooltip>
                         </TableCell>
+                        )}
+                        {isColVisible('phone') && (
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>
                           <Typography sx={{ fontSize: '0.5rem', ...(dc.isDeleted ? { textDecoration: 'line-through', color: 'text.disabled' } : {}) }}>
                             {formatPhoneWithCountryCode(dc.ftdPhone || dc.leadId?.newPhone, dc.leadId?.country || dc.lead?.country) || '-'}
                           </Typography>
                         </TableCell>
+                        )}
+                        {isColVisible('psp') && (
+                        <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                          <Typography sx={{ fontSize: '0.55rem' }}>
+                            {getLeadMetadata(dc)?.depositPSP?.name || '-'}
+                          </Typography>
+                        </TableCell>
+                        )}
+                        {isColVisible('cardIssuer') && (
+                        <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                          <Typography sx={{ fontSize: '0.55rem' }}>
+                            {getLeadMetadata(dc)?.depositCardIssuer?.name || '-'}
+                          </Typography>
+                        </TableCell>
+                        )}
+                        {isColVisible('deposit') && (
                         <TableCell sx={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
                           {dc.isDeleted ? (
                             <Tooltip title={`Removed: ${dc.deletedReason || 'Lead removed'}`}>
@@ -1247,7 +1399,9 @@ const DepositCallsPage = () => {
                             <Chip label="Pending" size="small" color="warning" variant="outlined" sx={{ height: 16, fontSize: '0.55rem' }} />
                           )}
                         </TableCell>
+                        )}
                         {/* Deposit Call Declaration column */}
+                        {isColVisible('depositCall') && (
                         <TableCell sx={{ p: '2px 4px', textAlign: 'center' }}>
                           {dc.depositCallDeclaration ? (
                             <Tooltip title={`Deposit Call - ${dc.depositCallDeclaration.status}`}>
@@ -1297,8 +1451,9 @@ const DepositCallsPage = () => {
                             </Box>
                           )}
                         </TableCell>
+                        )}
                         {[1,2,3,4,5,6,7,8,9,10].map(num => (
-                          <CallCell
+                          isColVisible(`call${num}`) && <CallCell
                             key={num}
                             call={dc[`call${num}`]}
                             callNumber={num}

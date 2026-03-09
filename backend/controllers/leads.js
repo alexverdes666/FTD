@@ -1867,6 +1867,41 @@ exports.updateLead = async (req, res, next) => {
 
     await lead.save();
 
+    // Sync lead changes to DepositCall records (denormalized fields)
+    try {
+      const DepositCall = require("../models/DepositCall");
+      const depositCalls = await DepositCall.find({ leadId: lead._id });
+      if (depositCalls.length > 0) {
+        const updatedName = `${lead.firstName} ${lead.lastName}`;
+        for (const dc of depositCalls) {
+          let changed = false;
+
+          // Sync name, email, phone
+          if (dc.ftdName !== updatedName) { dc.ftdName = updatedName; changed = true; }
+          if (dc.ftdEmail !== lead.newEmail) { dc.ftdEmail = lead.newEmail; changed = true; }
+          if (dc.ftdPhone !== lead.newPhone) { dc.ftdPhone = lead.newPhone; changed = true; }
+
+          // Sync broker from lead's clientBrokerHistory (order-specific, matching orders page logic)
+          const orderIdStr = dc.orderId?.toString();
+          const historyEntry = orderIdStr && lead.clientBrokerHistory?.length > 0
+            ? (lead.clientBrokerHistory.find(h => h.orderId?.toString() === orderIdStr) || lead.clientBrokerHistory[lead.clientBrokerHistory.length - 1])
+            : (lead.clientBrokerHistory?.length > 0 ? lead.clientBrokerHistory[lead.clientBrokerHistory.length - 1] : null);
+
+          const resolvedBrokerId = historyEntry?.clientBroker?._id || historyEntry?.clientBroker
+            || (lead.assignedClientBrokers?.length > 0 ? (lead.assignedClientBrokers[lead.assignedClientBrokers.length - 1]?._id || lead.assignedClientBrokers[lead.assignedClientBrokers.length - 1]) : null);
+
+          if (resolvedBrokerId && dc.clientBrokerId?.toString() !== resolvedBrokerId.toString()) {
+            dc.clientBrokerId = resolvedBrokerId;
+            changed = true;
+          }
+
+          if (changed) await dc.save();
+        }
+      }
+    } catch (syncError) {
+      console.error("Error syncing lead changes to DepositCall records:", syncError);
+    }
+
     // Create audit entries for all field changes (in separate collection for independence)
     if (auditEntries.length > 0) {
       try {
@@ -4743,10 +4778,19 @@ exports.confirmDeposit = async (req, res, next) => {
     let depositCall = await DepositCall.findOne({ leadId: lead._id, orderId });
 
     if (!depositCall) {
+      // Resolve broker using order-specific clientBrokerHistory (matches orders page display)
+      const orderIdStr = orderId.toString();
+      const brokerHistEntry = lead.clientBrokerHistory?.length > 0
+        ? (lead.clientBrokerHistory.find(h => h.orderId?.toString() === orderIdStr) || lead.clientBrokerHistory[lead.clientBrokerHistory.length - 1])
+        : null;
+      const resolvedBrokerId = brokerHistEntry?.clientBroker
+        || lead.assignedClientBrokers?.[0]
+        || order.selectedClientBrokers?.[0]
+        || null;
       depositCall = await DepositCall.create({
         leadId: lead._id,
         orderId,
-        clientBrokerId: lead.assignedClientBrokers?.[0] || order.selectedClientBrokers?.[0] || null,
+        clientBrokerId: resolvedBrokerId,
         accountManager: userId,
         assignedAgent: lead.assignedAgent,
         ftdName: `${lead.firstName} ${lead.lastName}`,
