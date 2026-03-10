@@ -1782,9 +1782,11 @@ const LeadsPage = () => {
 
       const leadIds = Array.from(selectedLeads);
 
-      const response = await api.post("/leads/batch-validate-ipqs", {
-        leadIds,
-      });
+      const response = await api.post(
+        "/leads/batch-validate-ipqs",
+        { leadIds },
+        { timeout: 120000 }
+      );
 
       if (response.data.success) {
         const { stats, results } = response.data.data;
@@ -1853,7 +1855,8 @@ const LeadsPage = () => {
 
       const response = await api.post(
         "/leads/batch-validate-ipqs?force=true",
-        { leadIds }
+        { leadIds },
+        { timeout: 120000 }
       );
 
       if (response.data.success) {
@@ -4577,13 +4580,15 @@ const LeadRow = React.memo(
       >
         {/* IPQS Validation Success Indicator */}
         {isIPQSValidated && (
-          <Box
+          <TableCell
             sx={{
               position: "absolute",
               left: 8,
               top: "50%",
               transform: "translateY(-50%)",
               zIndex: 10,
+              padding: 0,
+              border: "none",
               animation: "ipqsCheckFadeInOut 2s ease-in-out",
               "@keyframes ipqsCheckFadeInOut": {
                 "0%": { opacity: 0, transform: "translateY(-50%) scale(0.5)" },
@@ -4594,7 +4599,7 @@ const LeadRow = React.memo(
             }}
           >
             <CheckCircleIcon sx={{ color: "success.main", fontSize: 20 }} />
-          </Box>
+          </TableCell>
         )}
         {canAssignLeads && (
           <TableCell padding="checkbox" sx={checkboxCellSx}>
