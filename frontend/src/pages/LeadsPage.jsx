@@ -289,7 +289,7 @@ const buildIPQSTooltip = (validation, type) => {
   }
 };
 const LeadDetails = React.memo(({ lead }) => (
-  <Box>
+  <Box onClick={(e) => e.stopPropagation()}>
     <Grid container spacing={1.5}>
       {}
       <Grid item xs={12} md={4}>
@@ -632,6 +632,21 @@ const LeadDetails = React.memo(({ lead }) => (
                 <Typography variant="caption">{lead.clientNetwork}</Typography>
               </Box>
             )}
+            {lead.additionalDetails && typeof lead.additionalDetails === "object" && Object.keys(lead.additionalDetails).length > 0 && (
+              <>
+                <Box sx={{ borderTop: "1px solid", borderColor: "divider", my: 0.5 }} />
+                {Object.entries(lead.additionalDetails).map(([key, value]) => (
+                  <Box key={key} sx={{ display: "flex", gap: 1, alignItems: "baseline" }}>
+                    <Typography variant="caption" color="text.secondary" sx={{ minWidth: 50 }}>
+                      {key.replace(/([A-Z])/g, " $1").replace(/^./, (s) => s.toUpperCase()).trim()}:
+                    </Typography>
+                    <Typography variant="caption">
+                      {typeof value === "number" ? value.toLocaleString() : String(value)}
+                    </Typography>
+                  </Box>
+                ))}
+              </>
+            )}
           </Stack>
         </Paper>
       </Grid>
@@ -874,11 +889,21 @@ const LeadDetails = React.memo(({ lead }) => (
                 <Grid item xs={12} sm={6} md={4} key={index}>
                   <Paper
                     elevation={0}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (doc?.url) {
+                        const isImage = doc.url.match(/\.(jpg|jpeg|png|gif|webp)(\?|$)/i) || doc.url.startsWith("data:image/");
+                        if (!isImage) {
+                          window.open(doc.url, "_blank", "noopener,noreferrer");
+                        }
+                      }
+                    }}
                     sx={{
                       p: 1.5,
                       border: "1px solid",
                       borderColor: "divider",
                       borderRadius: 1,
+                      cursor: "pointer",
                       "&:hover": {
                         bgcolor: "action.hover",
                       },
@@ -887,29 +912,25 @@ const LeadDetails = React.memo(({ lead }) => (
                     {doc?.url &&
                     (doc.url.match(/\.(jpg|jpeg|png|gif|webp)(\?|$)/i) ||
                       doc.url.startsWith("data:image/")) ? (
-                      <Box sx={{ mb: 1 }}>
+                      <Box sx={{ mb: 1 }} onClick={(e) => e.stopPropagation()}>
                         <DocumentPreview
                           url={doc.url}
                           type={doc.description || `Document ${index + 1}`}
                         />
                       </Box>
                     ) : (
-                      <Link
-                        href={doc?.url || "#"}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                      <Box
                         sx={{
                           display: "flex",
                           alignItems: "center",
                           gap: 1,
                           color: "primary.main",
-                          textDecoration: "none",
                           mb: 1,
                         }}
                       >
                         <DescriptionIcon fontSize="small" />
                         {doc?.description || "View Document"}
-                      </Link>
+                      </Box>
                     )}
                     {doc?.description && (
                       <Typography
@@ -2859,7 +2880,10 @@ const LeadsPage = () => {
                       />
                       {expandedRows.has(lead._id) && (
                         <TableRow
-                          onClick={() => toggleRowExpansion(lead._id)}
+                          onClick={(e) => {
+                            if (e.target.closest("a, button, [data-no-collapse]")) return;
+                            toggleRowExpansion(lead._id);
+                          }}
                           sx={{ cursor: "pointer" }}
                         >
                           <TableCell
@@ -4034,7 +4058,10 @@ const GroupedLeadRow = React.memo(
           </TableCell>
         </TableRow>
         <TableRow
-          onClick={() => onToggleExpansion(leadId)}
+          onClick={(e) => {
+            if (e.target.closest("a, button, [data-no-collapse]")) return;
+            onToggleExpansion(leadId);
+          }}
           sx={{ cursor: isExpanded ? "pointer" : "default" }}
         >
           <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={8}>
@@ -5400,6 +5427,7 @@ const LeadCard = React.memo(
             sx={{ width: "100%", cursor: "pointer" }}
             onClick={(e) => {
               e.stopPropagation();
+              if (e.target.closest("a, button, [data-no-collapse]")) return;
               onToggleExpansion(lead._id);
             }}
           >

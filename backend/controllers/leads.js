@@ -406,6 +406,8 @@ exports.getLeads = async (req, res, next) => {
           archivedAt: 1,
           archivedBy: 1,
           ipqsValidation: 1,
+          additionalDetails: 1,
+          source: 1,
           // Only include callNumber and callHistory for agents
           ...(req.user.role === "agent"
             ? {
@@ -509,7 +511,7 @@ exports.getAssignedLeads = async (req, res, next) => {
     // Step 1: Get all unique leads assigned to this agent
     const assignedLeads = await Lead.find(filter)
       .select(
-        "_id firstName lastName prefix newEmail newPhone country leadType status assignedAgentAt createdAt orderCallTracking orderComments clientBrokerHistory dob gender address sin socialMedia ipqsValidation"
+        "_id firstName lastName prefix newEmail newPhone country leadType status assignedAgentAt createdAt orderCallTracking orderComments clientBrokerHistory dob gender address sin socialMedia ipqsValidation additionalDetails source"
       )
       .populate("clientBrokerHistory.clientBroker", "name domain isActive")
       .lean();

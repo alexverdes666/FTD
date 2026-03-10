@@ -467,6 +467,10 @@ const leadSchema = new mongoose.Schema(
       // SIN is now optional for all lead types
     },
     source: String,
+    additionalDetails: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
+    },
     submissionMode: {
       type: String,
       enum: ["internal", "external", "dual"],
