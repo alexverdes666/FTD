@@ -4,6 +4,8 @@ const { protect } = require('../middleware/auth');
 const {
   getGlobalBonusRates,
   updateGlobalBonusRates,
+  getSuperiorLeadManager,
+  setSuperiorLeadManager,
 } = require('../controllers/systemConfiguration');
 
 // Middleware to ensure only admins can access these routes
@@ -22,5 +24,11 @@ router.get('/bonus-rates', protect, adminOnly, getGlobalBonusRates);
 
 // Update global bonus rates configuration  
 router.put('/bonus-rates', protect, adminOnly, updateGlobalBonusRates);
+
+// Get superior lead manager configuration
+router.get('/superior-lead-manager', protect, adminOnly, getSuperiorLeadManager);
+
+// Set superior lead manager configuration
+router.put('/superior-lead-manager', protect, adminOnly, setSuperiorLeadManager);
 
 module.exports = router;

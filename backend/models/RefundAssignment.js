@@ -215,6 +215,12 @@ const refundAssignmentSchema = new Schema(
       type: Date,
       // Automatically set when status changes to 'refund_complete'
     },
+    // Reference to active approval process (if any)
+    pendingApproval: {
+      type: Schema.Types.ObjectId,
+      ref: "RefundApproval",
+      default: null,
+    },
   },
   {
     timestamps: true,

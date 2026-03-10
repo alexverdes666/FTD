@@ -24,6 +24,7 @@ const ticketSchema = new mongoose.Schema({
       'feature_request',
       'bug_report',
       'fine_dispute',
+      'refund_approval',
       'other'
     ],
     required: true

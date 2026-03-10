@@ -155,6 +155,7 @@ export const formatTicketCategory = (category) => {
     feature_request: 'Feature Request',
     bug_report: 'Bug Report',
     fine_dispute: 'Fine Dispute',
+    refund_approval: 'Refund Approval',
     other: 'Other'
   };
   return categoryMap[category] || category;
@@ -170,6 +171,7 @@ export const getCategoryIcon = (category) => {
     feature_request: 'Lightbulb',
     bug_report: 'BugReport',
     fine_dispute: 'Gavel',
+    refund_approval: 'CheckCircle',
     other: 'Help'
   };
   return iconMap[category] || 'Help';

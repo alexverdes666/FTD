@@ -274,6 +274,14 @@ exports.getRefundAssignments = async (req, res, next) => {
             "firstName lastName newEmail oldEmail newPhone oldPhone country leadType",
         },
         { path: "assignedBy", select: "fullName email" },
+        {
+          path: "pendingApproval",
+          select: "status requestedBy superiorManager createdAt decisions",
+          populate: [
+            { path: "requestedBy", select: "fullName email" },
+            { path: "superiorManager", select: "fullName email" },
+          ],
+        },
       ]);
     } else {
       // No search term, use regular query
@@ -310,6 +318,14 @@ exports.getRefundAssignments = async (req, res, next) => {
           "firstName lastName newEmail oldEmail newPhone oldPhone country leadType"
         )
         .populate("assignedBy", "fullName email")
+        .populate({
+          path: "pendingApproval",
+          select: "status requestedBy superiorManager createdAt decisions",
+          populate: [
+            { path: "requestedBy", select: "fullName email" },
+            { path: "superiorManager", select: "fullName email" },
+          ],
+        })
         .sort({ assignedAt: -1 });
     }
 
@@ -441,6 +457,30 @@ exports.updateRefundStatus = async (req, res, next) => {
       return res.status(404).json({
         success: false,
         message: "Refund assignment not found",
+      });
+    }
+
+    // Block status changes if there's a pending approval
+    if (assignment.pendingApproval) {
+      return res.status(400).json({
+        success: false,
+        message: "This refund has a pending approval process. Cannot change status until it is resolved.",
+      });
+    }
+
+    // Block non-admin users from directly setting "refunded_checked" or "refund_complete"
+    // These statuses must go through the approval workflow
+    if (
+      (status === "refunded_checked" || status === "refund_complete") &&
+      req.user.role !== "admin"
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          status === "refunded_checked"
+            ? "Refunded (Check) must go through the approval workflow. Please use the approval request instead."
+            : "Refund Complete can only be set through the approval workflow.",
+        requiresApproval: true,
       });
     }
 

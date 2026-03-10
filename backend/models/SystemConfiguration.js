@@ -47,6 +47,12 @@ const systemConfigurationSchema = new mongoose.Schema(
         default: "/audio/debeliq.mp3",
       },
     },
+    // Superior Lead Manager for refund approval workflow
+    superiorLeadManager: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
     // Track when this configuration was last updated
     lastUpdatedBy: {
       type: mongoose.Schema.Types.ObjectId,
@@ -107,6 +113,35 @@ systemConfigurationSchema.statics.createDefaultGlobalBonusRates = function (admi
     lastUpdatedBy: adminId,
     notes: "Default global bonus rates created automatically",
   });
+};
+
+// Static method to get superior lead manager
+systemConfigurationSchema.statics.getSuperiorLeadManager = async function () {
+  const config = await this.findOne({
+    configType: "REFUND_APPROVAL_CONFIG",
+    isActive: true,
+  }).populate("superiorLeadManager", "fullName email role");
+  return config?.superiorLeadManager || null;
+};
+
+// Static method to set superior lead manager
+systemConfigurationSchema.statics.setSuperiorLeadManager = async function (
+  userId,
+  adminId
+) {
+  return this.findOneAndUpdate(
+    { configType: "REFUND_APPROVAL_CONFIG" },
+    {
+      superiorLeadManager: userId,
+      lastUpdatedBy: adminId,
+      isActive: true,
+    },
+    {
+      upsert: true,
+      new: true,
+      runValidators: true,
+    }
+  ).populate("superiorLeadManager", "fullName email role");
 };
 
 module.exports = mongoose.model("SystemConfiguration", systemConfigurationSchema);

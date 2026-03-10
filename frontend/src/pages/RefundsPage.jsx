@@ -43,9 +43,15 @@ import {
   KeyboardArrowDown as KeyboardArrowDownIcon,
   KeyboardArrowRight as KeyboardArrowRightIcon,
   Warning as WarningIcon,
-  CloudUpload as CloudUploadIcon
+  CloudUpload as CloudUploadIcon,
+  HourglassEmpty as PendingIcon,
+  CheckCircle as ApproveIcon,
+  Cancel as RejectIcon,
+  Image as ImageIcon,
+  SupervisorAccount as SupervisorIcon
 } from '@mui/icons-material';
 import { refundsService, REFUND_STATUSES, getStatusColor, getStatusLabel } from '../services/refunds';
+import { refundApprovalsService, getRefundApprovalImageUrl, getRefundApprovalImageThumbnailUrl } from '../services/refundApprovals';
 import { useSelector } from 'react-redux';
 
 const RefundsPage = () => {
@@ -91,6 +97,26 @@ const RefundsPage = () => {
     selfieBack: ''
   });
 
+  // Refund Approval states
+  const [approvalConfirmOpen, setApprovalConfirmOpen] = useState(false);
+  const [approvalNotes, setApprovalNotes] = useState('');
+  const [submittingApproval, setSubmittingApproval] = useState(false);
+  const [pendingApprovals, setPendingApprovals] = useState([]);
+  const [approvalsLoading, setApprovalsLoading] = useState(false);
+  const [approvalDecisionDialog, setApprovalDecisionDialog] = useState(null);
+  const [decisionNotes, setDecisionNotes] = useState('');
+  const [decisionImages, setDecisionImages] = useState([]);
+  const [uploadedImageIds, setUploadedImageIds] = useState([]);
+  const [uploadingEvidenceImage, setUploadingEvidenceImage] = useState(false);
+  const [processingDecision, setProcessingDecision] = useState(false);
+  const [superiorManager, setSuperiorManager] = useState(null);
+  const [superiorManagerDialogOpen, setSuperiorManagerDialogOpen] = useState(false);
+  const [selectedSuperiorManagerId, setSelectedSuperiorManagerId] = useState('');
+  const [settingSuperior, setSettingSuperior] = useState(false);
+  const [approvalCounts, setApprovalCounts] = useState({});
+  const [adminUsers, setAdminUsers] = useState([]);
+  const [selectedAdminReviewerId, setSelectedAdminReviewerId] = useState('');
+
   // CSV Upload states
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -124,11 +150,17 @@ const RefundsPage = () => {
     user?.role === 'admin' ||
     (user?.role === 'affiliate_manager' && user?.permissions?.canManageRefunds);
 
+  const isAdmin = user?.role === 'admin';
+  const isSuperiorManager = superiorManager && user?._id === superiorManager._id;
+
   useEffect(() => {
     if (hasRefundsAccess) {
       fetchAssignments();
       fetchStats();
       fetchRefundsManagers();
+      fetchPendingApprovals();
+      fetchApprovalCounts();
+      fetchSuperiorManager();
     }
   }, [page, rowsPerPage, statusFilter, startDate, endDate, searchTerm, hasRefundsAccess]);
 
@@ -245,6 +277,176 @@ const RefundsPage = () => {
     setNewStatus(assignment.status);
     setStatusNotes(assignment.notes || '');
     setEditDialogOpen(true);
+  };
+
+  // Approval workflow handlers
+  const fetchPendingApprovals = async () => {
+    try {
+      setApprovalsLoading(true);
+      const response = await refundApprovalsService.getPendingApprovals();
+      setPendingApprovals(response.data || []);
+    } catch (err) {
+      console.error('Fetch pending approvals error:', err);
+    } finally {
+      setApprovalsLoading(false);
+    }
+  };
+
+  const fetchApprovalCounts = async () => {
+    try {
+      const response = await refundApprovalsService.getApprovalCounts();
+      setApprovalCounts(response.data || {});
+    } catch (err) {
+      console.error('Fetch approval counts error:', err);
+    }
+  };
+
+  const fetchSuperiorManager = async () => {
+    try {
+      const response = await refundApprovalsService.getSuperiorLeadManager();
+      setSuperiorManager(response.data);
+    } catch (err) {
+      console.error('Fetch superior manager error:', err);
+    }
+  };
+
+  const fetchAdminUsers = async () => {
+    try {
+      const response = await refundApprovalsService.getAdminUsers();
+      setAdminUsers(response.data || []);
+    } catch (err) {
+      console.error('Fetch admin users error:', err);
+    }
+  };
+
+  const handleStatusUpdateWithApproval = async () => {
+    if (!selectedAssignment || !newStatus) return;
+
+    // If non-admin user selects "refunded_checked", trigger approval workflow
+    if (newStatus === 'refunded_checked' && !isAdmin) {
+      setEditDialogOpen(false);
+      setApprovalNotes(statusNotes);
+      setApprovalConfirmOpen(true);
+      return;
+    }
+
+    // For all other statuses (or admin for refunded_checked), proceed normally
+    await handleStatusUpdate();
+  };
+
+  const handleSubmitApprovalRequest = async () => {
+    if (!selectedAssignment) return;
+
+    try {
+      setSubmittingApproval(true);
+      await refundApprovalsService.createApprovalRequest(
+        selectedAssignment._id,
+        approvalNotes
+      );
+      setApprovalConfirmOpen(false);
+      setSelectedAssignment(null);
+      setApprovalNotes('');
+      setNewStatus('');
+      setStatusNotes('');
+
+      // Refresh
+      await fetchAssignments();
+      fetchStats();
+      fetchPendingApprovals();
+      fetchApprovalCounts();
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to submit approval request');
+    } finally {
+      setSubmittingApproval(false);
+    }
+  };
+
+  const handleOpenDecisionDialog = (approval) => {
+    setApprovalDecisionDialog(approval);
+    setDecisionNotes('');
+    setDecisionImages([]);
+    setUploadedImageIds([]);
+    setSelectedAdminReviewerId('');
+    // Fetch admin users if superior is opening a pending_superior approval
+    if (approval.status === 'pending_superior') {
+      fetchAdminUsers();
+    }
+  };
+
+  const handleEvidenceImageUpload = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    try {
+      setUploadingEvidenceImage(true);
+      const response = await refundApprovalsService.uploadEvidenceImage(
+        file,
+        approvalDecisionDialog?._id
+      );
+      if (response.data) {
+        setDecisionImages(prev => [...prev, response.data]);
+        setUploadedImageIds(prev => [...prev, response.data._id]);
+      }
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to upload evidence image');
+    } finally {
+      setUploadingEvidenceImage(false);
+      event.target.value = '';
+    }
+  };
+
+  const handleProcessDecision = async (decision) => {
+    if (!approvalDecisionDialog) return;
+
+    // If superior is approving, require admin selection
+    if (approvalDecisionDialog.status === 'pending_superior' && decision === 'approve' && !selectedAdminReviewerId) {
+      setError('Please select an admin to send the approval to');
+      return;
+    }
+
+    try {
+      setProcessingDecision(true);
+      const adminId = (approvalDecisionDialog.status === 'pending_superior' && decision === 'approve')
+        ? selectedAdminReviewerId
+        : null;
+      await refundApprovalsService.processDecision(
+        approvalDecisionDialog._id,
+        decision,
+        decisionNotes,
+        uploadedImageIds,
+        adminId
+      );
+      setApprovalDecisionDialog(null);
+      setDecisionNotes('');
+      setDecisionImages([]);
+      setUploadedImageIds([]);
+
+      // Refresh everything
+      await fetchAssignments();
+      fetchStats();
+      fetchPendingApprovals();
+      fetchApprovalCounts();
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to process decision');
+    } finally {
+      setProcessingDecision(false);
+    }
+  };
+
+  const handleSetSuperiorManager = async () => {
+    if (!selectedSuperiorManagerId) return;
+
+    try {
+      setSettingSuperior(true);
+      await refundApprovalsService.setSuperiorLeadManager(selectedSuperiorManagerId);
+      setSuperiorManagerDialogOpen(false);
+      setSelectedSuperiorManagerId('');
+      fetchSuperiorManager();
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to set superior lead manager');
+    } finally {
+      setSettingSuperior(false);
+    }
   };
 
   const handleViewClick = (assignment) => {
@@ -686,12 +888,109 @@ const RefundsPage = () => {
                 Add Manual Refund
               </Button>
             </Grid>
+            {isAdmin && (
+              <Grid item xs={12} sm={6} md={2}>
+                <Button
+                  fullWidth
+                  variant="outlined"
+                  startIcon={<SupervisorIcon />}
+                  onClick={() => setSuperiorManagerDialogOpen(true)}
+                  color="secondary"
+                >
+                  {superiorManager ? 'Change Superior Manager' : 'Set Superior Manager'}
+                </Button>
+              </Grid>
+            )}
           </Grid>
+          {isAdmin && superiorManager && (
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+              Superior Lead Manager: <strong>{superiorManager.fullName}</strong> ({superiorManager.email})
+            </Typography>
+          )}
         </CardContent>
       </Card>
 
+      {/* Pending Approvals Section - visible to superior lead manager and admin */}
+      {(isAdmin || isSuperiorManager) && pendingApprovals.length > 0 && (
+        <Card sx={{ mb: 3, border: '2px solid', borderColor: 'warning.main' }}>
+          <CardContent>
+            <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
+              <PendingIcon color="warning" />
+              <Typography variant="h6">
+                Pending Refund Approvals ({pendingApprovals.length})
+              </Typography>
+            </Stack>
+            <TableContainer component={Paper} variant="outlined">
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Customer</TableCell>
+                    <TableCell>Requested By</TableCell>
+                    <TableCell>Previous Status</TableCell>
+                    <TableCell>Approval Status</TableCell>
+                    <TableCell>Requested At</TableCell>
+                    <TableCell>Actions</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {pendingApprovals.map((approval) => {
+                    const assignment = approval.refundAssignmentId;
+                    const customerName = assignment?.source === 'csv'
+                      ? `${assignment?.firstName || ''} ${assignment?.lastName || ''}`
+                      : `${assignment?.leadId?.firstName || ''} ${assignment?.leadId?.lastName || ''}`;
+
+                    const canDecide =
+                      (approval.status === 'pending_superior' && (isSuperiorManager || isAdmin)) ||
+                      (approval.status === 'pending_admin' && isAdmin);
+
+                    return (
+                      <TableRow key={approval._id}>
+                        <TableCell>{customerName}</TableCell>
+                        <TableCell>{approval.requestedBy?.fullName}</TableCell>
+                        <TableCell>
+                          <Chip
+                            label={getStatusLabel(approval.previousStatus)}
+                            color={getStatusColor(approval.previousStatus)}
+                            size="small"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Chip
+                            label={
+                              approval.status === 'pending_superior'
+                                ? 'Awaiting Superior Review'
+                                : 'Awaiting Admin Confirmation'
+                            }
+                            color="warning"
+                            size="small"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          {new Date(approval.createdAt).toLocaleDateString()}
+                        </TableCell>
+                        <TableCell>
+                          {canDecide && (
+                            <Button
+                              size="small"
+                              variant="contained"
+                              onClick={() => handleOpenDecisionDialog(approval)}
+                            >
+                              Review
+                            </Button>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </CardContent>
+        </Card>
+      )}
+
       {error && (
-        <Alert severity="error" sx={{ mb: 2 }}>
+        <Alert severity="error" sx={{ mb: 2, cursor: 'pointer' }} onClick={() => setError('')}>
           {error}
         </Alert>
       )}
@@ -903,11 +1202,28 @@ const RefundsPage = () => {
                             )}
                           </TableCell>
                           <TableCell>
-                            <Chip
-                              label={getStatusLabel(assignment.status)}
-                              color={getStatusColor(assignment.status)}
-                              size="small"
-                            />
+                            <Stack direction="column" spacing={0.5}>
+                              <Chip
+                                label={getStatusLabel(assignment.status)}
+                                color={getStatusColor(assignment.status)}
+                                size="small"
+                              />
+                              {assignment.pendingApproval && (
+                                <Chip
+                                  icon={<PendingIcon />}
+                                  label={
+                                    assignment.pendingApproval.status === 'pending_superior'
+                                      ? 'Awaiting Superior Review'
+                                      : assignment.pendingApproval.status === 'pending_admin'
+                                      ? 'Awaiting Admin Review'
+                                      : 'Pending Approval'
+                                  }
+                                  color="warning"
+                                  size="small"
+                                  variant="outlined"
+                                />
+                              )}
+                            </Stack>
                           </TableCell>
                           <TableCell>
                             <FormControlLabel
@@ -1055,16 +1371,27 @@ const RefundsPage = () => {
                   : `${selectedAssignment.leadId?.firstName} ${selectedAssignment.leadId?.lastName}`
                 }
               </Typography>
+              {selectedAssignment?.pendingApproval && (
+                <Alert severity="warning" sx={{ mb: 2 }}>
+                  This refund has a pending approval (Status: {selectedAssignment.pendingApproval.status?.replace(/_/g, ' ')}). Cannot change status until resolved.
+                </Alert>
+              )}
               <FormControl fullWidth sx={{ mb: 2 }}>
                 <InputLabel>New Status</InputLabel>
                 <Select
                   value={newStatus}
                   onChange={(e) => setNewStatus(e.target.value)}
                   label="New Status"
+                  disabled={!!selectedAssignment?.pendingApproval}
                 >
-                  {REFUND_STATUSES.map((status) => (
+                  {REFUND_STATUSES.filter(status => {
+                    // Non-admin users can't directly set refund_complete
+                    if (status.value === 'refund_complete' && !isAdmin) return false;
+                    return true;
+                  }).map((status) => (
                     <MenuItem key={status.value} value={status.value}>
                       {status.label}
+                      {status.value === 'refunded_checked' && !isAdmin && ' (Requires Approval)'}
                     </MenuItem>
                   ))}
                 </Select>
@@ -1084,11 +1411,13 @@ const RefundsPage = () => {
         <DialogActions>
           <Button onClick={() => setEditDialogOpen(false)}>Cancel</Button>
           <Button
-            onClick={handleStatusUpdate}
+            onClick={handleStatusUpdateWithApproval}
             variant="contained"
-            disabled={updating || !newStatus}
+            disabled={updating || !newStatus || !!selectedAssignment?.pendingApproval}
           >
-            {updating ? <CircularProgress size={20} /> : 'Update Status'}
+            {updating ? <CircularProgress size={20} /> :
+              (newStatus === 'refunded_checked' && !isAdmin) ? 'Request Approval' : 'Update Status'
+            }
           </Button>
         </DialogActions>
       </Dialog>
@@ -1739,6 +2068,313 @@ const RefundsPage = () => {
             startIcon={uploadingDocs ? <CircularProgress size={20} /> : <CloudUploadIcon />}
           >
             {uploadingDocs ? 'Uploading...' : 'Upload Documents'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Approval Confirmation Dialog - shown when refunds manager selects "Refunded (Check)" */}
+      <Dialog open={approvalConfirmOpen} onClose={() => setApprovalConfirmOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Request Refund Approval</DialogTitle>
+        <DialogContent>
+          <Alert severity="info" sx={{ mb: 2, mt: 1 }}>
+            Setting status to "Refunded (Check)" requires approval from the superior lead manager and admin confirmation.
+          </Alert>
+          {selectedAssignment && (
+            <Typography variant="subtitle1" gutterBottom>
+              Customer: {selectedAssignment.source === 'csv'
+                ? `${selectedAssignment.firstName} ${selectedAssignment.lastName}`
+                : `${selectedAssignment.leadId?.firstName} ${selectedAssignment.leadId?.lastName}`
+              }
+            </Typography>
+          )}
+          {superiorManager ? (
+            <Typography variant="body2" sx={{ mb: 2 }}>
+              Approval will be sent to: <strong>{superiorManager.fullName}</strong>
+            </Typography>
+          ) : (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              No superior lead manager configured. Please contact admin.
+            </Alert>
+          )}
+          <TextField
+            fullWidth
+            multiline
+            rows={3}
+            label="Notes (optional)"
+            value={approvalNotes}
+            onChange={(e) => setApprovalNotes(e.target.value)}
+            placeholder="Add notes for the approval request..."
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => {
+            setApprovalConfirmOpen(false);
+            setEditDialogOpen(true);
+          }}>Back</Button>
+          <Button
+            onClick={handleSubmitApprovalRequest}
+            variant="contained"
+            color="primary"
+            disabled={submittingApproval || !superiorManager}
+          >
+            {submittingApproval ? <CircularProgress size={20} /> : 'Submit for Approval'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Approval Decision Dialog - for superior lead manager and admin */}
+      <Dialog
+        open={!!approvalDecisionDialog}
+        onClose={() => setApprovalDecisionDialog(null)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>
+          {approvalDecisionDialog?.status === 'pending_superior'
+            ? 'Review Refund Approval (Superior Lead Manager)'
+            : 'Review Refund Approval (Admin Confirmation)'}
+        </DialogTitle>
+        <DialogContent>
+          {approvalDecisionDialog && (
+            <Box sx={{ mt: 1 }}>
+              {/* Refund details */}
+              <Typography variant="h6" gutterBottom>Refund Details</Typography>
+              {approvalDecisionDialog.refundAssignmentId && (
+                <Box sx={{ mb: 2, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+                  <Typography variant="body2">
+                    <strong>Customer:</strong>{' '}
+                    {approvalDecisionDialog.refundAssignmentId.source === 'csv'
+                      ? `${approvalDecisionDialog.refundAssignmentId.firstName} ${approvalDecisionDialog.refundAssignmentId.lastName}`
+                      : `${approvalDecisionDialog.refundAssignmentId.leadId?.firstName || ''} ${approvalDecisionDialog.refundAssignmentId.leadId?.lastName || ''}`
+                    }
+                  </Typography>
+                  <Typography variant="body2">
+                    <strong>Current Status:</strong>{' '}
+                    {getStatusLabel(approvalDecisionDialog.refundAssignmentId.status)}
+                  </Typography>
+                  <Typography variant="body2">
+                    <strong>Previous Status:</strong>{' '}
+                    {getStatusLabel(approvalDecisionDialog.previousStatus)}
+                  </Typography>
+                  <Typography variant="body2">
+                    <strong>Refunds Manager:</strong>{' '}
+                    {approvalDecisionDialog.refundAssignmentId.refundsManager?.fullName || 'N/A'}
+                  </Typography>
+                </Box>
+              )}
+
+              {/* Request info */}
+              <Typography variant="body2" sx={{ mb: 1 }}>
+                <strong>Requested by:</strong> {approvalDecisionDialog.requestedBy?.fullName}
+              </Typography>
+              {approvalDecisionDialog.requestNotes && (
+                <Typography variant="body2" sx={{ mb: 1 }}>
+                  <strong>Request notes:</strong> {approvalDecisionDialog.requestNotes}
+                </Typography>
+              )}
+              <Typography variant="body2" sx={{ mb: 2 }}>
+                <strong>Requested at:</strong>{' '}
+                {new Date(approvalDecisionDialog.createdAt).toLocaleString()}
+              </Typography>
+
+              {/* Decision history */}
+              {approvalDecisionDialog.decisions?.length > 0 && (
+                <Box sx={{ mb: 2 }}>
+                  <Typography variant="h6" gutterBottom>Decision History</Typography>
+                  {approvalDecisionDialog.decisions.map((decision, idx) => (
+                    <Box key={idx} sx={{
+                      p: 1.5, mb: 1, borderRadius: 1,
+                      bgcolor: decision.decision === 'approve' ? 'success.50' : 'error.50',
+                      border: `1px solid ${decision.decision === 'approve' ? '#c8e6c9' : '#ffcdd2'}`
+                    }}>
+                      <Typography variant="body2">
+                        <strong>{decision.decidedBy?.fullName}</strong> ({decision.role})
+                        {' '}{decision.decision === 'approve' ? 'approved' : 'rejected'}
+                        {' '}on {new Date(decision.decidedAt).toLocaleString()}
+                      </Typography>
+                      {decision.notes && (
+                        <Typography variant="body2" sx={{ mt: 0.5, fontStyle: 'italic' }}>
+                          Notes: {decision.notes}
+                        </Typography>
+                      )}
+                      {decision.evidenceImages?.length > 0 && (
+                        <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
+                          {decision.evidenceImages.map((img) => (
+                            <Box
+                              key={img._id}
+                              component="a"
+                              href={getRefundApprovalImageUrl(img._id)}
+                              target="_blank"
+                              sx={{
+                                display: 'inline-block',
+                                width: 60, height: 60,
+                                borderRadius: 1, overflow: 'hidden',
+                                border: '1px solid #ddd'
+                              }}
+                            >
+                              <img
+                                src={getRefundApprovalImageThumbnailUrl(img._id)}
+                                alt={img.originalName || 'Evidence'}
+                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                              />
+                            </Box>
+                          ))}
+                        </Stack>
+                      )}
+                    </Box>
+                  ))}
+                </Box>
+              )}
+
+              {/* Admin selector - shown when superior is reviewing */}
+              {approvalDecisionDialog?.status === 'pending_superior' && (
+                <Box sx={{ mb: 2 }}>
+                  <Typography variant="h6" gutterBottom>Select Admin for Final Review</Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                    Choose which admin should perform the final confirmation review.
+                  </Typography>
+                  <FormControl fullWidth size="small">
+                    <InputLabel>Admin Reviewer</InputLabel>
+                    <Select
+                      value={selectedAdminReviewerId}
+                      onChange={(e) => setSelectedAdminReviewerId(e.target.value)}
+                      label="Admin Reviewer"
+                    >
+                      {adminUsers.map((admin) => (
+                        <MenuItem key={admin._id} value={admin._id}>
+                          {admin.fullName} ({admin.email})
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Box>
+              )}
+
+              {/* Decision form */}
+              <Typography variant="h6" gutterBottom>Your Decision</Typography>
+              <TextField
+                fullWidth
+                multiline
+                rows={3}
+                label="Decision Notes"
+                value={decisionNotes}
+                onChange={(e) => setDecisionNotes(e.target.value)}
+                placeholder="Add notes about your decision..."
+                sx={{ mb: 2 }}
+              />
+
+              {/* Evidence image upload */}
+              <Typography variant="subtitle2" gutterBottom>
+                Upload Evidence Images (optional)
+              </Typography>
+              <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
+                <Button
+                  variant="outlined"
+                  component="label"
+                  startIcon={uploadingEvidenceImage ? <CircularProgress size={16} /> : <ImageIcon />}
+                  disabled={uploadingEvidenceImage}
+                  size="small"
+                >
+                  {uploadingEvidenceImage ? 'Uploading...' : 'Add Image'}
+                  <input
+                    type="file"
+                    hidden
+                    accept="image/*"
+                    onChange={handleEvidenceImageUpload}
+                  />
+                </Button>
+                {decisionImages.length > 0 && (
+                  <Typography variant="body2" color="text.secondary">
+                    {decisionImages.length} image(s) attached
+                  </Typography>
+                )}
+              </Stack>
+              {decisionImages.length > 0 && (
+                <Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: 'wrap' }}>
+                  {decisionImages.map((img) => (
+                    <Box
+                      key={img._id}
+                      sx={{
+                        width: 80, height: 80,
+                        borderRadius: 1, overflow: 'hidden',
+                        border: '1px solid #ddd', position: 'relative'
+                      }}
+                    >
+                      <img
+                        src={getRefundApprovalImageThumbnailUrl(img._id)}
+                        alt={img.originalName || 'Evidence'}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      />
+                    </Box>
+                  ))}
+                </Stack>
+              )}
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setApprovalDecisionDialog(null)}>Cancel</Button>
+          <Button
+            onClick={() => handleProcessDecision('reject')}
+            variant="outlined"
+            color="error"
+            disabled={processingDecision}
+            startIcon={processingDecision ? <CircularProgress size={16} /> : <RejectIcon />}
+          >
+            Reject
+          </Button>
+          <Button
+            onClick={() => handleProcessDecision('approve')}
+            variant="contained"
+            color="success"
+            disabled={processingDecision || (approvalDecisionDialog?.status === 'pending_superior' && !selectedAdminReviewerId)}
+            startIcon={processingDecision ? <CircularProgress size={16} /> : <ApproveIcon />}
+          >
+            Approve
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Superior Lead Manager Selection Dialog (Admin only) */}
+      <Dialog
+        open={superiorManagerDialogOpen}
+        onClose={() => setSuperiorManagerDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Set Superior Lead Manager</DialogTitle>
+        <DialogContent>
+          <Alert severity="info" sx={{ mb: 2, mt: 1 }}>
+            The superior lead manager will be responsible for reviewing refund approval requests before they go to admin for final confirmation.
+          </Alert>
+          {superiorManager && (
+            <Typography variant="body2" sx={{ mb: 2 }}>
+              <strong>Current:</strong> {superiorManager.fullName} ({superiorManager.email})
+            </Typography>
+          )}
+          <FormControl fullWidth>
+            <InputLabel>Select User</InputLabel>
+            <Select
+              value={selectedSuperiorManagerId}
+              onChange={(e) => setSelectedSuperiorManagerId(e.target.value)}
+              label="Select User"
+            >
+              {refundsManagers.map((manager) => (
+                <MenuItem key={manager._id} value={manager._id}>
+                  {manager.fullName} ({manager.email})
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setSuperiorManagerDialogOpen(false)}>Cancel</Button>
+          <Button
+            onClick={handleSetSuperiorManager}
+            variant="contained"
+            disabled={settingSuperior || !selectedSuperiorManagerId}
+          >
+            {settingSuperior ? <CircularProgress size={20} /> : 'Set Superior Manager'}
           </Button>
         </DialogActions>
       </Dialog>

@@ -885,7 +885,7 @@ const LeadDetails = React.memo(({ lead }) => (
                     }}
                   >
                     {doc?.url &&
-                    (doc.url.match(/\.(jpg|jpeg|png|gif|webp)$/i) ||
+                    (doc.url.match(/\.(jpg|jpeg|png|gif|webp)(\?|$)/i) ||
                       doc.url.startsWith("data:image/")) ? (
                       <Box sx={{ mb: 1 }}>
                         <DocumentPreview

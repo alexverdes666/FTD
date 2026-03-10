@@ -1,5 +1,7 @@
 const { validationResult } = require("express-validator");
 const mongoose = require("mongoose");
+const { S3Client, GetObjectCommand } = require("@aws-sdk/client-s3");
+const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const Order = require("../models/Order");
 const Lead = require("../models/Lead");
 const ClientNetwork = require("../models/ClientNetwork");
@@ -8,6 +10,47 @@ const Campaign = require("../models/Campaign");
 const CallChangeRequest = require("../models/CallChangeRequest");
 const referenceCache = require("../services/referenceCache");
 const leadSearchCache = require("../services/leadSearchCache");
+
+// S3 client for resolving verification photo URLs
+const s3Client = new S3Client({
+  region: process.env.AWS_REGION || "eu-west-2",
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+  },
+});
+const S3_BUCKET =
+  process.env.S3_BUCKET_NAME || "creditopro-verification-sessions-2025";
+
+// Helper to resolve s3: document URLs to signed S3 URLs for leads within orders
+const resolveS3DocumentUrls = async (orders) => {
+  const orderArray = Array.isArray(orders) ? orders : [orders];
+  try {
+    await Promise.all(
+      orderArray.flatMap((order) =>
+        (order.leads || []).flatMap((lead) =>
+          (lead.documents || [])
+            .filter((doc) => doc.url && doc.url.startsWith("s3:"))
+            .map(async (doc) => {
+              const s3Key = doc.url.substring(3);
+              const command = new GetObjectCommand({
+                Bucket: S3_BUCKET,
+                Key: s3Key,
+              });
+              doc.url = await getSignedUrl(s3Client, command, {
+                expiresIn: 3600,
+              });
+            })
+        )
+      )
+    );
+  } catch (s3Error) {
+    console.error(
+      "[ORDERS] Error resolving S3 document URLs:",
+      s3Error.message
+    );
+  }
+};
 
 // Helper function to build a Set of active (non-removed) lead IDs from orders.
 // Orders must have been queried with .select("leads removedLeads").
@@ -3658,6 +3701,11 @@ exports.getOrderById = async (req, res, next) => {
         success: false,
         message: "Not authorized to view this order",
       });
+    }
+
+    // Resolve s3: document URLs to signed S3 URLs
+    if (!lightweight) {
+      await resolveS3DocumentUrls(order);
     }
 
     // In lightweight mode, add lead count for convenience

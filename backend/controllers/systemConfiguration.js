@@ -74,7 +74,77 @@ const updateGlobalBonusRates = async (req, res) => {
   }
 };
 
+// Get superior lead manager configuration
+const getSuperiorLeadManager = async (req, res) => {
+  try {
+    const superiorManager = await SystemConfiguration.getSuperiorLeadManager();
+
+    res.json({
+      success: true,
+      data: superiorManager,
+    });
+  } catch (error) {
+    console.error("Error fetching superior lead manager:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch superior lead manager configuration",
+      error: error.message,
+    });
+  }
+};
+
+// Set superior lead manager configuration (admin only)
+const setSuperiorLeadManager = async (req, res) => {
+  try {
+    const { userId } = req.body;
+    const User = require("../models/User");
+
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: "User ID is required.",
+      });
+    }
+
+    // Verify the user exists
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found.",
+      });
+    }
+
+    if (!user.isActive || user.status !== "approved") {
+      return res.status(400).json({
+        success: false,
+        message: "User must be active and approved.",
+      });
+    }
+
+    const config = await SystemConfiguration.setSuperiorLeadManager(
+      userId,
+      req.user.id
+    );
+
+    res.json({
+      success: true,
+      message: `${user.fullName} has been set as the superior lead manager.`,
+      data: config.superiorLeadManager,
+    });
+  } catch (error) {
+    console.error("Error setting superior lead manager:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to set superior lead manager",
+      error: error.message,
+    });
+  }
+};
+
 module.exports = {
   getGlobalBonusRates,
   updateGlobalBonusRates,
+  getSuperiorLeadManager,
+  setSuperiorLeadManager,
 };

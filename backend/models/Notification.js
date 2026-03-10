@@ -48,6 +48,12 @@ const notificationSchema = new mongoose.Schema({
       'sim_card_cooldown',
       'fine_disputed',
       'fine_decision',
+      'refund_approval_requested',
+      'refund_approval_approved',
+      'refund_approval_rejected',
+      'refund_approval_admin_review',
+      'refund_approval_admin_rejected',
+      'refund_approval_complete',
       'system',
       'general'
     ],
@@ -81,7 +87,7 @@ const notificationSchema = new mongoose.Schema({
     },
     type: {
       type: String,
-      enum: ['Ticket', 'Order', 'Lead', 'User', 'Withdrawal', 'SimCard', 'AgentFine'],
+      enum: ['Ticket', 'Order', 'Lead', 'User', 'Withdrawal', 'SimCard', 'AgentFine', 'RefundApproval'],
       default: null
     }
   },

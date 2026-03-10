@@ -24,3 +24,27 @@ export const updateGlobalBonusRates = async (bonusRates, notes = '') => {
     throw error;
   }
 };
+
+// Get superior lead manager configuration
+export const getSuperiorLeadManager = async () => {
+  try {
+    const response = await api.get('/system-config/superior-lead-manager');
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching superior lead manager:', error);
+    throw error;
+  }
+};
+
+// Set superior lead manager configuration
+export const setSuperiorLeadManager = async (userId) => {
+  try {
+    const response = await api.put('/system-config/superior-lead-manager', {
+      userId
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error setting superior lead manager:', error);
+    throw error;
+  }
+};
