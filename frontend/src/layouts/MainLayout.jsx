@@ -525,6 +525,7 @@ const MainLayout = () => {
             },
           ],
         },
+        { text: "SMS", icon: <SmsIcon />, path: "/sms" },
         {
           text: "Announce",
           icon: <AnnouncementIcon />,
@@ -624,6 +625,11 @@ const MainLayout = () => {
               icon: <SimCardIcon />,
               path: "/numbers",
             },
+            {
+              text: "SMS",
+              icon: <SmsIcon />,
+              path: "/sms",
+            },
           ],
         },
         { text: "Fines", icon: <GavelIcon />, path: "/fines" },
@@ -633,6 +639,7 @@ const MainLayout = () => {
       return [
         ...commonItems,
         { text: "Refunds", icon: <RefundsIcon />, path: "/refunds" },
+        { text: "SMS", icon: <SmsIcon />, path: "/sms" },
         { text: "Fines", icon: <GavelIcon />, path: "/fines" },
         { text: "Tickets", icon: <TicketIcon />, path: "/tickets" },
       ];

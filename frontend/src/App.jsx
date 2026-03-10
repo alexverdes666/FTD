@@ -373,7 +373,7 @@ function AppContent() {
             <Route
               path="sms"
               element={
-                <ProtectedRoute allowedRoles={["admin"]}>
+                <ProtectedRoute allowedRoles={["admin", "affiliate_manager", "lead_manager", "refunds_manager"]}>
                   <LazyPage><SMSPage /></LazyPage>
                 </ProtectedRoute>
               }

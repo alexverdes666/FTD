@@ -1,12 +1,12 @@
 const express = require("express");
 const { getSMSMessages, fetchFromGateway } = require("../controllers/sms");
-const { protect, isAdmin } = require("../middleware/auth");
+const { protect, authorize } = require("../middleware/auth");
 
 const router = express.Router();
 
-// All SMS routes require admin access
+// SMS routes accessible by admin, affiliate_manager, lead_manager, and refunds_manager
 router.use(protect);
-router.use(isAdmin);
+router.use(authorize("admin", "affiliate_manager", "lead_manager", "refunds_manager"));
 
 // Get all SMS messages with pagination and filtering
 router.get("/", getSMSMessages);

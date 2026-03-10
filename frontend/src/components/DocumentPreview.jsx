@@ -237,6 +237,7 @@ const DocumentPreview = ({ url, type, children, forceImage = false }) => {
   }, [directUrl, isImage]);
 
   const handleMouseEnter = (event) => {
+    if (showModal) return;
     const rect = event.currentTarget.getBoundingClientRect();
     const viewportHeight = window.innerHeight;
     const viewportWidth = window.innerWidth;
@@ -297,7 +298,7 @@ const DocumentPreview = ({ url, type, children, forceImage = false }) => {
       event.preventDefault();
       event.stopPropagation();
       setZoom((prev) => {
-        const next = Math.min(Math.max(prev + (event.deltaY > 0 ? -0.1 : 0.1), 0.2), 5);
+        const next = Math.min(Math.max(prev + (event.deltaY > 0 ? -0.25 : 0.25), 0.2), 5);
         if (next <= 1) setPan({ x: 0, y: 0 });
         return next;
       });
@@ -525,7 +526,7 @@ const DocumentPreview = ({ url, type, children, forceImage = false }) => {
           backgroundColor: 'rgba(0, 0, 0, 0.5)',
         }}
       >
-        <ModalContent>
+        <ModalContent onClick={(e) => e.stopPropagation()}>
           <Box sx={{
             display: 'flex',
             justifyContent: 'space-between',
