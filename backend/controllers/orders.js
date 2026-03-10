@@ -2326,6 +2326,15 @@ exports.createOrder = async (req, res, next) => {
         ...genderFilter,
       };
 
+      // Exclude leads currently assigned to any of the excluded brokers
+      if (selectedClientBrokers && selectedClientBrokers.length > 0) {
+        ftdQuery.assignedClientBrokers = {
+          $nin: selectedClientBrokers.map(
+            (id) => new mongoose.Types.ObjectId(id)
+          ),
+        };
+      }
+
       // Exclude leads already in orders with same client network or same brokers (robust dedup)
       const excludedIds = new Set();
       for (const id of leadsAlreadyInSameClientNetwork) excludedIds.add(id);
@@ -2729,6 +2738,15 @@ exports.createOrder = async (req, res, next) => {
         ...genderFilter,
       };
 
+      // Exclude leads currently assigned to any of the excluded brokers
+      if (selectedClientBrokers && selectedClientBrokers.length > 0) {
+        fillerQuery.assignedClientBrokers = {
+          $nin: selectedClientBrokers.map(
+            (id) => new mongoose.Types.ObjectId(id)
+          ),
+        };
+      }
+
       // Exclude leads already in orders with same client network or same brokers (robust dedup)
       const fillerExcludedIds = new Set();
       for (const id of leadsAlreadyInSameClientNetwork) fillerExcludedIds.add(id);
@@ -2853,6 +2871,15 @@ exports.createOrder = async (req, res, next) => {
         ...genderFilter,
       };
 
+      // Exclude leads currently assigned to any of the excluded brokers
+      if (selectedClientBrokers && selectedClientBrokers.length > 0) {
+        coldQuery.assignedClientBrokers = {
+          $nin: selectedClientBrokers.map(
+            (id) => new mongoose.Types.ObjectId(id)
+          ),
+        };
+      }
+
       // Exclude leads already in orders with same client network or same brokers (robust dedup)
       const coldExcludedIds = new Set();
       for (const id of leadsAlreadyInSameClientNetwork) coldExcludedIds.add(id);
@@ -2886,10 +2913,6 @@ exports.createOrder = async (req, res, next) => {
         );
         coldQuery.newPhone = { $nin: alreadyPulledPhoneNumbers };
       }
-
-      // Client network and broker dedup for cold leads is handled above via order-based _id exclusion
-      // (leadsAlreadyInSameClientNetwork + leadsAlreadyWithSameBrokers sets),
-      // which is more reliable than checking clientNetworkHistory/assignedClientBrokers on each lead
 
       // Use aggregate with $sample for random selection, but now with ALL filters applied
       // Sample more than needed to account for phone pattern filtering
@@ -4929,6 +4952,20 @@ exports.changeFTDInOrder = async (req, res, next) => {
       ...countryFilter,
     };
 
+    // Exclude leads currently assigned to any of the excluded brokers
+    const brokersForExclusion = (selectedClientBrokers && selectedClientBrokers.length > 0)
+      ? selectedClientBrokers
+      : (order.selectedClientBrokers && order.selectedClientBrokers.length > 0)
+        ? order.selectedClientBrokers
+        : [];
+    if (brokersForExclusion.length > 0) {
+      ftdQuery.assignedClientBrokers = {
+        $nin: brokersForExclusion.map(
+          (id) => new mongoose.Types.ObjectId(id.toString())
+        ),
+      };
+    }
+
     // Apply agent/gender filters based on what's provided
     // Priority: fallbackGender > preferredAgent > default unassigned
     if (fallbackGender) {
@@ -5928,6 +5965,13 @@ exports.checkOrderFulfillment = async (req, res, next) => {
             $nin: [...currentExcluded, ...[...brokerExcludedIds].map((id) => new mongoose.Types.ObjectId(id))],
           };
         }
+
+        // Exclude leads currently assigned to any of the excluded brokers
+        baseQuery.assignedClientBrokers = {
+          $nin: selectedClientBrokers.map(
+            (id) => new mongoose.Types.ObjectId(id)
+          ),
+        };
       }
 
       let insufficient = false;
@@ -6339,6 +6383,23 @@ exports.addLeadsToOrder = async (req, res, next) => {
         return res.status(400).json({
           success: false,
           message: `Some leads were already assigned to this order's client brokers: ${conflictNames.join(", ")}`,
+        });
+      }
+
+      // Check if any leads are currently assigned to excluded brokers
+      const excludedBrokerStrings = brokerIds.map((id) => id.toString());
+      const brokerAssignedConflicts = foundLeads.filter((lead) =>
+        (lead.assignedClientBrokers || []).some((id) =>
+          excludedBrokerStrings.includes(id.toString())
+        )
+      );
+      if (brokerAssignedConflicts.length > 0) {
+        const conflictNames = brokerAssignedConflicts.map(
+          (l) => `${l.firstName} ${l.lastName} (${l.newEmail})`
+        );
+        return res.status(400).json({
+          success: false,
+          message: `Some leads are assigned to excluded brokers: ${conflictNames.join(", ")}`,
         });
       }
     }
@@ -6983,6 +7044,20 @@ exports.replaceLeadInOrder = async (req, res, next) => {
         return res.status(400).json({
           success: false,
           message: `Replacement lead "${newLead.firstName} ${newLead.lastName}" was already used in an order with the same client brokers. Cannot reuse the same lead for the same broker.`,
+        });
+      }
+
+      // Check if replacement lead is currently assigned to any of the excluded brokers
+      const excludedBrokerStrings = brokerIds.map((id) => id.toString());
+      const leadBrokerStrings = (newLead.assignedClientBrokers || []).map((id) => id.toString());
+      const matchedBrokers = leadBrokerStrings.filter((id) => excludedBrokerStrings.includes(id));
+      if (matchedBrokers.length > 0) {
+        const ClientBroker = require("../models/ClientBroker");
+        const matchedBrokerDocs = await ClientBroker.find({ _id: { $in: matchedBrokers } }).select("name");
+        const brokerNames = matchedBrokerDocs.map((b) => b.name).join(", ");
+        return res.status(400).json({
+          success: false,
+          message: `Replacement lead "${newLead.firstName} ${newLead.lastName}" is assigned to excluded broker(s): ${brokerNames}. Cannot use a lead already assigned to an excluded broker.`,
         });
       }
     }
