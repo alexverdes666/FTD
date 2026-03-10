@@ -182,6 +182,9 @@ const DocumentPreview = ({ url, type, children, forceImage = false }) => {
   const [imageLoading, setImageLoading] = useState(true);
   const [imageError, setImageError] = useState(false);
   const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
 
   // Get the direct image URL - memoized to prevent unnecessary recalculations
   const directUrl = useMemo(() => getDirectImageUrl(url), [url]);
@@ -265,6 +268,7 @@ const DocumentPreview = ({ url, type, children, forceImage = false }) => {
     }
     setShowPreview(false);
     setZoom(1);
+    setPan({ x: 0, y: 0 });
     setShowModal(true);
   };
 
@@ -275,15 +279,50 @@ const DocumentPreview = ({ url, type, children, forceImage = false }) => {
     setShowPreview(false);
     setShowModal(false);
     setZoom(1);
+    setPan({ x: 0, y: 0 });
   };
 
   const handleWheel = useCallback((event) => {
     event.preventDefault();
     setZoom((prev) => {
-      const delta = event.deltaY > 0 ? -0.1 : 0.1;
-      return Math.min(Math.max(prev + delta, 0.2), 5);
+      const next = Math.min(Math.max(prev + (event.deltaY > 0 ? -0.1 : 0.1), 0.2), 5);
+      if (next <= 1) setPan({ x: 0, y: 0 });
+      return next;
     });
   }, []);
+
+  const handleMouseDown = useCallback((event) => {
+    if (zoom <= 1) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setIsDragging(true);
+    setDragStart({ x: event.clientX - pan.x, y: event.clientY - pan.y });
+  }, [zoom, pan]);
+
+  const handleMouseMove = useCallback((event) => {
+    if (!isDragging) return;
+    event.preventDefault();
+    setPan({ x: event.clientX - dragStart.x, y: event.clientY - dragStart.y });
+  }, [isDragging, dragStart]);
+
+  const handleMouseUp = useCallback(() => {
+    setIsDragging(false);
+  }, []);
+
+  // Attach global mouse events during drag to prevent losing the drag when mouse leaves container
+  useEffect(() => {
+    if (!isDragging) return;
+    const onMove = (e) => {
+      setPan({ x: e.clientX - dragStart.x, y: e.clientY - dragStart.y });
+    };
+    const onUp = () => setIsDragging(false);
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+  }, [isDragging, dragStart]);
 
   const handleDownload = useCallback(async (event) => {
     event.stopPropagation();
@@ -520,16 +559,22 @@ const DocumentPreview = ({ url, type, children, forceImage = false }) => {
           </Box>
           <Box
             onWheel={handleWheel}
+            onMouseDown={handleMouseDown}
             sx={{
-              overflow: 'auto',
+              overflow: 'hidden',
               maxHeight: 'calc(90vh - 100px)',
               display: 'flex',
               justifyContent: 'center',
               alignItems: 'center',
-              cursor: zoom > 1 ? 'grab' : 'default',
+              cursor: zoom > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default',
+              userSelect: 'none',
             }}
           >
-            <Box sx={{ transform: `scale(${zoom})`, transformOrigin: 'center center', transition: 'transform 0.1s ease-out' }}>
+            <Box sx={{
+              transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+              transformOrigin: 'center center',
+              transition: isDragging ? 'none' : 'transform 0.1s ease-out',
+            }}>
               {renderContent(true)}
             </Box>
           </Box>
