@@ -272,7 +272,9 @@ const DocumentPreview = ({ url, type, children, forceImage = false }) => {
     setShowModal(true);
   };
 
-  const handleCloseModal = (event) => {
+  const handleCloseModal = (event, reason) => {
+    // Ignore backdrop clicks when zoomed - prevents unzoom during drag
+    if (reason === "backdropClick" && zoom > 1) return;
     if (event) {
       event.stopPropagation();
     }
