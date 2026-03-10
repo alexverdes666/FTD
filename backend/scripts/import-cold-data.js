@@ -199,10 +199,6 @@ const loadAllFiles = async () => {
 };
 
 const importColdData = async () => {
-  // Delete previously imported cold leads first
-  const deleteResult = await Lead.deleteMany({ leadType: "cold" });
-  console.log(`Deleted ${deleteResult.deletedCount} existing cold leads`);
-
   const allLeads = await loadAllFiles();
 
   console.log(`\nTotal parsed: ${allLeads.length} rows`);
@@ -225,8 +221,24 @@ const importColdData = async () => {
   }
   console.log(`After deduplication: ${uniqueLeads.length} unique leads`);
 
+  // Check which emails already exist in the database
+  const existingEmails = await Lead.find(
+    { newEmail: { $in: uniqueLeads.map((l) => l.newEmail) } },
+    { newEmail: 1 }
+  ).lean();
+  const existingEmailSet = new Set(existingEmails.map((e) => e.newEmail));
+  console.log(`Already in database: ${existingEmailSet.size} leads`);
+
+  const newLeads = uniqueLeads.filter((l) => !existingEmailSet.has(l.newEmail));
+  console.log(`New leads to insert: ${newLeads.length}`);
+
+  if (newLeads.length === 0) {
+    console.log("\nNo new leads to import. All data already exists in the database.");
+    return { inserted: 0, skipped: existingEmailSet.size, errors: 0 };
+  }
+
   // Build documents for insertion
-  const documents = uniqueLeads.map((lead) => ({
+  const documents = newLeads.map((lead) => ({
     leadType: "cold",
     firstName: lead.firstName,
     lastName: lead.lastName,
@@ -260,6 +272,7 @@ const importColdData = async () => {
 
   console.log(`\n\n--- Import Summary ---`);
   console.log(`Successfully inserted: ${insertedCount}`);
+  console.log(`Skipped (already existed): ${existingEmailSet.size}`);
   console.log(`Skipped (duplicates in files): ${validLeads.length - uniqueLeads.length}`);
   console.log(`Errors: ${errorCount}`);
 
