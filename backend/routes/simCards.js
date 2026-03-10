@@ -29,7 +29,7 @@ const router = express.Router();
 
 // Middleware to ensure user has permission to manage SIM cards
 const requireSimCardPermission = (req, res, next) => {
-  if (req.user.role === 'admin' || req.user.role === 'inventory_manager' || 
+  if (req.user.role === 'admin' || req.user.role === 'inventory_manager' ||
       (req.user.permissions && req.user.permissions.canManageSimCards)) {
     next();
   } else {
@@ -40,8 +40,22 @@ const requireSimCardPermission = (req, res, next) => {
   }
 };
 
+// Read-only access for roles that need SIM card data (e.g. SMS page)
+const requireSimCardReadAccess = (req, res, next) => {
+  const readRoles = ['admin', 'inventory_manager', 'affiliate_manager', 'lead_manager', 'refunds_manager'];
+  if (readRoles.includes(req.user.role) ||
+      (req.user.permissions && req.user.permissions.canManageSimCards)) {
+    next();
+  } else {
+    return res.status(403).json({
+      success: false,
+      message: 'Permission to view SIM cards required'
+    });
+  }
+};
+
 // Get all SIM cards with filtering
-router.get('/', [protect, requireSimCardPermission], getSimCards);
+router.get('/', [protect, requireSimCardReadAccess], getSimCards);
 
 // Get SIM card statistics
 router.get('/stats', [protect, requireSimCardPermission], getSimCardStats);

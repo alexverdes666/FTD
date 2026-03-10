@@ -16,7 +16,7 @@ const router = express.Router();
 
 // Middleware to ensure user has permission to manage gateways
 const requireGatewayPermission = (req, res, next) => {
-  if (req.user.role === 'admin' || req.user.role === 'inventory_manager' || 
+  if (req.user.role === 'admin' || req.user.role === 'inventory_manager' ||
       (req.user.permissions && req.user.permissions.canManageSimCards)) {
     next();
   } else {
@@ -27,8 +27,22 @@ const requireGatewayPermission = (req, res, next) => {
   }
 };
 
+// Read-only access for roles that need gateway data (e.g. SMS page)
+const requireGatewayReadAccess = (req, res, next) => {
+  const readRoles = ['admin', 'inventory_manager', 'affiliate_manager', 'lead_manager', 'refunds_manager'];
+  if (readRoles.includes(req.user.role) ||
+      (req.user.permissions && req.user.permissions.canManageSimCards)) {
+    next();
+  } else {
+    return res.status(403).json({
+      success: false,
+      message: 'Permission to view gateways required'
+    });
+  }
+};
+
 // Get all gateway devices
-router.get('/', [protect, requireGatewayPermission], getGatewayDevices);
+router.get('/', [protect, requireGatewayReadAccess], getGatewayDevices);
 
 // Get single gateway device by ID
 router.get('/:id', [protect, requireGatewayPermission], getGatewayDeviceById);
