@@ -29,6 +29,36 @@ const s3Client = new S3Client({
 const S3_BUCKET =
   process.env.S3_BUCKET_NAME || "creditopro-verification-sessions-2025";
 
+// Extract the S3 key from a document URL (handles both s3: prefix and full signed URLs)
+const extractS3Key = (url) => {
+  if (!url) return null;
+  // Already in s3: prefix format
+  if (url.startsWith("s3:")) return url.substring(3);
+  // Full S3 URL - extract the key from the path
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname.includes(S3_BUCKET) || parsed.hostname.includes(".s3.")) {
+      return decodeURIComponent(parsed.pathname.substring(1)); // Remove leading /
+    }
+  } catch (e) {
+    // Not a valid URL
+  }
+  return null;
+};
+
+// Convert any S3 URL (signed or otherwise) back to s3: prefix format for storage
+const sanitizeDocumentUrls = (documents) => {
+  if (!Array.isArray(documents)) return documents;
+  return documents.map((doc) => {
+    if (!doc || !doc.url) return doc;
+    const s3Key = extractS3Key(doc.url);
+    if (s3Key) {
+      return { ...doc, url: `s3:${s3Key}` };
+    }
+    return doc;
+  });
+};
+
 // Country code to name mapping for search
 const COUNTRY_CODE_MAP = {
   UK: "United Kingdom",
@@ -413,14 +443,14 @@ exports.getLeads = async (req, res, next) => {
       },
     ]);
 
-    // Resolve s3: document URLs to signed S3 URLs
+    // Resolve S3 document URLs to fresh signed URLs (handles both s3: prefix and full S3 URLs)
     try {
       await Promise.all(
         leads.flatMap((lead) =>
           (lead.documents || [])
-            .filter((doc) => doc.url && doc.url.startsWith("s3:"))
             .map(async (doc) => {
-              const s3Key = doc.url.substring(3);
+              const s3Key = extractS3Key(doc.url);
+              if (!s3Key) return;
               const command = new GetObjectCommand({
                 Bucket: S3_BUCKET,
                 Key: s3Key,
@@ -728,21 +758,20 @@ exports.getLeadById = async (req, res, next) => {
       delete leadData.callHistory;
     }
 
-    // Resolve s3: document URLs to signed S3 URLs
+    // Resolve S3 document URLs to fresh signed URLs (handles both s3: prefix and full S3 URLs)
     if (leadData.documents && leadData.documents.length > 0) {
       try {
         await Promise.all(
           leadData.documents.map(async (doc) => {
-            if (doc.url && doc.url.startsWith("s3:")) {
-              const s3Key = doc.url.substring(3); // Remove "s3:" prefix
-              const command = new GetObjectCommand({
-                Bucket: S3_BUCKET,
-                Key: s3Key,
-              });
-              doc.url = await getSignedUrl(s3Client, command, {
-                expiresIn: 3600,
-              });
-            }
+            const s3Key = extractS3Key(doc.url);
+            if (!s3Key) return;
+            const command = new GetObjectCommand({
+              Bucket: S3_BUCKET,
+              Key: s3Key,
+            });
+            doc.url = await getSignedUrl(s3Client, command, {
+              expiresIn: 3600,
+            });
           })
         );
       } catch (s3Error) {
@@ -1701,7 +1730,7 @@ exports.updateLead = async (req, res, next) => {
       };
     }
     if (documents) {
-      lead.documents = documents;
+      lead.documents = sanitizeDocumentUrls(documents);
     }
 
     // Handle campaign assignments

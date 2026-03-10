@@ -22,7 +22,22 @@ const s3Client = new S3Client({
 const S3_BUCKET =
   process.env.S3_BUCKET_NAME || "creditopro-verification-sessions-2025";
 
-// Helper to resolve s3: document URLs to signed S3 URLs for leads within orders
+// Extract the S3 key from a document URL (handles both s3: prefix and full signed URLs)
+const extractS3Key = (url) => {
+  if (!url) return null;
+  if (url.startsWith("s3:")) return url.substring(3);
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname.includes(S3_BUCKET) || parsed.hostname.includes(".s3.")) {
+      return decodeURIComponent(parsed.pathname.substring(1));
+    }
+  } catch (e) {
+    // Not a valid URL
+  }
+  return null;
+};
+
+// Helper to resolve S3 document URLs to fresh signed URLs for leads within orders
 const resolveS3DocumentUrls = async (orders) => {
   const orderArray = Array.isArray(orders) ? orders : [orders];
   try {
@@ -30,9 +45,9 @@ const resolveS3DocumentUrls = async (orders) => {
       orderArray.flatMap((order) =>
         (order.leads || []).flatMap((lead) =>
           (lead.documents || [])
-            .filter((doc) => doc.url && doc.url.startsWith("s3:"))
             .map(async (doc) => {
-              const s3Key = doc.url.substring(3);
+              const s3Key = extractS3Key(doc.url);
+              if (!s3Key) return;
               const command = new GetObjectCommand({
                 Bucket: S3_BUCKET,
                 Key: s3Key,

@@ -526,7 +526,7 @@ const LeadDetailCard = ({ lead, onLeadUpdate }) => {
                 <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
                   {lead.documents.map((doc, index) => {
                     const isImage =
-                      doc.url?.match(/\.(jpg|jpeg|png|gif|webp)$/i) ||
+                      doc.url?.match(/\.(jpg|jpeg|png|gif|webp)(\?|$)/i) ||
                       doc.url?.startsWith("data:image/");
                     return (
                       <Box key={index} sx={{ display: "flex", alignItems: "center", gap: 1, p: 0.75, bgcolor: "action.hover", borderRadius: 0.5 }}>
