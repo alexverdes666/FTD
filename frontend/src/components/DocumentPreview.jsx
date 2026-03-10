@@ -261,6 +261,7 @@ const DocumentPreview = ({ url, type, children, forceImage = false }) => {
       window.open(url, '_blank', 'noopener,noreferrer');
       return;
     }
+    setShowPreview(false);
     setShowModal(true);
   };
 
@@ -268,6 +269,7 @@ const DocumentPreview = ({ url, type, children, forceImage = false }) => {
     if (event) {
       event.stopPropagation();
     }
+    setShowPreview(false);
     setShowModal(false);
   };
 
