@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Box, Paper, Typography, Modal, IconButton, Portal, CircularProgress, Tooltip } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import CloseIcon from '@mui/icons-material/Close';
+import DownloadIcon from '@mui/icons-material/Download';
 import ImageIcon from '@mui/icons-material/Image';
 import BrokenImageIcon from '@mui/icons-material/BrokenImage';
 import CancelIcon from '@mui/icons-material/Cancel';
@@ -180,6 +181,7 @@ const DocumentPreview = ({ url, type, children, forceImage = false }) => {
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [imageLoading, setImageLoading] = useState(true);
   const [imageError, setImageError] = useState(false);
+  const [zoom, setZoom] = useState(1);
 
   // Get the direct image URL - memoized to prevent unnecessary recalculations
   const directUrl = useMemo(() => getDirectImageUrl(url), [url]);
@@ -262,6 +264,7 @@ const DocumentPreview = ({ url, type, children, forceImage = false }) => {
       return;
     }
     setShowPreview(false);
+    setZoom(1);
     setShowModal(true);
   };
 
@@ -271,7 +274,37 @@ const DocumentPreview = ({ url, type, children, forceImage = false }) => {
     }
     setShowPreview(false);
     setShowModal(false);
+    setZoom(1);
   };
+
+  const handleWheel = useCallback((event) => {
+    event.preventDefault();
+    setZoom((prev) => {
+      const delta = event.deltaY > 0 ? -0.1 : 0.1;
+      return Math.min(Math.max(prev + delta, 0.2), 5);
+    });
+  }, []);
+
+  const handleDownload = useCallback(async (event) => {
+    event.stopPropagation();
+    const downloadUrl = directUrl || url;
+    if (!downloadUrl) return;
+    try {
+      const response = await fetch(downloadUrl, { mode: 'cors', referrerPolicy: 'no-referrer' });
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = type || 'document';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+    } catch {
+      // Fallback: open in new tab if CORS blocks download
+      window.open(downloadUrl, '_blank', 'noopener,noreferrer');
+    }
+  }, [directUrl, url, type]);
 
   const handleImageLoad = useCallback(() => {
     setImageLoading(false);
@@ -294,8 +327,8 @@ const DocumentPreview = ({ url, type, children, forceImage = false }) => {
 
   const renderContent = (inModal = false) => {
     const styles = inModal ? {
-      maxWidth: '100%',
-      maxHeight: 'calc(90vh - 100px)',
+      maxWidth: '80vw',
+      maxHeight: 'calc(85vh - 100px)',
       objectFit: 'contain',
       display: imageLoading ? 'none' : 'block',
     } : {
@@ -451,20 +484,55 @@ const DocumentPreview = ({ url, type, children, forceImage = false }) => {
             <Typography variant="h6" component="h2" color="text.primary">
               {type}
             </Typography>
-            <IconButton
-              onClick={handleCloseModal}
-              size="small"
-              sx={{
-                color: 'text.primary',
-                '&:hover': {
-                  backgroundColor: 'action.hover',
-                }
-              }}
-            >
-              <CloseIcon />
-            </IconButton>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              {zoom !== 1 && (
+                <Typography variant="caption" color="text.secondary" sx={{ mr: 0.5 }}>
+                  {Math.round(zoom * 100)}%
+                </Typography>
+              )}
+              <Tooltip title="Download" arrow>
+                <IconButton
+                  onClick={handleDownload}
+                  size="small"
+                  sx={{
+                    color: 'text.primary',
+                    '&:hover': {
+                      backgroundColor: 'action.hover',
+                    }
+                  }}
+                >
+                  <DownloadIcon />
+                </IconButton>
+              </Tooltip>
+              <IconButton
+                onClick={handleCloseModal}
+                size="small"
+                sx={{
+                  color: 'text.primary',
+                  '&:hover': {
+                    backgroundColor: 'action.hover',
+                  }
+                }}
+              >
+                <CloseIcon />
+              </IconButton>
+            </Box>
           </Box>
-          {renderContent(true)}
+          <Box
+            onWheel={handleWheel}
+            sx={{
+              overflow: 'auto',
+              maxHeight: 'calc(90vh - 100px)',
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              cursor: zoom > 1 ? 'grab' : 'default',
+            }}
+          >
+            <Box sx={{ transform: `scale(${zoom})`, transformOrigin: 'center center', transition: 'transform 0.1s ease-out' }}>
+              {renderContent(true)}
+            </Box>
+          </Box>
         </ModalContent>
       </Modal>
     </Box>
