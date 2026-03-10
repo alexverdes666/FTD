@@ -285,10 +285,14 @@ const DocumentPreview = ({ url, type, children, forceImage = false }) => {
     setPan({ x: 0, y: 0 });
   };
 
-  // Use native wheel listener with { passive: false } to allow preventDefault
-  useEffect(() => {
-    const el = zoomContainerRef.current;
-    if (!el || !showModal) return;
+  // Use callback ref + native wheel listener with { passive: false } to allow preventDefault
+  const zoomContainerCallbackRef = useCallback((node) => {
+    // Cleanup previous
+    if (zoomContainerRef.current) {
+      zoomContainerRef.current.__wheelCleanup?.();
+    }
+    zoomContainerRef.current = node;
+    if (!node) return;
     const onWheel = (event) => {
       event.preventDefault();
       event.stopPropagation();
@@ -298,9 +302,9 @@ const DocumentPreview = ({ url, type, children, forceImage = false }) => {
         return next;
       });
     };
-    el.addEventListener('wheel', onWheel, { passive: false });
-    return () => el.removeEventListener('wheel', onWheel);
-  }, [showModal]);
+    node.addEventListener('wheel', onWheel, { passive: false });
+    node.__wheelCleanup = () => node.removeEventListener('wheel', onWheel);
+  }, []);
 
   const handleMouseDown = useCallback((event) => {
     if (zoom <= 1) return;
@@ -569,7 +573,7 @@ const DocumentPreview = ({ url, type, children, forceImage = false }) => {
             </Box>
           </Box>
           <Box
-            ref={zoomContainerRef}
+            ref={zoomContainerCallbackRef}
             onMouseDown={handleMouseDown}
             sx={{
               overflow: 'hidden',
