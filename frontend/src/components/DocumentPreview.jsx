@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Box, Paper, Typography, Modal, IconButton, Portal, CircularProgress, Tooltip } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import CloseIcon from '@mui/icons-material/Close';
@@ -185,6 +185,7 @@ const DocumentPreview = ({ url, type, children, forceImage = false }) => {
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const zoomContainerRef = useRef(null);
 
   // Get the direct image URL - memoized to prevent unnecessary recalculations
   const directUrl = useMemo(() => getDirectImageUrl(url), [url]);
@@ -284,14 +285,22 @@ const DocumentPreview = ({ url, type, children, forceImage = false }) => {
     setPan({ x: 0, y: 0 });
   };
 
-  const handleWheel = useCallback((event) => {
-    event.preventDefault();
-    setZoom((prev) => {
-      const next = Math.min(Math.max(prev + (event.deltaY > 0 ? -0.1 : 0.1), 0.2), 5);
-      if (next <= 1) setPan({ x: 0, y: 0 });
-      return next;
-    });
-  }, []);
+  // Use native wheel listener with { passive: false } to allow preventDefault
+  useEffect(() => {
+    const el = zoomContainerRef.current;
+    if (!el || !showModal) return;
+    const onWheel = (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      setZoom((prev) => {
+        const next = Math.min(Math.max(prev + (event.deltaY > 0 ? -0.1 : 0.1), 0.2), 5);
+        if (next <= 1) setPan({ x: 0, y: 0 });
+        return next;
+      });
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [showModal]);
 
   const handleMouseDown = useCallback((event) => {
     if (zoom <= 1) return;
@@ -560,7 +569,7 @@ const DocumentPreview = ({ url, type, children, forceImage = false }) => {
             </Box>
           </Box>
           <Box
-            onWheel={handleWheel}
+            ref={zoomContainerRef}
             onMouseDown={handleMouseDown}
             sx={{
               overflow: 'hidden',
