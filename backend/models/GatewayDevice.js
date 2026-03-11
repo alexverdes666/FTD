@@ -77,6 +77,26 @@ const gatewayDeviceSchema = new mongoose.Schema(
         type: Date,
       },
     },
+    // SMS Webhook configuration (for GoIP SMS Forward HTTP-POST)
+    webhook: {
+      enabled: {
+        type: Boolean,
+        default: false,
+      },
+      slug: {
+        type: String,
+        trim: true,
+        sparse: true,
+        // e.g., "gsm_canada1" → gateway POSTs to /gsm_canada1
+      },
+      username: {
+        type: String,
+        trim: true,
+      },
+      password: {
+        type: String,
+      },
+    },
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
@@ -98,6 +118,10 @@ const gatewayDeviceSchema = new mongoose.Schema(
 // Indexes for efficient querying
 gatewayDeviceSchema.index({ host: 1, port: 1 }, { unique: true });
 gatewayDeviceSchema.index({ isActive: 1 });
+gatewayDeviceSchema.index(
+  { "webhook.slug": 1 },
+  { unique: true, sparse: true }
+);
 
 // Virtual for base URL
 gatewayDeviceSchema.virtual("baseURL").get(function () {

@@ -33,7 +33,8 @@ import {
   Error as ErrorIcon,
   Refresh as RefreshIcon,
   Settings as SettingsIcon,
-  SignalCellularAlt as SignalIcon
+  SignalCellularAlt as SignalIcon,
+  Webhook as WebhookIcon
 } from '@mui/icons-material';
 import gatewayDeviceService from '../services/gatewayDeviceService';
 import toast from 'react-hot-toast';
@@ -51,7 +52,11 @@ const GatewayManagementPage = () => {
     username: '',
     password: '',
     description: '',
-    isActive: true
+    isActive: true,
+    webhookEnabled: false,
+    webhookSlug: '',
+    webhookUsername: '',
+    webhookPassword: ''
   });
 
   useEffect(() => {
@@ -81,7 +86,11 @@ const GatewayManagementPage = () => {
         username: gateway.username,
         password: '', // Don't prefill password for security
         description: gateway.description || '',
-        isActive: gateway.isActive
+        isActive: gateway.isActive,
+        webhookEnabled: gateway.webhook?.enabled || false,
+        webhookSlug: gateway.webhook?.slug || '',
+        webhookUsername: gateway.webhook?.username || '',
+        webhookPassword: gateway.webhook?.password || ''
       });
     } else {
       setEditingGateway(null);
@@ -92,7 +101,11 @@ const GatewayManagementPage = () => {
         username: '',
         password: '',
         description: '',
-        isActive: true
+        isActive: true,
+        webhookEnabled: false,
+        webhookSlug: '',
+        webhookUsername: '',
+        webhookPassword: ''
       });
     }
     setOpenDialog(true);
@@ -108,7 +121,11 @@ const GatewayManagementPage = () => {
       username: '',
       password: '',
       description: '',
-      isActive: true
+      isActive: true,
+      webhookEnabled: false,
+      webhookSlug: '',
+      webhookUsername: '',
+      webhookPassword: ''
     });
   };
 
@@ -133,6 +150,18 @@ const GatewayManagementPage = () => {
       if (editingGateway && !submitData.password) {
         delete submitData.password;
       }
+
+      // Build webhook object
+      submitData.webhook = {
+        enabled: submitData.webhookEnabled,
+        slug: submitData.webhookSlug,
+        username: submitData.webhookUsername,
+        password: submitData.webhookPassword,
+      };
+      delete submitData.webhookEnabled;
+      delete submitData.webhookSlug;
+      delete submitData.webhookUsername;
+      delete submitData.webhookPassword;
 
       if (!editingGateway && !submitData.password) {
         toast.error('Password is required for new gateway');
@@ -278,6 +307,7 @@ const GatewayManagementPage = () => {
                   <TableCell><strong>Host:Port</strong></TableCell>
                   <TableCell><strong>Username</strong></TableCell>
                   <TableCell><strong>Status</strong></TableCell>
+                  <TableCell><strong>SMS Webhook</strong></TableCell>
                   <TableCell><strong>Connection</strong></TableCell>
                   <TableCell><strong>Last Test</strong></TableCell>
                   <TableCell align="right"><strong>Actions</strong></TableCell>
@@ -314,6 +344,15 @@ const GatewayManagementPage = () => {
                         label={gateway.isActive ? 'Active' : 'Inactive'}
                         color={gateway.isActive ? 'success' : 'default'}
                       />
+                    </TableCell>
+                    <TableCell>
+                      {gateway.webhook?.enabled ? (
+                        <Tooltip title={`Slug: /${gateway.webhook.slug}`}>
+                          <Chip size="small" label={gateway.webhook.slug} color="info" icon={<WebhookIcon />} />
+                        </Tooltip>
+                      ) : (
+                        <Chip size="small" label="Off" color="default" />
+                      )}
                     </TableCell>
                     <TableCell>
                       {getConnectionStatusChip(gateway)}
@@ -409,22 +448,23 @@ const GatewayManagementPage = () => {
               <TextField
                 fullWidth
                 required
-                label="Username"
+                label="API Username"
                 name="username"
                 value={formData.username}
                 onChange={handleInputChange}
+                helperText="Gateway login (to connect TO the device)"
               />
             </Grid>
             <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
                 required={!editingGateway}
-                label="Password"
+                label="API Password"
                 name="password"
                 type="password"
                 value={formData.password}
                 onChange={handleInputChange}
-                helperText={editingGateway ? 'Leave blank to keep current' : ''}
+                helperText={editingGateway ? 'Leave blank to keep current' : 'Gateway login password'}
               />
             </Grid>
             <Grid item xs={12}>
@@ -437,6 +477,68 @@ const GatewayManagementPage = () => {
                 multiline
                 rows={2}
                 helperText="Optional description"
+              />
+            </Grid>
+
+            {/* SMS Webhook Configuration */}
+            <Grid item xs={12}>
+              <Typography variant="subtitle2" sx={{ mt: 1, mb: 0.5, display: 'flex', alignItems: 'center', gap: 1 }}>
+                <WebhookIcon fontSize="small" />
+                SMS Webhook (GoIP SMS Forward)
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                The gateway will HTTP-POST incoming SMS to this server. Set the same username/password here and on the GoIP SMS Forward page.
+              </Typography>
+            </Grid>
+            <Grid item xs={12} sm={4}>
+              <TextField
+                select
+                fullWidth
+                label="Webhook"
+                name="webhookEnabled"
+                value={formData.webhookEnabled ? 'true' : 'false'}
+                onChange={(e) => setFormData(prev => ({ ...prev, webhookEnabled: e.target.value === 'true' }))}
+                SelectProps={{ native: true }}
+                size="small"
+              >
+                <option value="false">Disabled</option>
+                <option value="true">Enabled</option>
+              </TextField>
+            </Grid>
+            <Grid item xs={12} sm={8}>
+              <TextField
+                fullWidth
+                label="Webhook Slug"
+                name="webhookSlug"
+                value={formData.webhookSlug}
+                onChange={handleInputChange}
+                size="small"
+                disabled={!formData.webhookEnabled}
+                helperText={formData.webhookSlug ? `URL: ${window.location.origin.replace(/:\d+$/, ':5000')}/${formData.webhookSlug}` : 'e.g., gsm_canada1'}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Webhook Username"
+                name="webhookUsername"
+                value={formData.webhookUsername}
+                onChange={handleInputChange}
+                size="small"
+                disabled={!formData.webhookEnabled}
+                helperText="Must match GoIP SMS Forward config"
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Webhook Password"
+                name="webhookPassword"
+                value={formData.webhookPassword}
+                onChange={handleInputChange}
+                size="small"
+                disabled={!formData.webhookEnabled}
+                helperText="Must match GoIP SMS Forward config"
               />
             </Grid>
           </Grid>

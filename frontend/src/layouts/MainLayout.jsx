@@ -50,6 +50,7 @@ import {
   Speed as PerformanceIcon,
   GridOn as SheetsIcon,
   Sms as SmsIcon,
+  Router as RouterIcon,
   Workspaces as WorkspaceIcon,
   Payment as PSPIcon,
   CreditCard as CardIssuerIcon,
@@ -396,6 +397,11 @@ const MainLayout = () => {
               text: "SMS",
               icon: <SmsIcon />,
               path: "/sms",
+            },
+            {
+              text: "Gateways",
+              icon: <RouterIcon />,
+              path: "/gateway-devices",
             },
             {
               text: "Targets",

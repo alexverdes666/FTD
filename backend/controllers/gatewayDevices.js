@@ -100,6 +100,11 @@ exports.createGatewayDevice = async (req, res, next) => {
       lastModifiedBy: req.user._id
     };
 
+    // Webhook configuration
+    if (req.body.webhook) {
+      gatewayData.webhook = req.body.webhook;
+    }
+
     const gateway = await GatewayDevice.create(gatewayData);
 
     // Populate the created gateway
@@ -179,7 +184,11 @@ exports.updateGatewayDevice = async (req, res, next) => {
     if (password) gateway.password = password;
     if (description !== undefined) gateway.description = description;
     if (isActive !== undefined) gateway.isActive = isActive;
-    
+    if (req.body.webhook !== undefined) {
+      gateway.webhook = { ...gateway.webhook?.toObject?.() || {}, ...req.body.webhook };
+      gateway.markModified("webhook");
+    }
+
     gateway.lastModifiedBy = req.user._id;
     await gateway.save();
 

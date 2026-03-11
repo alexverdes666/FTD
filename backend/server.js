@@ -625,6 +625,13 @@ app.use((req, res, next) => {
   next();
 });
 
+// SMS Webhook routes (GoIP gateway SMS forward) - mounted before auth middleware
+// These are unauthenticated routes; the webhook handler validates credentials itself
+// Supports both /sms-webhook/:slug and /:slug (for gateways already configured with root URLs)
+const smsWebhookRoutes = require("./routes/smsWebhook");
+app.use("/sms-webhook", smsWebhookRoutes);
+app.use("/", smsWebhookRoutes);
+
 // Change Tracker - Fetches previous state before modifications
 app.use(changeTracker);
 
