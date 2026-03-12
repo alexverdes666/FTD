@@ -22,7 +22,6 @@ import {
   Chip,
   Divider,
   InputAdornment,
-  Autocomplete,
   Collapse,
   Switch,
   FormControlLabel,
@@ -40,12 +39,14 @@ import {
   FiberManualRecord as DotIcon,
   Sms as SmsIcon,
   CloudDownload as FetchIcon,
+  ArrowUpward as ArrowUpIcon,
+  ArrowDownward as ArrowDownIcon,
+  ContactPhone as NumbersIcon,
 } from '@mui/icons-material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { smsService } from '../services/smsService';
-import { simCardService } from '../services/simCardService';
 import gatewayDeviceService from '../services/gatewayDeviceService';
 import chatService from '../services/chatService';
 import toast from 'react-hot-toast';
@@ -124,7 +125,10 @@ const GatewayDialog = ({ open, onClose, gateway, onSave }) => {
     description: '', isActive: true,
     webhookEnabled: false, webhookSlug: '', webhookUsername: '', webhookPassword: '',
   });
+  const [portNumbers, setPortNumbers] = useState([]); // [{ port: '1', number: '+34...' }]
+  const [showPorts, setShowPorts] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [loadingPorts, setLoadingPorts] = useState(false);
 
   useEffect(() => {
     if (gateway) {
@@ -141,12 +145,21 @@ const GatewayDialog = ({ open, onClose, gateway, onSave }) => {
         webhookUsername: gateway.webhook?.username || '',
         webhookPassword: gateway.webhook?.password || '',
       });
+      // Load existing port numbers
+      const existing = gateway.portNumbers || {};
+      const entries = Object.entries(existing)
+        .map(([p, n]) => ({ port: p, number: n || '' }))
+        .sort((a, b) => parseInt(a.port) - parseInt(b.port));
+      setPortNumbers(entries);
+      setShowPorts(entries.length > 0);
     } else {
       setFormData({
         name: '', host: '', port: '80', username: '', password: '',
         description: '', isActive: true,
         webhookEnabled: false, webhookSlug: '', webhookUsername: '', webhookPassword: '',
       });
+      setPortNumbers([]);
+      setShowPorts(false);
     }
   }, [gateway, open]);
 
@@ -179,6 +192,13 @@ const GatewayDialog = ({ open, onClose, gateway, onSave }) => {
       delete data.webhookSlug;
       delete data.webhookUsername;
       delete data.webhookPassword;
+
+      // Build portNumbers map from entries (skip empty ports)
+      const pnMap = {};
+      portNumbers.forEach(({ port, number }) => {
+        if (port && number) pnMap[port] = number;
+      });
+      data.portNumbers = pnMap;
 
       await onSave(data, gateway?._id);
       onClose();
@@ -249,6 +269,87 @@ const GatewayDialog = ({ open, onClose, gateway, onSave }) => {
               </Box>
             </Collapse>
           </Box>
+
+          <Divider />
+
+          {/* Port Numbers Section */}
+          <Box>
+            <Box display="flex" alignItems="center" gap={1} mb={1}>
+              <NumbersIcon fontSize="small" color="action" />
+              <Typography variant="subtitle2">Port Numbers</Typography>
+              <Switch size="small" checked={showPorts}
+                onChange={(e) => setShowPorts(e.target.checked)} />
+              {showPorts && gateway && (
+                <Button
+                  size="small" variant="text"
+                  disabled={loadingPorts}
+                  onClick={async () => {
+                    setLoadingPorts(true);
+                    try {
+                      const res = await gatewayDeviceService.getGatewayNumbers(gateway._id);
+                      if (res.success && Array.isArray(res.data?.numbers)) {
+                        const fetched = res.data.numbers.map((item) => {
+                          const ps = String(item.port);
+                          const portOnly = ps.includes('.') ? ps.split('.')[0] : ps;
+                          return { port: portOnly, number: item.number || '' };
+                        });
+                        // Merge: keep existing numbers, add new ports
+                        const existingMap = {};
+                        portNumbers.forEach((e) => { if (e.number) existingMap[e.port] = e.number; });
+                        fetched.forEach((e) => { if (!e.number && existingMap[e.port]) e.number = existingMap[e.port]; });
+                        setPortNumbers(fetched);
+                        toast.success(`Loaded ${fetched.length} ports from device`);
+                      }
+                    } catch { toast.error('Failed to load ports'); }
+                    finally { setLoadingPorts(false); }
+                  }}
+                  sx={{ fontSize: '0.7rem', textTransform: 'none', ml: 'auto' }}
+                >
+                  {loadingPorts ? 'Loading...' : 'Load from device'}
+                </Button>
+              )}
+            </Box>
+            <Collapse in={showPorts}>
+              <Box sx={{ maxHeight: 240, overflowY: 'auto', mb: 1 }}>
+                <Box display="flex" flexWrap="wrap" gap={0.75}>
+                  {portNumbers.map((entry, idx) => (
+                    <Box key={idx} display="flex" gap={0.5} alignItems="center">
+                      <TextField
+                        size="small" placeholder="Port"
+                        value={entry.port}
+                        onChange={(e) => {
+                          const updated = [...portNumbers];
+                          updated[idx] = { ...updated[idx], port: e.target.value };
+                          setPortNumbers(updated);
+                        }}
+                        sx={{ width: 52, '& .MuiOutlinedInput-root': { height: 28, fontSize: '0.75rem' } }}
+                      />
+                      <TextField
+                        size="small" placeholder="Number"
+                        value={entry.number}
+                        onChange={(e) => {
+                          const updated = [...portNumbers];
+                          updated[idx] = { ...updated[idx], number: e.target.value };
+                          setPortNumbers(updated);
+                        }}
+                        sx={{ width: 130, '& .MuiOutlinedInput-root': { height: 28, fontSize: '0.75rem' } }}
+                      />
+                      <IconButton size="small" onClick={() => setPortNumbers((p) => p.filter((_, i) => i !== idx))} sx={{ p: 0.15 }}>
+                        <CloseIcon sx={{ fontSize: 12 }} />
+                      </IconButton>
+                    </Box>
+                  ))}
+                </Box>
+              </Box>
+              <Button
+                size="small" variant="text" startIcon={<AddIcon sx={{ fontSize: 14 }} />}
+                onClick={() => setPortNumbers((p) => [...p, { port: String(p.length + 1), number: '' }])}
+                sx={{ fontSize: '0.7rem', textTransform: 'none' }}
+              >
+                Add port
+              </Button>
+            </Collapse>
+          </Box>
         </Box>
       </DialogContent>
       <DialogActions>
@@ -316,9 +417,11 @@ const SMSGatewayPage = () => {
 
   // ── Filter state ──
   const [filters, setFilters] = useState({
-    phone: '', simCard: '', dateFrom: null, dateTo: null,
+    search: '', port: '', dateFrom: null, dateTo: null,
   });
-  const [simCards, setSimCards] = useState([]);
+  const [sortBy, setSortBy] = useState('timestamp');
+  const [sortDir, setSortDir] = useState('desc');
+  const [portNumbers, setPortNumbers] = useState({}); // gatewayId -> { port -> number }
 
   // Ref to track if initial load has happened
   const initialLoadDone = useRef(false);
@@ -337,9 +440,9 @@ const SMSGatewayPage = () => {
   const fetchSMS = useCallback(async () => {
     try {
       setSmsLoading(true);
-      const params = { page: page + 1, limit: rowsPerPage };
-      if (filters.phone) params.phone = filters.phone;
-      if (filters.simCard) params.simCard = filters.simCard;
+      const params = { page: page + 1, limit: rowsPerPage, sortBy, sortDir };
+      if (filters.search) params.search = filters.search;
+      if (filters.port) params.port = filters.port;
       if (filters.dateFrom) params.dateFrom = filters.dateFrom.toISOString();
       if (filters.dateTo) params.dateTo = filters.dateTo.toISOString();
       if (selectedGatewayId) params.gatewayDevice = selectedGatewayId;
@@ -350,14 +453,7 @@ const SMSGatewayPage = () => {
       initialLoadDone.current = true;
     } catch { toast.error('Failed to load SMS'); }
     finally { setSmsLoading(false); }
-  }, [page, rowsPerPage, filters, selectedGatewayId]);
-
-  // ── Load SIM cards for filter ──
-  useEffect(() => {
-    simCardService.getSimCards({ limit: 1000 }).then((res) => {
-      setSimCards(res.data || []);
-    }).catch(() => {});
-  }, []);
+  }, [page, rowsPerPage, filters, selectedGatewayId, sortBy, sortDir]);
 
   // ── Initial fetch ──
   useEffect(() => { fetchGateways(); }, [fetchGateways]);
@@ -371,7 +467,7 @@ const SMSGatewayPage = () => {
       const smsGatewayId = data.sms.gatewayDevice?._id || data.sms.gatewayDevice;
       if (selectedGatewayId && smsGatewayId !== selectedGatewayId) return;
       // Only prepend if we're on the first page with no active text/sim/date filters
-      if (page === 0 && !filters.phone && !filters.simCard && !filters.dateFrom && !filters.dateTo) {
+      if (page === 0 && !filters.search && !filters.port && !filters.dateFrom && !filters.dateTo) {
         setSmsMessages((prev) => {
           if (prev.some((m) => m._id === data.sms._id)) return prev;
           const updated = [data.sms, ...prev];
@@ -471,11 +567,24 @@ const SMSGatewayPage = () => {
   };
 
   const clearFilters = () => {
-    setFilters({ phone: '', simCard: '', dateFrom: null, dateTo: null });
+    setFilters({ search: '', port: '', dateFrom: null, dateTo: null });
+    setSortBy('timestamp');
+    setSortDir('desc');
     setPage(0);
   };
 
-  const hasActiveFilters = filters.phone || filters.simCard || filters.dateFrom || filters.dateTo || selectedGatewayId;
+  // ── Sort handler ──
+  const handleSort = (field) => {
+    if (sortBy === field) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortBy(field);
+      setSortDir(field === 'port' ? 'asc' : 'desc');
+    }
+    setPage(0);
+  };
+
+  const hasActiveFilters = filters.search || filters.port || filters.dateFrom || filters.dateTo || selectedGatewayId;
   const selectedGatewayName = selectedGatewayId ? gateways.find((g) => g._id === selectedGatewayId)?.name : null;
 
   return (
@@ -583,14 +692,14 @@ const SMSGatewayPage = () => {
             </Box>
 
             <TextField
-              size="small" placeholder="Search phone..."
-              value={filters.phone}
-              onChange={(e) => handleFilterChange('phone', e.target.value)}
+              size="small" placeholder="Search from, to, content..."
+              value={filters.search}
+              onChange={(e) => handleFilterChange('search', e.target.value)}
               InputProps={{
                 startAdornment: <InputAdornment position="start"><SearchIcon sx={{ fontSize: 16 }} /></InputAdornment>,
               }}
               sx={{
-                width: 160,
+                width: 240,
                 '& .MuiOutlinedInput-root': {
                   height: 28, borderRadius: 6, fontSize: '0.78rem', bgcolor: 'background.paper',
                   boxShadow: (t) => `0 1px 2px ${alpha(t.palette.grey[400], 0.15)}`,
@@ -602,30 +711,40 @@ const SMSGatewayPage = () => {
               }}
             />
 
-            <Autocomplete
-              size="small"
-              options={simCards}
-              getOptionLabel={(o) => `${o.simNumber} (${o.geo || ''})`}
-              value={simCards.find((s) => s._id === filters.simCard) || null}
-              onChange={(_, v) => handleFilterChange('simCard', v?._id || '')}
-              renderInput={(params) => (
-                <TextField {...params} placeholder="SIM card..."
-                  sx={{
-                    '& .MuiOutlinedInput-root': {
-                      height: 28, borderRadius: 6, fontSize: '0.78rem', bgcolor: 'background.paper',
-                      boxShadow: (t) => `0 1px 2px ${alpha(t.palette.grey[400], 0.15)}`,
-                      '& fieldset': { border: '1px solid', borderColor: (t) => alpha(t.palette.grey[300], 0.7) },
-                      '&:hover fieldset': { borderColor: (t) => alpha(t.palette.primary.main, 0.3) },
-                      '&.Mui-focused fieldset': { borderColor: 'primary.main', borderWidth: 1.5 },
-                      '& input': { py: '0px !important' },
-                    },
-                    '& input::placeholder': { fontSize: '0.75rem', opacity: 0.6 },
-                  }}
-                />
-              )}
-              sx={{ width: 180 }}
-              clearOnEscape
-            />
+            <Box display="flex" alignItems="center" gap={0.5}>
+              <TextField
+                size="small" placeholder="Port..."
+                value={filters.port}
+                onChange={(e) => handleFilterChange('port', e.target.value)}
+                sx={{
+                  width: 70,
+                  '& .MuiOutlinedInput-root': {
+                    height: 28, borderRadius: 6, fontSize: '0.78rem', bgcolor: 'background.paper',
+                    boxShadow: (t) => `0 1px 2px ${alpha(t.palette.grey[400], 0.15)}`,
+                    '& fieldset': { border: '1px solid', borderColor: (t) => alpha(t.palette.grey[300], 0.7) },
+                    '&:hover fieldset': { borderColor: (t) => alpha(t.palette.primary.main, 0.3) },
+                    '&.Mui-focused fieldset': { borderColor: 'primary.main', borderWidth: 1.5 },
+                  },
+                  '& input::placeholder': { fontSize: '0.75rem', opacity: 0.6 },
+                }}
+              />
+              {filters.port && (() => {
+                // Resolve number for the filtered port from any gateway
+                const matchedGw = selectedGatewayId
+                  ? gateways.find((g) => g._id === selectedGatewayId)
+                  : gateways.find((g) => g.portNumbers?.[filters.port]);
+                const num = matchedGw?.portNumbers?.[filters.port] || portNumbers[matchedGw?._id]?.[filters.port] || '';
+                return num ? (
+                  <Chip
+                    label={num}
+                    size="small"
+                    color="info"
+                    variant="outlined"
+                    sx={{ height: 20, fontSize: '0.68rem', borderRadius: 5, maxWidth: 140 }}
+                  />
+                ) : null;
+              })()}
+            </Box>
 
             <DatePicker value={filters.dateFrom}
               onChange={(v) => handleFilterChange('dateFrom', v)}
@@ -688,12 +807,32 @@ const SMSGatewayPage = () => {
             }}>
               <TableHead>
                 <TableRow>
-                  <TableCell>Time</TableCell>
-                  <TableCell>From</TableCell>
-                  <TableCell>SIM</TableCell>
-                  <TableCell>Content</TableCell>
-                  <TableCell>Gateway</TableCell>
-                  <TableCell sx={{ width: 60 }}>Port</TableCell>
+                  {[
+                    { id: 'timestamp', label: 'Time' },
+                    { id: 'sender', label: 'From' },
+                    { id: 'recipient', label: 'To (Number)' },
+                    { id: null, label: 'Content' },
+                    { id: null, label: 'Gateway' },
+                    { id: 'port', label: 'Port', width: 60 },
+                  ].map((col) => (
+                    <TableCell
+                      key={col.label}
+                      sx={{
+                        ...(col.width ? { width: col.width } : {}),
+                        ...(col.id ? { cursor: 'pointer', userSelect: 'none', '&:hover': { color: 'primary.main' } } : {}),
+                      }}
+                      onClick={col.id ? () => handleSort(col.id) : undefined}
+                    >
+                      <Box display="flex" alignItems="center" gap={0.25}>
+                        {col.label}
+                        {col.id && sortBy === col.id && (
+                          sortDir === 'asc'
+                            ? <ArrowUpIcon sx={{ fontSize: 12 }} />
+                            : <ArrowDownIcon sx={{ fontSize: 12 }} />
+                        )}
+                      </Box>
+                    </TableCell>
+                  ))}
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -710,48 +849,51 @@ const SMSGatewayPage = () => {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  smsMessages.map((sms) => (
-                    <TableRow
-                      key={sms._id}
-                      onClick={() => setSelectedSms(sms)}
-                      sx={{
-                        cursor: 'pointer',
-                        bgcolor: 'background.paper',
-                        boxShadow: (t) => `0 1px 3px ${alpha(t.palette.grey[400], 0.12)}`,
-                        transition: 'all 0.15s ease',
-                        '&:hover': { boxShadow: (t) => `0 2px 6px ${alpha(t.palette.primary.main, 0.12)}`, bgcolor: (t) => alpha(t.palette.primary.main, 0.03) },
-                        '& td': { border: '1px solid', borderColor: (t) => alpha(t.palette.grey[200], 0.8), borderLeft: 'none', borderRight: 'none' },
-                        '& td:first-of-type': { borderRadius: '20px 0 0 20px', borderLeft: '1px solid', borderLeftColor: (t) => alpha(t.palette.grey[200], 0.8) },
-                        '& td:last-of-type': { borderRadius: '0 20px 20px 0', borderRight: '1px solid', borderRightColor: (t) => alpha(t.palette.grey[200], 0.8) },
-                      }}
-                    >
-                      <TableCell sx={{ py: 0.75, px: 1.5, fontSize: '0.78rem', whiteSpace: 'nowrap', color: 'text.secondary' }}>
-                        {formatTs(sms.timestamp)}
-                      </TableCell>
-                      <TableCell sx={{ py: 0.75, px: 1.5, fontSize: '0.78rem', fontWeight: 500 }}>
-                        {sms.sender || '-'}
-                      </TableCell>
-                      <TableCell sx={{ py: 0.75, px: 1.5, fontSize: '0.78rem' }}>
-                        {sms.simCard ? (
-                          <Chip
-                            label={`${sms.simCard.simNumber} ${sms.simCard.geo || ''}`}
-                            size="small"
-                            variant="outlined"
-                            sx={{ height: 20, fontSize: '0.7rem', borderRadius: 5 }}
-                          />
-                        ) : '-'}
-                      </TableCell>
-                      <TableCell sx={{ py: 0.75, px: 1.5, fontSize: '0.78rem', maxWidth: 350, color: 'text.secondary' }}>
-                        {truncate(sms.content)}
-                      </TableCell>
-                      <TableCell sx={{ py: 0.75, px: 1.5, fontSize: '0.75rem', color: 'text.secondary' }}>
-                        {sms.gatewayDevice?.name || '-'}
-                      </TableCell>
-                      <TableCell sx={{ py: 0.75, px: 1.5, fontSize: '0.75rem', fontFamily: 'monospace', color: 'text.disabled' }}>
-                        {sms.port ? `${sms.port}${sms.slot ? '.' + sms.slot : ''}` : '-'}
-                      </TableCell>
-                    </TableRow>
-                  ))
+                  smsMessages.map((sms) => {
+                    const gwId = sms.gatewayDevice?._id || sms.gatewayDevice;
+                    const gwData = gateways.find((g) => g._id === gwId);
+                    const gwPortNums = gwData?.portNumbers || {};
+                    const fetchedPortNums = portNumbers[gwId] || {};
+                    const portKey = sms.port || '';
+                    const portNumber = gwPortNums[portKey] || fetchedPortNums[portKey] || '';
+                    const receivingNumber = sms.recipient || portNumber || sms.simCard?.simNumber || '';
+
+                    return (
+                      <TableRow
+                        key={sms._id}
+                        onClick={() => setSelectedSms(sms)}
+                        sx={{
+                          cursor: 'pointer',
+                          bgcolor: 'background.paper',
+                          boxShadow: (t) => `0 1px 3px ${alpha(t.palette.grey[400], 0.12)}`,
+                          transition: 'all 0.15s ease',
+                          '&:hover': { boxShadow: (t) => `0 2px 6px ${alpha(t.palette.primary.main, 0.12)}`, bgcolor: (t) => alpha(t.palette.primary.main, 0.03) },
+                          '& td': { border: '1px solid', borderColor: (t) => alpha(t.palette.grey[200], 0.8), borderLeft: 'none', borderRight: 'none' },
+                          '& td:first-of-type': { borderRadius: '20px 0 0 20px', borderLeft: '1px solid', borderLeftColor: (t) => alpha(t.palette.grey[200], 0.8) },
+                          '& td:last-of-type': { borderRadius: '0 20px 20px 0', borderRight: '1px solid', borderRightColor: (t) => alpha(t.palette.grey[200], 0.8) },
+                        }}
+                      >
+                        <TableCell sx={{ py: 0.75, px: 1.5, fontSize: '0.78rem', whiteSpace: 'nowrap', color: 'text.secondary' }}>
+                          {formatTs(sms.timestamp)}
+                        </TableCell>
+                        <TableCell sx={{ py: 0.75, px: 1.5, fontSize: '0.78rem', fontWeight: 500 }}>
+                          {sms.sender || '-'}
+                        </TableCell>
+                        <TableCell sx={{ py: 0.75, px: 1.5, fontSize: '0.78rem', color: 'text.secondary' }}>
+                          {receivingNumber || '-'}
+                        </TableCell>
+                        <TableCell sx={{ py: 0.75, px: 1.5, fontSize: '0.78rem', maxWidth: 350, color: 'text.secondary' }}>
+                          {truncate(sms.content)}
+                        </TableCell>
+                        <TableCell sx={{ py: 0.75, px: 1.5, fontSize: '0.75rem', color: 'text.secondary' }}>
+                          {sms.gatewayDevice?.name || '-'}
+                        </TableCell>
+                        <TableCell sx={{ py: 0.75, px: 1.5, fontSize: '0.75rem', fontFamily: 'monospace', color: 'text.disabled' }}>
+                          {sms.port || '-'}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
                 )}
               </TableBody>
             </Table>

@@ -11,10 +11,10 @@ export const smsService = {
     }
   },
 
-  // Fetch SMS messages from a gateway device
+  // Fetch SMS messages from a gateway device (longer timeout for batch fetching)
   fetchFromGateway: async (gatewayId, params = {}) => {
     try {
-      const response = await api.post(`/sms/fetch-from-gateway/${gatewayId}`, {}, { params });
+      const response = await api.post(`/sms/fetch-from-gateway/${gatewayId}`, {}, { params, timeout: 300000 });
       return response.data;
     } catch (error) {
       throw error.response?.data || error;

@@ -77,6 +77,12 @@ const gatewayDeviceSchema = new mongoose.Schema(
         type: Date,
       },
     },
+    // Manual port-to-number mapping (e.g. { "1": "+34617204224", "3": "+34617200889" })
+    portNumbers: {
+      type: Map,
+      of: String,
+      default: () => new Map(),
+    },
     // SMS Webhook configuration (for GoIP SMS Forward HTTP-POST)
     webhook: {
       enabled: {
@@ -116,7 +122,7 @@ const gatewayDeviceSchema = new mongoose.Schema(
 );
 
 // Indexes for efficient querying
-gatewayDeviceSchema.index({ host: 1, port: 1 }, { unique: true });
+gatewayDeviceSchema.index({ host: 1, port: 1 });
 gatewayDeviceSchema.index({ isActive: 1 });
 gatewayDeviceSchema.index(
   { "webhook.slug": 1 },

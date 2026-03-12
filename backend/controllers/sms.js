@@ -16,20 +16,24 @@ exports.getSMSMessages = async (req, res, next) => {
     // Build filter object
     const filter = {};
 
-    // Phone number search (searches both sender and recipient)
-    if (req.query.phone) {
-      const phoneRegex = new RegExp(req.query.phone, "i");
-      filter.$or = [{ sender: phoneRegex }, { recipient: phoneRegex }];
-    }
-
-    // SIM card filter
-    if (req.query.simCard) {
-      filter.simCard = req.query.simCard;
+    // Search across sender, recipient, and content
+    if (req.query.search) {
+      const searchRegex = new RegExp(req.query.search, "i");
+      filter.$or = [
+        { sender: searchRegex },
+        { recipient: searchRegex },
+        { content: searchRegex },
+      ];
     }
 
     // Gateway device filter
     if (req.query.gatewayDevice) {
       filter.gatewayDevice = req.query.gatewayDevice;
+    }
+
+    // Port filter
+    if (req.query.port) {
+      filter.port = req.query.port;
     }
 
     // Date range filter
@@ -46,10 +50,16 @@ exports.getSMSMessages = async (req, res, next) => {
       }
     }
 
+    // Sort option
+    const sortField = req.query.sortBy || 'timestamp';
+    const sortDir = req.query.sortDir === 'asc' ? 1 : -1;
+    const allowedSortFields = ['timestamp', 'port', 'sender', 'recipient'];
+    const sort = { [allowedSortFields.includes(sortField) ? sortField : 'timestamp']: sortDir };
+
     const smsMessages = await IncomingSMS.find(filter)
       .populate("simCard", "simNumber geo operator")
       .populate("gatewayDevice", "name")
-      .sort({ timestamp: -1 })
+      .sort(sort)
       .skip(skip)
       .limit(limit);
 
@@ -71,14 +81,105 @@ exports.getSMSMessages = async (req, res, next) => {
 };
 
 /**
- * Fetch SMS messages from a gateway device and store them in the database
+ * Parse raw GoIP SMS response data into a normalized array
+ */
+function parseGoIPSmsData(data) {
+  const smsArray = [];
+
+  if (data.data && Array.isArray(data.data)) {
+    for (const item of data.data) {
+      if (Array.isArray(item) && item.length >= 6) {
+        let port = "";
+        let slot = "";
+        const portSlot = item[1]?.toString() || "";
+        if (portSlot.includes(".")) {
+          const parts = portSlot.split(".");
+          port = parts[0];
+          slot = parts[1];
+        } else {
+          port = portSlot;
+        }
+
+        smsArray.push({
+          status: item[0],
+          port: port,
+          slot: slot,
+          timestamp: item[2],
+          sender: item[3],
+          recipient: item[4],
+          content: item[5],
+        });
+      }
+    }
+  } else if (Array.isArray(data)) {
+    smsArray.push(...data);
+  } else if (data.smses && Array.isArray(data.smses)) {
+    smsArray.push(...data.smses);
+  }
+
+  return smsArray;
+}
+
+/**
+ * Parse a single raw SMS item into a normalized object with decoded content
+ */
+function parseSmsItem(sms, portSlotToSimCard, portNumbersMap, gatewayId) {
+  let content = sms.content || sms.sms || sms.message || "";
+
+  if (content) {
+    try {
+      const decoded = Buffer.from(content, "base64").toString("utf-8");
+      if (decoded) content = decoded;
+    } catch (e) {
+      // Keep original content if decoding fails
+    }
+  }
+
+  let timestamp;
+  const tsValue = sms.timestamp || sms.time || sms.date;
+  try {
+    if (typeof tsValue === "number") {
+      timestamp = new Date(tsValue * 1000);
+    } else {
+      timestamp = new Date(tsValue);
+    }
+    if (isNaN(timestamp.getTime())) timestamp = new Date();
+  } catch (e) {
+    timestamp = new Date();
+  }
+
+  const sender = sms.sender || sms.from || sms.src || "";
+  const port = sms.port?.toString() || "";
+  const slot = sms.slot?.toString() || "1";
+
+  if (!sender || !content) return null;
+
+  const portSlotKey = `${port}.${parseInt(slot) || 1}`;
+  const matchedSimCard = portSlotToSimCard[portSlotKey] || null;
+
+  return {
+    timestamp,
+    sender,
+    recipient: matchedSimCard?.simNumber || portNumbersMap[port] || sms.recipient || sms.to || "",
+    content,
+    port,
+    slot,
+    simCard: matchedSimCard?._id || null,
+    gatewayDevice: gatewayId,
+  };
+}
+
+/**
+ * Fetch SMS messages from a gateway device and store them in the database.
+ * Fetches in batches to avoid timeout on gateways with many messages.
+ * Uses bulk DB operations for performance.
  */
 exports.fetchFromGateway = async (req, res, next) => {
   try {
     const { gatewayId } = req.params;
-    const { startId = 1, count = 0 } = req.query;
+    const { startId = 1 } = req.query;
+    const BATCH_SIZE = 50;
 
-    // Find the gateway device
     const gateway = await GatewayDevice.findById(gatewayId);
     if (!gateway) {
       return res.status(404).json({
@@ -94,7 +195,6 @@ exports.fetchFromGateway = async (req, res, next) => {
       });
     }
 
-    // Create gateway service instance
     const gatewayService = GoIPGatewayService.createInstance({
       host: gateway.host,
       port: gateway.port,
@@ -104,206 +204,134 @@ exports.fetchFromGateway = async (req, res, next) => {
       _id: gateway._id,
     });
 
-    // Fetch SMS using the GoIP API
-    let response;
-    try {
-      response = await gatewayService.queryReceivedSMS({
-        smsId: parseInt(startId),
-        smsNum: parseInt(count),
-        smsDel: false, // Don't delete after reading
-      });
-    } catch (error) {
-      return res.status(503).json({
-        success: false,
-        message: "Failed to connect to gateway",
-        error: error.message,
-      });
-    }
-
-    const data = response.data;
-
-    // Log raw response for debugging
-    console.log("Gateway SMS response:", JSON.stringify(data).substring(0, 500));
-
-    // GoIP response format: check if we have SMS data
-    // The response might be in different formats depending on gateway version
-    if (!data) {
-      return res.status(200).json({
-        success: true,
-        message: "No SMS messages found on gateway",
-        data: {
-          fetched: 0,
-          saved: 0,
-          duplicates: 0,
-        },
-      });
-    }
-
     // Get all SIM cards associated with this gateway for mapping
     const simCards = await SimCard.find({
       "gateway.gatewayId": gateway._id,
       "gateway.enabled": true,
     });
 
-    // Create a map of port.slot -> simCard for quick lookup
     const portSlotToSimCard = {};
     simCards.forEach((sim) => {
       if (sim.gateway?.port) {
-        // Key format: "port.slot" e.g., "23.1"
         const key = `${sim.gateway.port}.${sim.gateway.slot || 1}`;
         portSlotToSimCard[key] = sim;
       }
     });
 
+    // Build port-to-number map from gateway's manual portNumbers
+    const portNumbersMap = {};
+    if (gateway.portNumbers) {
+      for (const [k, v] of gateway.portNumbers) {
+        portNumbersMap[k] = v;
+      }
+    }
+
     let savedCount = 0;
     let duplicateCount = 0;
     let fetchedCount = 0;
-    let savedIds = [];
+    let currentSmsId = parseInt(startId);
+    let totalOnGateway = null;
+    let batchCount = 0;
+    const MAX_BATCHES = 100;
 
-    // Parse GoIP response - format: { code, reason, ssrc, sms_num, next_sms, data: [[port, slot, timestamp, sender, recipient, base64_content], ...] }
-    let smsArray = [];
-
-    if (data.data && Array.isArray(data.data)) {
-      // GoIP format: data is array of arrays [status, port.slot, timestamp, sender, recipient, base64_content]
-      // port.slot is like "23.01" meaning port 23, slot 1
-      for (const item of data.data) {
-        if (Array.isArray(item) && item.length >= 6) {
-          // Parse port.slot format (e.g., "23.01" -> port: 23, slot: 1)
-          let port = "";
-          let slot = "";
-          const portSlot = item[1]?.toString() || "";
-          if (portSlot.includes(".")) {
-            const parts = portSlot.split(".");
-            port = parts[0];
-            slot = parts[1];
-          } else {
-            port = portSlot;
-          }
-
-          smsArray.push({
-            status: item[0], // 0 = received
-            port: port,
-            slot: slot,
-            timestamp: item[2], // Unix timestamp
-            sender: item[3],
-            recipient: item[4],
-            content: item[5], // BASE64 encoded
+    // Fetch in batches
+    while (batchCount < MAX_BATCHES) {
+      batchCount++;
+      let response;
+      try {
+        response = await gatewayService.queryReceivedSMS({
+          smsId: currentSmsId,
+          smsNum: BATCH_SIZE,
+          smsDel: false,
+        });
+      } catch (error) {
+        if (fetchedCount === 0) {
+          return res.status(503).json({
+            success: false,
+            message: "Failed to connect to gateway",
+            error: error.message,
           });
         }
+        console.error(`Gateway batch fetch error at sms_id ${currentSmsId}:`, error.message);
+        break;
       }
-    } else if (Array.isArray(data)) {
-      smsArray = data;
-    } else if (data.smses && Array.isArray(data.smses)) {
-      smsArray = data.smses;
-    }
 
-    fetchedCount = smsArray.length;
+      const data = response.data;
+      if (!data) break;
 
-    if (smsArray.length === 0) {
-      return res.status(200).json({
-        success: true,
-        message: "No SMS messages found on gateway",
-        data: {
-          fetched: 0,
-          saved: 0,
-          duplicates: 0,
-          rawResponse: typeof data === "string" ? data.substring(0, 200) : JSON.stringify(data).substring(0, 200),
-        },
-      });
-    }
+      if (totalOnGateway === null && data.sms_num !== undefined) {
+        totalOnGateway = data.sms_num;
+      }
 
-    // Process each SMS message
-    for (const sms of smsArray) {
-      // Get content and decode from BASE64
-      let content = sms.content || sms.sms || sms.message || "";
+      const smsArray = parseGoIPSmsData(data);
+      if (smsArray.length === 0) break;
 
-      // Decode BASE64 content
-      if (content) {
-        try {
-          const decoded = Buffer.from(content, "base64").toString("utf-8");
-          if (decoded) {
-            content = decoded;
+      fetchedCount += smsArray.length;
+
+      // Parse all SMS in this batch
+      const parsed = smsArray
+        .map((sms) => parseSmsItem(sms, portSlotToSimCard, portNumbersMap, gateway._id))
+        .filter(Boolean);
+
+      if (parsed.length > 0) {
+        // Bulk duplicate check: find any existing SMS from this gateway
+        // that match any sender+content combo within timestamp range
+        const orConditions = parsed.map((sms) => ({
+          sender: sms.sender,
+          content: sms.content,
+          gatewayDevice: gateway._id,
+          timestamp: {
+            $gte: new Date(sms.timestamp.getTime() - 60000),
+            $lte: new Date(sms.timestamp.getTime() + 60000),
+          },
+        }));
+
+        const existingDups = await IncomingSMS.find(
+          { $or: orConditions },
+          { sender: 1, content: 1, timestamp: 1 }
+        ).lean();
+
+        // Build a set of duplicate keys for fast lookup
+        const dupKeys = new Set();
+        for (const dup of existingDups) {
+          dupKeys.add(`${dup.sender}|${dup.content}`);
+        }
+
+        // Filter out duplicates
+        const toInsert = [];
+        for (const sms of parsed) {
+          const key = `${sms.sender}|${sms.content}`;
+          if (dupKeys.has(key)) {
+            duplicateCount++;
+          } else {
+            toInsert.push(sms);
+            dupKeys.add(key); // Prevent dupes within same batch
           }
-        } catch (e) {
-          // Keep original content if decoding fails
+        }
+
+        // Bulk insert
+        if (toInsert.length > 0) {
+          const inserted = await IncomingSMS.insertMany(toInsert, { ordered: false });
+          savedCount += inserted.length;
+
+          // Emit real-time events for this batch
+          if (req.io) {
+            const ids = inserted.map((doc) => doc._id);
+            const populated = await IncomingSMS.find({ _id: { $in: ids } })
+              .populate("simCard", "simNumber geo operator")
+              .populate("gatewayDevice", "name")
+              .lean();
+            for (const sms of populated) {
+              req.io.emit("new_sms", { sms });
+            }
+          }
         }
       }
 
-      // Parse timestamp (Unix timestamp in seconds)
-      let timestamp;
-      const tsValue = sms.timestamp || sms.time || sms.date;
-      try {
-        // Check if it's a Unix timestamp (number)
-        if (typeof tsValue === "number") {
-          timestamp = new Date(tsValue * 1000); // Convert seconds to milliseconds
-        } else {
-          timestamp = new Date(tsValue);
-        }
-        if (isNaN(timestamp.getTime())) {
-          timestamp = new Date();
-        }
-      } catch (e) {
-        timestamp = new Date();
-      }
-
-      // Get sender
-      const sender = sms.sender || sms.from || sms.src || "";
-      const port = sms.port?.toString() || "";
-      const slot = sms.slot?.toString() || "1";
-
-      // Skip if no sender or content
-      if (!sender || !content) {
-        continue;
-      }
-
-      // Find matching SIM card by port.slot
-      const portSlotKey = `${port}.${parseInt(slot) || 1}`;
-      const matchedSimCard = portSlotToSimCard[portSlotKey] || null;
-      const simCardId = matchedSimCard?._id || null;
-
-      // Set recipient to the SIM card's number if found
-      const recipient = matchedSimCard?.simNumber || sms.recipient || sms.to || "";
-
-      // Check for duplicate (same sender, content, timestamp within 1 minute)
-      const duplicateCheck = await IncomingSMS.findOne({
-        sender: sender,
-        content: content,
-        gatewayDevice: gateway._id,
-        timestamp: {
-          $gte: new Date(timestamp.getTime() - 60000),
-          $lte: new Date(timestamp.getTime() + 60000),
-        },
-      });
-
-      if (duplicateCheck) {
-        duplicateCount++;
-        continue;
-      }
-
-      // Create the SMS record
-      const savedDoc = await IncomingSMS.create({
-        timestamp,
-        sender,
-        recipient,
-        content,
-        port,
-        slot,
-        simCard: simCardId,
-        gatewayDevice: gateway._id,
-      });
-
-      savedIds.push(savedDoc._id);
-      savedCount++;
-    }
-
-    // Emit real-time events for newly saved SMS
-    if (req.io && savedIds.length > 0) {
-      const populatedMessages = await IncomingSMS.find({ _id: { $in: savedIds } })
-        .populate("simCard", "simNumber geo operator")
-        .populate("gatewayDevice", "name");
-      for (const sms of populatedMessages) {
-        req.io.emit("new_sms", { sms });
-      }
+      // Check if there are more SMS to fetch
+      const nextSmsId = data.next_sms;
+      if (!nextSmsId || nextSmsId <= currentSmsId) break;
+      currentSmsId = nextSmsId;
     }
 
     res.status(200).json({
@@ -313,8 +341,9 @@ exports.fetchFromGateway = async (req, res, next) => {
         fetched: fetchedCount,
         saved: savedCount,
         duplicates: duplicateCount,
-        nextSmsId: data.next_sms,
-        totalOnGateway: data.sms_num,
+        nextSmsId: currentSmsId,
+        totalOnGateway: totalOnGateway,
+        batches: batchCount,
       },
     });
   } catch (error) {

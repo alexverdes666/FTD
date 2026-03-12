@@ -83,6 +83,15 @@ const gatewayDeviceService = {
   async configureSmsForwarding(id) {
     const response = await api.post(`/gateway-devices/${id}/configure-sms-forwarding`);
     return response.data;
+  },
+
+  /**
+   * Get port-to-number mapping from gateway device
+   * @param {string} id - Gateway device ID
+   */
+  async getGatewayNumbers(id) {
+    const response = await api.get(`/gateway-devices/${id}/numbers`);
+    return response.data;
   }
 };
 

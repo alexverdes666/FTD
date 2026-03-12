@@ -73,11 +73,15 @@ exports.handleSmsWebhook = async (req, res, next) => {
       return res.status(200).send("OK");
     }
 
+    // Resolve recipient from: webhook payload → SIM card → gateway portNumbers
+    const portNumber = portStr && gateway.portNumbers ? gateway.portNumbers.get(portStr) : "";
+    const resolvedRecipient = receiver || simCard?.simNumber || portNumber || "";
+
     // Save the SMS
     const savedSms = await IncomingSMS.create({
       timestamp: now,
       sender,
-      recipient: receiver || simCard?.simNumber || "",
+      recipient: resolvedRecipient,
       content,
       port: portStr,
       slot: "1",

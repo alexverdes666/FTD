@@ -8,6 +8,7 @@ const {
   deleteGatewayDevice,
   testGatewayConnection,
   getGatewayLiveStatus,
+  getGatewayNumbers,
   configureGatewayNotifications,
   configureSmsForwarding
 } = require('../controllers/gatewayDevices');
@@ -53,6 +54,9 @@ router.post('/:id/test', [protect, requireGatewayPermission], testGatewayConnect
 
 // Get live status from gateway
 router.get('/:id/status', [protect, requireGatewayPermission], getGatewayLiveStatus);
+
+// Get port-to-number mapping from gateway
+router.get('/:id/numbers', [protect, requireGatewayPermission], getGatewayNumbers);
 
 // Configure SMS forwarding on gateway (tells gateway to POST received SMS to our webhook)
 router.post('/:id/configure-sms-forwarding', [protect, requireGatewayPermission], configureSmsForwarding);

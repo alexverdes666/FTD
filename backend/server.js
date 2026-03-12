@@ -86,8 +86,18 @@ app.set("trust proxy", true);
 
 const db = mongoose.connection;
 db.on("error", console.error.bind(console, "MongoDB connection error:"));
-db.once("open", () => {
+db.once("open", async () => {
   console.log("Connected to MongoDB");
+
+  // Sync indexes (drops removed unique constraints, creates new indexes)
+  try {
+    const GatewayDevice = require("./models/GatewayDevice");
+    await GatewayDevice.syncIndexes();
+    console.log("GatewayDevice indexes synced");
+  } catch (error) {
+    console.error("Failed to sync GatewayDevice indexes:", error.message);
+  }
+
   if (process.env.NODE_ENV !== "test") {
     try {
       const sessionCleanupService = new SessionCleanupService();

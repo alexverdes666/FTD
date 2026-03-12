@@ -1,4 +1,5 @@
 const GatewayDevice = require('../models/GatewayDevice');
+const IncomingSMS = require('../models/IncomingSMS');
 const { validationResult } = require('express-validator');
 const GoIPGatewayService = require('../services/goipGatewayService');
 const axios = require('axios');
@@ -71,15 +72,6 @@ exports.createGatewayDevice = async (req, res, next) => {
 
     const { name, host, port, username, password, description } = req.body;
 
-    // Check if gateway with same host:port already exists
-    const existingGateway = await GatewayDevice.findOne({ host, port });
-    if (existingGateway) {
-      return res.status(400).json({
-        success: false,
-        message: 'Gateway with this host and port already exists'
-      });
-    }
-
     // Check if gateway with same name already exists
     const existingName = await GatewayDevice.findOne({ name });
     if (existingName) {
@@ -103,6 +95,11 @@ exports.createGatewayDevice = async (req, res, next) => {
     // Webhook configuration
     if (req.body.webhook) {
       gatewayData.webhook = req.body.webhook;
+    }
+
+    // Port numbers mapping
+    if (req.body.portNumbers) {
+      gatewayData.portNumbers = req.body.portNumbers;
     }
 
     const gateway = await GatewayDevice.create(gatewayData);
@@ -147,21 +144,6 @@ exports.updateGatewayDevice = async (req, res, next) => {
 
     const { name, host, port, username, password, description, isActive } = req.body;
 
-    // Check if new host:port combination conflicts with another gateway
-    if (host && port && (host !== gateway.host || port !== gateway.port)) {
-      const existingGateway = await GatewayDevice.findOne({ 
-        host, 
-        port,
-        _id: { $ne: gateway._id }
-      });
-      if (existingGateway) {
-        return res.status(400).json({
-          success: false,
-          message: 'Another gateway with this host and port already exists'
-        });
-      }
-    }
-
     // Check if new name conflicts with another gateway
     if (name && name !== gateway.name) {
       const existingName = await GatewayDevice.findOne({
@@ -184,6 +166,10 @@ exports.updateGatewayDevice = async (req, res, next) => {
     if (password) gateway.password = password;
     if (description !== undefined) gateway.description = description;
     if (isActive !== undefined) gateway.isActive = isActive;
+    if (req.body.portNumbers !== undefined) {
+      gateway.portNumbers = new Map(Object.entries(req.body.portNumbers));
+      gateway.markModified('portNumbers');
+    }
     if (req.body.webhook !== undefined) {
       gateway.webhook = { ...gateway.webhook?.toObject?.() || {}, ...req.body.webhook };
       gateway.markModified("webhook");
@@ -191,6 +177,29 @@ exports.updateGatewayDevice = async (req, res, next) => {
 
     gateway.lastModifiedBy = req.user._id;
     await gateway.save();
+
+    // Backfill recipient on existing SMS when portNumbers are updated
+    if (req.body.portNumbers !== undefined) {
+      const portNumbers = req.body.portNumbers;
+      const bulkOps = [];
+      for (const [portKey, number] of Object.entries(portNumbers)) {
+        if (number) {
+          bulkOps.push({
+            updateMany: {
+              filter: {
+                gatewayDevice: gateway._id,
+                port: portKey,
+                $or: [{ recipient: "" }, { recipient: { $exists: false } }],
+              },
+              update: { $set: { recipient: number } },
+            },
+          });
+        }
+      }
+      if (bulkOps.length > 0) {
+        await IncomingSMS.bulkWrite(bulkOps);
+      }
+    }
 
     const updatedGateway = await GatewayDevice.findById(gateway._id)
       .populate('createdBy', 'fullName email')
@@ -438,6 +447,79 @@ exports.configureSmsForwarding = async (req, res, next) => {
       success: false,
       message: 'Failed to configure SMS forwarding on gateway',
       error: error.message || 'Gateway unreachable'
+    });
+  }
+};
+
+/**
+ * Fetch port-to-number mapping from gateway device
+ */
+exports.getGatewayNumbers = async (req, res, next) => {
+  try {
+    const gateway = await GatewayDevice.findById(req.params.id);
+
+    if (!gateway) {
+      return res.status(404).json({ success: false, message: 'Gateway device not found' });
+    }
+
+    if (!gateway.isActive) {
+      return res.status(400).json({ success: false, message: 'Gateway is not active' });
+    }
+
+    const gatewayService = GoIPGatewayService.createInstance({
+      host: gateway.host,
+      port: gateway.port,
+      username: gateway.username,
+      password: gateway.password,
+      name: gateway.name,
+      _id: gateway._id,
+    });
+
+    const result = await gatewayService.getNumbers();
+
+    // Enrich with SIM card numbers from our database when the device doesn't provide them
+    const SimCard = require('../models/SimCard');
+    const simCards = await SimCard.find({
+      'gateway.gatewayId': gateway._id,
+      'gateway.enabled': true,
+    }).select('simNumber gateway.port gateway.slot').lean();
+
+    // Build port -> simNumber map from our DB
+    const dbPortMap = {};
+    for (const sim of simCards) {
+      if (sim.gateway?.port) {
+        dbPortMap[String(sim.gateway.port)] = sim.simNumber;
+      }
+    }
+
+    // Fill empty numbers from our SIM card data
+    const numbers = Array.isArray(result.data) ? result.data : [];
+    for (const entry of numbers) {
+      if (!entry.number) {
+        // Try matching by port number (strip the slot part "1.01" -> "1")
+        const portStr = String(entry.port);
+        const portOnly = portStr.includes('.') ? portStr.split('.')[0] : portStr;
+        entry.number = dbPortMap[portOnly] || dbPortMap[portStr] || '';
+        if (entry.number) entry.numberSource = 'database';
+      } else {
+        entry.numberSource = 'device';
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Numbers fetched from gateway',
+      data: {
+        gateway: { id: gateway._id, name: gateway.name },
+        numbers,
+      },
+    });
+  } catch (error) {
+    console.error('Error fetching gateway numbers:', error?.message || error);
+    res.status(503).json({
+      success: false,
+      message: 'Failed to fetch numbers from gateway',
+      error: error?.message || error?.error || 'Gateway unreachable',
     });
   }
 };
