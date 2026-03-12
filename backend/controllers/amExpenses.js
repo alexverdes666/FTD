@@ -11,6 +11,21 @@ try {
   console.warn('BlockchainScraperService not available:', error.message);
 }
 
+// Global Net Agent: cumulative net starting from 26 Feb 2026 (tracked monthly)
+const GLOBAL_NET_START = { month: 2, year: 2026 };
+
+function getMonthRange(startMonth, startYear, endMonth, endYear) {
+  const months = [];
+  let m = startMonth;
+  let y = startYear;
+  while (y < endYear || (y === endYear && m <= endMonth)) {
+    months.push({ month: m, year: y });
+    m++;
+    if (m > 12) { m = 1; y++; }
+  }
+  return months;
+}
+
 // @desc    Get auto-calculated expenses for ALL AMs
 // @route   GET /api/am-expenses/calculate
 // @access  Admin
@@ -39,6 +54,24 @@ exports.getCalculatedExpenses = async (req, res) => {
 
     const results = [];
 
+    // Check if we need to compute Global Net Agent (cumulative from Feb 2026)
+    const computeGlobalNet = targetYear > GLOBAL_NET_START.year ||
+      (targetYear === GLOBAL_NET_START.year && targetMonth >= GLOBAL_NET_START.month);
+    const priorMonths = computeGlobalNet
+      ? getMonthRange(GLOBAL_NET_START.month, GLOBAL_NET_START.year, targetMonth, targetYear)
+          .filter(({ month: m, year: y }) => !(m === targetMonth && y === targetYear))
+      : [];
+
+    // Create blockchain service once for reuse
+    let blockchainService = null;
+    if (BlockchainScraperService) {
+      try {
+        blockchainService = new BlockchainScraperService();
+      } catch (err) {
+        console.warn('Failed to initialize BlockchainScraperService:', err.message);
+      }
+    }
+
     for (const manager of managers) {
       const expenses = await calculateAMExpenses(manager._id, targetMonth, targetYear);
 
@@ -54,14 +87,39 @@ exports.getCalculatedExpenses = async (req, res) => {
 
       // Get total money in from blockchain
       let totalMoneyIn = 0;
-      if (BlockchainScraperService) {
+      if (blockchainService) {
         try {
-          const service = new BlockchainScraperService();
-          const cryptoValues = await service.getAffiliateManagerTotalValue(manager._id, { month: targetMonth, year: targetYear });
+          const cryptoValues = await blockchainService.getAffiliateManagerTotalValue(manager._id, { month: targetMonth, year: targetYear });
           totalMoneyIn = cryptoValues.totalUsdValue || 0;
         } catch (err) {
           console.warn(`Failed to get crypto values for ${manager.fullName}:`, err.message);
         }
+      }
+
+      const currentNet = totalMoneyIn - (expenses.grandTotal + fixedTotal + globalFixedTotal);
+
+      // Compute Global Net Agent (cumulative net from Feb 2026)
+      let globalNetAgent = null;
+      if (computeGlobalNet) {
+        let cumulativeNet = currentNet;
+        for (const { month: m, year: y } of priorMonths) {
+          const [priorExpenses, priorFixed] = await Promise.all([
+            calculateAMExpenses(manager._id, m, y),
+            AMFixedExpense.find({ affiliateManager: manager._id, month: m, year: y, isActive: true }).lean(),
+          ]);
+          const priorFixedTotal = priorFixed.reduce((sum, fe) => sum + fe.amount, 0);
+          let priorMoneyIn = 0;
+          if (blockchainService) {
+            try {
+              const cryptoValues = await blockchainService.getAffiliateManagerTotalValue(manager._id, { month: m, year: y });
+              priorMoneyIn = cryptoValues.totalUsdValue || 0;
+            } catch (err) {
+              // silently skip failed crypto lookups for prior months
+            }
+          }
+          cumulativeNet += priorMoneyIn - (priorExpenses.grandTotal + priorFixedTotal + globalFixedTotal);
+        }
+        globalNetAgent = cumulativeNet;
       }
 
       results.push({
@@ -72,6 +130,7 @@ exports.getCalculatedExpenses = async (req, res) => {
         autoExpenses: expenses.grandTotal,
         fixedExpenses: fixedTotal + globalFixedTotal,
         totalExpenses: expenses.grandTotal + fixedTotal + globalFixedTotal,
+        globalNetAgent,
       });
     }
 

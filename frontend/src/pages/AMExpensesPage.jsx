@@ -277,9 +277,12 @@ const AMDetailRow = ({ row, month, year, onFixedExpenseChange, globalFixedTotal 
         <TableCell align="right" sx={{ fontWeight: "bold" }}>
           {formatCurrency(((row.totalMoneyIn || 0) - row.totalExpenses) * 0.1)}
         </TableCell>
+        <TableCell align="right" sx={{ fontWeight: "bold", color: (row.globalNetAgent || 0) >= 0 ? "success.main" : "error.main" }}>
+          {row.globalNetAgent !== null && row.globalNetAgent !== undefined ? formatCurrency(row.globalNetAgent) : "—"}
+        </TableCell>
       </TableRow>
       <TableRow>
-        <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={9}>
+        <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={10}>
           <Collapse in={open} timeout="auto" unmountOnExit>
             <Box sx={{ margin: 2 }}>
               {loadingDetail ? (
@@ -760,12 +763,13 @@ const AMExpensesPage = () => {
                 <TableCell align="right">Total</TableCell>
                 <TableCell align="right">Net Value</TableCell>
                 <TableCell align="right">Commission Agent</TableCell>
+                <TableCell align="right">Global Net Agent</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {data.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} align="center" sx={{ py: 4 }}>
+                  <TableCell colSpan={10} align="center" sx={{ py: 4 }}>
                     <Typography color="text.secondary">
                       No affiliate managers found
                     </Typography>

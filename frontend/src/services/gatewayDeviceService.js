@@ -74,6 +74,15 @@ const gatewayDeviceService = {
   async configureNotifications(id, config) {
     const response = await api.post(`/gateway-devices/${id}/configure-notifications`, config);
     return response.data;
+  },
+
+  /**
+   * Configure SMS forwarding on gateway (tells the gateway to POST received SMS to our webhook)
+   * @param {string} id - Gateway device ID
+   */
+  async configureSmsForwarding(id) {
+    const response = await api.post(`/gateway-devices/${id}/configure-sms-forwarding`);
+    return response.data;
   }
 };
 

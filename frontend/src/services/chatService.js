@@ -267,6 +267,11 @@ class ChatService {
     this.socket.on('fine_created', (data) => {
       this.emit('fine_created', data);
     });
+
+    // SMS events (real-time incoming SMS from gateway webhooks)
+    this.socket.on('new_sms', (data) => {
+      this.emit('sms:new_message', data);
+    });
   }
 
   // Disconnect from chat

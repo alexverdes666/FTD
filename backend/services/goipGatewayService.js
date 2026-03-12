@@ -205,16 +205,13 @@ class GoIPGatewayService {
    */
   async sendSMS(smsData) {
     try {
-      const payload = {
-        type: 'send-sms',
-        task_num: smsData.tasks.length,
-        tasks: smsData.tasks,
+      const tasks = smsData.tasks.map(task => ({
+        ...task,
         ...smsData.options
-      };
+      }));
 
-      const response = await this.client.post('/goip_post_sms.html', payload, {
+      const response = await this.client.post('/submit_sms_tasks', tasks, {
         params: {
-          version: '1.1',
           username: this.gatewayUsername,
           password: this.gatewayPassword
         }
@@ -232,10 +229,9 @@ class GoIPGatewayService {
    */
   async pauseSMSTask(taskIds) {
     try {
-      const payload = taskIds ? { tids: taskIds } : {};
-      const response = await this.client.post('/goip_pause_sms.html', payload, {
+      const payload = taskIds ? { ids: taskIds } : {};
+      const response = await this.client.post('/pause_sms_tasks', payload, {
         params: {
-          version: '1.1',
           username: this.gatewayUsername,
           password: this.gatewayPassword
         }
@@ -253,10 +249,9 @@ class GoIPGatewayService {
    */
   async resumeSMSTask(taskIds) {
     try {
-      const payload = taskIds ? { tids: taskIds } : {};
-      const response = await this.client.post('/goip_resume_sms.html', payload, {
+      const payload = taskIds ? { ids: taskIds } : {};
+      const response = await this.client.post('/resume_sms_tasks', payload, {
         params: {
-          version: '1.1',
           username: this.gatewayUsername,
           password: this.gatewayPassword
         }
@@ -274,10 +269,9 @@ class GoIPGatewayService {
    */
   async deleteSMSTask(taskIds) {
     try {
-      const payload = taskIds ? { tids: taskIds } : {};
-      const response = await this.client.post('/goip_remove_sms.html', payload, {
+      const payload = taskIds ? { ids: taskIds } : {};
+      const response = await this.client.post('/remove_sms_tasks', payload, {
         params: {
-          version: '1.1',
           username: this.gatewayUsername,
           password: this.gatewayPassword
         }
@@ -295,20 +289,62 @@ class GoIPGatewayService {
    */
   async querySMSTasks(options = {}) {
     try {
-      const params = {
-        version: '1.1',
-        username: this.gatewayUsername,
-        password: this.gatewayPassword,
+      const body = {
         port: options.port || 1,
-        pos: options.pos || 0,
+        index: options.index || 0,
         num: options.num || 10,
-        has_content: options.hasContent ? 1 : 0
+        need_content: options.needContent ? 1 : 0
       };
 
-      const response = await this.client.get('/goip_get_tasks.html', { params });
+      const response = await this.client.get('/get_sms_tasks', {
+        params: {
+          username: this.gatewayUsername,
+          password: this.gatewayPassword
+        },
+        data: body
+      });
       return { success: true, data: response.data };
     } catch (error) {
       console.error('Error querying SMS tasks:', error.message);
+      throw this._handleError(error);
+    }
+  }
+
+  /**
+   * Get SMS configuration from gateway
+   * @returns {Object} SMS config data
+   */
+  async getSMSConfig() {
+    try {
+      const response = await this.client.get('/get_sms_config', {
+        params: {
+          username: this.gatewayUsername,
+          password: this.gatewayPassword
+        }
+      });
+      return { success: true, data: response.data };
+    } catch (error) {
+      console.error('Error getting SMS config:', error.message);
+      throw this._handleError(error);
+    }
+  }
+
+  /**
+   * Set SMS configuration on gateway
+   * @param {Object} config - SMS configuration to set
+   * @returns {Object} Result
+   */
+  async setSMSConfig(config) {
+    try {
+      const response = await this.client.post('/set_sms_config', config, {
+        params: {
+          username: this.gatewayUsername,
+          password: this.gatewayPassword
+        }
+      });
+      return { success: true, data: response.data };
+    } catch (error) {
+      console.error('Error setting SMS config:', error.message);
       throw this._handleError(error);
     }
   }

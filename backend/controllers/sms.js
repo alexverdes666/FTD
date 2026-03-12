@@ -27,6 +27,11 @@ exports.getSMSMessages = async (req, res, next) => {
       filter.simCard = req.query.simCard;
     }
 
+    // Gateway device filter
+    if (req.query.gatewayDevice) {
+      filter.gatewayDevice = req.query.gatewayDevice;
+    }
+
     // Date range filter
     if (req.query.dateFrom || req.query.dateTo) {
       filter.timestamp = {};
@@ -153,6 +158,7 @@ exports.fetchFromGateway = async (req, res, next) => {
     let savedCount = 0;
     let duplicateCount = 0;
     let fetchedCount = 0;
+    let savedIds = [];
 
     // Parse GoIP response - format: { code, reason, ssrc, sms_num, next_sms, data: [[port, slot, timestamp, sender, recipient, base64_content], ...] }
     let smsArray = [];
@@ -275,7 +281,7 @@ exports.fetchFromGateway = async (req, res, next) => {
       }
 
       // Create the SMS record
-      await IncomingSMS.create({
+      const savedDoc = await IncomingSMS.create({
         timestamp,
         sender,
         recipient,
@@ -286,7 +292,18 @@ exports.fetchFromGateway = async (req, res, next) => {
         gatewayDevice: gateway._id,
       });
 
+      savedIds.push(savedDoc._id);
       savedCount++;
+    }
+
+    // Emit real-time events for newly saved SMS
+    if (req.io && savedIds.length > 0) {
+      const populatedMessages = await IncomingSMS.find({ _id: { $in: savedIds } })
+        .populate("simCard", "simNumber geo operator")
+        .populate("gatewayDevice", "name");
+      for (const sms of populatedMessages) {
+        req.io.emit("new_sms", { sms });
+      }
     }
 
     res.status(200).json({

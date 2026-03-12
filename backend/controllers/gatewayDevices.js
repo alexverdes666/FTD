@@ -384,6 +384,65 @@ exports.getGatewayLiveStatus = async (req, res, next) => {
 };
 
 /**
+ * Configure SMS forwarding on the gateway device.
+ * Uses the eJoin API set_sms_config to set recv_sms_url to our webhook endpoint.
+ */
+exports.configureSmsForwarding = async (req, res, next) => {
+  try {
+    const gateway = await GatewayDevice.findById(req.params.id);
+
+    if (!gateway) {
+      return res.status(404).json({ success: false, message: 'Gateway device not found' });
+    }
+
+    if (!gateway.webhook?.enabled || !gateway.webhook?.slug) {
+      return res.status(400).json({
+        success: false,
+        message: 'Webhook must be enabled with a slug before configuring SMS forwarding'
+      });
+    }
+
+    const serverUrl = process.env.SERVER_URL || `http://localhost:${process.env.PORT || 5000}`;
+    // Use root path format /:slug (matching the gateway's SMS Forward HTTP-POST URL config)
+    const webhookUrl = `${serverUrl}/${gateway.webhook.slug}`;
+
+    const gatewayService = GoIPGatewayService.createInstance({
+      host: gateway.host,
+      port: gateway.port,
+      username: gateway.username,
+      password: gateway.password,
+      name: gateway.name,
+      _id: gateway._id
+    });
+
+    const result = await gatewayService.setSMSConfig({
+      recv_sms_url: webhookUrl,
+      recv_sms_max: 1,
+      recv_sms_period: 5
+    });
+
+    gateway.lastModifiedBy = req.user._id;
+    await gateway.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'SMS forwarding configured on gateway',
+      data: {
+        webhookUrl,
+        gatewayResponse: result.data
+      }
+    });
+  } catch (error) {
+    console.error('Error configuring SMS forwarding:', error.message);
+    res.status(503).json({
+      success: false,
+      message: 'Failed to configure SMS forwarding on gateway',
+      error: error.message || 'Gateway unreachable'
+    });
+  }
+};
+
+/**
  * Configure status notifications for gateway
  */
 exports.configureGatewayNotifications = async (req, res, next) => {

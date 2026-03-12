@@ -50,7 +50,6 @@ import {
   Speed as PerformanceIcon,
   GridOn as SheetsIcon,
   Sms as SmsIcon,
-  Router as RouterIcon,
   Workspaces as WorkspaceIcon,
   Payment as PSPIcon,
   CreditCard as CardIssuerIcon,
@@ -394,14 +393,9 @@ const MainLayout = () => {
               path: "/numbers",
             },
             {
-              text: "SMS",
+              text: "SMS Gateway",
               icon: <SmsIcon />,
               path: "/sms",
-            },
-            {
-              text: "Gateways",
-              icon: <RouterIcon />,
-              path: "/gateway-devices",
             },
             {
               text: "Targets",
@@ -531,7 +525,7 @@ const MainLayout = () => {
             },
           ],
         },
-        { text: "SMS", icon: <SmsIcon />, path: "/sms" },
+        { text: "SMS Gateway", icon: <SmsIcon />, path: "/sms" },
         {
           text: "Announce",
           icon: <AnnouncementIcon />,
@@ -632,7 +626,7 @@ const MainLayout = () => {
               path: "/numbers",
             },
             {
-              text: "SMS",
+              text: "SMS Gateway",
               icon: <SmsIcon />,
               path: "/sms",
             },
@@ -645,7 +639,7 @@ const MainLayout = () => {
       return [
         ...commonItems,
         { text: "Refunds", icon: <RefundsIcon />, path: "/refunds" },
-        { text: "SMS", icon: <SmsIcon />, path: "/sms" },
+        { text: "SMS Gateway", icon: <SmsIcon />, path: "/sms" },
         { text: "Fines", icon: <GavelIcon />, path: "/fines" },
         { text: "Tickets", icon: <TicketIcon />, path: "/tickets" },
       ];
@@ -662,6 +656,11 @@ const MainLayout = () => {
               text: "SIMs",
               icon: <SimCardIcon />,
               path: "/simcards",
+            },
+            {
+              text: "SMS Gateway",
+              icon: <SmsIcon />,
+              path: "/sms",
             },
           ],
         },
@@ -1006,8 +1005,8 @@ const MainLayout = () => {
           display: "flex",
           flexDirection: "column",
           minHeight: "100vh",
-          overflow: (location.pathname === "/notes" || location.pathname === "/orders" || location.pathname === "/crm" || location.pathname === "/leads" || location.pathname === "/client-psps" || location.pathname === "/card-issuers") ? "hidden" : "auto",
-          height: (location.pathname === "/notes" || location.pathname === "/orders" || location.pathname === "/crm" || location.pathname === "/leads" || location.pathname === "/client-psps" || location.pathname === "/card-issuers") ? "100vh" : "auto",
+          overflow: (location.pathname === "/notes" || location.pathname === "/orders" || location.pathname === "/crm" || location.pathname === "/leads" || location.pathname === "/client-psps" || location.pathname === "/card-issuers" || location.pathname === "/sms") ? "hidden" : "auto",
+          height: (location.pathname === "/notes" || location.pathname === "/orders" || location.pathname === "/crm" || location.pathname === "/leads" || location.pathname === "/client-psps" || location.pathname === "/card-issuers" || location.pathname === "/sms") ? "100vh" : "auto",
         }}
       >
         <Box sx={{ minHeight: 42 }} />
@@ -1015,7 +1014,7 @@ const MainLayout = () => {
           component="div"
           sx={{
             flexGrow: 1,
-            overflow: (location.pathname === "/notes" || location.pathname === "/orders" || location.pathname === "/crm" || location.pathname === "/leads" || location.pathname === "/client-psps" || location.pathname === "/card-issuers") ? "hidden" : "auto",
+            overflow: (location.pathname === "/notes" || location.pathname === "/orders" || location.pathname === "/crm" || location.pathname === "/leads" || location.pathname === "/client-psps" || location.pathname === "/card-issuers" || location.pathname === "/sms") ? "hidden" : "auto",
             display: "flex",
             flexDirection: "column",
           }}
@@ -1024,7 +1023,7 @@ const MainLayout = () => {
             <Outlet />
           </Force2FASetup>
         </Box>
-        {location.pathname !== "/notes" && location.pathname !== "/orders" && location.pathname !== "/crm" && location.pathname !== "/leads" && location.pathname !== "/client-psps" && location.pathname !== "/card-issuers" && location.pathname !== "/am-expenses" && !location.pathname.startsWith("/client-network/") && !location.pathname.startsWith("/client-broker/") && <Footer />}
+        {location.pathname !== "/notes" && location.pathname !== "/orders" && location.pathname !== "/crm" && location.pathname !== "/leads" && location.pathname !== "/client-psps" && location.pathname !== "/card-issuers" && location.pathname !== "/am-expenses" && location.pathname !== "/sms" && !location.pathname.startsWith("/client-network/") && !location.pathname.startsWith("/client-broker/") && <Footer />}
       </Box>
 
       {/* Floating Chat Button */}

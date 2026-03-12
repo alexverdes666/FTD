@@ -74,7 +74,7 @@ exports.handleSmsWebhook = async (req, res, next) => {
     }
 
     // Save the SMS
-    await IncomingSMS.create({
+    const savedSms = await IncomingSMS.create({
       timestamp: now,
       sender,
       recipient: receiver || simCard?.simNumber || "",
@@ -84,6 +84,14 @@ exports.handleSmsWebhook = async (req, res, next) => {
       simCard: simCard?._id || null,
       gatewayDevice: gateway._id,
     });
+
+    // Emit real-time event to connected clients
+    if (req.io) {
+      const populatedSms = await IncomingSMS.findById(savedSms._id)
+        .populate("simCard", "simNumber geo operator")
+        .populate("gatewayDevice", "name");
+      req.io.emit("new_sms", { sms: populatedSms });
+    }
 
     console.log(
       `[SMS Webhook] ${webhookSlug}: from=${sender} port=${portStr} content="${content.substring(0, 50)}"`

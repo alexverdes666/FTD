@@ -58,14 +58,14 @@ const TicketsPage = lazy(() => import("./pages/TicketsPage.jsx"));
 const NotificationsPage = lazy(() => import("./pages/NotificationsPage.jsx"));
 const SimCardsPage = lazy(() => import("./pages/SimCardsPage.jsx"));
 const NumberPage = lazy(() => import("./pages/NumberPage.jsx"));
-const SMSPage = lazy(() => import("./pages/SMSPage.jsx"));
+const SMSGatewayPage = lazy(() => import("./pages/SMSGatewayPage.jsx"));
 const AccountManagementPage = lazy(() => import("./pages/AccountManagementPage.jsx"));
 const ClientNetworkProfilePage = lazy(() => import("./pages/ClientNetworkProfilePage.jsx"));
 const ClientBrokerProfilePage = lazy(() => import("./pages/ClientBrokerProfilePage.jsx"));
 const PSPProfilePage = lazy(() => import("./pages/PSPProfilePage.jsx"));
 const ClientPSPsPage = lazy(() => import("./pages/ClientPSPsPage.jsx"));
 const CardIssuersPage = lazy(() => import("./pages/CardIssuersPage.jsx"));
-const GatewayManagementPage = lazy(() => import("./pages/GatewayManagementPage.jsx"));
+// GatewayManagementPage removed - merged into SMSGatewayPage
 const AgentSchedulePage = lazy(() => import("./pages/AgentSchedulePage.jsx"));
 const AgentCallsCalendarPage = lazy(() => import("./pages/AgentCallsCalendarPage.jsx"));
 const ApproveAMCallsPage = lazy(() => import("./pages/ApproveAMCallsPage.jsx"));
@@ -373,8 +373,8 @@ function AppContent() {
             <Route
               path="sms"
               element={
-                <ProtectedRoute allowedRoles={["admin", "affiliate_manager", "lead_manager", "refunds_manager"]}>
-                  <LazyPage><SMSPage /></LazyPage>
+                <ProtectedRoute allowedRoles={["admin", "inventory_manager", "affiliate_manager", "lead_manager", "refunds_manager"]}>
+                  <LazyPage><SMSGatewayPage /></LazyPage>
                 </ProtectedRoute>
               }
             />
@@ -412,11 +412,7 @@ function AppContent() {
             />
             <Route
               path="gateway-devices"
-              element={
-                <ProtectedRoute allowedRoles={["inventory_manager", "admin"]}>
-                  <LazyPage><GatewayManagementPage /></LazyPage>
-                </ProtectedRoute>
-              }
+              element={<Navigate to="/sms" replace />}
             />
             <Route
               path="agent-schedule"
