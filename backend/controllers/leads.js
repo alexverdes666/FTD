@@ -100,10 +100,9 @@ exports.getLeads = async (req, res, next) => {
       ipqsType,
       ipqsResult,
     } = req.query;
-    const filter = {};
-    
-    // Note: Archived leads are now included in the list but displayed with grey styling
-    // They are excluded from order selection by checking isArchived flag
+    const filter = { isArchived: { $ne: true } };
+
+    // Archived leads are excluded by default; use search keyword "archived" to view them
     
     if (leadType) filter.leadType = leadType;
 
@@ -4482,9 +4481,10 @@ exports.archiveLead = async (req, res, next) => {
     }
 
     if (lead.isArchived) {
-      return res.status(400).json({
-        success: false,
+      return res.status(200).json({
+        success: true,
         message: "Lead is already archived",
+        data: lead,
       });
     }
 
