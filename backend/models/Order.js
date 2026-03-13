@@ -125,6 +125,9 @@ const orderSchema = new Schema(
       // Per-order agent assignment (snapshot at time of assignment)
       assignedAgent: { type: SchemaTypes.ObjectId, ref: "User", default: null },
       assignedAgentAt: { type: Date },
+      // When true, assignedAgent is the authoritative value for this order
+      // (even if null, meaning explicitly unassigned for this order)
+      assignedAgentOverridden: { type: Boolean, default: false },
       _id: false
     }],
     // Track leads that have been removed from the order (soft delete)

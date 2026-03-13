@@ -77,6 +77,9 @@ const useLeadActions = ({
           updatedLeads[leadIndex] = {
             ...updatedLead,
             orderedAs: metadata?.orderedAs || updatedLeads[leadIndex].orderedAs,
+            // Preserve per-order agent assignment — don't let global lead updates override it
+            assignedAgent: updatedLeads[leadIndex].assignedAgent,
+            assignedAgentAt: updatedLeads[leadIndex].assignedAgentAt,
           };
 
           return {
@@ -103,6 +106,9 @@ const useLeadActions = ({
               updatedLeads[leadIndex] = {
                 ...updatedLead,
                 orderedAs: metadata?.orderedAs || updatedLeads[leadIndex].orderedAs,
+                // Preserve per-order agent assignment — don't let global lead updates override it
+                assignedAgent: updatedLeads[leadIndex].assignedAgent,
+                assignedAgentAt: updatedLeads[leadIndex].assignedAgentAt,
               };
               newData[orderId] = {
                 ...orderData,

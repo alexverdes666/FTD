@@ -995,6 +995,14 @@ exports.createFromOrder = async (req, res, next) => {
     const created = [];
     const skipped = [];
 
+    // Build metadata map for per-order agent resolution
+    const metadataMap = new Map();
+    if (order.leadsMetadata && Array.isArray(order.leadsMetadata)) {
+      order.leadsMetadata.forEach((meta) => {
+        metadataMap.set(meta.leadId.toString(), meta);
+      });
+    }
+
     for (const lead of ftdLeads) {
       // Check if already exists
       const existing = await DepositCall.findOne({ leadId: lead._id, orderId });
@@ -1015,12 +1023,18 @@ exports.createFromOrder = async (req, res, next) => {
           ? order.requester._id
           : null;
 
+      // Resolve agent: per-order override takes priority over global lead assignment
+      const meta = metadataMap.get(lead._id.toString());
+      const resolvedAgent = (meta?.assignedAgentOverridden || meta?.assignedAgent)
+        ? (meta?.assignedAgent || null)
+        : (lead.assignedAgent || null);
+
       const depositCall = await DepositCall.create({
         leadId: lead._id,
         orderId,
         clientBrokerId,
         accountManager,
-        assignedAgent: lead.assignedAgent,
+        assignedAgent: resolvedAgent,
         ftdName: `${lead.firstName} ${lead.lastName}`,
         ftdEmail: lead.newEmail,
         ftdPhone: lead.newPhone,
@@ -1527,9 +1541,15 @@ exports.syncOrderedFTDs = async (req, res, next) => {
               if (existing.ftdEmail !== leadDoc.newEmail) { existing.ftdEmail = leadDoc.newEmail; changed = true; }
               if (existing.ftdPhone !== leadDoc.newPhone) { existing.ftdPhone = leadDoc.newPhone; changed = true; }
 
-              if (!existing.assignedAgent) {
-                const perOrderAgent = meta.assignedAgent || leadDoc.assignedAgent || null;
-                if (perOrderAgent) { existing.assignedAgent = perOrderAgent; changed = true; }
+              // Always sync agent to match per-order assignment (or global fallback)
+              const perOrderAgent = (meta.assignedAgentOverridden || meta.assignedAgent)
+                ? (meta.assignedAgent || null)
+                : (leadDoc.assignedAgent || null);
+              const existingAgentStr = existing.assignedAgent ? existing.assignedAgent.toString() : null;
+              const perOrderAgentStr = perOrderAgent ? perOrderAgent.toString() : null;
+              if (existingAgentStr !== perOrderAgentStr) {
+                existing.assignedAgent = perOrderAgent;
+                changed = true;
               }
 
               // Sync broker from lead's clientBrokerHistory (order-specific)
@@ -1576,6 +1596,11 @@ exports.syncOrderedFTDs = async (req, res, next) => {
             || lead.assignedClientBrokers?.[0]
             || order.selectedClientBrokers?.[0]
             || null;
+          // Resolve agent: per-order override takes priority over global lead assignment
+          const resolvedAgent = (meta.assignedAgentOverridden || meta.assignedAgent)
+            ? (meta.assignedAgent || null)
+            : (lead.assignedAgent || null);
+
           await DepositCall.create({
             leadId: lead._id,
             orderId: order._id,
@@ -1586,7 +1611,7 @@ exports.syncOrderedFTDs = async (req, res, next) => {
                 : order.requester?.role === "affiliate_manager"
                   ? order.requester._id || null
                   : null,
-            assignedAgent: lead.assignedAgent || null,
+            assignedAgent: resolvedAgent,
             ftdName: `${lead.firstName} ${lead.lastName}`,
             ftdEmail: lead.newEmail,
             ftdPhone: lead.newPhone,

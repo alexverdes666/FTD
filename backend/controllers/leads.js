@@ -3996,186 +3996,258 @@ exports.assignLeadsToAgent = async (req, res, next) => {
           continue;
         }
 
-        if (isUnassigning) {
-          // Handle unassignment
-          if (!lead.assignedAgent) {
-            // Already unassigned
+        if (orderId) {
+          // ===== PER-ORDER ASSIGNMENT PATH =====
+          // Only update the order's leadsMetadata, NOT the global lead.assignedAgent.
+          // This ensures agent changes in one order don't affect other orders.
+          const Order = require("../models/Order");
+          const order = await Order.findById(orderId)
+            .populate("leadsMetadata.assignedAgent", "fullName fourDigitCode");
+          if (!order) {
+            results.failed.push({ leadId, reason: "Order not found" });
+            continue;
+          }
+
+          const metaIndex = order.leadsMetadata?.findIndex(
+            (m) => m.leadId.toString() === lead._id.toString()
+          );
+          if (metaIndex === -1 || metaIndex === undefined) {
+            results.failed.push({ leadId, reason: "Lead not found in order metadata" });
+            continue;
+          }
+
+          const currentMeta = order.leadsMetadata[metaIndex];
+          // Effective agent: per-order override if set (or old data with agent but no flag), else global
+          const effectiveAgent = (currentMeta.assignedAgentOverridden || currentMeta.assignedAgent)
+            ? currentMeta.assignedAgent
+            : lead.assignedAgent;
+
+          const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+                           req.headers['x-real-ip'] ||
+                           req.connection?.remoteAddress ||
+                           req.socket?.remoteAddress ||
+                           'unknown';
+          if (!order.auditLog) {
+            order.auditLog = [];
+          }
+
+          if (isUnassigning) {
+            if (!effectiveAgent) {
+              results.success.push({
+                leadId,
+                leadType: lead.leadType,
+                name: `${lead.firstName} ${lead.lastName}`,
+                alreadyUnassigned: true,
+              });
+              continue;
+            }
+
+            const previousAgentInfo = {
+              id: effectiveAgent._id,
+              name: effectiveAgent.fullName,
+              code: effectiveAgent.fourDigitCode,
+            };
+
+            // Update per-order metadata only
+            order.leadsMetadata[metaIndex].assignedAgent = null;
+            order.leadsMetadata[metaIndex].assignedAgentAt = null;
+            order.leadsMetadata[metaIndex].assignedAgentOverridden = true;
+
+            order.auditLog.push({
+              action: "agent_changed",
+              leadId: lead._id,
+              leadEmail: lead.email,
+              performedBy: req.user._id,
+              performedAt: new Date(),
+              ipAddress: clientIp,
+              details: `Agent unassigned from lead ${lead.firstName} ${lead.lastName} (${lead.email}) by ${req.user.fullName || req.user.email}. Previous agent: ${previousAgentInfo.name}`,
+              previousValue: {
+                agentId: previousAgentInfo.id,
+                agentName: previousAgentInfo.name,
+              },
+              newValue: null,
+            });
+            await order.save();
+
+            // Sync unassignment to DepositCall record for this lead+order
+            try {
+              const DepositCall = require("../models/DepositCall");
+              await DepositCall.updateMany(
+                { leadId: lead._id, orderId },
+                { $set: { assignedAgent: null } }
+              );
+            } catch (dcErr) {
+              console.error("Error syncing agent unassignment to deposit calls:", dcErr);
+            }
+
             results.success.push({
               leadId,
               leadType: lead.leadType,
               name: `${lead.firstName} ${lead.lastName}`,
-              alreadyUnassigned: true,
+              unassigned: true,
+              previousAgent: previousAgentInfo,
             });
-            continue;
-          }
-
-          // Store previous agent info
-          const previousAgentInfo = {
-            id: lead.assignedAgent._id,
-            name: lead.assignedAgent.fullName,
-            code: lead.assignedAgent.fourDigitCode,
-          };
-
-          // Unassign the lead
-          lead.unassignFromAgent();
-          await lead.save();
-
-          // Update per-order agent in leadsMetadata (only when orderId is explicitly provided from orders page)
-          if (orderId) {
-            const Order = require("../models/Order");
-            const order = await Order.findById(orderId);
-            if (order) {
-              // Update leadsMetadata with new agent assignment for this order only
-              if (order.leadsMetadata && Array.isArray(order.leadsMetadata)) {
-                const metaIndex = order.leadsMetadata.findIndex(
-                  (m) => m.leadId.toString() === lead._id.toString()
-                );
-                if (metaIndex !== -1) {
-                  order.leadsMetadata[metaIndex].assignedAgent = null;
-                  order.leadsMetadata[metaIndex].assignedAgentAt = null;
-                }
-              }
-              const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
-                               req.headers['x-real-ip'] ||
-                               req.connection?.remoteAddress ||
-                               req.socket?.remoteAddress ||
-                               'unknown';
-              if (!order.auditLog) {
-                order.auditLog = [];
-              }
-              order.auditLog.push({
-                action: "agent_changed",
-                leadId: lead._id,
-                leadEmail: lead.email,
-                performedBy: req.user._id,
-                performedAt: new Date(),
-                ipAddress: clientIp,
-                details: `Agent unassigned from lead ${lead.firstName} ${lead.lastName} (${lead.email}) by ${req.user.fullName || req.user.email}. Previous agent: ${previousAgentInfo.name}`,
-                previousValue: {
-                  agentId: previousAgentInfo.id,
-                  agentName: previousAgentInfo.name,
-                },
-                newValue: null,
-              });
-              await order.save();
-            }
-          }
-
-          // Sync unassignment to DepositCall record for this lead+order
-          try {
-            const DepositCall = require("../models/DepositCall");
-            const dcFilter = { leadId: lead._id };
-            if (orderId) dcFilter.orderId = orderId;
-            await DepositCall.updateMany(dcFilter, { $set: { assignedAgent: null } });
-          } catch (dcErr) {
-            console.error("Error syncing agent unassignment to deposit calls:", dcErr);
-          }
-
-          results.success.push({
-            leadId,
-            leadType: lead.leadType,
-            name: `${lead.firstName} ${lead.lastName}`,
-            unassigned: true,
-            previousAgent: previousAgentInfo,
-          });
-        } else {
-          // Handle assignment
-          // Check if this is already assigned to the same agent
-          if (
-            lead.assignedAgent &&
-            lead.assignedAgent._id.toString() === agentId
-          ) {
-            results.success.push({
-              leadId,
-              leadType: lead.leadType,
-              name: `${lead.firstName} ${lead.lastName}`,
-              alreadyAssigned: true,
-            });
-            continue;
-          }
-
-          // Store previous agent info for reassignment tracking
-          const previousAgentInfo = lead.assignedAgent
-            ? {
-                id: lead.assignedAgent._id,
-                name: lead.assignedAgent.fullName,
-                code: lead.assignedAgent.fourDigitCode,
-              }
-            : null;
-
-          // Assign to new agent (reassignment allowed)
-          const assignmentResult = lead.assignToAgent(agentId, true);
-          await assignmentResult.lead.save();
-
-          // Update per-order agent in leadsMetadata (only when orderId is explicitly provided from orders page)
-          if (orderId) {
-            const Order = require("../models/Order");
-            const order = await Order.findById(orderId);
-            if (order) {
-              // Update leadsMetadata with new agent assignment for this order only
-              if (order.leadsMetadata && Array.isArray(order.leadsMetadata)) {
-                const metaIndex = order.leadsMetadata.findIndex(
-                  (m) => m.leadId.toString() === lead._id.toString()
-                );
-                if (metaIndex !== -1) {
-                  order.leadsMetadata[metaIndex].assignedAgent = agent._id;
-                  order.leadsMetadata[metaIndex].assignedAgentAt = new Date();
-                }
-              }
-              const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
-                               req.headers['x-real-ip'] ||
-                               req.connection?.remoteAddress ||
-                               req.socket?.remoteAddress ||
-                               'unknown';
-              if (!order.auditLog) {
-                order.auditLog = [];
-              }
-              const isReassignment = assignmentResult.isReassignment && previousAgentInfo;
-              order.auditLog.push({
-                action: "agent_changed",
-                leadId: lead._id,
-                leadEmail: lead.email,
-                performedBy: req.user._id,
-                performedAt: new Date(),
-                ipAddress: clientIp,
-                details: isReassignment
-                  ? `Agent changed for lead ${lead.firstName} ${lead.lastName} (${lead.email}) by ${req.user.fullName || req.user.email}. Previous agent: ${previousAgentInfo.name}, New agent: ${agent.fullName}`
-                  : `Agent ${agent.fullName} assigned to lead ${lead.firstName} ${lead.lastName} (${lead.email}) by ${req.user.fullName || req.user.email}`,
-                previousValue: previousAgentInfo ? {
-                  agentId: previousAgentInfo.id,
-                  agentName: previousAgentInfo.name,
-                } : null,
-                newValue: {
-                  agentId: agent._id,
-                  agentName: agent.fullName,
-                },
-              });
-              await order.save();
-            }
-          }
-
-          // Sync agent assignment to DepositCall record for this lead+order
-          try {
-            const DepositCall = require("../models/DepositCall");
-            const dcFilter = { leadId: lead._id };
-            if (orderId) dcFilter.orderId = orderId;
-            await DepositCall.updateMany(dcFilter, { $set: { assignedAgent: agent._id } });
-          } catch (dcErr) {
-            console.error("Error syncing agent to deposit calls:", dcErr);
-          }
-
-          const successData = {
-            leadId,
-            leadType: lead.leadType,
-            name: `${lead.firstName} ${lead.lastName}`,
-          };
-
-          if (assignmentResult.isReassignment && previousAgentInfo) {
-            successData.reassigned = true;
-            successData.previousAgent = previousAgentInfo;
-            results.reassigned.push(successData);
           } else {
-            results.success.push(successData);
+            // Check if already assigned to the same agent in this order
+            if (effectiveAgent && effectiveAgent._id.toString() === agentId) {
+              results.success.push({
+                leadId,
+                leadType: lead.leadType,
+                name: `${lead.firstName} ${lead.lastName}`,
+                alreadyAssigned: true,
+              });
+              continue;
+            }
+
+            const previousAgentInfo = effectiveAgent
+              ? {
+                  id: effectiveAgent._id,
+                  name: effectiveAgent.fullName,
+                  code: effectiveAgent.fourDigitCode,
+                }
+              : null;
+
+            // Update per-order metadata only
+            order.leadsMetadata[metaIndex].assignedAgent = agent._id;
+            order.leadsMetadata[metaIndex].assignedAgentAt = new Date();
+            order.leadsMetadata[metaIndex].assignedAgentOverridden = true;
+
+            const isReassignment = !!previousAgentInfo;
+            order.auditLog.push({
+              action: "agent_changed",
+              leadId: lead._id,
+              leadEmail: lead.email,
+              performedBy: req.user._id,
+              performedAt: new Date(),
+              ipAddress: clientIp,
+              details: isReassignment
+                ? `Agent changed for lead ${lead.firstName} ${lead.lastName} (${lead.email}) by ${req.user.fullName || req.user.email}. Previous agent: ${previousAgentInfo.name}, New agent: ${agent.fullName}`
+                : `Agent ${agent.fullName} assigned to lead ${lead.firstName} ${lead.lastName} (${lead.email}) by ${req.user.fullName || req.user.email}`,
+              previousValue: previousAgentInfo ? {
+                agentId: previousAgentInfo.id,
+                agentName: previousAgentInfo.name,
+              } : null,
+              newValue: {
+                agentId: agent._id,
+                agentName: agent.fullName,
+              },
+            });
+            await order.save();
+
+            // Sync agent assignment to DepositCall record for this lead+order
+            try {
+              const DepositCall = require("../models/DepositCall");
+              await DepositCall.updateMany(
+                { leadId: lead._id, orderId },
+                { $set: { assignedAgent: agent._id } }
+              );
+            } catch (dcErr) {
+              console.error("Error syncing agent to deposit calls:", dcErr);
+            }
+
+            const successData = {
+              leadId,
+              leadType: lead.leadType,
+              name: `${lead.firstName} ${lead.lastName}`,
+            };
+
+            if (isReassignment) {
+              successData.reassigned = true;
+              successData.previousAgent = previousAgentInfo;
+              results.reassigned.push(successData);
+            } else {
+              results.success.push(successData);
+            }
+          }
+        } else {
+          // ===== GLOBAL ASSIGNMENT PATH (no orderId - e.g. from Leads page) =====
+          if (isUnassigning) {
+            if (!lead.assignedAgent) {
+              results.success.push({
+                leadId,
+                leadType: lead.leadType,
+                name: `${lead.firstName} ${lead.lastName}`,
+                alreadyUnassigned: true,
+              });
+              continue;
+            }
+
+            const previousAgentInfo = {
+              id: lead.assignedAgent._id,
+              name: lead.assignedAgent.fullName,
+              code: lead.assignedAgent.fourDigitCode,
+            };
+
+            lead.unassignFromAgent();
+            await lead.save();
+
+            // Sync unassignment to DepositCall record for this lead
+            try {
+              const DepositCall = require("../models/DepositCall");
+              await DepositCall.updateMany(
+                { leadId: lead._id },
+                { $set: { assignedAgent: null } }
+              );
+            } catch (dcErr) {
+              console.error("Error syncing agent unassignment to deposit calls:", dcErr);
+            }
+
+            results.success.push({
+              leadId,
+              leadType: lead.leadType,
+              name: `${lead.firstName} ${lead.lastName}`,
+              unassigned: true,
+              previousAgent: previousAgentInfo,
+            });
+          } else {
+            if (
+              lead.assignedAgent &&
+              lead.assignedAgent._id.toString() === agentId
+            ) {
+              results.success.push({
+                leadId,
+                leadType: lead.leadType,
+                name: `${lead.firstName} ${lead.lastName}`,
+                alreadyAssigned: true,
+              });
+              continue;
+            }
+
+            const previousAgentInfo = lead.assignedAgent
+              ? {
+                  id: lead.assignedAgent._id,
+                  name: lead.assignedAgent.fullName,
+                  code: lead.assignedAgent.fourDigitCode,
+                }
+              : null;
+
+            const assignmentResult = lead.assignToAgent(agentId, true);
+            await assignmentResult.lead.save();
+
+            // Sync agent assignment to DepositCall record for this lead
+            try {
+              const DepositCall = require("../models/DepositCall");
+              await DepositCall.updateMany(
+                { leadId: lead._id },
+                { $set: { assignedAgent: agent._id } }
+              );
+            } catch (dcErr) {
+              console.error("Error syncing agent to deposit calls:", dcErr);
+            }
+
+            const successData = {
+              leadId,
+              leadType: lead.leadType,
+              name: `${lead.firstName} ${lead.lastName}`,
+            };
+
+            if (assignmentResult.isReassignment && previousAgentInfo) {
+              successData.reassigned = true;
+              successData.previousAgent = previousAgentInfo;
+              results.reassigned.push(successData);
+            } else {
+              results.success.push(successData);
+            }
           }
         }
       } catch (error) {

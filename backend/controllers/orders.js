@@ -120,12 +120,11 @@ const mergeLeadsWithMetadata = (order) => {
         if (meta.orderedAs) {
           leadObj.orderedAs = meta.orderedAs;
         }
-        // Override with per-order agent if set (preserves historical agent assignment)
-        if (meta.assignedAgent) {
-          leadObj.assignedAgent = meta.assignedAgent;
-          if (meta.assignedAgentAt) {
-            leadObj.assignedAgentAt = meta.assignedAgentAt;
-          }
+        // Override with per-order agent if explicitly set for this order
+        // Also handles backward compat: old data has assignedAgent set but assignedAgentOverridden=false
+        if (meta.assignedAgentOverridden || meta.assignedAgent) {
+          leadObj.assignedAgent = meta.assignedAgent || null;
+          leadObj.assignedAgentAt = meta.assignedAgentAt || null;
         }
       }
       return leadObj;
@@ -5415,9 +5414,10 @@ exports.changeFTDInOrder = async (req, res, next) => {
 
               // Preserve the orderedAs value (e.g., 'filler' or 'ftd') for the replacement lead
               order.leadsMetadata[metadataIndex].leadId = newLead._id;
-              // Snapshot the new lead's current agent assignment
+              // Snapshot the new lead's current agent assignment (reset per-order override)
               order.leadsMetadata[metadataIndex].assignedAgent = newLead.assignedAgent || null;
               order.leadsMetadata[metadataIndex].assignedAgentAt = newLead.assignedAgentAt || null;
+              order.leadsMetadata[metadataIndex].assignedAgentOverridden = false;
               console.log(
                 `[CHANGE-FTD-DEBUG] Updated leadsMetadata: preserved orderedAs='${order.leadsMetadata[metadataIndex].orderedAs}' for new lead`
               );
