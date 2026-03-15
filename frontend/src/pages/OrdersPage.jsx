@@ -106,6 +106,7 @@ import {
 import AssignedLeadsModal from "./orders/AssignedLeadsModal";
 import OrderDetailPanel from "./orders/OrderDetailPanel";
 import LeadsPreviewModal from "./orders/LeadsPreviewModal";
+import LeadDetailDrawer from "./orders/LeadDetailDrawer";
 import useOrdersData from "./orders/useOrdersData";
 import useDropdownData from "./orders/useDropdownData";
 import useLeadActions from "./orders/useLeadActions";
@@ -194,6 +195,15 @@ const OrdersPage = () => {
     order: null,
     loading: false,
     enriching: false,
+  });
+
+  // Lead Detail Drawer state
+  const [leadDetailDrawer, setLeadDetailDrawer] = useState({
+    open: false,
+    leadId: null,
+    initialLeadData: null,
+    orderId: null,
+    order: null,
   });
 
   // Requester filter dropdown state
@@ -1931,6 +1941,21 @@ const OrdersPage = () => {
     setHighlightLeadId(null);
   }, []);
 
+  // Lead Detail Drawer handlers
+  const handleOpenLeadDetailDrawer = useCallback((lead, orderId, order) => {
+    setLeadDetailDrawer({
+      open: true,
+      leadId: lead._id,
+      initialLeadData: lead,
+      orderId: orderId || null,
+      order: order || null,
+    });
+  }, []);
+
+  const handleCloseLeadDetailDrawer = useCallback(() => {
+    setLeadDetailDrawer({ open: false, leadId: null, initialLeadData: null, orderId: null, order: null });
+  }, []);
+
   // Handler for manual IPQS recheck of a single lead
   const handleIPQSRecheckLead = useCallback(async (lead) => {
     if (!leadsPreviewModal.orderId || !lead?._id) return;
@@ -3608,6 +3633,7 @@ const OrdersPage = () => {
             onLeadMouseLeave={handleLeadMouseLeave}
             onOpenApplyFine={handleOpenApplyFineDialog}
             onOpenRemoveLead={handleOpenRemoveLeadDialog}
+            onOpenLeadDetailDrawer={handleOpenLeadDetailDrawer}
 
             setCopyPreferencesOpen={setCopyPreferencesOpen}
             processingLeads={processingLeads}
@@ -4208,6 +4234,7 @@ const OrdersPage = () => {
         onCopyToClipboard={handleCopyToClipboard}
         onOpenApplyFine={handleOpenApplyFineDialog}
         onOpenRemoveLead={handleOpenRemoveLeadDialog}
+        onOpenLeadDetailDrawer={handleOpenLeadDetailDrawer}
         onOpenClientBrokersDialog={handleOpenClientBrokersDialog}
         onOpenClientNetworksDialog={handleOpenClientNetworksDialog}
         onOpenOurNetworksDialog={handleOpenOurNetworksDialog}
@@ -4227,6 +4254,33 @@ const OrdersPage = () => {
         undoingReplacement={undoingReplacement}
         onRestoreLead={handleRestoreLead}
         onUndoReplacementFromMenu={handleUndoReplacementFromMenu}
+      />
+
+      {/* Lead Detail Drawer */}
+      <LeadDetailDrawer
+        open={leadDetailDrawer.open}
+        onClose={handleCloseLeadDetailDrawer}
+        leadId={leadDetailDrawer.leadId}
+        initialLeadData={leadDetailDrawer.initialLeadData}
+        orderId={leadDetailDrawer.orderId}
+        order={leadDetailDrawer.order}
+        user={user}
+        getLeadWithOrderMetadata={getLeadWithOrderMetadata}
+        onConfirmDeposit={handleConfirmDeposit}
+        onUnconfirmDeposit={handleUnconfirmDeposit}
+        onMarkAsShaved={handleMarkAsShaved}
+        onUnmarkAsShaved={handleUnmarkAsShaved}
+        onMarkAsClosedNetwork={handleMarkAsClosedNetwork}
+        onUnmarkAsClosedNetwork={handleUnmarkAsClosedNetwork}
+        onConvertLeadType={handleConvertLeadType}
+        onOpenChangeFTD={handleOpenChangeFTDDialog}
+        onOpenReplaceLead={handleOpenReplaceLeadDialog}
+        onOpenAssignLead={handleOpenAssignLeadDialog}
+        onOpenApplyFine={handleOpenApplyFineDialog}
+        onOpenRemoveLead={handleOpenRemoveLeadDialog}
+        onIPQSRecheckLead={handleIPQSRecheckLead}
+        onLeadUpdate={handleLeadUpdate}
+        processingLeads={processingLeads}
       />
 
       {/* Client Brokers Display Dialog */}

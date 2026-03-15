@@ -722,7 +722,8 @@ exports.getLeadById = async (req, res, next) => {
       .populate("assignedAgent", "fullName fourDigitCode email")
       .populate("comments.author", "fullName fourDigitCode")
       .populate("orderId", "requester")
-      .populate("adminActions.performedBy", "fullName email");
+      .populate("adminActions.performedBy", "fullName email")
+      .populate("assignedClientBrokers", "name domain description");
     if (!lead) {
       return res.status(404).json({
         success: false,

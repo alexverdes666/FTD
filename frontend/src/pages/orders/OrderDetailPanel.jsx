@@ -29,6 +29,7 @@ import {
   Assignment as AssignmentIcon,
   Notes as NotesIcon,
   Language as LanguageIcon,
+  OpenInNew as OpenInNewIcon,
 } from "@mui/icons-material";
 import api from "../../services/api";
 import { formatPhoneWithCountryCode } from "../../utils/phoneUtils";
@@ -76,6 +77,7 @@ const OrderDetailPanel = ({
   onLeadMouseLeave,
   onOpenApplyFine,
   onOpenRemoveLead,
+  onOpenLeadDetailDrawer,
   setCopyPreferencesOpen,
   processingLeads,
   setNotification,
@@ -372,6 +374,20 @@ const OrderDetailPanel = ({
                                         <Typography variant="body2" sx={{ fontWeight: 500, fontSize: "0.85rem", flex: 1 }}>
                                           {lead.firstName} {lead.lastName}
                                         </Typography>
+                                        {onOpenLeadDetailDrawer && (
+                                          <Tooltip title="View full lead details">
+                                            <IconButton
+                                              size="small"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                onOpenLeadDetailDrawer(lead, orderPanelId, expandedDetails);
+                                              }}
+                                              sx={{ p: 0.25 }}
+                                            >
+                                              <OpenInNewIcon sx={{ fontSize: 14 }} />
+                                            </IconButton>
+                                          </Tooltip>
+                                        )}
                                         {/* Status indicators */}
                                         <Box sx={{ display: "flex", gap: 0.5 }}>
                                           {isRemoved && <Chip label="Removed" size="small" sx={{ height: 18, fontSize: "0.6rem", bgcolor: "grey.500", color: "white" }} />}

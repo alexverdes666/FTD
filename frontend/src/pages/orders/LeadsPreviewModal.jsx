@@ -94,6 +94,7 @@ const LeadsPreviewModal = ({
   onCopyToClipboard,
   onOpenApplyFine,
   onOpenRemoveLead,
+  onOpenLeadDetailDrawer,
   // Display info dialogs
   onOpenClientBrokersDialog,
   onOpenClientNetworksDialog,
@@ -575,7 +576,19 @@ const LeadsPreviewModal = ({
                           )}
                           <Typography
                             variant="body2"
-                            sx={{ whiteSpace: "nowrap", fontSize: "0.75rem" }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (onOpenLeadDetailDrawer) {
+                                onOpenLeadDetailDrawer(lead, modal.orderId, modal.order);
+                              }
+                            }}
+                            sx={{
+                              whiteSpace: "nowrap",
+                              fontSize: "0.75rem",
+                              cursor: onOpenLeadDetailDrawer ? "pointer" : "default",
+                              color: onOpenLeadDetailDrawer ? "primary.main" : "inherit",
+                              "&:hover": onOpenLeadDetailDrawer ? { textDecoration: "underline" } : {},
+                            }}
                           >
                             {lead.firstName} {lead.lastName}
                           </Typography>
