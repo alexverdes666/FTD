@@ -1005,8 +1005,8 @@ const MainLayout = () => {
           display: "flex",
           flexDirection: "column",
           minHeight: "100vh",
-          overflow: (location.pathname === "/notes" || location.pathname === "/orders" || location.pathname === "/crm" || location.pathname === "/leads" || location.pathname === "/client-psps" || location.pathname === "/card-issuers" || location.pathname === "/sms") ? "hidden" : "auto",
-          height: (location.pathname === "/notes" || location.pathname === "/orders" || location.pathname === "/crm" || location.pathname === "/leads" || location.pathname === "/client-psps" || location.pathname === "/card-issuers" || location.pathname === "/sms") ? "100vh" : "auto",
+          overflow: (location.pathname === "/notes" || location.pathname === "/orders" || location.pathname === "/crm" || location.pathname === "/leads" || location.pathname === "/client-psps" || location.pathname === "/card-issuers" || location.pathname === "/sms" || location.pathname === "/deposit-calls") ? "hidden" : "auto",
+          height: (location.pathname === "/notes" || location.pathname === "/orders" || location.pathname === "/crm" || location.pathname === "/leads" || location.pathname === "/client-psps" || location.pathname === "/card-issuers" || location.pathname === "/sms" || location.pathname === "/deposit-calls") ? "100vh" : "auto",
         }}
       >
         <Box sx={{ minHeight: 42 }} />
@@ -1014,7 +1014,7 @@ const MainLayout = () => {
           component="div"
           sx={{
             flexGrow: 1,
-            overflow: (location.pathname === "/notes" || location.pathname === "/orders" || location.pathname === "/crm" || location.pathname === "/leads" || location.pathname === "/client-psps" || location.pathname === "/card-issuers" || location.pathname === "/sms") ? "hidden" : "auto",
+            overflow: (location.pathname === "/notes" || location.pathname === "/orders" || location.pathname === "/crm" || location.pathname === "/leads" || location.pathname === "/client-psps" || location.pathname === "/card-issuers" || location.pathname === "/sms" || location.pathname === "/deposit-calls") ? "hidden" : "auto",
             display: "flex",
             flexDirection: "column",
           }}
@@ -1023,7 +1023,7 @@ const MainLayout = () => {
             <Outlet />
           </Force2FASetup>
         </Box>
-        {location.pathname !== "/notes" && location.pathname !== "/orders" && location.pathname !== "/crm" && location.pathname !== "/leads" && location.pathname !== "/client-psps" && location.pathname !== "/card-issuers" && location.pathname !== "/am-expenses" && location.pathname !== "/sms" && !location.pathname.startsWith("/client-network/") && !location.pathname.startsWith("/client-broker/") && <Footer />}
+        {location.pathname !== "/notes" && location.pathname !== "/orders" && location.pathname !== "/crm" && location.pathname !== "/leads" && location.pathname !== "/client-psps" && location.pathname !== "/card-issuers" && location.pathname !== "/am-expenses" && location.pathname !== "/sms" && location.pathname !== "/fines" && location.pathname !== "/numbers" && location.pathname !== "/approve-am-calls" && location.pathname !== "/deposit-calls" && !location.pathname.startsWith("/client-network/") && !location.pathname.startsWith("/client-broker/") && <Footer />}
       </Box>
 
       {/* Floating Chat Button */}

@@ -923,7 +923,7 @@ const DepositCallsPage = () => {
   };
 
   return (
-    <Box sx={{ width: "100%", typography: "body1" }}>
+    <Box sx={{ width: "100%", typography: "body1", height: "100%", display: "flex", flexDirection: "column", overflow: "hidden" }}>
       {error && (
         <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
           {error}
@@ -931,7 +931,7 @@ const DepositCallsPage = () => {
       )}
 
       {/* Tabs */}
-      <Paper sx={{ mb: 2 }}>
+      <Paper sx={{ mb: 2, flexShrink: 0 }}>
         <Tabs value={tabValue} onChange={(e, v) => setTabValue(v)}>
           <Tab icon={<TableIcon />} label="Table View" iconPosition="start" />
           <Tab icon={<PhoneIcon />} label="Filler Calls" iconPosition="start" />
@@ -939,7 +939,7 @@ const DepositCallsPage = () => {
       </Paper>
 
       {/* Toolbar & Collapsible Filters */}
-      <Paper sx={{ mb: 2 }}>
+      <Paper sx={{ mb: 2, flexShrink: 0 }}>
         <Box sx={{ px: 2, py: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
           {tabValue !== 1 && (
             <Button
@@ -1212,7 +1212,7 @@ const DepositCallsPage = () => {
 
       {/* Table View */}
       {tabValue === 0 && (
-        <Paper sx={{ width: '100%', overflow: 'auto' }}>
+        <Paper sx={{ width: '100%', overflow: 'auto', flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           {loading ? (
             <Box display="flex" justifyContent="center" alignItems="center" minHeight={400}>
               <CircularProgress />
@@ -1228,7 +1228,7 @@ const DepositCallsPage = () => {
             </Box>
           ) : (
             <>
-              <TableContainer sx={{ maxHeight: 'calc(100vh - 300px)' }}>
+              <TableContainer sx={{ flex: 1, overflow: 'auto' }}>
                 <Table stickyHeader size="small" sx={{
                   borderCollapse: 'collapse',
                   '& .MuiTableCell-root': {
@@ -1490,6 +1490,7 @@ const DepositCallsPage = () => {
                   setPage(0);
                 }}
                 rowsPerPageOptions={[10, 25, 50, 100]}
+                sx={{ minHeight: 0, height: 36, overflow: 'hidden', '& .MuiTablePagination-toolbar': { minHeight: 36, height: 36, py: 0 } }}
               />
             </>
           )}
@@ -1498,7 +1499,7 @@ const DepositCallsPage = () => {
 
       {/* Filler Calls Tab */}
       {tabValue === 1 && (
-        <Paper sx={{ width: '100%', overflow: 'auto' }}>
+        <Paper sx={{ width: '100%', overflow: 'auto', flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           {fillerLoading ? (
             <Box display="flex" justifyContent="center" alignItems="center" minHeight={400}>
               <CircularProgress />
@@ -1516,7 +1517,7 @@ const DepositCallsPage = () => {
             </Box>
           ) : (
             <>
-              <TableContainer sx={{ maxHeight: 'calc(100vh - 300px)' }}>
+              <TableContainer sx={{ flex: 1, overflow: 'auto' }}>
                 <Table stickyHeader size="small">
                   <TableHead>
                     <TableRow>
@@ -1615,6 +1616,7 @@ const DepositCallsPage = () => {
                   setFillerPage(0);
                 }}
                 rowsPerPageOptions={[10, 25, 50, 100]}
+                sx={{ minHeight: 0, height: 36, overflow: 'hidden', '& .MuiTablePagination-toolbar': { minHeight: 36, height: 36, py: 0 } }}
               />
             </>
           )}

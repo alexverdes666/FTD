@@ -25,9 +25,7 @@ import {
   TextField,
 } from '@mui/material';
 import {
-  Gavel as GavelIcon,
   Add as AddIcon,
-  Refresh as RefreshIcon,
   Warning as WarningIcon,
 } from '@mui/icons-material';
 import dayjs from 'dayjs';
@@ -192,24 +190,6 @@ const FinesPage = () => {
 
   return (
     <Box sx={{ p: 3 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <GavelIcon color="warning" />
-          <Typography variant="h5" fontWeight={700}>
-            {isAdmin ? 'Fines Management' : 'My Fines'}
-          </Typography>
-        </Box>
-        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-          <Button
-            size="small"
-            startIcon={<RefreshIcon />}
-            onClick={() => { fetchFines(); fetchDisputedFines(); }}
-          >
-            Refresh
-          </Button>
-        </Box>
-      </Box>
-
       {/* Admin controls */}
       {isAdmin && (
         <Paper sx={{ p: 2, mb: 2 }}>

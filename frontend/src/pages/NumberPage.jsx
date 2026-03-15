@@ -26,11 +26,9 @@ import {
   DialogContent,
   DialogActions,
   Checkbox,
-  Stack,
-  Alert
+  Stack
 } from '@mui/material';
 import {
-  SimCard as SimCardIcon,
   Assignment as AssignmentIcon,
   FilterList as FilterIcon
 } from '@mui/icons-material';
@@ -232,19 +230,6 @@ const NumberPage = () => {
 
   return (
     <Box sx={{ width: "100%", typography: "body1" }}>
-      {/* Header */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h4" component="h1" sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <SimCardIcon fontSize="large" />
-          Number Assignment
-        </Typography>
-      </Box>
-
-      {/* Info Alert */}
-      <Alert severity="info" sx={{ mb: 3 }}>
-        Assign SIM card numbers to FTD leads. Click "Assign to FTDs" to select leads for each SIM card.
-      </Alert>
-
       {/* Filters */}
       <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
         <Button
