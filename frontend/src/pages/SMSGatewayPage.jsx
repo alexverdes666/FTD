@@ -25,6 +25,8 @@ import {
   Collapse,
   Switch,
   FormControlLabel,
+  Select,
+  MenuItem,
 } from '@mui/material';
 import { alpha, useTheme } from '@mui/material/styles';
 import {
@@ -42,18 +44,21 @@ import {
   ArrowUpward as ArrowUpIcon,
   ArrowDownward as ArrowDownIcon,
   ContactPhone as NumbersIcon,
+  History as HistoryIcon,
+  Info as InfoIcon,
 } from '@mui/icons-material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { smsService } from '../services/smsService';
 import gatewayDeviceService from '../services/gatewayDeviceService';
+import api from '../services/api';
 import chatService from '../services/chatService';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 
 // ─── Gateway Sidebar Item ────────────────────────────────────
-const GatewayItem = ({ gateway, onTest, onEdit, onDelete, onSetupForwarding, onSelect, selected, testing }) => {
+const GatewayItem = ({ gateway, onTest, onEdit, onDelete, onSetupForwarding, onSelect, onInfo, selected, testing }) => {
   const theme = useTheme();
   const isConnected = gateway.lastConnectionStatus === 'success';
   const isTesting = testing === gateway._id;
@@ -91,6 +96,11 @@ const GatewayItem = ({ gateway, onTest, onEdit, onDelete, onSetupForwarding, onS
       </Box>
 
       <Box display="flex" gap={0.25} mt={0.5} ml={1.25} onClick={(e) => e.stopPropagation()}>
+        <Tooltip title="Port usage">
+          <IconButton size="small" onClick={() => onInfo(gateway)} sx={{ p: 0.25 }}>
+            <InfoIcon sx={{ fontSize: 14 }} />
+          </IconButton>
+        </Tooltip>
         {gateway.webhook?.enabled && (
           <Tooltip title="Setup SMS forwarding">
             <IconButton size="small" color="info" onClick={() => onSetupForwarding(gateway)} sx={{ p: 0.25 }}>
@@ -382,6 +392,301 @@ const SMSContentDialog = ({ open, onClose, sms }) => {
   );
 };
 
+// ─── Order Preview Dialog (read-only leads list) ─────────────
+const phoneMatchesSuffix = (leadPhone, targetPhone) => {
+  if (!leadPhone || !targetPhone) return false;
+  const a = leadPhone.replace(/[\s+\-()]/g, '');
+  const b = targetPhone.replace(/[\s+\-()]/g, '');
+  return a.endsWith(b.slice(-9)) || b.endsWith(a.slice(-9));
+};
+
+const OrderPreviewDialog = ({ open, onClose, orderId, highlightPhone }) => {
+  const [order, setOrder] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!open || !orderId) return;
+    setLoading(true);
+    api.get(`/orders/${orderId}?panel=true`)
+      .then((res) => setOrder(res.data?.data || null))
+      .catch(() => toast.error('Failed to load order'))
+      .finally(() => setLoading(false));
+  }, [open, orderId]);
+
+  // Build removed leads map: leadId -> { reason, leadData }
+  const removedMap = {};
+  for (const removed of (order?.removedLeads || [])) {
+    const lid = removed.leadId?._id || removed.leadId;
+    if (lid) removedMap[lid.toString()] = { reason: removed.reason, data: removed.leadId };
+  }
+
+  // Active leads (exclude any that appear in removedLeads)
+  const allLeads = [];
+  const seenIds = new Set();
+  if (order) {
+    for (const lead of (order.leads || [])) {
+      const lid = (lead._id || '').toString();
+      seenIds.add(lid);
+      const isRemoved = !!removedMap[lid];
+      allLeads.push({ ...lead, _status: isRemoved ? 'removed' : 'active', _removeReason: removedMap[lid]?.reason });
+    }
+    // Add removed leads not already in the leads array
+    for (const [lid, { reason, data }] of Object.entries(removedMap)) {
+      if (!seenIds.has(lid) && data && typeof data === 'object' && data._id) {
+        allLeads.push({ ...data, _status: 'removed', _removeReason: reason });
+      }
+    }
+  }
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
+      <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', py: 1.5, px: 2 }}>
+        <Typography variant="subtitle1" fontWeight={600}>
+          Order {order ? `#${order._id?.slice(-6).toUpperCase()}` : ''} — Leads Preview
+        </Typography>
+        <IconButton size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
+      </DialogTitle>
+      <DialogContent sx={{ px: 2, pb: 2, pt: '0 !important' }}>
+        {loading ? (
+          <Box display="flex" justifyContent="center" py={4}><CircularProgress size={28} /></Box>
+        ) : !order ? (
+          <Typography color="text.secondary">No order data</Typography>
+        ) : (
+          <>
+            <Box display="flex" gap={1} mb={2} flexWrap="wrap">
+              <Chip label={order.status} size="small" color={order.status === 'fulfilled' ? 'success' : order.status === 'partial' ? 'warning' : 'default'} />
+              {order.countryFilter && <Chip label={order.countryFilter} size="small" variant="outlined" />}
+              {order.selectedCampaign?.name && <Chip label={order.selectedCampaign.name} size="small" variant="outlined" />}
+              {order.requester?.fullName && <Chip label={order.requester.fullName} size="small" variant="outlined" />}
+              {order.plannedDate && <Chip label={format(new Date(order.plannedDate), 'MMM dd, yyyy')} size="small" variant="outlined" />}
+            </Box>
+            <TableContainer component={Paper} variant="outlined">
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 700, fontSize: '0.75rem' }}>#</TableCell>
+                    <TableCell sx={{ fontWeight: 700, fontSize: '0.75rem' }}>Name</TableCell>
+                    <TableCell sx={{ fontWeight: 700, fontSize: '0.75rem' }}>Phone</TableCell>
+                    <TableCell sx={{ fontWeight: 700, fontSize: '0.75rem' }}>Email</TableCell>
+                    <TableCell sx={{ fontWeight: 700, fontSize: '0.75rem' }}>Country</TableCell>
+                    <TableCell sx={{ fontWeight: 700, fontSize: '0.75rem' }}>Type</TableCell>
+                    <TableCell sx={{ fontWeight: 700, fontSize: '0.75rem' }}>Status</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {allLeads.map((lead, i) => {
+                    const meta = order.leadsMetadata?.find((m) => {
+                      const mid = m.leadId?._id || m.leadId;
+                      return mid === lead._id || mid?.toString() === lead._id?.toString();
+                    });
+                    const isHighlighted = highlightPhone && phoneMatchesSuffix(lead.newPhone, highlightPhone);
+                    const isRemoved = lead._status === 'removed';
+
+                    return (
+                      <TableRow
+                        key={`${lead._id}-${lead._status}`}
+                        sx={{
+                          ...(isHighlighted && { bgcolor: 'warning.50', outline: '2px solid', outlineColor: 'warning.main', outlineOffset: -2 }),
+                          ...(isRemoved && { opacity: 0.5 }),
+                        }}
+                      >
+                        <TableCell sx={{ fontSize: '0.75rem' }}>{i + 1}</TableCell>
+                        <TableCell sx={{ fontSize: '0.75rem' }}>{lead.firstName} {lead.lastName}</TableCell>
+                        <TableCell sx={{ fontSize: '0.75rem', fontFamily: 'monospace', fontWeight: isHighlighted ? 700 : 400 }}>
+                          {lead.newPhone || '—'}
+                        </TableCell>
+                        <TableCell sx={{ fontSize: '0.75rem' }}>{lead.newEmail || '—'}</TableCell>
+                        <TableCell sx={{ fontSize: '0.75rem' }}>{lead.country || '—'}</TableCell>
+                        <TableCell sx={{ fontSize: '0.75rem' }}>{meta?.orderedAs || lead.leadType || '—'}</TableCell>
+                        <TableCell sx={{ fontSize: '0.75rem' }}>
+                          {isRemoved && (
+                            <Chip label="Removed" size="small" color="error" variant="outlined" sx={{ height: 20, fontSize: '0.65rem' }} />
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                  {allLeads.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={7} align="center" sx={{ py: 3, color: 'text.secondary' }}>No leads</TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+// ─── Port Usage Dialog (opened from gateway sidebar) ─────────
+const PortUsageDialog = ({ open, onClose, gateway }) => {
+  const [portUsage, setPortUsage] = useState({});
+  const [portHistory, setPortHistory] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [previewOrder, setPreviewOrder] = useState(null); // { orderId, phone }
+
+  useEffect(() => {
+    if (!open || !gateway) return;
+    setLoading(true);
+    setPortUsage({});
+    setPortHistory([]);
+    setShowHistory(false);
+    gatewayDeviceService.getPortUsage(gateway._id)
+      .then((res) => {
+        if (res.success) {
+          setPortUsage(res.data || {});
+          setPortHistory(res.history || []);
+        }
+      })
+      .catch(() => toast.error('Failed to load port usage'))
+      .finally(() => setLoading(false));
+  }, [open, gateway]);
+
+  if (!gateway) return null;
+
+  const ports = Object.entries(portUsage).sort((a, b) => parseInt(a[0]) - parseInt(b[0]));
+
+  return (
+    <>
+      <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
+        <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', py: 1.5, px: 2 }}>
+          <Box>
+            <Typography variant="subtitle1" fontWeight={600}>{gateway.name} — Port Usage</Typography>
+            {gateway.description && (
+              <Typography variant="body2" color="text.secondary">{gateway.description}</Typography>
+            )}
+          </Box>
+          <IconButton size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
+        </DialogTitle>
+        <DialogContent sx={{ px: 2, pb: 2, pt: '0 !important' }}>
+          {loading ? (
+            <Box display="flex" justifyContent="center" py={4}><CircularProgress size={28} /></Box>
+          ) : ports.length === 0 ? (
+            <Typography color="text.secondary" sx={{ py: 3, textAlign: 'center' }}>
+              No port numbers configured for this gateway.
+            </Typography>
+          ) : (
+            <TableContainer component={Paper} variant="outlined">
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 700, fontSize: '0.75rem', width: 50 }}>Port</TableCell>
+                    <TableCell sx={{ fontWeight: 700, fontSize: '0.75rem' }}>Number</TableCell>
+                    <TableCell sx={{ fontWeight: 700, fontSize: '0.75rem', width: 120 }}>Status</TableCell>
+                    <TableCell sx={{ fontWeight: 700, fontSize: '0.75rem' }}>Orders</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {ports.map(([port, info]) => {
+                    const manualStatus = info.manualStatus;
+                    const isUsed = info.isUsedInOrders;
+                    const allRemoved = info.allRemovedFromOrders;
+                    const orders = info.orders || [];
+
+                    // Auto-resolve: if used but all leads removed from orders → available
+                    const autoStatus = isUsed && !allRemoved ? 'used' : (info.number ? 'available' : 'not_defined');
+                    const effectiveStatus = manualStatus || autoStatus;
+
+                    let statusColor = 'default';
+                    if (effectiveStatus === 'used') statusColor = 'error';
+                    else if (effectiveStatus === 'available') statusColor = 'success';
+
+                    return (
+                      <TableRow key={port}>
+                        <TableCell sx={{ fontSize: '0.8rem', fontFamily: 'monospace' }}>{port}</TableCell>
+                        <TableCell sx={{ fontSize: '0.8rem', fontFamily: 'monospace' }}>{info.number || '—'}</TableCell>
+                        <TableCell>
+                          <Select
+                            size="small"
+                            value={effectiveStatus}
+                            onChange={async (e) => {
+                              try {
+                                await gatewayDeviceService.updatePortStatus(gateway._id, port, e.target.value);
+                                setPortUsage((prev) => ({
+                                  ...prev,
+                                  [port]: { ...prev[port], manualStatus: e.target.value },
+                                }));
+                                toast.success(`Port ${port} → ${e.target.value}`);
+                              } catch { toast.error('Failed to update status'); }
+                            }}
+                            sx={{
+                              height: 28, fontSize: '0.75rem', minWidth: 105,
+                              '& .MuiSelect-select': { py: 0.25 },
+                              bgcolor: statusColor === 'error' ? 'rgba(211,47,47,0.08)' : statusColor === 'success' ? 'rgba(46,125,50,0.08)' : undefined,
+                            }}
+                          >
+                            <MenuItem value="used" sx={{ fontSize: '0.75rem' }}>Used</MenuItem>
+                            <MenuItem value="available" sx={{ fontSize: '0.75rem' }}>Available</MenuItem>
+                            <MenuItem value="not_defined" sx={{ fontSize: '0.75rem' }}>Not defined</MenuItem>
+                          </Select>
+                        </TableCell>
+                        <TableCell>
+                          {isUsed ? (
+                            <Box display="flex" flexWrap="wrap" gap={0.5}>
+                              {orders.map((o) => {
+                                const isRemoved = o.leadStatus === 'removed';
+                                return (
+                                  <Chip
+                                    key={o._id}
+                                    label={`#${o._id.slice(-6).toUpperCase()} · ${o.countryFilter || '?'}`}
+                                    size="small"
+                                    color={isRemoved ? 'error' : 'success'}
+                                    variant="outlined"
+                                    sx={{ height: 22, fontSize: '0.68rem', cursor: 'pointer' }}
+                                    onClick={() => setPreviewOrder({ orderId: o._id, phone: info.number })}
+                                  />
+                                );
+                              })}
+                            </Box>
+                          ) : (
+                            <Typography variant="caption" color="text.disabled">—</Typography>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
+          {portHistory.length > 0 && (
+            <Box mt={2}>
+              <Button
+                size="small" variant="text" startIcon={<HistoryIcon sx={{ fontSize: 14 }} />}
+                onClick={() => setShowHistory((v) => !v)}
+                sx={{ fontSize: '0.7rem', textTransform: 'none', mb: 0.5 }}
+              >
+                {showHistory ? 'Hide history' : 'Status history'}
+              </Button>
+              <Collapse in={showHistory}>
+                <Box sx={{ maxHeight: 160, overflowY: 'auto', border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1 }}>
+                  {portHistory.slice().reverse().map((h, i) => (
+                    <Typography key={i} variant="caption" display="block" color="text.secondary" fontSize="0.68rem">
+                      Port {h.port} ({h.number || '—'}): {h.previousStatus || '—'} → <strong>{h.newStatus}</strong>
+                      {h.changedAt && ` · ${new Date(h.changedAt).toLocaleDateString()}`}
+                    </Typography>
+                  ))}
+                </Box>
+              </Collapse>
+            </Box>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <OrderPreviewDialog
+        open={!!previewOrder}
+        onClose={() => setPreviewOrder(null)}
+        orderId={previewOrder?.orderId}
+        highlightPhone={previewOrder?.phone}
+      />
+    </>
+  );
+};
+
 // ─── Helpers ─────────────────────────────────────────────────
 function formatTs(ts) {
   if (!ts) return '-';
@@ -404,6 +709,7 @@ const SMSGatewayPage = () => {
   const [gatewayDialogOpen, setGatewayDialogOpen] = useState(false);
   const [editingGateway, setEditingGateway] = useState(null);
   const [selectedGatewayId, setSelectedGatewayId] = useState(null);
+  const [portUsageGateway, setPortUsageGateway] = useState(null);
 
   // ── SMS state ──
   const [smsMessages, setSmsMessages] = useState([]);
@@ -660,6 +966,7 @@ const SMSGatewayPage = () => {
                     onEdit={(g) => { setEditingGateway(g); setGatewayDialogOpen(true); }}
                     onDelete={handleDeleteGateway}
                     onSetupForwarding={handleSetupForwarding}
+                    onInfo={(g) => setPortUsageGateway(g)}
                   />
                 </React.Fragment>
               ))
@@ -929,6 +1236,12 @@ const SMSGatewayPage = () => {
           open={!!selectedSms}
           onClose={() => setSelectedSms(null)}
           sms={selectedSms}
+        />
+
+        <PortUsageDialog
+          open={!!portUsageGateway}
+          onClose={() => setPortUsageGateway(null)}
+          gateway={portUsageGateway}
         />
 
       </Box>

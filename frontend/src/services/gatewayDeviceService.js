@@ -92,7 +92,17 @@ const gatewayDeviceService = {
   async getGatewayNumbers(id) {
     const response = await api.get(`/gateway-devices/${id}/numbers`);
     return response.data;
-  }
+  },
+
+  async getPortUsage(id) {
+    const response = await api.get(`/gateway-devices/${id}/port-usage`);
+    return response.data;
+  },
+
+  async updatePortStatus(id, port, status) {
+    const response = await api.put(`/gateway-devices/${id}/port-status`, { port, status });
+    return response.data;
+  },
 };
 
 export default gatewayDeviceService;

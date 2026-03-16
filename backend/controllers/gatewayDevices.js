@@ -1,5 +1,7 @@
 const GatewayDevice = require('../models/GatewayDevice');
 const IncomingSMS = require('../models/IncomingSMS');
+const Lead = require('../models/Lead');
+const Order = require('../models/Order');
 const { validationResult } = require('express-validator');
 const GoIPGatewayService = require('../services/goipGatewayService');
 const axios = require('axios');
@@ -589,3 +591,166 @@ exports.configureGatewayNotifications = async (req, res, next) => {
   }
 };
 
+/**
+ * Get port usage info for a gateway — which numbers are used in orders
+ */
+exports.getPortUsage = async (req, res, next) => {
+  try {
+    const gateway = await GatewayDevice.findById(req.params.id).lean();
+    if (!gateway) {
+      return res.status(404).json({ success: false, message: 'Gateway device not found' });
+    }
+
+    const portNumbers = gateway.portNumbers || {};
+    const portStatuses = gateway.portStatuses || {};
+    const results = {};
+
+    // Collect all unique phone numbers across ports
+    const allNumbers = [];
+    for (const [port, number] of Object.entries(portNumbers)) {
+      if (number) {
+        const normalized = number.replace(/[\s+\-()]/g, '');
+        allNumbers.push({ port, normalized });
+      }
+    }
+
+    // Batch-find all leads whose newPhone matches any port number (last 9 digits)
+    let leadsByPort = {};
+    if (allNumbers.length > 0) {
+      const orConditions = allNumbers.map(({ normalized }) => ({
+        newPhone: { $regex: normalized.slice(-9) + '$' },
+      }));
+      const leads = await Lead.find({ $or: orConditions }).select('_id newPhone').lean();
+
+      for (const lead of leads) {
+        const leadNorm = (lead.newPhone || '').replace(/[\s+\-()]/g, '');
+        for (const { port, normalized } of allNumbers) {
+          if (leadNorm.endsWith(normalized.slice(-9))) {
+            if (!leadsByPort[port]) leadsByPort[port] = [];
+            leadsByPort[port].push(lead._id);
+          }
+        }
+      }
+    }
+
+    // Batch-find orders for all found lead IDs (active + removed leads)
+    const allLeadIds = [...new Set(Object.values(leadsByPort).flat())];
+    // Map: leadId -> [{ order info, leadStatus }]
+    let ordersByLeadId = {};
+    if (allLeadIds.length > 0) {
+      const orders = await Order.find({
+        $or: [
+          { 'leadsMetadata.leadId': { $in: allLeadIds } },
+          { 'removedLeads.leadId': { $in: allLeadIds } },
+        ],
+      }).select('_id leadsMetadata.leadId removedLeads.leadId plannedDate status countryFilter').lean();
+
+      for (const order of orders) {
+        // Build set of removed lead IDs for this order
+        const removedSet = new Set();
+        for (const removed of order.removedLeads || []) {
+          removedSet.add(removed.leadId.toString());
+        }
+
+        // Check active leads — mark as removed if also in removedLeads
+        for (const meta of order.leadsMetadata || []) {
+          const lid = meta.leadId.toString();
+          if (!allLeadIds.some(id => id.toString() === lid)) continue;
+          if (!ordersByLeadId[lid]) ordersByLeadId[lid] = [];
+          ordersByLeadId[lid].push({
+            _id: order._id,
+            plannedDate: order.plannedDate,
+            status: order.status,
+            countryFilter: order.countryFilter,
+            leadStatus: removedSet.has(lid) ? 'removed' : 'active',
+          });
+        }
+        // Add removed leads that are NOT in leadsMetadata at all
+        const metaSet = new Set((order.leadsMetadata || []).map(m => m.leadId.toString()));
+        for (const removed of order.removedLeads || []) {
+          const lid = removed.leadId.toString();
+          if (metaSet.has(lid)) continue; // already handled above
+          if (!allLeadIds.some(id => id.toString() === lid)) continue;
+          if (!ordersByLeadId[lid]) ordersByLeadId[lid] = [];
+          ordersByLeadId[lid].push({
+            _id: order._id,
+            plannedDate: order.plannedDate,
+            status: order.status,
+            countryFilter: order.countryFilter,
+            leadStatus: 'removed',
+          });
+        }
+      }
+    }
+
+    // Build per-port results
+    for (const [port, number] of Object.entries(portNumbers)) {
+      const leadIds = leadsByPort[port] || [];
+      const orders = [];
+      const seenOrderIds = new Set();
+      for (const lid of leadIds) {
+        for (const o of (ordersByLeadId[lid.toString()] || [])) {
+          if (!seenOrderIds.has(o._id.toString())) {
+            orders.push(o);
+            seenOrderIds.add(o._id.toString());
+          }
+        }
+      }
+
+      const allRemoved = orders.length > 0 && orders.every(o => o.leadStatus === 'removed');
+
+      results[port] = {
+        number: number || '',
+        manualStatus: portStatuses[port] || null,
+        isUsedInOrders: orders.length > 0,
+        allRemovedFromOrders: allRemoved,
+        orders,
+      };
+    }
+
+    res.json({
+      success: true,
+      data: results,
+      history: (gateway.portStatusHistory || []).slice(-100),
+    });
+  } catch (error) {
+    console.error('Error getting port usage:', error);
+    next(error);
+  }
+};
+
+/**
+ * Update port status (manual override)
+ */
+exports.updatePortStatus = async (req, res, next) => {
+  try {
+    const gateway = await GatewayDevice.findById(req.params.id);
+    if (!gateway) {
+      return res.status(404).json({ success: false, message: 'Gateway device not found' });
+    }
+
+    const { port, status } = req.body;
+    if (!port || !['used', 'available', 'not_defined'].includes(status)) {
+      return res.status(400).json({ success: false, message: 'Valid port and status (used/available/not_defined) required' });
+    }
+
+    const previousStatus = gateway.portStatuses?.get(port) || null;
+    const number = gateway.portNumbers?.get(port) || '';
+
+    gateway.portStatuses.set(port, status);
+    gateway.portStatusHistory.push({
+      port,
+      number,
+      previousStatus,
+      newStatus: status,
+      changedBy: req.user._id,
+      changedAt: new Date(),
+    });
+    gateway.lastModifiedBy = req.user._id;
+    await gateway.save();
+
+    res.json({ success: true, data: { port, status, previousStatus } });
+  } catch (error) {
+    next(error);
+  }
+};

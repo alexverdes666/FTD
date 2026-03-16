@@ -83,6 +83,23 @@ const gatewayDeviceSchema = new mongoose.Schema(
       of: String,
       default: () => new Map(),
     },
+    // Manual port status overrides (e.g. { "1": "used", "3": "available" })
+    // Values: "used" | "available" | "not_defined"
+    portStatuses: {
+      type: Map,
+      of: String,
+      default: () => new Map(),
+    },
+    // History of port status changes for audit trail
+    portStatusHistory: [{
+      port: { type: String, required: true },
+      number: { type: String },
+      previousStatus: { type: String },
+      newStatus: { type: String, required: true },
+      changedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      changedAt: { type: Date, default: Date.now },
+      _id: false,
+    }],
     // SMS Webhook configuration (for GoIP SMS Forward HTTP-POST)
     webhook: {
       enabled: {

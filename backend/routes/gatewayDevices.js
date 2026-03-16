@@ -10,7 +10,9 @@ const {
   getGatewayLiveStatus,
   getGatewayNumbers,
   configureGatewayNotifications,
-  configureSmsForwarding
+  configureSmsForwarding,
+  getPortUsage,
+  updatePortStatus,
 } = require('../controllers/gatewayDevices');
 const { protect, isAdmin } = require('../middleware/auth');
 
@@ -60,6 +62,12 @@ router.get('/:id/numbers', [protect, requireGatewayPermission], getGatewayNumber
 
 // Configure SMS forwarding on gateway (tells gateway to POST received SMS to our webhook)
 router.post('/:id/configure-sms-forwarding', [protect, requireGatewayPermission], configureSmsForwarding);
+
+// Get port usage info (which numbers are used in orders)
+router.get('/:id/port-usage', [protect, requireGatewayPermission], getPortUsage);
+
+// Update port status (manual override)
+router.put('/:id/port-status', [protect, isAdmin], updatePortStatus);
 
 // Configure status notifications for gateway
 router.post('/:id/configure-notifications', [

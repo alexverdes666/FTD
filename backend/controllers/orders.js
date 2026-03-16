@@ -3633,6 +3633,7 @@ exports.getOrderById = async (req, res, next) => {
       .populate("selectedClientBrokers", "name domain description")
       .populate("auditLog.performedBy", "fullName email")
       .populate("removedLeads.removedBy", "fullName email")
+      .populate("removedLeads.leadId", "firstName lastName newPhone newEmail country leadType")
       .populate("leadsMetadata.assignedAgent", "fullName email fourDigitCode");
 
     // Only populate full lead details if not in lightweight mode
