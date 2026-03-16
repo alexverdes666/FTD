@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   Box,
   Typography,
@@ -41,8 +41,32 @@ import {
   addGlobalFixedExpense,
   updateGlobalFixedExpense,
   deleteGlobalFixedExpense,
+  getRateOverrides,
+  saveRateOverrides,
 } from "../services/amExpenses";
 import { getAgentFines } from "../services/agentFines";
+
+// Default rates (mirrors backend constants)
+const DEFAULT_RATES = [
+  { key: "ftdDeposit", label: "FTDs (Deposit)", defaultRate: 300, rateType: "fixed" },
+  { key: "ftdTransactionCommission", label: "FTDs Transaction Commission", defaultRate: 0.05, rateType: "percentage" },
+  { key: "sim-SE", label: "SIM Cards (SE)", defaultRate: 60, rateType: "fixed" },
+  { key: "sim-UK", label: "SIM Cards (UK)", defaultRate: 35, rateType: "fixed" },
+  { key: "sim-CA", label: "SIM Cards (CA)", defaultRate: 100, rateType: "fixed" },
+  { key: "sim-PL", label: "SIM Cards (PL)", defaultRate: 35, rateType: "fixed" },
+  { key: "sim-ES", label: "SIM Cards (ES)", defaultRate: 40, rateType: "fixed" },
+  { key: "documents", label: "Documents", defaultRate: 20, rateType: "fixed" },
+  { key: "dataTraffic", label: "Data Traffic", defaultRate: 1, rateType: "fixed" },
+  { key: "esUkCards", label: "ES/UK Cards", defaultRate: 0.15, rateType: "percentage" },
+  { key: "caCards", label: "CA Cards", defaultRate: 75, rateType: "fixed" },
+  { key: "totalTalkingTime", label: "Total Talking Time", defaultRate: 10, rateType: "fixed", suffix: "/hr" },
+  { key: "depositCalls", label: "Deposit Calls", defaultRate: 10, rateType: "fixed" },
+  { key: "firstCalls", label: "1st Calls", defaultRate: 7.5, rateType: "fixed" },
+  { key: "secondCalls", label: "2nd Calls", defaultRate: 7.5, rateType: "fixed" },
+  { key: "thirdCalls", label: "3rd Calls", defaultRate: 5, rateType: "fixed" },
+  { key: "fourthCalls", label: "4th Calls", defaultRate: 10, rateType: "fixed" },
+  { key: "verifiedLeads", label: "Verified Leads", defaultRate: 5, rateType: "fixed" },
+];
 
 // --- Fixed Expense Dialog (reused for both per-AM and global) ---
 const FixedExpenseDialog = ({ open, onClose, onSave, expense, title }) => {
@@ -143,8 +167,16 @@ const RateInput = ({ value, onChange, suffix }) => (
   />
 );
 
+// --- Format rate display for read-only view ---
+const formatRate = (value, rateType, suffix) => {
+  if (value === undefined || value === null) return "—";
+  if (rateType === "percentage") return `${(value * 100).toFixed(1)}%`;
+  if (suffix) return `$${value}${suffix}`;
+  return `$${value}`;
+};
+
 // --- AM Detail Row (Expandable) ---
-const AMDetailRow = ({ row, month, year, onFixedExpenseChange, globalFixedTotal }) => {
+const AMDetailRow = ({ row, month, year, onFixedExpenseChange, globalFixedTotal, rateOverrides }) => {
   const [open, setOpen] = useState(false);
   const [detail, setDetail] = useState(null);
   const [fixedExpensesList, setFixedExpensesList] = useState([]);
@@ -152,7 +184,6 @@ const AMDetailRow = ({ row, month, year, onFixedExpenseChange, globalFixedTotal 
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState(null);
-  const [rateOverrides, setRateOverrides] = useState({});
 
   const loadDetail = useCallback(async () => {
     if (!open) return;
@@ -166,7 +197,6 @@ const AMDetailRow = ({ row, month, year, onFixedExpenseChange, globalFixedTotal 
       setDetail(expenseRes.data);
       setFixedExpensesList(fixedRes.data);
       setAmFines(finesRes || []);
-      setRateOverrides({});
     } catch (err) {
       console.error("Error loading AM detail:", err);
     } finally {
@@ -213,14 +243,6 @@ const AMDetailRow = ({ row, month, year, onFixedExpenseChange, globalFixedTotal 
     } catch (err) {
       console.error("Error saving fixed expense:", err);
     }
-  };
-
-  const handleRateChange = (key, value) => {
-    const num = parseFloat(value);
-    setRateOverrides((prev) => ({
-      ...prev,
-      [key]: isNaN(num) ? undefined : num,
-    }));
   };
 
   // Compute auto subtotal with overrides
@@ -316,10 +338,7 @@ const AMDetailRow = ({ row, month, year, onFixedExpenseChange, globalFixedTotal 
                                 <TableRow key={simKey}>
                                   <TableCell>SIM Cards ({sim.geo})</TableCell>
                                   <TableCell align="right">
-                                    <RateInput
-                                      value={rate}
-                                      onChange={(v) => handleRateChange(simKey, v)}
-                                    />
+                                    {formatRate(rate, "fixed")}
                                   </TableCell>
                                   <TableCell align="right">{sim.count}</TableCell>
                                   <TableCell align="right">
@@ -341,11 +360,7 @@ const AMDetailRow = ({ row, month, year, onFixedExpenseChange, globalFixedTotal 
                                   {cat.label} ({hours}h {minutes}m)
                                 </TableCell>
                                 <TableCell align="right">
-                                  <RateInput
-                                    value={rate}
-                                    onChange={(v) => handleRateChange(cat.key, v)}
-                                    suffix="/hr"
-                                  />
+                                  {formatRate(rate, "fixed", "/hr")}
                                 </TableCell>
                                 <TableCell align="right">{hours} hrs</TableCell>
                                 <TableCell align="right" sx={{ fontWeight: "medium" }}>
@@ -367,7 +382,7 @@ const AMDetailRow = ({ row, month, year, onFixedExpenseChange, globalFixedTotal 
                               </TableRow>
                             );
                           }
-                          // Generic category with editable rate
+                          // Generic category — read-only rate display
                           const rate = getRateValue(cat.key, cat.rate);
                           const total = computeCategoryTotal(cat, rateOverrides[cat.key]);
                           const isPercentage = cat.rateType === "percentage";
@@ -375,22 +390,9 @@ const AMDetailRow = ({ row, month, year, onFixedExpenseChange, globalFixedTotal 
                             <TableRow key={cat.key}>
                               <TableCell>{cat.label}</TableCell>
                               <TableCell align="right">
-                                {cat.rate !== undefined ? (
-                                  <RateInput
-                                    value={isPercentage ? (rate * 100) : rate}
-                                    onChange={(v) => {
-                                      const num = parseFloat(v);
-                                      if (isPercentage) {
-                                        handleRateChange(cat.key, isNaN(num) ? "" : (num / 100).toString());
-                                      } else {
-                                        handleRateChange(cat.key, v);
-                                      }
-                                    }}
-                                    suffix={isPercentage ? "%" : undefined}
-                                  />
-                                ) : (
-                                  "—"
-                                )}
+                                {cat.rate !== undefined
+                                  ? formatRate(rate, isPercentage ? "percentage" : "fixed")
+                                  : "—"}
                               </TableCell>
                               <TableCell align="right">
                                 {isPercentage && cat.base !== undefined
@@ -578,10 +580,18 @@ const AMExpensesPage = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  // Global section toggles (collapsed by default)
+  const [ratesOpen, setRatesOpen] = useState(false);
+  const [fixedOpen, setFixedOpen] = useState(false);
+
   // Global fixed expenses
   const [globalFixedExpenses, setGlobalFixedExpenses] = useState([]);
   const [globalDialogOpen, setGlobalDialogOpen] = useState(false);
   const [editingGlobalExpense, setEditingGlobalExpense] = useState(null);
+
+  // Global rate overrides (shared across all AMs for the selected month/year)
+  const [rateOverrides, setRateOverrides] = useState({});
+  const saveTimerRef = useRef(null);
 
   const globalFixedTotal = useMemo(
     () => globalFixedExpenses.reduce((sum, fe) => sum + fe.amount, 0),
@@ -613,6 +623,41 @@ const AMExpensesPage = () => {
     }
   }, []);
 
+  const fetchRateOverrides = useCallback(async () => {
+    try {
+      const month = selectedDate.month() + 1;
+      const year = selectedDate.year();
+      const res = await getRateOverrides({ month, year });
+      setRateOverrides(res.data || {});
+    } catch (err) {
+      console.error("Error fetching rate overrides:", err);
+    }
+  }, [selectedDate]);
+
+  const handleRateChange = useCallback((key, value) => {
+    const num = parseFloat(value);
+    setRateOverrides((prev) => {
+      const next = { ...prev };
+      if (isNaN(num)) {
+        delete next[key];
+      } else {
+        next[key] = num;
+      }
+
+      // Debounce save to backend
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = setTimeout(() => {
+        const month = selectedDate.month() + 1;
+        const year = selectedDate.year();
+        saveRateOverrides({ month, year, overrides: next }).catch((err) =>
+          console.error("Error saving rate overrides:", err)
+        );
+      }, 800);
+
+      return next;
+    });
+  }, [selectedDate]);
+
   useEffect(() => {
     fetchData();
   }, [fetchData]);
@@ -620,6 +665,17 @@ const AMExpensesPage = () => {
   useEffect(() => {
     fetchGlobalFixedExpenses();
   }, [fetchGlobalFixedExpenses]);
+
+  useEffect(() => {
+    fetchRateOverrides();
+  }, [fetchRateOverrides]);
+
+  // Cleanup debounce timer on unmount
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    };
+  }, []);
 
   const handleAddGlobalExpense = () => {
     setEditingGlobalExpense(null);
@@ -666,78 +722,158 @@ const AMExpensesPage = () => {
         />
       </Paper>
 
-      {/* Global Fixed Expenses Section */}
-      <Paper sx={{ p: 2, mb: 3 }}>
-        <Box sx={{ display: "flex", alignItems: "center", mb: 1 }}>
-          <Typography variant="h6" sx={{ flex: 1 }}>
-            Global Fixed Expenses
-          </Typography>
-          <Button
-            startIcon={<AddIcon />}
-            size="small"
-            variant="outlined"
-            onClick={handleAddGlobalExpense}
+      {/* Global Settings — side by side, collapsible */}
+      <Box sx={{ display: "flex", gap: 3, mb: 3, alignItems: "flex-start" }}>
+        {/* Global Auto-Calculated Rates */}
+        <Paper sx={{ flex: 1, minWidth: 0 }}>
+          <Box
+            sx={{ display: "flex", alignItems: "center", p: 2, cursor: "pointer" }}
+            onClick={() => setRatesOpen((v) => !v)}
           >
-            Add
-          </Button>
-        </Box>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          These expenses apply to all affiliate managers, every month.
-        </Typography>
-        <TableContainer>
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>Label</TableCell>
-                <TableCell align="right">Amount</TableCell>
-                <TableCell>Notes</TableCell>
-                <TableCell align="center">Actions</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {globalFixedExpenses.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={4} align="center" sx={{ color: "text.secondary" }}>
-                    No global fixed expenses
-                  </TableCell>
-                </TableRow>
-              ) : (
-                globalFixedExpenses.map((fe) => (
-                  <TableRow key={fe._id}>
-                    <TableCell>{fe.label}</TableCell>
-                    <TableCell align="right">{formatCurrency(fe.amount)}</TableCell>
-                    <TableCell>{fe.notes || "—"}</TableCell>
-                    <TableCell align="center">
-                      <IconButton
-                        size="small"
-                        onClick={() => handleEditGlobalExpense(fe)}
-                      >
-                        <EditIcon fontSize="small" />
-                      </IconButton>
-                      <IconButton
-                        size="small"
-                        onClick={() => handleDeleteGlobalExpense(fe._id)}
-                        color="error"
-                      >
-                        <DeleteIcon fontSize="small" />
-                      </IconButton>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-              {globalFixedExpenses.length > 0 && (
-                <TableRow>
-                  <TableCell sx={{ fontWeight: "bold" }}>Total</TableCell>
-                  <TableCell align="right" sx={{ fontWeight: "bold" }}>
-                    {formatCurrency(globalFixedTotal)}
-                  </TableCell>
-                  <TableCell colSpan={2} />
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </TableContainer>
-      </Paper>
+            <IconButton size="small" sx={{ mr: 1 }}>
+              {ratesOpen ? <KeyboardArrowUp /> : <KeyboardArrowDown />}
+            </IconButton>
+            <Typography variant="h6" sx={{ flex: 1 }}>
+              Global Auto-Calculated Rates
+            </Typography>
+          </Box>
+          <Collapse in={ratesOpen}>
+            <Box sx={{ px: 2, pb: 2 }}>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                Rates for the selected month. Changes saved automatically.
+              </Typography>
+              <TableContainer>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Expense</TableCell>
+                      <TableCell align="right">Default</TableCell>
+                      <TableCell align="right">Current Rate</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {DEFAULT_RATES.map((item) => {
+                      const isPercentage = item.rateType === "percentage";
+                      const currentRaw = rateOverrides[item.key];
+                      const currentValue = currentRaw !== undefined ? currentRaw : item.defaultRate;
+                      const displayValue = isPercentage ? currentValue * 100 : currentValue;
+                      const defaultDisplay = isPercentage
+                        ? `${(item.defaultRate * 100).toFixed(1)}%`
+                        : `$${item.defaultRate}${item.suffix || ""}`;
+
+                      return (
+                        <TableRow key={item.key}>
+                          <TableCell>{item.label}</TableCell>
+                          <TableCell align="right" sx={{ color: "text.secondary" }}>
+                            {defaultDisplay}
+                          </TableCell>
+                          <TableCell align="right">
+                            <RateInput
+                              value={displayValue}
+                              onChange={(v) => {
+                                const num = parseFloat(v);
+                                if (isPercentage) {
+                                  handleRateChange(item.key, isNaN(num) ? "" : (num / 100).toString());
+                                } else {
+                                  handleRateChange(item.key, v);
+                                }
+                              }}
+                              suffix={isPercentage ? "%" : item.suffix}
+                            />
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </Box>
+          </Collapse>
+        </Paper>
+
+        {/* Global Fixed Expenses */}
+        <Paper sx={{ flex: 1, minWidth: 0 }}>
+          <Box
+            sx={{ display: "flex", alignItems: "center", p: 2, cursor: "pointer" }}
+            onClick={() => setFixedOpen((v) => !v)}
+          >
+            <IconButton size="small" sx={{ mr: 1 }}>
+              {fixedOpen ? <KeyboardArrowUp /> : <KeyboardArrowDown />}
+            </IconButton>
+            <Typography variant="h6" sx={{ flex: 1 }}>
+              Global Fixed Expenses
+            </Typography>
+            <Button
+              startIcon={<AddIcon />}
+              size="small"
+              variant="outlined"
+              onClick={(e) => { e.stopPropagation(); handleAddGlobalExpense(); }}
+            >
+              Add
+            </Button>
+          </Box>
+          <Collapse in={fixedOpen}>
+            <Box sx={{ px: 2, pb: 2 }}>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                These expenses apply to all affiliate managers, every month.
+              </Typography>
+              <TableContainer>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Label</TableCell>
+                      <TableCell align="right">Amount</TableCell>
+                      <TableCell>Notes</TableCell>
+                      <TableCell align="center">Actions</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {globalFixedExpenses.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={4} align="center" sx={{ color: "text.secondary" }}>
+                          No global fixed expenses
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      globalFixedExpenses.map((fe) => (
+                        <TableRow key={fe._id}>
+                          <TableCell>{fe.label}</TableCell>
+                          <TableCell align="right">{formatCurrency(fe.amount)}</TableCell>
+                          <TableCell>{fe.notes || "—"}</TableCell>
+                          <TableCell align="center">
+                            <IconButton
+                              size="small"
+                              onClick={() => handleEditGlobalExpense(fe)}
+                            >
+                              <EditIcon fontSize="small" />
+                            </IconButton>
+                            <IconButton
+                              size="small"
+                              onClick={() => handleDeleteGlobalExpense(fe._id)}
+                              color="error"
+                            >
+                              <DeleteIcon fontSize="small" />
+                            </IconButton>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                    {globalFixedExpenses.length > 0 && (
+                      <TableRow>
+                        <TableCell sx={{ fontWeight: "bold" }}>Total</TableCell>
+                        <TableCell align="right" sx={{ fontWeight: "bold" }}>
+                          {formatCurrency(globalFixedTotal)}
+                        </TableCell>
+                        <TableCell colSpan={2} />
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </Box>
+          </Collapse>
+        </Paper>
+      </Box>
 
       {error && (
         <Alert severity="error" sx={{ mb: 2 }}>
@@ -784,6 +920,7 @@ const AMExpensesPage = () => {
                     year={selectedDate.year()}
                     onFixedExpenseChange={fetchData}
                     globalFixedTotal={globalFixedTotal}
+                    rateOverrides={rateOverrides}
                   />
                 ))
               )}

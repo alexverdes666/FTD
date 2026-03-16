@@ -95,6 +95,30 @@ router.delete(
   amExpensesController.deleteFixedExpense
 );
 
+// ==================== Rate Overrides ====================
+
+// Get global rate overrides for a month/year
+router.get(
+  '/rate-overrides',
+  protect,
+  isAdmin,
+  monthYearValidation,
+  amExpensesController.getRateOverrides
+);
+
+// Save global rate overrides for a month/year (upsert)
+router.put(
+  '/rate-overrides',
+  protect,
+  isAdmin,
+  [
+    body('month').isInt({ min: 1, max: 12 }).withMessage('Month must be between 1 and 12'),
+    body('year').isInt({ min: 2020, max: 2100 }).withMessage('Invalid year'),
+    body('overrides').isObject().withMessage('Overrides must be an object'),
+  ],
+  amExpensesController.saveRateOverrides
+);
+
 // ==================== Global Fixed Expenses ====================
 
 const globalFixedExpenseValidation = [

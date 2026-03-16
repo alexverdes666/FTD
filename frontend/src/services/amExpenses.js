@@ -60,6 +60,28 @@ export const deleteFixedExpense = async (id) => {
   }
 };
 
+// ==================== Rate Overrides ====================
+
+export const getRateOverrides = async (params = {}) => {
+  try {
+    const response = await api.get("/am-expenses/rate-overrides", { params });
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching rate overrides:", error);
+    throw error;
+  }
+};
+
+export const saveRateOverrides = async (data) => {
+  try {
+    const response = await api.put("/am-expenses/rate-overrides", data);
+    return response.data;
+  } catch (error) {
+    console.error("Error saving rate overrides:", error);
+    throw error;
+  }
+};
+
 // ==================== Global Fixed Expenses ====================
 
 export const getGlobalFixedExpenses = async () => {

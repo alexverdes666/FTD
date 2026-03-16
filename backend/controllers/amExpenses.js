@@ -2,6 +2,7 @@ const { validationResult } = require('express-validator');
 const User = require('../models/User');
 const AMFixedExpense = require('../models/AMFixedExpense');
 const GlobalFixedExpense = require('../models/GlobalFixedExpense');
+const AMRateOverride = require('../models/AMRateOverride');
 const { calculateAMExpenses } = require('../services/amExpenseCalculationService');
 
 let BlockchainScraperService;
@@ -292,6 +293,70 @@ exports.deleteFixedExpense = async (req, res) => {
     res.json({ success: true, message: 'Fixed expense deleted' });
   } catch (error) {
     console.error('Error deleting fixed expense:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+// ==================== Rate Overrides ====================
+
+// @desc    Get global rate overrides for a given month/year
+// @route   GET /api/am-expenses/rate-overrides
+// @access  Admin
+exports.getRateOverrides = async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ success: false, errors: errors.array() });
+    }
+
+    const { month, year } = req.query;
+
+    const doc = await AMRateOverride.findOne({
+      month: parseInt(month),
+      year: parseInt(year),
+    }).lean();
+
+    // Convert Map to plain object
+    const overrides = doc ? Object.fromEntries(Object.entries(doc.overrides || {})) : {};
+
+    res.json({ success: true, data: overrides });
+  } catch (error) {
+    console.error('Error fetching rate overrides:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+// @desc    Save global rate overrides for a given month/year (upsert)
+// @route   PUT /api/am-expenses/rate-overrides
+// @access  Admin
+exports.saveRateOverrides = async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ success: false, errors: errors.array() });
+    }
+
+    const { month, year, overrides } = req.body;
+
+    const doc = await AMRateOverride.findOneAndUpdate(
+      {
+        month,
+        year,
+      },
+      {
+        overrides,
+        updatedBy: req.user._id,
+      },
+      {
+        upsert: true,
+        new: true,
+        setDefaultsOnInsert: true,
+      }
+    );
+
+    res.json({ success: true, data: doc });
+  } catch (error) {
+    console.error('Error saving rate overrides:', error);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 };
