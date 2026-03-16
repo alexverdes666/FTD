@@ -14,13 +14,13 @@ const {
   getPortUsage,
   updatePortStatus,
 } = require('../controllers/gatewayDevices');
-const { protect, isAdmin } = require('../middleware/auth');
+const { protect } = require('../middleware/auth');
 
 const router = express.Router();
 
 // Middleware to ensure user has permission to manage gateways
 const requireGatewayPermission = (req, res, next) => {
-  if (req.user.role === 'admin' || req.user.role === 'inventory_manager' ||
+  if (req.user.role === 'admin' || req.user.role === 'inventory_manager' || req.user.role === 'lead_manager' ||
       (req.user.permissions && req.user.permissions.canManageSimCards)) {
     next();
   } else {
@@ -67,21 +67,21 @@ router.post('/:id/configure-sms-forwarding', [protect, requireGatewayPermission]
 router.get('/:id/port-usage', [protect, requireGatewayPermission], getPortUsage);
 
 // Update port status (manual override)
-router.put('/:id/port-status', [protect, isAdmin], updatePortStatus);
+router.put('/:id/port-status', [protect, requireGatewayPermission], updatePortStatus);
 
 // Configure status notifications for gateway
 router.post('/:id/configure-notifications', [
   protect,
-  isAdmin,
+  requireGatewayPermission,
   body('callbackUrl').optional().isURL().withMessage('Invalid callback URL'),
   body('period').optional().isInt({ min: 60 }).withMessage('Period must be at least 60 seconds'),
   body('allSims').optional().isInt({ min: 0, max: 1 }).withMessage('allSims must be 0 or 1')
 ], configureGatewayNotifications);
 
-// Create new gateway device (admin only)
+// Create new gateway device
 router.post('/', [
   protect,
-  isAdmin,
+  requireGatewayPermission,
   body('name')
     .trim()
     .notEmpty()
@@ -111,10 +111,10 @@ router.post('/', [
     .withMessage('Description cannot exceed 500 characters')
 ], createGatewayDevice);
 
-// Update gateway device (admin only)
+// Update gateway device
 router.put('/:id', [
   protect,
-  isAdmin,
+  requireGatewayPermission,
   body('name')
     .optional()
     .trim()
@@ -145,8 +145,8 @@ router.put('/:id', [
     .withMessage('isActive must be a boolean')
 ], updateGatewayDevice);
 
-// Delete gateway device (admin only)
-router.delete('/:id', [protect, isAdmin], deleteGatewayDevice);
+// Delete gateway device
+router.delete('/:id', [protect, requireGatewayPermission], deleteGatewayDevice);
 
 module.exports = router;
 
