@@ -57,6 +57,7 @@ import {
   ReceiptLong as ReceiptLongIcon,
   Headset as HeadsetIcon,
   Gavel as GavelIcon,
+  Vaccines as InjectionIcon,
 } from "@mui/icons-material";
 import {
   logout,
@@ -450,6 +451,11 @@ const MainLayout = () => {
               icon: <HeadsetIcon />,
               path: "/ami-agents",
             },
+            {
+              text: "Injection",
+              icon: <InjectionIcon />,
+              path: "/injections",
+            },
           ],
         },
         { text: "Tickets", icon: <TicketIcon />, path: "/tickets" },
@@ -523,6 +529,11 @@ const MainLayout = () => {
               icon: <HeadsetIcon />,
               path: "/ami-agents",
             },
+            {
+              text: "Injection",
+              icon: <InjectionIcon />,
+              path: "/injections",
+            },
           ],
         },
         { text: "SMS Gateway", icon: <SmsIcon />, path: "/sms" },
@@ -548,6 +559,7 @@ const MainLayout = () => {
     } else if (user?.role === "agent") {
       return [
         { text: "My Leads", icon: <LeadsIcon />, path: "/leads" },
+        { text: "Injection", icon: <InjectionIcon />, path: "/injections" },
         { text: "Notes", icon: <NoteIcon />, path: "/notes" },
         {
           text: "Agents",
@@ -713,6 +725,7 @@ const MainLayout = () => {
     "/lead-management": "#66bb6a",
     "/ami-agents": "#e91e63",
     "/fines": "#ff9800",
+    "/injections": "#9c27b0",
   };
 
   // Flatten navigation items: expand all children into a single flat list

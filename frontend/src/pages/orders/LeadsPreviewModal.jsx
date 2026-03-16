@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import {
   Box,
   Typography,
@@ -44,7 +44,10 @@ import {
   Gavel as GavelIcon,
   Block as ClosedNetworkIcon,
   Label as SetStatusIcon,
+  Vaccines as InjectIcon,
 } from "@mui/icons-material";
+import InjectLeadsDialog from "./InjectLeadsDialog";
+import { getInjectionStatusesByOrder } from "../../services/injections";
 import DocumentPreview from "../../components/DocumentPreview";
 import { formatPhoneWithCountryCode } from "../../utils/phoneUtils";
 import {
@@ -122,6 +125,34 @@ const LeadsPreviewModal = ({
   onRestoreLead,
   onUndoReplacementFromMenu,
 }) => {
+  const [injectDialogOpen, setInjectDialogOpen] = useState(false);
+  const [injectionStatusMap, setInjectionStatusMap] = useState({});
+
+  // Fetch injection statuses for the current order
+  useEffect(() => {
+    if (!modal.open || !modal.orderId) {
+      setInjectionStatusMap({});
+      return;
+    }
+    getInjectionStatusesByOrder(modal.orderId)
+      .then((res) => {
+        if (res.data.success) setInjectionStatusMap(res.data.data);
+      })
+      .catch(() => {});
+  }, [modal.open, modal.orderId]);
+
+  // Refresh injection statuses after creating injections
+  const handleInjectSuccess = () => {
+    setInjectDialogOpen(false);
+    if (modal.orderId) {
+      getInjectionStatusesByOrder(modal.orderId)
+        .then((res) => {
+          if (res.data.success) setInjectionStatusMap(res.data.data);
+        })
+        .catch(() => {});
+    }
+  };
+
   if (!modal.open) return null;
 
   // Handler for select-all / deselect-all checkbox
@@ -142,6 +173,7 @@ const LeadsPreviewModal = ({
   };
 
   return (
+    <>
       <Dialog
         open
         onClose={onClose}
@@ -229,6 +261,21 @@ const LeadsPreviewModal = ({
                         color="error"
                       >
                         <DeleteIcon />
+                      </IconButton>
+                      </span>
+                    </Tooltip>
+                  )}
+                  {["admin", "affiliate_manager"].includes(user?.role) && modal.order && modal.leads.length > 0 && (
+                    <Tooltip title={modal.enriching ? "Loading details..." : "Inject leads"}>
+                      <span>
+                      <IconButton
+                        aria-label="inject leads"
+                        onClick={() => setInjectDialogOpen(true)}
+                        size="small"
+                        disabled={modal.enriching}
+                        sx={{ color: "#9c27b0" }}
+                      >
+                        <InjectIcon />
                       </IconButton>
                       </span>
                     </Tooltip>
@@ -685,7 +732,25 @@ const LeadsPreviewModal = ({
                                 }}
                               />
                             )}
-                            {!lead.depositConfirmed && !lead.shaved && !lead.closedNetwork && !isRemoved && (
+                            {/* Injection status */}
+                            {!isRemoved && injectionStatusMap[lead._id] && (
+                              <Chip
+                                label={injectionStatusMap[lead._id] === "approved" ? "Injected" : "Pending Injection"}
+                                size="small"
+                                sx={{
+                                  height: 18,
+                                  fontSize: "0.6rem",
+                                  backgroundColor: injectionStatusMap[lead._id] === "approved" ? "#9c27b0" : undefined,
+                                  color: injectionStatusMap[lead._id] === "approved" ? "white" : undefined,
+                                  "& .MuiChip-label": {
+                                    padding: "0 4px",
+                                  },
+                                }}
+                                color={injectionStatusMap[lead._id] === "approved" ? undefined : "default"}
+                                variant={injectionStatusMap[lead._id] === "approved" ? "filled" : "outlined"}
+                              />
+                            )}
+                            {!lead.depositConfirmed && !lead.shaved && !lead.closedNetwork && !isRemoved && !injectionStatusMap[lead._id] && (
                               <Typography
                                 variant="body2"
                                 color="text.secondary"
@@ -1310,6 +1375,22 @@ const LeadsPreviewModal = ({
           })()}
         </Menu>
       </Dialog>
+
+      {/* Inject Leads Dialog */}
+      <InjectLeadsDialog
+        open={injectDialogOpen}
+        onClose={() => setInjectDialogOpen(false)}
+        leads={modal.leads?.filter(
+          (l) =>
+            !modal.order?.removedLeads?.find(
+              (rl) => rl.leadId === l._id || rl.leadId?._id === l._id
+            ) &&
+            !injectionStatusMap[l._id]
+        )}
+        orderId={modal.orderId}
+        onSuccess={handleInjectSuccess}
+      />
+    </>
   );
 };
 

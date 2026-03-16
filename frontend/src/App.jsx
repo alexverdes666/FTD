@@ -83,6 +83,7 @@ const CrmPage = lazy(() => import("./pages/CrmPage.jsx"));
 const AMExpensesPage = lazy(() => import("./pages/AMExpensesPage.jsx"));
 const AmiAgentsPage = lazy(() => import("./pages/AmiAgentsPage.jsx"));
 const FinesPage = lazy(() => import("./pages/FinesPage.jsx"));
+const InjectionPage = lazy(() => import("./pages/InjectionPage.jsx"));
 
 // Component to handle role-based default routing
 const RoleBasedRedirect = () => {
@@ -486,6 +487,14 @@ function AppContent() {
               element={
                 <ProtectedRoute allowedRoles={["admin", "affiliate_manager"]}>
                   <LazyPage><AmiAgentsPage /></LazyPage>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="injections"
+              element={
+                <ProtectedRoute allowedRoles={["admin", "affiliate_manager", "agent"]}>
+                  <LazyPage><InjectionPage /></LazyPage>
                 </ProtectedRoute>
               }
             />
