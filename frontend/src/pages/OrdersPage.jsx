@@ -329,7 +329,6 @@ const OrdersPage = () => {
   const [assignLeadDialog, setAssignLeadDialog] = useState({
     open: false,
     lead: null,
-    orderId: null,
   });
   const [replaceLeadDialog, setReplaceLeadDialog] = useState({
     open: false,
@@ -3048,11 +3047,10 @@ const OrdersPage = () => {
   }, []);
 
 
-  const handleOpenAssignLeadDialog = useCallback((lead, orderId) => {
+  const handleOpenAssignLeadDialog = useCallback((lead) => {
     setAssignLeadDialog({
       open: true,
       lead: lead,
-      orderId: orderId || null,
     });
   }, []);
 
@@ -3060,7 +3058,6 @@ const OrdersPage = () => {
     setAssignLeadDialog({
       open: false,
       lead: null,
-      orderId: null,
     });
   }, []);
 
@@ -4074,7 +4071,6 @@ const OrdersPage = () => {
         open
         onClose={handleCloseAssignLeadDialog}
         lead={assignLeadDialog.lead}
-        orderId={assignLeadDialog.orderId}
         onSuccess={handleAssignLeadSuccess}
       />
       )}

@@ -319,7 +319,7 @@ const LeadDetailDrawer = ({
             </Button>
           )}
           {onOpenAssignLead && (
-            <Button size="small" startIcon={<AssignIcon />} onClick={() => { onOpenAssignLead(lead, orderId); }} variant="outlined" color="info" sx={{ fontSize: "0.7rem" }}>
+            <Button size="small" startIcon={<AssignIcon />} onClick={() => { onOpenAssignLead(lead); }} variant="outlined" color="info" sx={{ fontSize: "0.7rem" }}>
               Assign Agent
             </Button>
           )}

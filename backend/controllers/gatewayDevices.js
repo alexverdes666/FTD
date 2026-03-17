@@ -620,21 +620,22 @@ exports.getPortUsage = async (req, res, next) => {
       const orConditions = allNumbers.map(({ normalized }) => ({
         newPhone: { $regex: normalized.slice(-9) + '$' },
       }));
-      const leads = await Lead.find({ $or: orConditions }).select('_id newPhone').lean();
+      const leads = await Lead.find({ $or: orConditions }).select('_id newPhone firstName lastName newEmail leadType').lean();
 
       for (const lead of leads) {
         const leadNorm = (lead.newPhone || '').replace(/[\s+\-()]/g, '');
         for (const { port, normalized } of allNumbers) {
           if (leadNorm.endsWith(normalized.slice(-9))) {
             if (!leadsByPort[port]) leadsByPort[port] = [];
-            leadsByPort[port].push(lead._id);
+            leadsByPort[port].push(lead);
           }
         }
       }
     }
 
     // Batch-find orders for all found lead IDs (active + removed leads)
-    const allLeadIds = [...new Set(Object.values(leadsByPort).flat())];
+    const allLeadObjs = Object.values(leadsByPort).flat();
+    const allLeadIds = [...new Set(allLeadObjs.map(l => l._id.toString()))];
     // Map: leadId -> [{ order info, leadStatus }]
     let ordersByLeadId = {};
     if (allLeadIds.length > 0) {
@@ -655,7 +656,7 @@ exports.getPortUsage = async (req, res, next) => {
         // Check active leads — mark as removed if also in removedLeads
         for (const meta of order.leadsMetadata || []) {
           const lid = meta.leadId.toString();
-          if (!allLeadIds.some(id => id.toString() === lid)) continue;
+          if (!allLeadIds.includes(lid)) continue;
           if (!ordersByLeadId[lid]) ordersByLeadId[lid] = [];
           ordersByLeadId[lid].push({
             _id: order._id,
@@ -670,7 +671,7 @@ exports.getPortUsage = async (req, res, next) => {
         for (const removed of order.removedLeads || []) {
           const lid = removed.leadId.toString();
           if (metaSet.has(lid)) continue; // already handled above
-          if (!allLeadIds.some(id => id.toString() === lid)) continue;
+          if (!allLeadIds.includes(lid)) continue;
           if (!ordersByLeadId[lid]) ordersByLeadId[lid] = [];
           ordersByLeadId[lid].push({
             _id: order._id,
@@ -685,11 +686,11 @@ exports.getPortUsage = async (req, res, next) => {
 
     // Build per-port results
     for (const [port, number] of Object.entries(portNumbers)) {
-      const leadIds = leadsByPort[port] || [];
+      const portLeads = leadsByPort[port] || [];
       const orders = [];
       const seenOrderIds = new Set();
-      for (const lid of leadIds) {
-        for (const o of (ordersByLeadId[lid.toString()] || [])) {
+      for (const lead of portLeads) {
+        for (const o of (ordersByLeadId[lead._id.toString()] || [])) {
           if (!seenOrderIds.has(o._id.toString())) {
             orders.push(o);
             seenOrderIds.add(o._id.toString());
@@ -697,13 +698,22 @@ exports.getPortUsage = async (req, res, next) => {
         }
       }
 
-      const allRemoved = orders.length > 0 && orders.every(o => o.leadStatus === 'removed');
+      const activeOrders = orders.filter(o => o.leadStatus !== 'removed');
+      const allRemoved = orders.length > 0 && activeOrders.length === 0;
 
       results[port] = {
         number: number || '',
         manualStatus: portStatuses[port] || null,
         isUsedInOrders: orders.length > 0,
+        isInActiveOrder: activeOrders.length > 0,
         allRemovedFromOrders: allRemoved,
+        hasLead: portLeads.length > 0,
+        leads: portLeads.map(l => ({
+          _id: l._id,
+          name: `${l.firstName} ${l.lastName}`,
+          email: l.newEmail,
+          leadType: l.leadType,
+        })),
         orders,
       };
     }

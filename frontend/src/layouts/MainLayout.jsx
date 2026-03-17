@@ -384,11 +384,6 @@ const MainLayout = () => {
           key: "erp",
           children: [
             {
-              text: "SIMs",
-              icon: <SimCardIcon />,
-              path: "/simcards",
-            },
-            {
               text: "Numbers",
               icon: <SimCardIcon />,
               path: "/numbers",
@@ -665,11 +660,6 @@ const MainLayout = () => {
           key: "erp",
           children: [
             {
-              text: "SIMs",
-              icon: <SimCardIcon />,
-              path: "/simcards",
-            },
-            {
               text: "SMS Gateway",
               icon: <SmsIcon />,
               path: "/sms",
@@ -706,7 +696,6 @@ const MainLayout = () => {
     "/am-expenses": "#e91e63",
     "/withdrawals": "#ef5350",
     "/refunds": "#e53935",
-    "/simcards": "#26c6da",
     "/numbers": "#26c6da",
     "/sms": "#42a5f5",
     "/am-targets": "#ffa726",

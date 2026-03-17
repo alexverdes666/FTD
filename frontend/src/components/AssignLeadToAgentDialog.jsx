@@ -43,7 +43,6 @@ const AssignLeadToAgentDialog = ({
   open,
   onClose,
   lead,  // Can be a single lead object OR array of leads
-  orderId, // Optional: when assigning from orders context, updates only this order
   onSuccess
 }) => {
   const [loading, setLoading] = useState(false);
@@ -127,10 +126,10 @@ const AssignLeadToAgentDialog = ({
       const isUnassigning = data.agentId === 'UNASSIGN';
       
       // Use the correct API endpoint for agent assignment
+      // Agent assignment is always global (one lead = one agent across all orders)
       const response = await api.post('/leads/assign-to-agent', {
         leadIds,
         agentId: isUnassigning ? null : data.agentId,
-        orderId: orderId || undefined,
       });
       
       // Use the full agents list (not filtered) to get agent name

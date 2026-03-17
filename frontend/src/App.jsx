@@ -56,7 +56,6 @@ const DisclaimerPage = lazy(() => import("./pages/DisclaimerPage.jsx"));
 const VerificationsPage = lazy(() => import("./pages/VerificationsPage.jsx"));
 const TicketsPage = lazy(() => import("./pages/TicketsPage.jsx"));
 const NotificationsPage = lazy(() => import("./pages/NotificationsPage.jsx"));
-const SimCardsPage = lazy(() => import("./pages/SimCardsPage.jsx"));
 const NumberPage = lazy(() => import("./pages/NumberPage.jsx"));
 const SMSGatewayPage = lazy(() => import("./pages/SMSGatewayPage.jsx"));
 const AccountManagementPage = lazy(() => import("./pages/AccountManagementPage.jsx"));
@@ -103,9 +102,9 @@ const RoleBasedRedirect = () => {
     return <Navigate to="/refunds" replace />;
   }
 
-  // Redirect inventory manager to simcards page
+  // Redirect inventory manager to SMS gateway page
   if (user.role === "inventory_manager") {
-    return <Navigate to="/simcards" replace />;
+    return <Navigate to="/sms" replace />;
   }
 
   // All other roles go to dashboard
@@ -355,14 +354,7 @@ function AppContent() {
             />
             <Route path="tickets" element={<LazyPage><TicketsPage /></LazyPage>} />
             <Route path="notifications" element={<LazyPage><NotificationsPage /></LazyPage>} />
-            <Route
-              path="simcards"
-              element={
-                <ProtectedRoute allowedRoles={["inventory_manager", "admin"]}>
-                  <LazyPage><SimCardsPage /></LazyPage>
-                </ProtectedRoute>
-              }
-            />
+            <Route path="simcards" element={<Navigate to="/sms" replace />} />
             <Route
               path="numbers"
               element={

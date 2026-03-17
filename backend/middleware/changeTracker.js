@@ -185,8 +185,8 @@ const computeChanges = (previous, current) => {
 
     if (prevStr !== currStr) {
       changes[key] = {
-        from: prevValue,
-        to: currValue,
+        old: prevValue !== undefined ? prevValue : null,
+        new: currValue !== undefined ? currValue : null,
       };
     }
   }

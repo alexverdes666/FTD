@@ -440,7 +440,7 @@ const OrderPreviewDialog = ({ open, onClose, orderId, highlightPhone }) => {
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-      <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', py: 1.5, px: 2 }}>
+      <DialogTitle component="div" sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', py: 1.5, px: 2 }}>
         <Typography variant="subtitle1" fontWeight={600}>
           Order {order ? `#${order._id?.slice(-6).toUpperCase()}` : ''} — Leads Preview
         </Typography>
@@ -521,6 +521,25 @@ const OrderPreviewDialog = ({ open, onClose, orderId, highlightPhone }) => {
   );
 };
 
+// ─── Device status helpers ───────────────────────────────────
+const parseStatusCode = (st) => {
+  if (!st) return 0;
+  if (typeof st === 'number') return st;
+  if (typeof st === 'string') { const parts = st.split(' '); return parseInt(parts[0]) || 0; }
+  if (typeof st === 'object' && st.code !== undefined) return parseInt(st.code) || 0;
+  return 0;
+};
+const getDeviceStatusText = (code) => ({
+  0: 'No SIM', 1: 'Idle', 2: 'Registering', 3: 'Registered', 4: 'Call Connected',
+  5: 'No Balance', 6: 'Register Failed', 7: 'Locked (Device)', 8: 'Locked (Operator)',
+  9: 'Recognition Error', 11: 'Card Detected', 12: 'User Locked', 13: 'Inter-calling', 14: 'Inter-calling Hold',
+})[code] || `Status ${code}`;
+const getDeviceStatusColor = (code) => ({
+  0: 'error', 1: 'success', 2: 'warning', 3: 'success', 4: 'info',
+  5: 'warning', 6: 'error', 7: 'error', 8: 'error', 9: 'error',
+  11: 'warning', 12: 'error', 13: 'info', 14: 'info',
+})[code] || 'default';
+
 // ─── Port Usage Dialog (opened from gateway sidebar) ─────────
 const PortUsageDialog = ({ open, onClose, gateway }) => {
   const [portUsage, setPortUsage] = useState({});
@@ -528,6 +547,28 @@ const PortUsageDialog = ({ open, onClose, gateway }) => {
   const [loading, setLoading] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [previewOrder, setPreviewOrder] = useState(null); // { orderId, phone }
+  const [liveStatus, setLiveStatus] = useState({});
+  const [liveStatusLoading, setLiveStatusLoading] = useState(false);
+  const [liveStatusError, setLiveStatusError] = useState(null);
+
+  const fetchLiveStatus = () => {
+    if (!gateway) return;
+    setLiveStatusLoading(true);
+    setLiveStatusError(null);
+    gatewayDeviceService.getGatewayLiveStatus(gateway._id)
+      .then((res) => {
+        if (res.success && res.data?.rawResponse?.status) {
+          const statusMap = {};
+          for (const portInfo of res.data.rawResponse.status) {
+            const portNum = String(portInfo.port).split('.')[0];
+            statusMap[portNum] = portInfo;
+          }
+          setLiveStatus(statusMap);
+        }
+      })
+      .catch(() => setLiveStatusError('Device offline'))
+      .finally(() => setLiveStatusLoading(false));
+  };
 
   useEffect(() => {
     if (!open || !gateway) return;
@@ -535,6 +576,9 @@ const PortUsageDialog = ({ open, onClose, gateway }) => {
     setPortUsage({});
     setPortHistory([]);
     setShowHistory(false);
+    setLiveStatus({});
+    setLiveStatusError(null);
+
     gatewayDeviceService.getPortUsage(gateway._id)
       .then((res) => {
         if (res.success) {
@@ -544,6 +588,8 @@ const PortUsageDialog = ({ open, onClose, gateway }) => {
       })
       .catch(() => toast.error('Failed to load port usage'))
       .finally(() => setLoading(false));
+
+    fetchLiveStatus();
   }, [open, gateway]);
 
   if (!gateway) return null;
@@ -552,7 +598,7 @@ const PortUsageDialog = ({ open, onClose, gateway }) => {
 
   return (
     <>
-      <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
+      <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth>
         <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', py: 1.5, px: 2 }}>
           <Box>
             <Typography variant="subtitle1" fontWeight={600}>{gateway.name} — Port Usage</Typography>
@@ -560,9 +606,24 @@ const PortUsageDialog = ({ open, onClose, gateway }) => {
               <Typography variant="body2" color="text.secondary">{gateway.description}</Typography>
             )}
           </Box>
-          <IconButton size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
+          <Box display="flex" alignItems="center" gap={0.5}>
+            <Tooltip title="Refresh live status">
+              <IconButton size="small" onClick={fetchLiveStatus} disabled={liveStatusLoading}>
+                {liveStatusLoading ? <CircularProgress size={14} /> : <RefreshIcon fontSize="small" />}
+              </IconButton>
+            </Tooltip>
+            <IconButton size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
+          </Box>
         </DialogTitle>
         <DialogContent sx={{ px: 2, pb: 2, pt: '0 !important' }}>
+          {/* Status indicators */}
+          {!loading && ports.length > 0 && (liveStatusLoading || liveStatusError) && (
+            <Box display="flex" gap={1} mb={1.5} alignItems="center">
+              {liveStatusLoading && <Chip size="small" icon={<CircularProgress size={10} />} label="Loading device status..." sx={{ fontSize: '0.72rem', height: 24 }} />}
+              {liveStatusError && <Chip size="small" color="warning" variant="outlined" label="Device offline" sx={{ fontSize: '0.72rem', height: 24 }} />}
+            </Box>
+          )}
+
           {loading ? (
             <Box display="flex" justifyContent="center" py={4}><CircularProgress size={28} /></Box>
           ) : ports.length === 0 ? (
@@ -571,33 +632,50 @@ const PortUsageDialog = ({ open, onClose, gateway }) => {
             </Typography>
           ) : (
             <TableContainer component={Paper} variant="outlined">
-              <Table size="small">
+              <Table size="small" sx={{ tableLayout: 'auto' }}>
                 <TableHead>
                   <TableRow>
-                    <TableCell sx={{ fontWeight: 700, fontSize: '0.75rem', width: 50 }}>Port</TableCell>
-                    <TableCell sx={{ fontWeight: 700, fontSize: '0.75rem' }}>Number</TableCell>
-                    <TableCell sx={{ fontWeight: 700, fontSize: '0.75rem', width: 120 }}>Status</TableCell>
-                    <TableCell sx={{ fontWeight: 700, fontSize: '0.75rem' }}>Orders</TableCell>
+                    {['Port', 'Number', 'Usage', 'Lead', 'Device Status', 'Operator', 'Orders'].map((h) => (
+                      <TableCell key={h} sx={{ fontWeight: 700, fontSize: '0.75rem', whiteSpace: 'nowrap' }}>{h}</TableCell>
+                    ))}
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {ports.map(([port, info]) => {
                     const manualStatus = info.manualStatus;
-                    const isUsed = info.isUsedInOrders;
-                    const allRemoved = info.allRemovedFromOrders;
                     const orders = info.orders || [];
 
-                    // Auto-resolve: if used but all leads removed from orders → available
-                    const autoStatus = isUsed && !allRemoved ? 'used' : (info.number ? 'available' : 'not_defined');
+                    // Auto-detect status: in_order > attached > available
+                    let autoStatus = 'available';
+                    if (info.isInActiveOrder) autoStatus = 'in_order';
+                    else if (info.hasLead) autoStatus = 'attached';
+                    else if (!info.number) autoStatus = 'not_defined';
                     const effectiveStatus = manualStatus || autoStatus;
 
-                    let statusColor = 'default';
-                    if (effectiveStatus === 'used') statusColor = 'error';
-                    else if (effectiveStatus === 'available') statusColor = 'success';
+                    const statusStyles = {
+                      in_order: { color: 'error', bg: 'rgba(211,47,47,0.08)' },
+                      attached: { color: 'warning', bg: 'rgba(237,108,2,0.08)' },
+                      available: { color: 'success', bg: 'rgba(46,125,50,0.08)' },
+                      not_defined: { color: 'default', bg: undefined },
+                    };
+                    const st = statusStyles[effectiveStatus] || statusStyles.not_defined;
+
+                    const live = liveStatus[port];
+                    const deviceCode = live ? parseStatusCode(live.st) : null;
 
                     return (
-                      <TableRow key={port}>
-                        <TableCell sx={{ fontSize: '0.8rem', fontFamily: 'monospace' }}>{port}</TableCell>
+                      <TableRow key={port} sx={{ opacity: live && deviceCode === 0 ? 0.5 : 1 }}>
+                        <TableCell>
+                          <Box sx={{
+                            width: 24, height: 24, borderRadius: '50%', display: 'flex',
+                            alignItems: 'center', justifyContent: 'center',
+                            border: '1px solid', borderColor: '#64b5f6',
+                            fontSize: '0.68rem', fontWeight: 700, fontFamily: 'monospace',
+                            lineHeight: 1,
+                          }}>
+                            {port}
+                          </Box>
+                        </TableCell>
                         <TableCell sx={{ fontSize: '0.8rem', fontFamily: 'monospace' }}>{info.number || '—'}</TableCell>
                         <TableCell>
                           <Select
@@ -614,18 +692,46 @@ const PortUsageDialog = ({ open, onClose, gateway }) => {
                               } catch { toast.error('Failed to update status'); }
                             }}
                             sx={{
-                              height: 28, fontSize: '0.75rem', minWidth: 105,
-                              '& .MuiSelect-select': { py: 0.25 },
-                              bgcolor: statusColor === 'error' ? 'rgba(211,47,47,0.08)' : statusColor === 'success' ? 'rgba(46,125,50,0.08)' : undefined,
+                              height: 26, fontSize: '0.72rem', minWidth: 105,
+                              borderRadius: '13px',
+                              '& .MuiSelect-select': { py: 0, display: 'flex', alignItems: 'center', lineHeight: '26px' },
+                              '& .MuiOutlinedInput-notchedOutline': { borderRadius: '13px' },
+                              bgcolor: st.bg,
                             }}
                           >
-                            <MenuItem value="used" sx={{ fontSize: '0.75rem' }}>Used</MenuItem>
+                            <MenuItem value="in_order" sx={{ fontSize: '0.75rem' }}>In order</MenuItem>
+                            <MenuItem value="attached" sx={{ fontSize: '0.75rem' }}>Attached</MenuItem>
                             <MenuItem value="available" sx={{ fontSize: '0.75rem' }}>Available</MenuItem>
                             <MenuItem value="not_defined" sx={{ fontSize: '0.75rem' }}>Not defined</MenuItem>
                           </Select>
                         </TableCell>
                         <TableCell>
-                          {isUsed ? (
+                          {(info.leads || []).length > 0 ? (
+                            <Box display="flex" flexDirection="column" gap={0.25}>
+                              {info.leads.map((l) => (
+                                <Typography key={l._id} variant="caption" sx={{ fontSize: '0.7rem', lineHeight: 1.3 }}>
+                                  {l.name} <Typography component="span" variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem' }}>({l.email})</Typography>
+                                </Typography>
+                              ))}
+                            </Box>
+                          ) : (
+                            <Typography variant="caption" color="text.disabled">—</Typography>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {liveStatusLoading ? (
+                            <CircularProgress size={12} />
+                          ) : live ? (
+                            <Chip label={getDeviceStatusText(deviceCode)} color={getDeviceStatusColor(deviceCode)} size="small" sx={{ height: 22, fontSize: '0.68rem' }} />
+                          ) : liveStatusError ? (
+                            <Typography variant="caption" color="text.disabled">—</Typography>
+                          ) : (
+                            <Typography variant="caption" color="text.disabled">—</Typography>
+                          )}
+                        </TableCell>
+                        <TableCell sx={{ fontSize: '0.75rem' }}>{live?.opr || '—'}</TableCell>
+                        <TableCell>
+                          {orders.length > 0 ? (
                             <Box display="flex" flexWrap="wrap" gap={0.5}>
                               {orders.map((o) => {
                                 const isRemoved = o.leadStatus === 'removed';
