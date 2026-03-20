@@ -320,86 +320,54 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
   if (!call) return null;
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-      <DialogTitle>
-        <Box display="flex" alignItems="center" gap={1}>
-          <PhoneIcon color="primary" />
-          <Typography variant="h6">Declare Call Bonus</Typography>
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle sx={{ py: 1, px: 2 }}>
+        <Box display="flex" alignItems="center" gap={0.5}>
+          <PhoneIcon color="primary" sx={{ fontSize: 18 }} />
+          <Typography variant="subtitle1" fontWeight={600} sx={{ fontSize: "0.9rem" }}>Declare Call Bonus</Typography>
         </Box>
       </DialogTitle>
 
-      <DialogContent dividers>
+      <DialogContent dividers sx={{ px: 2, py: 1.5 }}>
         {error && (
-          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
+          <Alert severity="error" sx={{ mb: 1, py: 0.25, fontSize: "0.78rem" }} onClose={() => setError(null)}>
             {error}
           </Alert>
         )}
 
-        {/* Call Details */}
-        <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-          Call Details
-        </Typography>
-        <Paper variant="outlined" sx={{ p: 2, mb: 3 }}>
-          <Grid container spacing={2}>
-            <Grid item xs={12} sm={6}>
-              <Typography variant="caption" color="text.secondary">
-                Date & Time
-              </Typography>
-              <Typography variant="body2">
-                {formatDate(call.callDate)}
-              </Typography>
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <Typography variant="caption" color="text.secondary">
-                Duration
-              </Typography>
+        {/* Call Details - Compact Inline */}
+        <Paper variant="outlined" sx={{ p: 1, mb: 1.5 }}>
+          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1.5, alignItems: "stretch" }}>
+            <Box>
+              <Typography sx={{ fontSize: "0.6rem", color: "text.secondary", textTransform: "uppercase" }}>Date</Typography>
+              <Typography sx={{ fontSize: "0.78rem" }}>{formatDate(call.callDate)}</Typography>
+            </Box>
+            <Divider orientation="vertical" flexItem sx={{ borderColor: "primary.main" }} />
+            <Box>
+              <Typography sx={{ fontSize: "0.6rem", color: "text.secondary", textTransform: "uppercase" }}>Duration</Typography>
               <Box display="flex" alignItems="center" gap={0.5}>
-                <AccessTimeIcon fontSize="small" color="action" />
-                <Typography variant="body2" fontWeight="medium">
-                  {call.formattedDuration}
-                </Typography>
+                <Typography sx={{ fontSize: "0.78rem", fontWeight: 500 }}>{call.formattedDuration}</Typography>
                 {call.callDuration >= 3600 && (
-                  <Chip
-                    label="+$10/hr bonus"
-                    size="small"
-                    color="success"
-                    variant="outlined"
-                    sx={{ ml: 1 }}
-                  />
+                  <Chip label="+$10/hr" size="small" color="success" variant="outlined" sx={{ height: 16, fontSize: "0.6rem" }} />
                 )}
               </Box>
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <Typography variant="caption" color="text.secondary">
-                Source
-              </Typography>
-              <Typography variant="body2" fontFamily="monospace">
-                {call.sourceNumber}
-              </Typography>
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <Typography variant="caption" color="text.secondary">
-                Destination
-              </Typography>
-              <Typography variant="body2" fontFamily="monospace">
-                {call.destinationNumber}
-              </Typography>
-            </Grid>
-          </Grid>
+            </Box>
+            <Divider orientation="vertical" flexItem sx={{ borderColor: "primary.main" }} />
+            <Box>
+              <Typography sx={{ fontSize: "0.6rem", color: "text.secondary", textTransform: "uppercase" }}>Source</Typography>
+              <Typography sx={{ fontSize: "0.75rem", fontFamily: "monospace" }}>{call.sourceNumber}</Typography>
+            </Box>
+            <Divider orientation="vertical" flexItem sx={{ borderColor: "primary.main" }} />
+            <Box>
+              <Typography sx={{ fontSize: "0.6rem", color: "text.secondary", textTransform: "uppercase" }}>Dest</Typography>
+              <Typography sx={{ fontSize: "0.75rem", fontFamily: "monospace" }}>{call.destinationNumber}</Typography>
+            </Box>
+          </Box>
         </Paper>
 
-        <Divider sx={{ mb: 3 }} />
-
-        {/* Declaration Form */}
-        <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-          Declaration Details
-        </Typography>
-
         {/* Call Category Selection (FTD / Filler) */}
-        <Box sx={{ mb: 2 }}>
-          <Typography variant="body2" color="text.secondary" gutterBottom>
-            Call Category *
-          </Typography>
+        <Box sx={{ mb: 1 }}>
+          <Typography sx={{ fontSize: "0.7rem", color: "text.secondary", mb: 0.5 }}>Category *</Typography>
           <ToggleButtonGroup
             value={callCategory}
             exclusive
@@ -414,13 +382,10 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
             fullWidth
             disabled={loading}
             size="small"
+            sx={{ height: 30, "& .MuiToggleButton-root": { fontSize: "0.75rem", py: 0.25, textTransform: "none" } }}
           >
-            <ToggleButton value="ftd" color="primary">
-              FTD Call
-            </ToggleButton>
-            <ToggleButton value="filler" color="secondary">
-              Filler Call
-            </ToggleButton>
+            <ToggleButton value="ftd" color="primary">FTD</ToggleButton>
+            <ToggleButton value="filler" color="secondary">Filler</ToggleButton>
           </ToggleButtonGroup>
         </Box>
 
@@ -429,17 +394,17 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
           <>
             {/* Order counter info */}
             {leadId && !ordersLoading && orders.length === 0 && (
-              <Alert severity="info" sx={{ mb: 2 }}>
+              <Alert severity="info" sx={{ mb: 1, py: 0.25, fontSize: "0.75rem" }}>
                 No confirmed deposit orders found yet for this lead. You can still declare the call.
               </Alert>
             )}
             {leadId && orders.length === 1 && (
-              <Alert severity="info" sx={{ mb: 2 }}>
+              <Alert severity="info" sx={{ mb: 1, py: 0.25, fontSize: "0.75rem" }}>
                 This lead has <strong>1</strong> confirmed deposit order assigned to you. Order auto-selected.
               </Alert>
             )}
             {leadId && orders.length > 1 && (
-              <Alert severity="info" sx={{ mb: 2 }}>
+              <Alert severity="info" sx={{ mb: 1, py: 0.25, fontSize: "0.75rem" }}>
                 This lead has <strong>{orders.length}</strong> confirmed deposit orders assigned to you.
                 {' '}Select a call type first, then pick the order.
               </Alert>
@@ -453,8 +418,8 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
               value={callType}
               onChange={(e) => setCallType(e.target.value)}
               disabled={loading}
-              sx={{ mb: 2 }}
-              helperText="Select the type of call for bonus calculation"
+              sx={{ mb: 1 }}
+              size="small"
             >
               {CALL_TYPES.map((type) => {
                 const isDisabled = disabledCallTypes.includes(type.value);
@@ -503,8 +468,8 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
                 value={selectedOrderId}
                 onChange={(e) => setSelectedOrderId(e.target.value)}
                 disabled={loading || ordersLoading}
-                sx={{ mb: 2 }}
-                helperText="Choose which order this call declaration is for"
+                sx={{ mb: 1 }}
+                size="small"
                 InputProps={{
                   startAdornment: ordersLoading ? (
                     <CircularProgress size={16} sx={{ mr: 1 }} />
@@ -537,17 +502,16 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
               </TextField>
             )}
             {leadId && callType && availableOrders.length === 1 && orders.length > 1 && (
-              <Alert severity="success" sx={{ mb: 2 }}>
+              <Alert severity="success" sx={{ mb: 1, py: 0.25, fontSize: "0.75rem" }}>
                 Order auto-selected — only 1 order remaining for this call type.
               </Alert>
             )}
           </>
         )}
 
-        {/* Filler call info */}
         {callCategory === 'filler' && (
-          <Alert severity="info" sx={{ mb: 2 }}>
-            Filler calls have a $0.00 bonus. No call type selection needed.
+          <Alert severity="info" sx={{ mb: 1, py: 0.25, fontSize: "0.75rem" }}>
+            Filler calls: $0.00 bonus, no call type needed.
           </Alert>
         )}
 
@@ -559,8 +523,8 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
           value={affiliateManagerId}
           onChange={(e) => setAffiliateManagerId(e.target.value)}
           disabled={loading || affiliateManagersLoading}
-          sx={{ mb: 2 }}
-          helperText="Select the affiliate manager for approval"
+          sx={{ mb: 1 }}
+          size="small"
           InputProps={{
             startAdornment: affiliateManagersLoading ? (
               <CircularProgress size={16} sx={{ mr: 1 }} />
@@ -634,25 +598,15 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
             <TextField
               {...params}
               label="Lead *"
-              helperText={
-                leadSearchLoading
-                  ? "Searching for matching lead..."
-                  : leadAutoFilled
-                    ? "Lead auto-matched by phone number"
-                    : leadId && !leadAutoFilled
-                      ? "Multiple leads found for this phone — select the correct order"
-                      : !passedLeads || passedLeads.length === 0
-                        ? "No leads assigned to you"
-                        : "Search by name, email or phone"
-              }
+              size="small"
               InputProps={{
                 ...params.InputProps,
                 startAdornment: (
                   <>
                     {leadSearchLoading ? (
-                      <CircularProgress size={16} sx={{ mr: 1 }} />
+                      <CircularProgress size={14} sx={{ mr: 0.5 }} />
                     ) : (
-                      <ContactsIcon color={leadAutoFilled ? "success" : "action"} sx={{ mr: 1 }} />
+                      <ContactsIcon color={leadAutoFilled ? "success" : "action"} sx={{ mr: 0.5, fontSize: 18 }} />
                     )}
                     {params.InputProps.startAdornment}
                   </>
@@ -660,91 +614,63 @@ const CallDeclarationDialog = ({ open, onClose, call, onDeclarationCreated, lead
               }}
             />
           )}
-          sx={{ mb: 2 }}
+          sx={{ mb: 1 }}
         />
 
         <TextField
           fullWidth
           multiline
-          rows={3}
+          rows={2}
           label="Description (optional)"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           disabled={loading}
-          placeholder="Provide details about the call (e.g., client name, outcome, etc.)"
-          sx={{ mb: 3 }}
+          placeholder="Details about the call..."
+          sx={{ mb: 1 }}
+          size="small"
           inputProps={{ maxLength: 1000 }}
-          helperText={`${description.length}/1000 characters`}
+          helperText={`${description.length}/1000`}
         />
 
         {/* Bonus Preview */}
         {(callCategory === 'filler' || callType) && (
-          <Paper
-            variant="outlined"
-            sx={{
-              p: 2,
-              bgcolor: 'success.50',
-              borderColor: 'success.main',
-            }}
-          >
-            <Typography variant="subtitle2" gutterBottom display="flex" alignItems="center" gap={1}>
-              <MoneyIcon color="success" />
-              Bonus Preview
-            </Typography>
-
+          <Paper variant="outlined" sx={{ p: 1, bgcolor: 'success.50', borderColor: 'success.main' }}>
             {previewLoading ? (
-              <Box display="flex" justifyContent="center" py={1}>
-                <CircularProgress size={24} />
+              <Box display="flex" justifyContent="center" py={0.5}>
+                <CircularProgress size={16} />
               </Box>
             ) : bonusPreview ? (
-              <Grid container spacing={1}>
-                <Grid item xs={6}>
-                  <Typography variant="caption" color="text.secondary">
-                    Base Bonus
+              <Box display="flex" alignItems="center" justifyContent="space-between">
+                <Box display="flex" alignItems="center" gap={1}>
+                  <MoneyIcon sx={{ fontSize: 16, color: "success.main" }} />
+                  <Typography sx={{ fontSize: "0.75rem", color: "text.secondary" }}>
+                    Base: {formatCurrency(bonusPreview.baseBonus)}
+                    {bonusPreview.hourlyBonus > 0 && ` + Hourly: ${formatCurrency(bonusPreview.hourlyBonus)}`}
                   </Typography>
-                  <Typography variant="body1">
-                    {formatCurrency(bonusPreview.baseBonus)}
-                  </Typography>
-                </Grid>
-                {bonusPreview.hourlyBonus > 0 && (
-                  <Grid item xs={6}>
-                    <Typography variant="caption" color="text.secondary">
-                      Hourly Bonus (+1hr)
-                    </Typography>
-                    <Typography variant="body1">
-                      {formatCurrency(bonusPreview.hourlyBonus)}
-                    </Typography>
-                  </Grid>
-                )}
-                <Grid item xs={12}>
-                  <Divider sx={{ my: 1 }} />
-                  <Box display="flex" justifyContent="space-between" alignItems="center">
-                    <Typography variant="subtitle1" fontWeight="bold">
-                      Total Bonus
-                    </Typography>
-                    <Typography variant="h5" color="success.main" fontWeight="bold">
-                      {formatCurrency(bonusPreview.totalBonus)}
-                    </Typography>
-                  </Box>
-                </Grid>
-              </Grid>
+                </Box>
+                <Typography sx={{ fontSize: "1rem", fontWeight: 700, color: "success.main" }}>
+                  {formatCurrency(bonusPreview.totalBonus)}
+                </Typography>
+              </Box>
             ) : null}
           </Paper>
         )}
       </DialogContent>
 
-      <DialogActions sx={{ px: 3, py: 2 }}>
-        <Button onClick={onClose} disabled={loading}>
+      <DialogActions sx={{ px: 2, py: 1 }}>
+        <Button onClick={onClose} disabled={loading} size="small" sx={{ fontSize: "0.78rem" }}>
           Cancel
         </Button>
         <Button
           variant="contained"
           color="primary"
+          size="small"
           onClick={handleSubmit}
           disabled={loading || (callCategory === 'ftd' && !callType) || !affiliateManagerId || !leadId || (callCategory === 'ftd' && availableOrders.length > 1 && !selectedOrderId)}
-          startIcon={loading ? <CircularProgress size={16} /> : <SendIcon />}
+          startIcon={loading ? <CircularProgress size={14} /> : <SendIcon sx={{ fontSize: 16 }} />}
+          sx={{ fontSize: "0.78rem", py: 0.5 }}
         >
-          {loading ? 'Submitting...' : 'Submit Declaration'}
+          {loading ? 'Submitting...' : 'Submit'}
         </Button>
       </DialogActions>
     </Dialog>

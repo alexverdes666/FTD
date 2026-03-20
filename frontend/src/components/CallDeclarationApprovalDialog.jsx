@@ -173,305 +173,192 @@ const CallDeclarationApprovalDialog = ({ open, onClose, declaration, onDeclarati
 
   return (
     <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
-      <DialogTitle>
-        <Box display="flex" alignItems="center" gap={1}>
-          <PhoneIcon color="primary" />
-          <Typography variant="h6">Review Call Declaration</Typography>
-          <Box sx={{ ml: 'auto' }}>
-            <Chip
-              label={declaration.status.charAt(0).toUpperCase() + declaration.status.slice(1)}
-              color={getStatusColor(declaration.status)}
-              size="small"
-            />
-          </Box>
+      <DialogTitle sx={{ py: 1, px: 2 }}>
+        <Box display="flex" alignItems="center" gap={0.5}>
+          <PhoneIcon color="primary" sx={{ fontSize: 18 }} />
+          <Typography variant="subtitle1" fontWeight={600} sx={{ fontSize: "0.9rem" }}>Declaration Details</Typography>
+          <Chip
+            label={declaration.status}
+            color={getStatusColor(declaration.status)}
+            size="small"
+            sx={{ ml: "auto", height: 20, fontSize: "0.65rem", textTransform: "capitalize" }}
+          />
         </Box>
       </DialogTitle>
 
-      <DialogContent dividers>
+      <DialogContent dividers sx={{ px: 2, py: 1.5 }}>
         {error && (
-          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
+          <Alert severity="error" sx={{ mb: 1, py: 0.25, fontSize: "0.75rem" }} onClose={() => setError(null)}>
             {error}
           </Alert>
         )}
 
         {showResetConfirm && (
-          <Alert severity="warning" sx={{ mb: 2 }}>
-            This will reverse the AM table expense, reset the deposit call slot back to pending, and deactivate this declaration. The agent will be able to re-declare this call.
+          <Alert severity="warning" sx={{ mb: 1, py: 0.25, fontSize: "0.75rem" }}>
+            This will reverse the expense, reset the deposit call slot, and deactivate this declaration.
           </Alert>
         )}
 
-        {/* Agent Info */}
-        <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
-          <Box display="flex" alignItems="center" gap={1} mb={1}>
-            <PersonIcon color="action" />
-            <Typography variant="subtitle2" color="text.secondary">
-              Agent
-            </Typography>
-          </Box>
-          <Typography variant="body1" fontWeight="medium">
-            {declaration.agent?.fullName || 'N/A'}
-          </Typography>
-          {declaration.agent?.fourDigitCode && (
-            <Typography variant="body2" color="text.secondary">
-              Code: {declaration.agent.fourDigitCode}
-            </Typography>
-          )}
-        </Paper>
-
-        {/* Lead Info */}
-        {declaration.lead && (
-          <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
-            <Box display="flex" alignItems="center" gap={1} mb={1}>
-              <PhoneIcon color="action" />
-              <Typography variant="subtitle2" color="text.secondary">
-                Lead
+        {/* Agent & Lead Info - Compact Inline */}
+        <Paper variant="outlined" sx={{ p: 1, mb: 1 }}>
+          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1.5 }}>
+            <Box>
+              <Typography sx={{ fontSize: "0.6rem", color: "text.secondary", textTransform: "uppercase" }}>Agent</Typography>
+              <Typography sx={{ fontSize: "0.78rem", fontWeight: 500 }}>
+                {declaration.agent?.fullName || 'N/A'}
+                {declaration.agent?.fourDigitCode && <Typography component="span" sx={{ fontSize: "0.68rem", color: "text.secondary" }}> ({declaration.agent.fourDigitCode})</Typography>}
               </Typography>
             </Box>
-            <Typography variant="body1" fontWeight="medium">
-              {`${declaration.lead.firstName || ''} ${declaration.lead.lastName || ''}`.trim() || 'N/A'}
-            </Typography>
-            {declaration.lead.newPhone && (
-              <Typography variant="body2" color="text.secondary" fontFamily="monospace">
-                Phone: {declaration.lead.newPhone}
-              </Typography>
+            <Divider orientation="vertical" flexItem sx={{ borderColor: "primary.main" }} />
+            <Box>
+              <Typography sx={{ fontSize: "0.6rem", color: "text.secondary", textTransform: "uppercase" }}>AM</Typography>
+              <Typography sx={{ fontSize: "0.78rem" }}>{declaration.affiliateManager?.fullName || 'N/A'}</Typography>
+            </Box>
+            {declaration.lead && (
+              <>
+                <Divider orientation="vertical" flexItem sx={{ borderColor: "primary.main" }} />
+                <Box>
+                  <Typography sx={{ fontSize: "0.6rem", color: "text.secondary", textTransform: "uppercase" }}>Lead</Typography>
+                  <Typography sx={{ fontSize: "0.78rem", fontWeight: 500 }}>
+                    {`${declaration.lead.firstName || ''} ${declaration.lead.lastName || ''}`.trim() || 'N/A'}
+                  </Typography>
+                  <Typography sx={{ fontSize: "0.65rem", color: "text.secondary", fontFamily: "monospace" }}>
+                    {declaration.lead.newPhone || ''} {declaration.lead.newEmail ? `| ${declaration.lead.newEmail}` : ''}
+                  </Typography>
+                </Box>
+              </>
             )}
-            {declaration.lead.newEmail && (
-              <Typography variant="body2" color="text.secondary">
-                Email: {declaration.lead.newEmail}
-              </Typography>
-            )}
-          </Paper>
-        )}
-
-        {/* Call Details */}
-        <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-          Call Details
-        </Typography>
-        <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
-          <Grid container spacing={2}>
-            <Grid item xs={12} sm={6}>
-              <Typography variant="caption" color="text.secondary">
-                Call Date & Time
-              </Typography>
-              <Typography variant="body2">
-                {formatDate(declaration.callDate)}
-              </Typography>
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <Typography variant="caption" color="text.secondary">
-                Duration
-              </Typography>
-              <Box display="flex" alignItems="center" gap={0.5}>
-                <AccessTimeIcon fontSize="small" color="action" />
-                <Typography variant="body2" fontWeight="medium">
-                  {formatDuration(declaration.callDuration)}
-                </Typography>
-              </Box>
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <Typography variant="caption" color="text.secondary">
-                Source Number
-              </Typography>
-              <Typography variant="body2" fontFamily="monospace">
-                {declaration.sourceNumber}
-              </Typography>
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <Typography variant="caption" color="text.secondary">
-                Destination Number
-              </Typography>
-              <Typography variant="body2" fontFamily="monospace">
-                {declaration.destinationNumber}
-              </Typography>
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <Typography variant="caption" color="text.secondary">
-                Call Category
-              </Typography>
-              <Box>
-                <Chip
-                  label={declaration.callCategory === 'filler' ? 'Filler' : 'FTD'}
-                  size="small"
-                  color={declaration.callCategory === 'filler' ? 'default' : 'primary'}
-                  variant="outlined"
-                />
-              </Box>
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <Typography variant="caption" color="text.secondary">
-                Call Type
-              </Typography>
-              <Typography variant="body2">
-                {getCallTypeLabel(declaration.callType, declaration.callCategory)}
-              </Typography>
-            </Grid>
-            {declaration.description && (
-              <Grid item xs={12}>
-                <Typography variant="caption" color="text.secondary">
-                  Description
-                </Typography>
-                <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
-                  {declaration.description}
-                </Typography>
-              </Grid>
-            )}
-          </Grid>
+          </Box>
         </Paper>
 
-        {/* Call Recording */}
+        {/* Call Details - Compact */}
+        <Paper variant="outlined" sx={{ p: 1, mb: 1 }}>
+          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1.5 }}>
+            <Box>
+              <Typography sx={{ fontSize: "0.6rem", color: "text.secondary", textTransform: "uppercase" }}>Date</Typography>
+              <Typography sx={{ fontSize: "0.78rem" }}>{formatDate(declaration.callDate)}</Typography>
+            </Box>
+            <Divider orientation="vertical" flexItem sx={{ borderColor: "primary.main" }} />
+            <Box>
+              <Typography sx={{ fontSize: "0.6rem", color: "text.secondary", textTransform: "uppercase" }}>Duration</Typography>
+              <Typography sx={{ fontSize: "0.78rem", fontWeight: 500 }}>{formatDuration(declaration.callDuration)}</Typography>
+            </Box>
+            <Divider orientation="vertical" flexItem sx={{ borderColor: "primary.main" }} />
+            <Box>
+              <Typography sx={{ fontSize: "0.6rem", color: "text.secondary", textTransform: "uppercase" }}>Source</Typography>
+              <Typography sx={{ fontSize: "0.75rem", fontFamily: "monospace" }}>{declaration.sourceNumber}</Typography>
+            </Box>
+            <Divider orientation="vertical" flexItem sx={{ borderColor: "primary.main" }} />
+            <Box>
+              <Typography sx={{ fontSize: "0.6rem", color: "text.secondary", textTransform: "uppercase" }}>Dest</Typography>
+              <Typography sx={{ fontSize: "0.75rem", fontFamily: "monospace" }}>{declaration.destinationNumber}</Typography>
+            </Box>
+          </Box>
+          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1.5, mt: 0.75 }}>
+            <Box>
+              <Typography sx={{ fontSize: "0.6rem", color: "text.secondary", textTransform: "uppercase" }}>Category</Typography>
+              <Chip label={declaration.callCategory === 'filler' ? 'Filler' : 'FTD'} size="small" color={declaration.callCategory === 'filler' ? 'default' : 'primary'} variant="outlined" sx={{ height: 18, fontSize: "0.62rem" }} />
+            </Box>
+            <Box>
+              <Typography sx={{ fontSize: "0.6rem", color: "text.secondary", textTransform: "uppercase" }}>Type</Typography>
+              <Typography sx={{ fontSize: "0.78rem" }}>{getCallTypeLabel(declaration.callType, declaration.callCategory)}</Typography>
+            </Box>
+            {declaration.description && (
+              <Box sx={{ flex: 1 }}>
+                <Typography sx={{ fontSize: "0.6rem", color: "text.secondary", textTransform: "uppercase" }}>Description</Typography>
+                <Typography sx={{ fontSize: "0.75rem", color: "text.secondary" }}>{declaration.description}</Typography>
+              </Box>
+            )}
+          </Box>
+        </Paper>
+
+        {/* Recording */}
         {declaration.recordFile && (
-          <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
-            <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-              Call Recording
-            </Typography>
+          <Paper variant="outlined" sx={{ p: 1, mb: 1 }}>
+            <Typography sx={{ fontSize: "0.6rem", color: "text.secondary", textTransform: "uppercase", mb: 0.5 }}>Recording</Typography>
             {audioLoading ? (
               <Box display="flex" alignItems="center" gap={1}>
-                <CircularProgress size={20} />
-                <Typography variant="body2" color="text.secondary">Loading recording...</Typography>
+                <CircularProgress size={16} />
+                <Typography sx={{ fontSize: "0.75rem", color: "text.secondary" }}>Loading...</Typography>
               </Box>
             ) : audioUrl ? (
-              <audio controls src={audioUrl} style={{ width: '100%' }} />
+              <audio controls src={audioUrl} style={{ width: '100%', height: 28 }} />
             ) : (
-              <Typography variant="body2" color="error">Failed to load recording</Typography>
+              <Typography sx={{ fontSize: "0.75rem" }} color="error">Failed to load</Typography>
             )}
           </Paper>
         )}
 
-        {/* Bonus Details */}
-        <Paper
-          variant="outlined"
-          sx={{
-            p: 2,
-            mb: 2,
-            bgcolor: 'success.50',
-            borderColor: 'success.main',
-          }}
-        >
-          <Box display="flex" alignItems="center" gap={1} mb={1}>
-            <MoneyIcon color="success" />
-            <Typography variant="subtitle2">
-              Requested Bonus
+        {/* Bonus - Compact Inline */}
+        <Paper variant="outlined" sx={{ p: 1, mb: 1, bgcolor: 'success.50', borderColor: 'success.main' }}>
+          <Box display="flex" alignItems="center" justifyContent="space-between">
+            <Box display="flex" alignItems="center" gap={1}>
+              <MoneyIcon sx={{ fontSize: 16, color: "success.main" }} />
+              <Typography sx={{ fontSize: "0.75rem", color: "text.secondary" }}>
+                Base: {formatCurrency(declaration.baseBonus)}
+                {declaration.hourlyBonus > 0 && ` + Hourly: ${formatCurrency(declaration.hourlyBonus)}`}
+              </Typography>
+            </Box>
+            <Typography sx={{ fontSize: "1rem", fontWeight: 700, color: "success.main" }}>
+              {formatCurrency(declaration.totalBonus)}
             </Typography>
           </Box>
-          <Grid container spacing={1}>
-            <Grid item xs={6}>
-              <Typography variant="caption" color="text.secondary">
-                Base Bonus
-              </Typography>
-              <Typography variant="body1">
-                {formatCurrency(declaration.baseBonus)}
-              </Typography>
-            </Grid>
-            {declaration.hourlyBonus > 0 && (
-              <Grid item xs={6}>
-                <Typography variant="caption" color="text.secondary">
-                  Hourly Bonus
-                </Typography>
-                <Typography variant="body1">
-                  {formatCurrency(declaration.hourlyBonus)}
-                </Typography>
-              </Grid>
-            )}
-            <Grid item xs={12}>
-              <Divider sx={{ my: 1 }} />
-              <Box display="flex" justifyContent="space-between" alignItems="center">
-                <Typography variant="subtitle1" fontWeight="bold">
-                  Total Bonus
-                </Typography>
-                <Typography variant="h5" color="success.main" fontWeight="bold">
-                  {formatCurrency(declaration.totalBonus)}
-                </Typography>
-              </Box>
-            </Grid>
-          </Grid>
         </Paper>
 
-        {/* Submission Info */}
-        <Typography variant="caption" color="text.secondary">
+        {/* Submission + Review */}
+        <Typography sx={{ fontSize: "0.68rem", color: "text.disabled" }}>
           Submitted: {formatDate(declaration.createdAt)}
         </Typography>
 
-        {/* Reviewed Info (if already reviewed) */}
         {declaration.reviewedBy && (
-          <Box mt={2}>
-            <Divider sx={{ mb: 2 }} />
-            <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-              Review Information
+          <Box sx={{ mt: 0.5, pt: 0.5, borderTop: "1px solid", borderColor: "divider" }}>
+            <Typography sx={{ fontSize: "0.68rem", color: "text.secondary" }}>
+              Reviewed by {declaration.reviewedBy?.fullName || 'N/A'} on {formatDate(declaration.reviewedAt)}
             </Typography>
-            <Grid container spacing={1}>
-              <Grid item xs={6}>
-                <Typography variant="caption" color="text.secondary">
-                  Reviewed By
-                </Typography>
-                <Typography variant="body2">
-                  {declaration.reviewedBy?.fullName || 'N/A'}
-                </Typography>
-              </Grid>
-              <Grid item xs={6}>
-                <Typography variant="caption" color="text.secondary">
-                  Reviewed At
-                </Typography>
-                <Typography variant="body2">
-                  {formatDate(declaration.reviewedAt)}
-                </Typography>
-              </Grid>
-              {declaration.reviewNotes && (
-                <Grid item xs={12}>
-                  <Typography variant="caption" color="text.secondary">
-                    Notes
-                  </Typography>
-                  <Typography variant="body2">
-                    {declaration.reviewNotes}
-                  </Typography>
-                </Grid>
-              )}
-            </Grid>
+            {declaration.reviewNotes && (
+              <Typography sx={{ fontSize: "0.75rem", color: "text.secondary", mt: 0.25 }}>{declaration.reviewNotes}</Typography>
+            )}
           </Box>
         )}
 
         {/* Rejection Input */}
         {isPending && showRejectionInput && (
-          <Box mt={2}>
-            <Divider sx={{ mb: 2 }} />
-            <Typography variant="subtitle2" gutterBottom color="error">
-              Rejection Reason *
-            </Typography>
+          <Box sx={{ mt: 1 }}>
             <TextField
               fullWidth
               multiline
-              rows={3}
+              rows={2}
+              size="small"
+              label="Rejection Reason *"
               value={rejectionNotes}
               onChange={(e) => setRejectionNotes(e.target.value)}
-              placeholder="Please provide a reason for rejecting this declaration..."
+              placeholder="Reason for rejection..."
               disabled={loading}
               required
               error={!rejectionNotes.trim() && showRejectionInput}
-              helperText={!rejectionNotes.trim() && showRejectionInput ? 'Required' : ''}
             />
           </Box>
         )}
 
         {/* Approval Notes (optional) */}
         {isPending && !showRejectionInput && (
-          <Box mt={2}>
-            <Divider sx={{ mb: 2 }} />
-            <Typography variant="subtitle2" gutterBottom>
-              Approval Notes (optional)
-            </Typography>
+          <Box sx={{ mt: 1 }}>
             <TextField
               fullWidth
               multiline
-              rows={2}
+              rows={1}
+              size="small"
+              label="Approval Notes (optional)"
               value={approvalNotes}
               onChange={(e) => setApprovalNotes(e.target.value)}
-              placeholder="Add any notes about this approval..."
+              placeholder="Notes..."
               disabled={loading}
             />
           </Box>
         )}
       </DialogContent>
 
-      <DialogActions sx={{ px: 3, py: 2 }}>
+      <DialogActions sx={{ px: 2, py: 1 }}>
         {showResetConfirm ? (
           <>
             <Button onClick={() => setShowResetConfirm(false)} disabled={loading}>

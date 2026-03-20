@@ -99,7 +99,6 @@ import AssignLeadToAgentDialog from "../components/AssignLeadToAgentDialog";
 import LeadAuditHistoryModal from "../components/LeadAuditHistoryModal";
 import LeadGlobalAuditDialog from "../components/LeadGlobalAuditDialog";
 import LeadCommentsDialog from "../components/LeadCommentsDialog";
-import CallBonusesSection from "../components/CallBonusesSection";
 import FineDetailDialog from "../components/FineDetailDialog";
 import { getAgentFines } from "../services/agentFines";
 
@@ -1076,6 +1075,7 @@ const LeadsPage = () => {
   const [orders, setOrders] = useState([]);
   const [commentDialogOpen, setCommentDialogOpen] = useState(false);
   const [selectedLead, setSelectedLead] = useState(null);
+  const [leadDetailsOpen, setLeadDetailsOpen] = useState(null); // grouped lead for details popup
   const [selectedLeads, setSelectedLeads] = useState(new Set());
   const [bulkAssignDialogOpen, setBulkAssignDialogOpen] = useState(false);
   const [bulkUnassignDialogOpen, setBulkUnassignDialogOpen] = useState(false);
@@ -1153,7 +1153,6 @@ const LeadsPage = () => {
   const [ipqsValidationSuccess, setIpqsValidationSuccess] = useState([]);
 
   // Call Bonuses section expansion state (for agents)
-  const [callBonusesExpanded, setCallBonusesExpanded] = useState(false);
 
   // Fines state for agent view
   const [leadFines, setLeadFines] = useState(new Map()); // Map<leadId, fine[]>
@@ -2400,51 +2399,6 @@ const LeadsPage = () => {
         </Alert>
       )}
 
-      {/* Call Bonuses Section - For Agents Only */}
-      {isAgent && (
-        <Paper
-          elevation={0}
-          sx={{
-            p: 2,
-            mb: 3,
-            borderRadius: 2,
-            border: "1px solid",
-            borderColor: "divider",
-          }}
-        >
-          <Box
-            display="flex"
-            justifyContent="space-between"
-            alignItems="center"
-            mb={callBonusesExpanded ? 2 : 0}
-          >
-            <Typography variant="h6" display="flex" alignItems="center" gap={1}>
-              <PhoneIcon color="primary" />
-              Call Bonuses
-            </Typography>
-            <IconButton
-              onClick={() => setCallBonusesExpanded(!callBonusesExpanded)}
-              size="small"
-            >
-              {callBonusesExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-            </IconButton>
-          </Box>
-          <Collapse in={callBonusesExpanded}>
-            <CallBonusesSection
-              leads={leads.map(groupedLead => ({
-                _id: groupedLead.leadId,
-                firstName: groupedLead.leadInfo?.firstName,
-                lastName: groupedLead.leadInfo?.lastName,
-                newEmail: groupedLead.leadInfo?.newEmail,
-                newPhone: groupedLead.leadInfo?.newPhone,
-                leadType: groupedLead.leadInfo?.leadType,
-                orderId: groupedLead.leadInfo?.orderId,
-              })).filter(lead => lead._id)}
-            />
-          </Collapse>
-        </Paper>
-      )}
-
       {}
       <Box sx={{ display: { xs: "none", md: "flex" }, flexDirection: "column", width: "100%", flex: 1, minHeight: 0, overflow: "hidden" }}>
         <Paper sx={{ width: "100%", position: "relative", borderRadius: 2, overflow: "hidden", border: 1, borderColor: "divider", boxShadow: "0 1px 3px rgba(0,0,0,0.08)", display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
@@ -2725,7 +2679,7 @@ const LeadsPage = () => {
               size="small"
               sx={{
                 width: "100%",
-                tableLayout: "auto",
+                tableLayout: "fixed",
                 "& .MuiTableCell-root": {
                   padding: "2px 6px",
                   fontSize: "0.75rem",
@@ -2780,19 +2734,25 @@ const LeadsPage = () => {
                       />
                     </TableCell>
                   )}
-                  {isAgent && (
-                    <TableCell padding="none" sx={{ width: "36px", borderRight: "1px solid rgba(255,255,255,0.1)" }} />
-                  )}
                   {!isAgent && (
                     <TableCell sx={{ textAlign: "center", width: "70px", maxWidth: "70px", borderRight: "1px solid rgba(255,255,255,0.1)" }}>Type</TableCell>
                   )}
-                  <TableCell sx={{ textAlign: "left", width: "25%", borderRight: "1px solid rgba(255,255,255,0.1)" }}>Name</TableCell>
+                  <TableCell sx={{ textAlign: "left", width: isAgent ? "35%" : "25%", borderRight: "1px solid rgba(255,255,255,0.1)" }}>Name</TableCell>
                   {!isAgent && (
                     <TableCell sx={{ textAlign: "center", width: "25%", borderRight: "1px solid rgba(255,255,255,0.1)" }}>Contact</TableCell>
                   )}
-                  <TableCell sx={{ textAlign: "center", width: "70px", maxWidth: "70px", borderRight: "1px solid rgba(255,255,255,0.1)" }}>Country</TableCell>
+                  <TableCell sx={{ textAlign: "center", width: isAgent ? "12%" : "70px", borderRight: "1px solid rgba(255,255,255,0.1)" }}>Country</TableCell>
                   {isAgent && (
-                    <TableCell sx={{ textAlign: "center", width: "70px", maxWidth: "70px", borderRight: "1px solid rgba(255,255,255,0.1)" }}>Type</TableCell>
+                    <TableCell sx={{ textAlign: "center", width: "10%", borderRight: "1px solid rgba(255,255,255,0.1)" }}>Type</TableCell>
+                  )}
+                  {isAgent && (
+                    <TableCell sx={{ textAlign: "center", width: "10%", borderRight: "1px solid rgba(255,255,255,0.1)" }}>Orders</TableCell>
+                  )}
+                  {isAgent && (
+                    <TableCell sx={{ textAlign: "center", width: "15%", borderRight: "1px solid rgba(255,255,255,0.1)" }}>Assigned</TableCell>
+                  )}
+                  {isAgent && (
+                    <TableCell sx={{ textAlign: "center", width: "8%" }}>Fines</TableCell>
                   )}
                   {!isAgent && (
                     <TableCell sx={{ textAlign: "center", width: "70px", maxWidth: "70px", borderRight: "1px solid rgba(255,255,255,0.1)" }}>Gender</TableCell>
@@ -2800,15 +2760,19 @@ const LeadsPage = () => {
                   {isAdminOrManager && !isAgent && (
                     <TableCell sx={{ textAlign: "center", width: "120px", maxWidth: "120px", borderRight: "1px solid rgba(255,255,255,0.1)" }}>Assigned To</TableCell>
                   )}
-                  <TableCell sx={{ textAlign: "center", width: "70px", maxWidth: "70px", borderRight: "1px solid rgba(255,255,255,0.1)" }}>Cooldown</TableCell>
-                  <TableCell sx={{ textAlign: "right", width: "85px", maxWidth: "85px" }}>Actions</TableCell>
+                  {!isAgent && (
+                    <TableCell sx={{ textAlign: "center", width: "70px", maxWidth: "70px", borderRight: "1px solid rgba(255,255,255,0.1)" }}>Cooldown</TableCell>
+                  )}
+                  {!isAgent && (
+                    <TableCell sx={{ textAlign: "right", width: "85px" }}>Actions</TableCell>
+                  )}
                 </TableRow>
               </TableHead>
               <TableBody>
                 {loading ? (
                   <TableRow>
                     <TableCell
-                      colSpan={isAgent ? 7 : isAdminOrManager ? 10 : 9}
+                      colSpan={isAgent ? 6 : isAdminOrManager ? 10 : 9}
                       align="center"
                       sx={{ height: 200 }}
                     >
@@ -2818,7 +2782,7 @@ const LeadsPage = () => {
                 ) : leads.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={isAgent ? 7 : isAdminOrManager ? 10 : 9}
+                      colSpan={isAgent ? 6 : isAdminOrManager ? 10 : 9}
                       align="center"
                       sx={{ py: 8, border: "none" }}
                     >
@@ -2839,15 +2803,7 @@ const LeadsPage = () => {
                     <GroupedLeadRow
                       key={groupedLead.leadId}
                       groupedLead={groupedLead}
-                      expandedRows={expandedRows}
-                      onToggleExpansion={toggleRowExpansion}
-                      onComment={handleOpenCommentDialog}
-                      onUpdateStatus={updateLeadStatus}
-                      updateCallNumber={updateCallNumber}
-                      handleCallNumberChange={handleCallNumberChange}
-                      updateVerification={handleVerificationChange}
-                      getAvailableCallOptions={getAvailableCallOptions}
-                      pendingRequests={pendingRequests}
+                      onOpenDetails={setLeadDetailsOpen}
                       leadFines={leadFines}
                       onOpenFineDialog={handleOpenFineDialog}
                     />
@@ -3828,6 +3784,151 @@ const LeadsPage = () => {
         onFineUpdated={handleFineUpdated}
       />
 
+      {/* Lead Details Popup (agents) */}
+      {leadDetailsOpen && (() => {
+        const { leadId, leadInfo = {}, orders = [] } = leadDetailsOpen;
+        const getInjectionColor = (status) => {
+          switch (status) { case "successful": return "success"; case "failed": return "error"; default: return "secondary"; }
+        };
+        return (
+          <Dialog
+            open={!!leadDetailsOpen}
+            onClose={() => setLeadDetailsOpen(null)}
+            maxWidth="sm"
+            fullWidth
+          >
+            <DialogTitle sx={{ py: 1, px: 2 }}>
+              <Box display="flex" alignItems="center" justifyContent="space-between">
+                <Box>
+                  <Typography variant="subtitle1" fontWeight={600} sx={{ fontSize: "0.9rem" }}>
+                    {leadInfo?.prefix && `${leadInfo.prefix} `}{leadInfo?.firstName || "N/A"} {leadInfo?.lastName || ""}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.72rem" }}>
+                    {leadInfo?.newEmail || "No email"} {leadInfo?.newPhone ? `| ${leadInfo.newPhone}` : ""}
+                  </Typography>
+                </Box>
+                <Chip
+                  label={leadInfo?.leadType?.toUpperCase() || "UNKNOWN"}
+                  color={leadInfo?.leadType === "ftd" ? "success" : leadInfo?.leadType === "filler" ? "info" : leadInfo?.leadType === "cold" ? "warning" : "default"}
+                  size="small"
+                  sx={{ height: 20, fontSize: "0.65rem" }}
+                />
+              </Box>
+            </DialogTitle>
+            <DialogContent dividers sx={{ px: 2, py: 1 }}>
+              <Box sx={{ display: "flex", flexWrap: "wrap", gap: 2, mb: 1.5 }}>
+                <Box>
+                  <Typography sx={{ fontSize: "0.6rem", color: "text.secondary", textTransform: "uppercase" }}>Country</Typography>
+                  <Typography sx={{ fontSize: "0.78rem" }}>{leadInfo?.country || "N/A"}</Typography>
+                </Box>
+                <Box>
+                  <Typography sx={{ fontSize: "0.6rem", color: "text.secondary", textTransform: "uppercase" }}>Assigned</Typography>
+                  <Typography sx={{ fontSize: "0.78rem" }}>
+                    {leadInfo?.assignedAgentAt ? new Date(leadInfo.assignedAgentAt).toLocaleDateString() : "N/A"}
+                  </Typography>
+                </Box>
+              </Box>
+
+              <Typography sx={{ fontSize: "0.75rem", fontWeight: 600, color: "text.secondary", mb: 0.5 }}>
+                Orders ({orders.length})
+              </Typography>
+              {orders.length === 0 ? (
+                <Typography variant="caption" color="text.disabled">No orders</Typography>
+              ) : (
+                <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                  {orders.map((order) => (
+                    <Paper key={order.orderId} variant="outlined" sx={{ p: 1 }}>
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5, flexWrap: "wrap" }}>
+                        <Chip
+                          label={order.orderedAs?.toUpperCase() || "N/A"}
+                          size="small"
+                          color={order.orderedAs === "ftd" ? "success" : order.orderedAs === "filler" ? "info" : "default"}
+                          sx={{ height: 18, fontSize: "0.62rem" }}
+                        />
+                        <Typography sx={{ fontSize: "0.72rem", color: "text.secondary" }}>
+                          {new Date(order.orderCreatedAt).toLocaleDateString()}
+                        </Typography>
+                        <Typography sx={{ fontSize: "0.68rem", fontFamily: "monospace", color: "text.disabled" }}>
+                          ...{order.orderId?.toString().slice(-6)}
+                        </Typography>
+                      </Box>
+                      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1.5, alignItems: "center" }}>
+                        <Box>
+                          <Typography sx={{ fontSize: "0.6rem", color: "text.secondary", textTransform: "uppercase" }}>Call #</Typography>
+                          <FormControl size="small" sx={{ minWidth: 90 }}>
+                            <Select
+                              value={order.callNumber || ""}
+                              onChange={(e) => handleCallNumberChange(leadId, e.target.value, order.orderId, order.callNumber)}
+                              displayEmpty
+                              disabled={order.orderedAs === "filler" || pendingRequests.has(`${leadId}-${order.orderId}`)}
+                              sx={{ fontSize: "0.75rem", height: 28 }}
+                            >
+                              {getAvailableCallOptions(order.callNumber).map((opt) => (
+                                <MenuItem key={opt || "none"} value={opt} sx={{ fontSize: "0.75rem" }}>
+                                  {opt === "" ? <em>None</em> : opt}
+                                </MenuItem>
+                              ))}
+                            </Select>
+                          </FormControl>
+                        </Box>
+                        <Box>
+                          <Typography sx={{ fontSize: "0.6rem", color: "text.secondary", textTransform: "uppercase" }}>Verified</Typography>
+                          <FormControl size="small">
+                            <Select
+                              value={order.verified ? "yes" : "no"}
+                              onChange={(e) => handleVerificationChange(leadId, e.target.value === "yes", order.orderId)}
+                              disabled={order.orderedAs === "filler" || pendingRequests.has(`${leadId}-${order.orderId}`)}
+                              sx={{ fontSize: "0.75rem", height: 28 }}
+                            >
+                              <MenuItem value="no" sx={{ fontSize: "0.75rem" }}>No</MenuItem>
+                              <MenuItem value="yes" sx={{ fontSize: "0.75rem" }}>Yes</MenuItem>
+                            </Select>
+                          </FormControl>
+                        </Box>
+                        <Box sx={{ flex: 1 }}>
+                          <Typography sx={{ fontSize: "0.6rem", color: "text.secondary", textTransform: "uppercase" }}>Brokers</Typography>
+                          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+                            {order.clientBrokers?.length > 0 ? order.clientBrokers.map((broker, idx) => (
+                              <Chip
+                                key={broker?._id || `b-${idx}`}
+                                label={broker?.name || "Unknown"}
+                                size="small"
+                                color={getInjectionColor(broker?.injectionStatus)}
+                                sx={{ height: 18, fontSize: "0.62rem" }}
+                                title={broker?.injectionStatus ? `Injection: ${broker.injectionStatus}` : ""}
+                              />
+                            )) : (
+                              <Typography variant="caption" color="text.disabled" sx={{ fontSize: "0.68rem" }}>None</Typography>
+                            )}
+                          </Box>
+                        </Box>
+                      </Box>
+                      {/* Comments */}
+                      <Box sx={{ mt: 0.5, display: "flex", alignItems: "center", gap: 0.5 }}>
+                        <IconButton
+                          size="small"
+                          onClick={() => handleOpenCommentDialog({ _id: leadId, ...leadInfo, orderId: order.orderId })}
+                          color="primary"
+                          sx={{ p: 0.25 }}
+                        >
+                          <CommentIcon sx={{ fontSize: 14 }} />
+                        </IconButton>
+                        {order.comments?.length > 0 && (
+                          <Chip label={`${order.comments.length} comment${order.comments.length > 1 ? "s" : ""}`} size="small" sx={{ height: 18, fontSize: "0.62rem" }} />
+                        )}
+                      </Box>
+                    </Paper>
+                  ))}
+                </Box>
+              )}
+            </DialogContent>
+            <DialogActions sx={{ px: 2, py: 0.75 }}>
+              <Button size="small" onClick={() => setLeadDetailsOpen(null)} sx={{ fontSize: "0.78rem" }}>Close</Button>
+            </DialogActions>
+          </Dialog>
+        );
+      })()}
+
       {/* AM Selection Dialog for Verified Leads (agents only) */}
       <Dialog
         open={amDialogOpen}
@@ -3898,549 +3999,83 @@ const LeadsPage = () => {
 const GroupedLeadRow = React.memo(
   ({
     groupedLead,
-    expandedRows,
-    onToggleExpansion,
-    onComment,
-    onUpdateStatus,
-    updateCallNumber,
-    handleCallNumberChange,
-    updateVerification,
-    getAvailableCallOptions,
-    pendingRequests,
+    onOpenDetails,
     leadFines,
     onOpenFineDialog,
   }) => {
     const { leadId, leadInfo = {}, orders = [] } = groupedLead || {};
-
-    // Get fines for this lead
     const finesForLead = leadFines?.get(leadId?.toString()) || [];
 
-    // Safety check: if no leadId, don't render
     if (!leadId) return null;
 
-    const isExpanded = expandedRows.has(leadId);
-
     const getLeadTypeColor = (type) => {
-      const colors = {
-        ftd: "success",
-        filler: "info",
-        cold: "warning",
-        live: "error",
-      };
+      const colors = { ftd: "success", filler: "info", cold: "warning", live: "error" };
       return colors[type] || "default";
     };
 
-    const getStatusColor = (status) => {
-      const colors = {
-        active: "info",
-        contacted: "warning",
-        converted: "success",
-        inactive: "default",
-      };
-      return colors[status] || "default";
-    };
-
     return (
-      <React.Fragment key={leadId}>
-        <TableRow
-          hover
-          sx={{
-            "& > *": { borderBottom: "unset" },
-            "& .MuiTableCell-root": {
-              py: 0.25,
-              px: 1,
-              fontSize: "0.75rem",
-            },
-          }}
-        >
-          <TableCell padding="checkbox">
-            <IconButton
-              size="small"
-              onClick={() => onToggleExpansion(leadId)}
-              sx={{ padding: "4px" }}
-            >
-              {isExpanded ? (
-                <ExpandLessIcon fontSize="small" />
-              ) : (
-                <ExpandMoreIcon fontSize="small" />
-              )}
-            </IconButton>
-          </TableCell>
-          <TableCell>
-            <Box>
-              <Typography
-                variant="body2"
-                fontWeight="medium"
-                sx={{ fontSize: "0.8rem" }}
-              >
-                {leadInfo?.prefix && `${leadInfo.prefix} `}
-                {leadInfo?.firstName || "N/A"} {leadInfo?.lastName || ""}
-              </Typography>
-              <Typography
-                variant="caption"
-                color="text.secondary"
-                sx={{ fontSize: "0.7rem" }}
-              >
-                {leadInfo?.newEmail || "No email"}
-              </Typography>
-            </Box>
-          </TableCell>
-          <TableCell>
-            <Typography variant="caption" sx={{ fontSize: "0.75rem" }}>
-              {leadInfo?.country || "N/A"}
-            </Typography>
-          </TableCell>
-          <TableCell
-            sx={{ width: "70px", maxWidth: "70px", textAlign: "center" }}
+      <TableRow hover>
+        <TableCell>
+          <Box
+            sx={{ cursor: "pointer", "&:hover .lead-name": { textDecoration: "underline" } }}
+            onClick={() => onOpenDetails(groupedLead)}
           >
-            <Chip
-              label={leadInfo?.leadType?.toUpperCase() || "UNKNOWN"}
-              color={getLeadTypeColor(leadInfo?.leadType)}
-              size="small"
-              sx={{
-                height: "18px",
-                "& .MuiChip-label": { fontSize: "0.65rem", px: 0.75 },
-              }}
-            />
-          </TableCell>
-          {/* Status column hidden but still searchable/filterable */}
-          <TableCell>
-            <Chip
-              label={`${orders.length} Order${orders.length !== 1 ? "s" : ""}`}
-              color="primary"
-              size="small"
-              variant="outlined"
-              sx={{
-                height: "18px",
-                "& .MuiChip-label": { fontSize: "0.65rem", px: 0.75 },
-              }}
-            />
-          </TableCell>
-          <TableCell>
-            <Typography variant="caption" sx={{ fontSize: "0.7rem" }}>
-              {leadInfo?.assignedAgentAt
-                ? new Date(leadInfo.assignedAgentAt).toLocaleDateString()
-                : leadInfo?.createdAt
-                ? new Date(leadInfo.createdAt).toLocaleDateString()
-                : "N/A"}
+            <Typography className="lead-name" variant="body2" fontWeight="medium" sx={{ fontSize: "0.8rem", color: "primary.main" }}>
+              {leadInfo?.prefix && `${leadInfo.prefix} `}
+              {leadInfo?.firstName || "N/A"} {leadInfo?.lastName || ""}
             </Typography>
-          </TableCell>
-          <TableCell>
-            {/* Fine icon - shown when lead has fines */}
-            {finesForLead.length > 0 && (
-              <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-                <Tooltip
-                  title={`${finesForLead.length} Fine${finesForLead.length > 1 ? "s" : ""} - Click to view`}
-                >
-                  <IconButton
-                    size="small"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onOpenFineDialog(finesForLead[0]);
-                    }}
-                    sx={{
-                      color: "warning.main",
-                      "&:hover": {
-                        backgroundColor: "rgba(237, 108, 2, 0.1)",
-                      },
-                    }}
-                  >
-                    <GavelIcon fontSize="small" />
-                  </IconButton>
-                </Tooltip>
-                {finesForLead.length > 1 && (
-                  <Chip
-                    label={finesForLead.length}
-                    size="small"
-                    color="warning"
-                    sx={{ height: 18, "& .MuiChip-label": { px: 0.5, fontSize: "0.65rem" } }}
-                  />
-                )}
-              </Box>
-            )}
-          </TableCell>
-        </TableRow>
-        <TableRow
-          onClick={(e) => {
-            if (e.target.closest("a, button, [data-no-collapse]")) return;
-            onToggleExpansion(leadId);
-          }}
-          sx={{ cursor: isExpanded ? "pointer" : "default" }}
-        >
-          <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={8}>
-            <Collapse in={isExpanded} timeout={0}>
-              <Box sx={{ margin: 1 }}>
-                <Typography variant="h6" gutterBottom component="div">
-                  Orders ({orders.length})
-                </Typography>
-                {orders.length === 0 ? (
-                  <Alert severity="info">No orders found for this lead</Alert>
-                ) : (
-                  <Table size="small">
-                    <TableHead>
-                      <TableRow>
-                        <TableCell>Order Date</TableCell>
-                        <TableCell>Ordered As</TableCell>
-                        <TableCell>Call Number</TableCell>
-                        <TableCell>Verified</TableCell>
-                        <TableCell>Client Brokers</TableCell>
-                        <TableCell>Comments</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {orders.map((order) => (
-                        <TableRow key={order.orderId}>
-                          <TableCell>
-                            <Typography variant="body2">
-                              {new Date(
-                                order.orderCreatedAt
-                              ).toLocaleDateString()}
-                            </Typography>
-                            <Typography
-                              variant="caption"
-                              color="text.secondary"
-                            >
-                              {new Date(
-                                order.orderCreatedAt
-                              ).toLocaleTimeString()}
-                            </Typography>
-                          </TableCell>
-                          <TableCell>
-                            <Chip
-                              label={order.orderedAs?.toUpperCase() || "N/A"}
-                              size="small"
-                              color={
-                                order.orderedAs === "ftd"
-                                  ? "success"
-                                  : order.orderedAs === "filler"
-                                  ? "info"
-                                  : "default"
-                              }
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Box
-                              sx={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: 1,
-                              }}
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              {order.orderedAs === "filler" ? (
-                                <Tooltip title="Call changes are not available for leads ordered as filler">
-                                  <span>
-                                    <FormControl
-                                      size="small"
-                                      sx={{ minWidth: 100 }}
-                                    >
-                                      <Select
-                                        value={order.callNumber || ""}
-                                        displayEmpty
-                                        disabled
-                                      >
-                                        {getAvailableCallOptions(
-                                          order.callNumber
-                                        ).map((option) => (
-                                          <MenuItem
-                                            key={option || "none"}
-                                            value={option}
-                                          >
-                                            {option === "" ? (
-                                              <em>None</em>
-                                            ) : (
-                                              option
-                                            )}
-                                          </MenuItem>
-                                        ))}
-                                      </Select>
-                                    </FormControl>
-                                  </span>
-                                </Tooltip>
-                              ) : (
-                                <FormControl
-                                  size="small"
-                                  sx={{ minWidth: 100 }}
-                                >
-                                  <Select
-                                    value={order.callNumber || ""}
-                                    onChange={(e) =>
-                                      handleCallNumberChange(
-                                        leadId,
-                                        e.target.value,
-                                        order.orderId,
-                                        order.callNumber
-                                      )
-                                    }
-                                    displayEmpty
-                                    disabled={pendingRequests.has(
-                                      `${leadId}-${order.orderId}`
-                                    )}
-                                  >
-                                    {getAvailableCallOptions(
-                                      order.callNumber
-                                    ).map((option) => (
-                                      <MenuItem
-                                        key={option || "none"}
-                                        value={option}
-                                      >
-                                        {option === "" ? <em>None</em> : option}
-                                      </MenuItem>
-                                    ))}
-                                  </Select>
-                                </FormControl>
-                              )}
-                              {pendingRequests.has(
-                                `${leadId}-${order.orderId}`
-                              ) &&
-                                pendingRequests.get(
-                                  `${leadId}-${order.orderId}`
-                                ).requestedCallNumber !== undefined && (
-                                  <Tooltip
-                                    title={`Pending: ${
-                                      pendingRequests.get(
-                                        `${leadId}-${order.orderId}`
-                                      ).requestedCallNumber || "None"
-                                    }`}
-                                  >
-                                    <Chip
-                                      label="Pending"
-                                      size="small"
-                                      color="warning"
-                                      sx={{ fontSize: "0.75rem" }}
-                                    />
-                                  </Tooltip>
-                                )}
-                            </Box>
-                          </TableCell>
-                          <TableCell>
-                            <Box
-                              sx={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: 1,
-                              }}
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              {order.orderedAs === "filler" ? (
-                                <Tooltip title="Verification changes are not available for leads ordered as filler">
-                                  <span>
-                                    <FormControl size="small">
-                                      <Select
-                                        value={order.verified ? "yes" : "no"}
-                                        disabled
-                                      >
-                                        <MenuItem value="no">No</MenuItem>
-                                        <MenuItem value="yes">Yes</MenuItem>
-                                      </Select>
-                                    </FormControl>
-                                  </span>
-                                </Tooltip>
-                              ) : (
-                                <FormControl size="small">
-                                  <Select
-                                    value={order.verified ? "yes" : "no"}
-                                    onChange={(e) =>
-                                      updateVerification(
-                                        leadId,
-                                        e.target.value === "yes",
-                                        order.orderId
-                                      )
-                                    }
-                                    disabled={pendingRequests.has(
-                                      `${leadId}-${order.orderId}`
-                                    )}
-                                  >
-                                    <MenuItem value="no">No</MenuItem>
-                                    <MenuItem value="yes">Yes</MenuItem>
-                                  </Select>
-                                </FormControl>
-                              )}
-                              {pendingRequests.has(
-                                `${leadId}-${order.orderId}`
-                              ) &&
-                                pendingRequests.get(
-                                  `${leadId}-${order.orderId}`
-                                ).requestedVerified !== undefined && (
-                                  <Tooltip
-                                    title={`Pending: ${
-                                      pendingRequests.get(
-                                        `${leadId}-${order.orderId}`
-                                      ).requestedVerified
-                                        ? "Yes"
-                                        : "No"
-                                    }`}
-                                  >
-                                    <Chip
-                                      label="Pending"
-                                      size="small"
-                                      color="warning"
-                                      sx={{ fontSize: "0.75rem" }}
-                                    />
-                                  </Tooltip>
-                                )}
-                            </Box>
-                          </TableCell>
-                          <TableCell>
-                            {order.clientBrokers &&
-                            order.clientBrokers.length > 0 ? (
-                              <Box
-                                sx={{
-                                  display: "flex",
-                                  flexWrap: "wrap",
-                                  gap: 0.5,
-                                }}
-                              >
-                                {order.clientBrokers.map((broker, idx) => {
-                                  // Determine chip color based on injection status
-                                  const getStatusColor = (status) => {
-                                    switch (status) {
-                                      case "successful":
-                                        return "success";
-                                      case "failed":
-                                        return "error";
-                                      case "pending":
-                                      default:
-                                        return "secondary";
-                                    }
-                                  };
-
-                                  return (
-                                    <Chip
-                                      key={
-                                        broker?._id ||
-                                        `broker-${order.orderId}-${idx}`
-                                      }
-                                      label={broker?.name || "Unknown Broker"}
-                                      size="small"
-                                      color={getStatusColor(
-                                        broker?.injectionStatus
-                                      )}
-                                      title={
-                                        broker?.injectionStatus
-                                          ? `Injection: ${broker.injectionStatus}`
-                                          : "Lead-level broker assignment"
-                                      }
-                                    />
-                                  );
-                                })}
-                              </Box>
-                            ) : (
-                              <Typography
-                                variant="caption"
-                                color="text.secondary"
-                              >
-                                No client brokers assigned
-                              </Typography>
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            <Box
-                              sx={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: 1,
-                              }}
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <Tooltip title="Add Comment">
-                                <IconButton
-                                  size="small"
-                                  onClick={() =>
-                                    onComment({
-                                      _id: leadId,
-                                      ...leadInfo,
-                                      orderId: order.orderId,
-                                    })
-                                  }
-                                  color="primary"
-                                >
-                                  <CommentIcon fontSize="small" />
-                                </IconButton>
-                              </Tooltip>
-                              {order.comments && order.comments.length > 0 && (
-                                <Chip
-                                  label={order.comments.length}
-                                  size="small"
-                                  color="info"
-                                  sx={{ minWidth: 30, height: 20 }}
-                                />
-                              )}
-                            </Box>
-                            {order.comments && order.comments.length > 0 && (
-                              <Box
-                                sx={{
-                                  mt: 1,
-                                  maxHeight: 200,
-                                  overflowY: "auto",
-                                }}
-                              >
-                                <Stack spacing={1}>
-                                  {order.comments.map((comment, idx) => (
-                                    <Paper
-                                      key={idx}
-                                      elevation={0}
-                                      sx={{
-                                        p: 1,
-                                        bgcolor: "action.hover",
-                                        borderRadius: 1,
-                                      }}
-                                    >
-                                      <Box
-                                        sx={{
-                                          display: "flex",
-                                          alignItems: "center",
-                                          gap: 1,
-                                          mb: 0.5,
-                                        }}
-                                      >
-                                        <Avatar
-                                          sx={{
-                                            width: 20,
-                                            height: 20,
-                                            fontSize: "0.75rem",
-                                          }}
-                                        >
-                                          {comment.author?.fullName?.charAt(
-                                            0
-                                          ) || "U"}
-                                        </Avatar>
-                                        <Typography
-                                          variant="caption"
-                                          fontWeight="medium"
-                                        >
-                                          {comment.author?.fullName ||
-                                            "Unknown"}
-                                        </Typography>
-                                        <Typography
-                                          variant="caption"
-                                          color="text.secondary"
-                                        >
-                                          •{" "}
-                                          {new Date(
-                                            comment.createdAt
-                                          ).toLocaleString()}
-                                        </Typography>
-                                      </Box>
-                                      <Typography variant="caption">
-                                        {comment.text}
-                                      </Typography>
-                                    </Paper>
-                                  ))}
-                                </Stack>
-                              </Box>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                )}
-              </Box>
-            </Collapse>
-          </TableCell>
-        </TableRow>
-      </React.Fragment>
+            <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.7rem" }}>
+              {leadInfo?.newEmail || "No email"}
+            </Typography>
+          </Box>
+        </TableCell>
+        <TableCell sx={{ textAlign: "center" }}>
+          <Typography variant="caption" sx={{ fontSize: "0.75rem" }}>
+            {leadInfo?.country || "N/A"}
+          </Typography>
+        </TableCell>
+        <TableCell sx={{ textAlign: "center" }}>
+          <Chip
+            label={leadInfo?.leadType?.toUpperCase() || "UNKNOWN"}
+            color={getLeadTypeColor(leadInfo?.leadType)}
+            size="small"
+            sx={{ height: "18px", "& .MuiChip-label": { fontSize: "0.65rem", px: 0.75 } }}
+          />
+        </TableCell>
+        <TableCell sx={{ textAlign: "center" }}>
+          <Chip
+            label={orders.length}
+            color="primary"
+            size="small"
+            variant="outlined"
+            sx={{ height: "18px", "& .MuiChip-label": { fontSize: "0.65rem", px: 0.75 } }}
+          />
+        </TableCell>
+        <TableCell sx={{ textAlign: "center" }}>
+          <Typography variant="caption" sx={{ fontSize: "0.7rem" }}>
+            {leadInfo?.assignedAgentAt
+              ? new Date(leadInfo.assignedAgentAt).toLocaleDateString()
+              : leadInfo?.createdAt
+              ? new Date(leadInfo.createdAt).toLocaleDateString()
+              : "N/A"}
+          </Typography>
+        </TableCell>
+        <TableCell sx={{ textAlign: "center" }}>
+          {finesForLead.length > 0 ? (
+            <Tooltip title={`${finesForLead.length} Fine${finesForLead.length > 1 ? "s" : ""} - Click to view`}>
+              <IconButton
+                size="small"
+                onClick={(e) => { e.stopPropagation(); onOpenFineDialog(finesForLead[0]); }}
+                sx={{ color: "warning.main", p: 0.25 }}
+              >
+                <GavelIcon sx={{ fontSize: 16 }} />
+              </IconButton>
+            </Tooltip>
+          ) : (
+            <Typography variant="caption" color="text.disabled">-</Typography>
+          )}
+        </TableCell>
+      </TableRow>
     );
   }
 );

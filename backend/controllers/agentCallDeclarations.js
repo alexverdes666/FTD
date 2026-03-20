@@ -192,16 +192,17 @@ const fetchCDRCalls = async (req, res) => {
 
     const declarationMap = new Map();
     for (const d of declaredCalls) {
-      declarationMap.set(d.cdrCallId, d.status);
+      declarationMap.set(d.cdrCallId, { status: d.status, id: d._id });
     }
 
     // Enrich all calls with declaration status and formatted duration
     const enrichedCalls = parsedCalls.map((call) => {
-      const declarationStatus = declarationMap.get(call.cdrCallId) || null;
+      const decl = declarationMap.get(call.cdrCallId) || null;
       return {
         ...call,
         formattedDuration: cdrService.formatDuration(call.callDuration),
-        declarationStatus, // null = undeclared, 'pending', 'approved', 'rejected'
+        declarationStatus: decl?.status || null, // null = undeclared, 'pending', 'approved', 'rejected'
+        declarationId: decl?.id || null,
       };
     });
 
@@ -689,6 +690,7 @@ const getDeclarations = async (req, res) => {
       .populate("reviewedBy", "fullName email")
       .populate("affiliateManager", "fullName email")
       .populate("lead", "firstName lastName newEmail newPhone")
+      .populate("orderId", "createdAt plannedDate")
       .sort({ createdAt: -1 });
 
     res.json({

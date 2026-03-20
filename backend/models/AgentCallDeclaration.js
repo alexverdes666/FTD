@@ -215,6 +215,7 @@ agentCallDeclarationSchema.statics.getAgentDeclarations = function (
     .populate("reviewedBy", "fullName email")
     .populate("affiliateManager", "fullName email")
     .populate("lead", "firstName lastName newEmail newPhone")
+    .populate("orderId", "createdAt plannedDate")
     .sort({ callDate: -1 });
 };
 
@@ -229,6 +230,7 @@ agentCallDeclarationSchema.statics.getPendingDeclarations = function (affiliateM
     .populate("agent", "fullName email fourDigitCode")
     .populate("affiliateManager", "fullName email")
     .populate("lead", "firstName lastName newEmail newPhone")
+    .populate("orderId", "createdAt plannedDate")
     .sort({ createdAt: -1 });
 };
 
