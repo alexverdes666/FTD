@@ -49,8 +49,9 @@ import {
   Menu,
   ListItemIcon,
   ListItemText,
+  Breadcrumbs,
 } from "@mui/material";
-import { alpha } from "@mui/material/styles";
+
 import {
   ExpandMore as ExpandMoreIcon,
   ExpandLess as ExpandLessIcon,
@@ -92,6 +93,10 @@ import {
   Refresh as RefreshIcon,
 
   FilterListOff as FilterListOffIcon,
+  Add as AddIcon,
+  Download as DownloadIcon,
+  NavigateNext as NavigateNextIcon,
+  PeopleAlt as PeopleAltIcon,
 } from "@mui/icons-material";
 import AddLeadForm from "../components/AddLeadForm";
 import DocumentPreview from "../components/DocumentPreview";
@@ -296,18 +301,17 @@ const LeadDetails = React.memo(({ lead }) => (
           elevation={0}
           sx={{
             p: 1.5,
-            bgcolor: "background.paper",
-            borderRadius: 1,
-            border: "1px solid",
-            borderColor: "divider",
+            bgcolor: "#fff",
+            borderRadius: "10px",
+            border: "1px solid #e9ecef",
             height: "100%",
           }}
         >
           <Typography
             variant="subtitle2"
             sx={{
-              color: "primary.main",
-              fontWeight: "bold",
+              color: "#1e3a5f",
+              fontWeight: 700,
               display: "flex",
               alignItems: "center",
               gap: 0.5,
@@ -2230,14 +2234,198 @@ const LeadsPage = () => {
     }
   };
   return (
-    <Box sx={{ position: "relative", height: "100%", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+    <Box sx={{ position: "relative", height: "100%", display: "flex", flexDirection: "column", overflow: "hidden", bgcolor: "#f8f9fa" }}>
+      {/* Page Header */}
+      <Box
+        sx={{
+          px: { xs: 2, md: 3 },
+          pt: { xs: 1.5, md: 2 },
+          pb: { xs: 1, md: 1.5 },
+          bgcolor: "#fff",
+          borderBottom: "1px solid",
+          borderColor: "rgba(0,0,0,0.06)",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
+        }}
+      >
+        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 1 }}>
+          <Box>
+            <Breadcrumbs separator={<NavigateNextIcon sx={{ fontSize: 16, color: "text.disabled" }} />} sx={{ mb: 0.5, "& .MuiBreadcrumbs-li": { fontSize: "0.78rem" } }}>
+              <Typography color="text.secondary" sx={{ fontSize: "0.78rem", cursor: "pointer", "&:hover": { color: "#1e3a5f" } }}>
+                Dashboard
+              </Typography>
+              <Typography color="#1e3a5f" sx={{ fontSize: "0.78rem", fontWeight: 600 }}>
+                Leads
+              </Typography>
+            </Breadcrumbs>
+            <Typography variant="h4" sx={{ fontWeight: 700, color: "#1e3a5f", fontSize: { xs: "1.3rem", md: "1.6rem" }, lineHeight: 1.2 }}>
+              Lead Management
+            </Typography>
+          </Box>
+          <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+            {(isLeadManager || user?.role === ROLES.ADMIN) && (
+              <Button
+                variant="contained"
+                startIcon={<AddIcon />}
+                onClick={() => setAddLeadDialogOpen(true)}
+                sx={{
+                  bgcolor: "#1e3a5f",
+                  borderRadius: "8px",
+                  textTransform: "none",
+                  fontWeight: 600,
+                  fontSize: "0.82rem",
+                  px: 2,
+                  py: 0.8,
+                  boxShadow: "0 2px 8px rgba(30,58,95,0.25)",
+                  "&:hover": { bgcolor: "#2c4f7c", boxShadow: "0 4px 12px rgba(30,58,95,0.35)" },
+                }}
+              >
+                Add Lead
+              </Button>
+            )}
+            {isAdminOrManager && (
+              <Button
+                variant="outlined"
+                startIcon={<ImportIcon />}
+                onClick={() => setImportDialogOpen(true)}
+                sx={{
+                  borderColor: "#1e3a5f",
+                  color: "#1e3a5f",
+                  borderRadius: "8px",
+                  textTransform: "none",
+                  fontWeight: 600,
+                  fontSize: "0.82rem",
+                  px: 2,
+                  py: 0.8,
+                  "&:hover": { borderColor: "#2c4f7c", bgcolor: "rgba(30,58,95,0.04)" },
+                }}
+              >
+                Import
+              </Button>
+            )}
+            {isAdminOrManager && (
+              <Button
+                variant="outlined"
+                startIcon={<DownloadIcon />}
+                onClick={() => {
+                  // Export functionality placeholder - uses existing data
+                  const csvContent = leads.map(l => {
+                    const name = l.fullName || `${l.firstName} ${l.lastName || ""}`.trim();
+                    return [name, l.newEmail || "", l.newPhone || "", l.country || "", l.status || ""].join(",");
+                  }).join("\n");
+                  const header = "Name,Email,Phone,Country,Status\n";
+                  const blob = new Blob([header + csvContent], { type: "text/csv" });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = `leads_export_${new Date().toISOString().slice(0, 10)}.csv`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                }}
+                sx={{
+                  borderColor: "#1e3a5f",
+                  color: "#1e3a5f",
+                  borderRadius: "8px",
+                  textTransform: "none",
+                  fontWeight: 600,
+                  fontSize: "0.82rem",
+                  px: 2,
+                  py: 0.8,
+                  "&:hover": { borderColor: "#2c4f7c", bgcolor: "rgba(30,58,95,0.04)" },
+                }}
+              >
+                Export
+              </Button>
+            )}
+            {canDeleteLeads && (
+              <Tooltip title="Bulk Delete">
+                <IconButton size="small" onClick={() => setBulkDeleteDialogOpen(true)} sx={{ color: "#d32f2f", border: "1px solid rgba(211,47,47,0.3)", borderRadius: "8px", "&:hover": { bgcolor: "rgba(211,47,47,0.06)" } }}>
+                  <DeleteIcon sx={{ fontSize: 18 }} />
+                </IconButton>
+              </Tooltip>
+            )}
+            {user?.role === ROLES.ADMIN && (
+              <Tooltip title="Archived Leads">
+                <IconButton size="small" onClick={handleOpenArchivedLeadsDialog} sx={{ color: "#f57c00", border: "1px solid rgba(245,124,0,0.3)", borderRadius: "8px", "&:hover": { bgcolor: "rgba(245,124,0,0.06)" } }}>
+                  <ArchiveIcon sx={{ fontSize: 18 }} />
+                </IconButton>
+              </Tooltip>
+            )}
+            {(isAdminOrManager || isLeadManager) && (
+              <Tooltip title="Audit Log">
+                <IconButton size="small" onClick={() => setGlobalAuditDialogOpen(true)} sx={{ color: "#7b1fa2", border: "1px solid rgba(123,31,162,0.3)", borderRadius: "8px", "&:hover": { bgcolor: "rgba(123,31,162,0.06)" } }}>
+                  <HistoryIcon sx={{ fontSize: 18 }} />
+                </IconButton>
+              </Tooltip>
+            )}
+          </Box>
+        </Box>
+      </Box>
+
+      {/* Stats Bar */}
+      <Box sx={{ px: { xs: 2, md: 3 }, py: 1.5, display: "flex", gap: 1.5, flexWrap: "wrap", alignItems: "center" }}>
+        <Chip
+          icon={<PeopleAltIcon sx={{ fontSize: "16px !important", color: "#1e3a5f !important" }} />}
+          label={`Total: ${totalLeads.toLocaleString()}`}
+          size="small"
+          sx={{
+            bgcolor: "rgba(30,58,95,0.08)",
+            color: "#1e3a5f",
+            fontWeight: 600,
+            fontSize: "0.78rem",
+            height: 28,
+            borderRadius: "8px",
+            border: "1px solid rgba(30,58,95,0.12)",
+            "& .MuiChip-icon": { ml: 0.5 },
+          }}
+        />
+        <Chip
+          label={`FTD: ${leadStats.ftd}`}
+          size="small"
+          sx={{
+            bgcolor: "rgba(46,125,50,0.08)",
+            color: "#2e7d32",
+            fontWeight: 600,
+            fontSize: "0.78rem",
+            height: 28,
+            borderRadius: "8px",
+            border: "1px solid rgba(46,125,50,0.15)",
+          }}
+        />
+        <Chip
+          label={`Filler: ${leadStats.filler}`}
+          size="small"
+          sx={{
+            bgcolor: "rgba(245,124,0,0.08)",
+            color: "#f57c00",
+            fontWeight: 600,
+            fontSize: "0.78rem",
+            height: 28,
+            borderRadius: "8px",
+            border: "1px solid rgba(245,124,0,0.15)",
+          }}
+        />
+        <Chip
+          label={`Cold: ${leadStats.cold}`}
+          size="small"
+          sx={{
+            bgcolor: "rgba(25,118,210,0.08)",
+            color: "#1976d2",
+            fontWeight: 600,
+            fontSize: "0.78rem",
+            height: 28,
+            borderRadius: "8px",
+            border: "1px solid rgba(25,118,210,0.15)",
+          }}
+        />
+      </Box>
+
       {/* Floating action bar for selected leads */}
       {(canSelectLeads && numSelected > 0 && numAssignableSelected === 0) ||
       (isAdminOrManager && numAssignableSelected > 0) ||
       (isAdminOrManager && numAssignedAgentSelected > 0) ||
       (canSelectLeads && numSelected > 0) ? (
         <Paper
-          elevation={8}
+          elevation={0}
           sx={{
             position: "fixed",
             top: 80,
@@ -2248,10 +2436,11 @@ const LeadsPage = () => {
             alignItems: "center",
             px: 2.5,
             py: 1.5,
-            borderRadius: 3,
-            bgcolor: "rgba(255, 255, 255, 0.85)",
-            backdropFilter: "blur(12px)",
-            border: "1px solid rgba(0, 0, 0, 0.08)",
+            borderRadius: "12px",
+            bgcolor: "rgba(255, 255, 255, 0.92)",
+            backdropFilter: "blur(16px)",
+            border: "1px solid rgba(30,58,95,0.12)",
+            boxShadow: "0 8px 32px rgba(0,0,0,0.12)",
             animation: "slideInFromRight 0.3s ease-out",
             "@keyframes slideInFromRight": {
               "0%": {
@@ -2387,21 +2576,21 @@ const LeadsPage = () => {
       {success && (
         <Alert
           severity="success"
-          sx={{ mb: 2 }}
+          sx={{ mx: { xs: 2, md: 3 }, mb: 1, borderRadius: "10px", boxShadow: "0 1px 3px rgba(0,0,0,0.08)" }}
           onClose={() => setSuccess(null)}
         >
           {success}
         </Alert>
       )}
       {error && (
-        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
+        <Alert severity="error" sx={{ mx: { xs: 2, md: 3 }, mb: 1, borderRadius: "10px", boxShadow: "0 1px 3px rgba(0,0,0,0.08)" }} onClose={() => setError(null)}>
           {error}
         </Alert>
       )}
 
       {}
-      <Box sx={{ display: { xs: "none", md: "flex" }, flexDirection: "column", width: "100%", flex: 1, minHeight: 0, overflow: "hidden" }}>
-        <Paper sx={{ width: "100%", position: "relative", borderRadius: 2, overflow: "hidden", border: 1, borderColor: "divider", boxShadow: "0 1px 3px rgba(0,0,0,0.08)", display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
+      <Box sx={{ display: { xs: "none", md: "flex" }, flexDirection: "column", width: "100%", flex: 1, minHeight: 0, overflow: "hidden", px: 3, pb: 2 }}>
+        <Paper sx={{ width: "100%", position: "relative", borderRadius: "12px", overflow: "hidden", border: "1px solid rgba(0,0,0,0.06)", boxShadow: "0 1px 3px rgba(0,0,0,0.08)", display: "flex", flexDirection: "column", flex: 1, minHeight: 0, bgcolor: "#fff" }}>
           {searching && (
             <LinearProgress
               sx={{
@@ -2419,44 +2608,41 @@ const LeadsPage = () => {
             sx={{
               display: "flex",
               alignItems: "center",
-              gap: 0.75,
-              px: 1,
-              py: 0.5,
+              gap: 1,
+              px: 2,
+              py: 1,
               flexWrap: "wrap",
-              background: (theme) => `linear-gradient(135deg, ${alpha(theme.palette.grey[100], 0.7)} 0%, ${alpha(theme.palette.grey[50], 0.5)} 100%)`,
-              borderBottom: "1px solid",
-              borderColor: (theme) => alpha(theme.palette.divider, 0.6),
-              minHeight: 36,
+              bgcolor: "#fafbfc",
+              borderBottom: "1px solid rgba(0,0,0,0.06)",
+              minHeight: 44,
             }}
           >
             {/* Search */}
             <TextField
-              placeholder="Search leads..."
+              placeholder="Search by name, email, phone, country..."
               value={searchInput}
               onChange={(e) => handleSearchChange(e.target.value)}
               size="small"
               sx={{
-                width: 200,
+                width: 280,
                 "& .MuiOutlinedInput-root": {
-                  height: 28,
-                  borderRadius: 6,
-                  fontSize: "0.78rem",
-                  bgcolor: "background.paper",
-                  border: "none",
-                  boxShadow: (theme) => `0 1px 2px ${alpha(theme.palette.grey[400], 0.15)}`,
-                  "& fieldset": { border: "1px solid", borderColor: (theme) => alpha(theme.palette.grey[300], 0.7) },
-                  "&:hover fieldset": { borderColor: (theme) => alpha(theme.palette.primary.main, 0.3) },
-                  "&.Mui-focused fieldset": { borderColor: "primary.main", borderWidth: 1.5, boxShadow: (theme) => `0 0 0 2px ${alpha(theme.palette.primary.main, 0.1)}` },
+                  height: 34,
+                  borderRadius: "20px",
+                  fontSize: "0.82rem",
+                  bgcolor: "#fff",
+                  "& fieldset": { border: "1px solid", borderColor: "rgba(0,0,0,0.12)" },
+                  "&:hover fieldset": { borderColor: "rgba(30,58,95,0.3)" },
+                  "&.Mui-focused fieldset": { borderColor: "#1e3a5f", borderWidth: 1.5 },
                 },
-                "& input::placeholder": { fontSize: "0.75rem", opacity: 0.6 },
+                "& input::placeholder": { fontSize: "0.8rem", opacity: 0.5 },
               }}
               InputProps={{
-                startAdornment: <SearchIcon sx={{ color: "action.active", mr: 0.5, fontSize: 15 }} />,
+                startAdornment: <SearchIcon sx={{ color: "#1e3a5f", mr: 0.75, fontSize: 18, opacity: 0.6 }} />,
               }}
             />
-            <Divider orientation="vertical" flexItem sx={{ my: 0.5, borderColor: (theme) => alpha(theme.palette.grey[300], 0.6) }} />
+            <Divider orientation="vertical" flexItem sx={{ my: 0.75, borderColor: "rgba(0,0,0,0.08)" }} />
             {/* Order */}
-            <FormControl size="small" sx={{ minWidth: 130, "& .MuiOutlinedInput-root": { height: 28, borderRadius: 6, fontSize: "0.75rem", bgcolor: "background.paper", boxShadow: (theme) => `0 1px 2px ${alpha(theme.palette.grey[400], 0.15)}`, "& fieldset": { borderColor: (theme) => alpha(theme.palette.grey[300], 0.7) }, "&:hover fieldset": { borderColor: (theme) => alpha(theme.palette.primary.main, 0.3) } } }}>
+            <FormControl size="small" sx={{ minWidth: 130, "& .MuiOutlinedInput-root": { height: 34, borderRadius: "8px", fontSize: "0.8rem", bgcolor: "#fff", "& fieldset": { borderColor: "rgba(0,0,0,0.12)" }, "&:hover fieldset": { borderColor: "rgba(30,58,95,0.3)" } } }}>
               <Select
                 value={filters.orderId}
                 onChange={(e) => handleFilterChange("orderId", e.target.value)}
@@ -2484,7 +2670,7 @@ const LeadsPage = () => {
               </Select>
             </FormControl>
             {/* IPQS Type */}
-            <FormControl size="small" sx={{ minWidth: 85, "& .MuiOutlinedInput-root": { height: 28, borderRadius: 6, fontSize: "0.75rem", bgcolor: "background.paper", boxShadow: (theme) => `0 1px 2px ${alpha(theme.palette.grey[400], 0.15)}`, "& fieldset": { borderColor: (theme) => alpha(theme.palette.grey[300], 0.7) }, "&:hover fieldset": { borderColor: (theme) => alpha(theme.palette.primary.main, 0.3) } } }}>
+            <FormControl size="small" sx={{ minWidth: 85, "& .MuiOutlinedInput-root": { height: 34, borderRadius: "8px", fontSize: "0.8rem", bgcolor: "#fff", "& fieldset": { borderColor: "rgba(0,0,0,0.12)" }, "&:hover fieldset": { borderColor: "rgba(30,58,95,0.3)" } } }}>
               <Select
                 value={filters.ipqsType}
                 onChange={(e) => { handleFilterChange("ipqsType", e.target.value); if (!e.target.value) handleFilterChange("ipqsResult", ""); }}
@@ -2505,7 +2691,7 @@ const LeadsPage = () => {
             </FormControl>
             {/* IPQS Result (conditional) */}
             {filters.ipqsType && (
-              <FormControl size="small" sx={{ minWidth: 95, "& .MuiOutlinedInput-root": { height: 28, borderRadius: 6, fontSize: "0.75rem", bgcolor: "background.paper", boxShadow: (theme) => `0 1px 2px ${alpha(theme.palette.grey[400], 0.15)}`, "& fieldset": { borderColor: (theme) => alpha(theme.palette.grey[300], 0.7) }, "&:hover fieldset": { borderColor: (theme) => alpha(theme.palette.primary.main, 0.3) } } }}>
+              <FormControl size="small" sx={{ minWidth: 95, "& .MuiOutlinedInput-root": { height: 34, borderRadius: "8px", fontSize: "0.8rem", bgcolor: "#fff", "& fieldset": { borderColor: "rgba(0,0,0,0.12)" }, "&:hover fieldset": { borderColor: "rgba(30,58,95,0.3)" } } }}>
                 <Select
                   value={filters.ipqsResult}
                   onChange={(e) => handleFilterChange("ipqsResult", e.target.value)}
@@ -2534,14 +2720,16 @@ const LeadsPage = () => {
                 size="small"
                 onClick={() => handleFilterChange("includeConverted", !filters.includeConverted)}
                 sx={{
-                  height: 24,
-                  fontSize: "0.7rem",
+                  height: 28,
+                  fontSize: "0.78rem",
                   fontWeight: 600,
-                  bgcolor: (theme) => filters.includeConverted ? alpha(theme.palette.primary.main, 0.08) : alpha(theme.palette.grey[500], 0.08),
-                  color: filters.includeConverted ? "primary.dark" : "text.secondary",
+                  borderRadius: "8px",
+                  bgcolor: filters.includeConverted ? "rgba(30,58,95,0.08)" : "rgba(0,0,0,0.04)",
+                  color: filters.includeConverted ? "#1e3a5f" : "text.secondary",
                   border: "1px solid",
-                  borderColor: (theme) => filters.includeConverted ? alpha(theme.palette.primary.main, 0.2) : alpha(theme.palette.grey[400], 0.3),
-                  "&:hover": { bgcolor: (theme) => alpha(theme.palette.primary.main, 0.14) },
+                  borderColor: filters.includeConverted ? "rgba(30,58,95,0.2)" : "rgba(0,0,0,0.1)",
+                  "&:hover": { bgcolor: "rgba(30,58,95,0.12)" },
+                  cursor: "pointer",
                 }}
               />
             )}
@@ -2552,14 +2740,16 @@ const LeadsPage = () => {
                 size="small"
                 onClick={() => handleFilterChange("assignedToMe", !filters.assignedToMe)}
                 sx={{
-                  height: 24,
-                  fontSize: "0.7rem",
+                  height: 28,
+                  fontSize: "0.78rem",
                   fontWeight: 600,
-                  bgcolor: (theme) => filters.assignedToMe ? alpha(theme.palette.info.main, 0.08) : alpha(theme.palette.grey[500], 0.08),
-                  color: filters.assignedToMe ? "info.dark" : "text.secondary",
+                  borderRadius: "8px",
+                  bgcolor: filters.assignedToMe ? "rgba(25,118,210,0.08)" : "rgba(0,0,0,0.04)",
+                  color: filters.assignedToMe ? "#1565c0" : "text.secondary",
                   border: "1px solid",
-                  borderColor: (theme) => filters.assignedToMe ? alpha(theme.palette.info.main, 0.2) : alpha(theme.palette.grey[400], 0.3),
-                  "&:hover": { bgcolor: (theme) => alpha(theme.palette.info.main, 0.14) },
+                  borderColor: filters.assignedToMe ? "rgba(25,118,210,0.2)" : "rgba(0,0,0,0.1)",
+                  "&:hover": { bgcolor: "rgba(25,118,210,0.12)" },
+                  cursor: "pointer",
                 }}
               />
             )}
@@ -2570,20 +2760,19 @@ const LeadsPage = () => {
               onChange={(e) => handleFilterChange("orderCreatedStart", e.target.value)}
               size="small"
               sx={{
-                width: 130,
+                width: 140,
                 "& .MuiOutlinedInput-root": {
-                  height: 28,
-                  borderRadius: 6,
-                  fontSize: "0.72rem",
-                  bgcolor: "background.paper",
-                  boxShadow: (theme) => `0 1px 2px ${alpha(theme.palette.grey[400], 0.15)}`,
-                  "& fieldset": { border: "1px solid", borderColor: (theme) => alpha(theme.palette.grey[300], 0.7) },
-                  "&:hover fieldset": { borderColor: (theme) => alpha(theme.palette.primary.main, 0.3) },
+                  height: 34,
+                  borderRadius: "8px",
+                  fontSize: "0.78rem",
+                  bgcolor: "#fff",
+                  "& fieldset": { border: "1px solid", borderColor: "rgba(0,0,0,0.12)" },
+                  "&:hover fieldset": { borderColor: "rgba(30,58,95,0.3)" },
                 },
-                "& input": { fontSize: "0.72rem", py: 0 },
+                "& input": { fontSize: "0.78rem", py: 0 },
               }}
               InputProps={{
-                startAdornment: <Typography sx={{ fontSize: "0.65rem", color: "text.disabled", mr: 0.5, whiteSpace: "nowrap" }}>From</Typography>,
+                startAdornment: <Typography sx={{ fontSize: "0.72rem", color: "text.disabled", mr: 0.5, whiteSpace: "nowrap" }}>From</Typography>,
               }}
             />
             {/* Date To */}
@@ -2593,86 +2782,46 @@ const LeadsPage = () => {
               onChange={(e) => handleFilterChange("orderCreatedEnd", e.target.value)}
               size="small"
               sx={{
-                width: 130,
+                width: 140,
                 "& .MuiOutlinedInput-root": {
-                  height: 28,
-                  borderRadius: 6,
-                  fontSize: "0.72rem",
-                  bgcolor: "background.paper",
-                  boxShadow: (theme) => `0 1px 2px ${alpha(theme.palette.grey[400], 0.15)}`,
-                  "& fieldset": { border: "1px solid", borderColor: (theme) => alpha(theme.palette.grey[300], 0.7) },
-                  "&:hover fieldset": { borderColor: (theme) => alpha(theme.palette.primary.main, 0.3) },
+                  height: 34,
+                  borderRadius: "8px",
+                  fontSize: "0.78rem",
+                  bgcolor: "#fff",
+                  "& fieldset": { border: "1px solid", borderColor: "rgba(0,0,0,0.12)" },
+                  "&:hover fieldset": { borderColor: "rgba(30,58,95,0.3)" },
                 },
-                "& input": { fontSize: "0.72rem", py: 0 },
+                "& input": { fontSize: "0.78rem", py: 0 },
               }}
               InputProps={{
-                startAdornment: <Typography sx={{ fontSize: "0.65rem", color: "text.disabled", mr: 0.5, whiteSpace: "nowrap" }}>To</Typography>,
+                startAdornment: <Typography sx={{ fontSize: "0.72rem", color: "text.disabled", mr: 0.5, whiteSpace: "nowrap" }}>To</Typography>,
               }}
             />
             {/* Clear filters */}
             {activeFilterCount > 0 && (
               <>
-                <Divider orientation="vertical" flexItem sx={{ my: 0.5, borderColor: (theme) => alpha(theme.palette.grey[300], 0.6) }} />
+                <Divider orientation="vertical" flexItem sx={{ my: 0.75, borderColor: "rgba(0,0,0,0.08)" }} />
                 <Chip
-                  label={`Clear (${activeFilterCount})`}
+                  label={`Clear Filters (${activeFilterCount})`}
                   size="small"
                   onDelete={clearFilters}
                   deleteIcon={<FilterListOffIcon sx={{ fontSize: "14px !important" }} />}
                   onClick={clearFilters}
                   sx={{
-                    height: 24,
-                    fontSize: "0.7rem",
+                    height: 28,
+                    fontSize: "0.78rem",
                     fontWeight: 600,
-                    bgcolor: (theme) => alpha(theme.palette.error.main, 0.08),
-                    color: "error.dark",
-                    border: "1px solid",
-                    borderColor: (theme) => alpha(theme.palette.error.main, 0.2),
-                    "& .MuiChip-deleteIcon": { color: "error.main", "&:hover": { color: "error.dark" } },
-                    "&:hover": { bgcolor: (theme) => alpha(theme.palette.error.main, 0.14) },
+                    borderRadius: "8px",
+                    bgcolor: "rgba(211,47,47,0.06)",
+                    color: "#c62828",
+                    border: "1px solid rgba(211,47,47,0.2)",
+                    "& .MuiChip-deleteIcon": { color: "#d32f2f", "&:hover": { color: "#b71c1c" } },
+                    "&:hover": { bgcolor: "rgba(211,47,47,0.1)" },
+                    cursor: "pointer",
                   }}
                 />
               </>
             )}
-            {/* Spacer */}
-            <Box sx={{ flex: 1 }} />
-            {/* Action buttons */}
-            <Box sx={{ display: "flex", gap: 0.5, alignItems: "center" }}>
-              {(isLeadManager || user?.role === ROLES.ADMIN) && (
-                <Tooltip title="Add New Lead">
-                  <IconButton size="small" onClick={() => setAddLeadDialogOpen(true)} sx={{ padding: "3px", color: "primary.main" }}>
-                    <PersonAddIcon sx={{ fontSize: 16 }} />
-                  </IconButton>
-                </Tooltip>
-              )}
-              {isAdminOrManager && (
-                <Tooltip title="Import Leads">
-                  <IconButton size="small" onClick={() => setImportDialogOpen(true)} sx={{ padding: "3px", color: "info.main" }}>
-                    <ImportIcon sx={{ fontSize: 16 }} />
-                  </IconButton>
-                </Tooltip>
-              )}
-              {canDeleteLeads && (
-                <Tooltip title="Bulk Delete">
-                  <IconButton size="small" onClick={() => setBulkDeleteDialogOpen(true)} sx={{ padding: "3px", color: "error.main" }}>
-                    <DeleteIcon sx={{ fontSize: 16 }} />
-                  </IconButton>
-                </Tooltip>
-              )}
-              {user?.role === ROLES.ADMIN && (
-                <Tooltip title="Archived Leads">
-                  <IconButton size="small" onClick={handleOpenArchivedLeadsDialog} sx={{ padding: "3px", color: "warning.main" }}>
-                    <ArchiveIcon sx={{ fontSize: 16 }} />
-                  </IconButton>
-                </Tooltip>
-              )}
-              {(isAdminOrManager || isLeadManager) && (
-                <Tooltip title="Audit Log">
-                  <IconButton size="small" onClick={() => setGlobalAuditDialogOpen(true)} sx={{ padding: "3px", color: "secondary.main" }}>
-                    <HistoryIcon sx={{ fontSize: 16 }} />
-                  </IconButton>
-                </Tooltip>
-              )}
-            </Box>
           </Box>
           <TableContainer sx={{ width: "100%", overflowX: "auto", flex: 1, overflowY: "auto" }}>
             <Table
@@ -2681,40 +2830,40 @@ const LeadsPage = () => {
                 width: "100%",
                 tableLayout: "fixed",
                 "& .MuiTableCell-root": {
-                  padding: "2px 6px",
-                  fontSize: "0.75rem",
-                  lineHeight: 1.2,
+                  padding: "4px 8px",
+                  fontSize: "0.78rem",
+                  lineHeight: 1.3,
                 },
                 "& .MuiTableHead-root .MuiTableCell-root": {
-                  padding: "3px 6px",
-                  fontSize: "0.7rem",
+                  padding: "8px 8px",
+                  fontSize: "0.72rem",
                   fontWeight: 700,
-                  background: "linear-gradient(135deg, #1e293b 0%, #334155 100%)",
-                  color: "#fff",
+                  bgcolor: "#f1f3f5",
+                  color: "#495057",
                   textTransform: "uppercase",
-                  letterSpacing: "0.5px",
-                  borderBottom: "2px solid #3b82f6",
-                  lineHeight: 1.2,
+                  letterSpacing: "0.6px",
+                  borderBottom: "2px solid #dee2e6",
+                  lineHeight: 1.3,
                   position: "sticky",
                   top: 0,
                   zIndex: 2,
                 },
                 "& .MuiTableBody-root .MuiTableRow-root": {
-                  height: "28px",
+                  height: "32px",
                   transition: "background-color 0.15s ease",
                   "&:nth-of-type(even)": {
-                    bgcolor: "rgba(0, 0, 0, 0.015)",
+                    bgcolor: "#fafbfc",
                   },
                   "&:hover": {
-                    bgcolor: "rgba(25, 118, 210, 0.04) !important",
+                    bgcolor: "#f8f9fa !important",
                   },
                 },
                 "& .MuiChip-root": {
-                  height: "18px",
-                  fontSize: "0.65rem",
+                  height: "20px",
+                  fontSize: "0.68rem",
                 },
                 "& .MuiTypography-root": {
-                  lineHeight: 1.2,
+                  lineHeight: 1.3,
                 },
                 "& .MuiStack-root": {
                   gap: "0 !important",
@@ -2724,44 +2873,44 @@ const LeadsPage = () => {
               <TableHead>
                 <TableRow>
                   {!isAgent && canSelectLeads && (
-                    <TableCell padding="none" sx={{ width: "36px", maxWidth: "36px", textAlign: "center", borderRight: "1px solid rgba(255,255,255,0.1)" }}>
+                    <TableCell padding="none" sx={{ width: "36px", maxWidth: "36px", textAlign: "center", borderRight: "1px solid #e9ecef" }}>
                       <Checkbox
                         indeterminate={numSelected > 0 && numSelected < leads.length}
                         checked={leads.length > 0 && numSelected === leads.length}
                         onChange={handleSelectAll}
                         size="small"
-                        sx={{ padding: "2px", color: "rgba(255,255,255,0.7)", "&.Mui-checked, &.MuiCheckbox-indeterminate": { color: "#fff" } }}
+                        sx={{ padding: "2px", color: "#6c757d", "&.Mui-checked, &.MuiCheckbox-indeterminate": { color: "#1e3a5f" } }}
                       />
                     </TableCell>
                   )}
                   {!isAgent && (
-                    <TableCell sx={{ textAlign: "center", width: "70px", maxWidth: "70px", borderRight: "1px solid rgba(255,255,255,0.1)" }}>Type</TableCell>
+                    <TableCell sx={{ textAlign: "center", width: "70px", maxWidth: "70px", borderRight: "1px solid #e9ecef" }}>Type</TableCell>
                   )}
-                  <TableCell sx={{ textAlign: "left", width: isAgent ? "35%" : "25%", borderRight: "1px solid rgba(255,255,255,0.1)" }}>Name</TableCell>
+                  <TableCell sx={{ textAlign: "left", width: isAgent ? "35%" : "25%", borderRight: "1px solid #e9ecef" }}>Name</TableCell>
                   {!isAgent && (
-                    <TableCell sx={{ textAlign: "center", width: "25%", borderRight: "1px solid rgba(255,255,255,0.1)" }}>Contact</TableCell>
+                    <TableCell sx={{ textAlign: "center", width: "25%", borderRight: "1px solid #e9ecef" }}>Contact</TableCell>
                   )}
-                  <TableCell sx={{ textAlign: "center", width: isAgent ? "12%" : "70px", borderRight: "1px solid rgba(255,255,255,0.1)" }}>Country</TableCell>
+                  <TableCell sx={{ textAlign: "center", width: isAgent ? "12%" : "70px", borderRight: "1px solid #e9ecef" }}>Country</TableCell>
                   {isAgent && (
-                    <TableCell sx={{ textAlign: "center", width: "10%", borderRight: "1px solid rgba(255,255,255,0.1)" }}>Type</TableCell>
-                  )}
-                  {isAgent && (
-                    <TableCell sx={{ textAlign: "center", width: "10%", borderRight: "1px solid rgba(255,255,255,0.1)" }}>Orders</TableCell>
+                    <TableCell sx={{ textAlign: "center", width: "10%", borderRight: "1px solid #e9ecef" }}>Type</TableCell>
                   )}
                   {isAgent && (
-                    <TableCell sx={{ textAlign: "center", width: "15%", borderRight: "1px solid rgba(255,255,255,0.1)" }}>Assigned</TableCell>
+                    <TableCell sx={{ textAlign: "center", width: "10%", borderRight: "1px solid #e9ecef" }}>Orders</TableCell>
+                  )}
+                  {isAgent && (
+                    <TableCell sx={{ textAlign: "center", width: "15%", borderRight: "1px solid #e9ecef" }}>Assigned</TableCell>
                   )}
                   {isAgent && (
                     <TableCell sx={{ textAlign: "center", width: "8%" }}>Fines</TableCell>
                   )}
                   {!isAgent && (
-                    <TableCell sx={{ textAlign: "center", width: "70px", maxWidth: "70px", borderRight: "1px solid rgba(255,255,255,0.1)" }}>Gender</TableCell>
+                    <TableCell sx={{ textAlign: "center", width: "70px", maxWidth: "70px", borderRight: "1px solid #e9ecef" }}>Gender</TableCell>
                   )}
                   {isAdminOrManager && !isAgent && (
-                    <TableCell sx={{ textAlign: "center", width: "120px", maxWidth: "120px", borderRight: "1px solid rgba(255,255,255,0.1)" }}>Assigned To</TableCell>
+                    <TableCell sx={{ textAlign: "center", width: "120px", maxWidth: "120px", borderRight: "1px solid #e9ecef" }}>Assigned To</TableCell>
                   )}
                   {!isAgent && (
-                    <TableCell sx={{ textAlign: "center", width: "70px", maxWidth: "70px", borderRight: "1px solid rgba(255,255,255,0.1)" }}>Cooldown</TableCell>
+                    <TableCell sx={{ textAlign: "center", width: "70px", maxWidth: "70px", borderRight: "1px solid #e9ecef" }}>Cooldown</TableCell>
                   )}
                   {!isAgent && (
                     <TableCell sx={{ textAlign: "right", width: "85px" }}>Actions</TableCell>
@@ -2784,16 +2933,36 @@ const LeadsPage = () => {
                     <TableCell
                       colSpan={isAgent ? 6 : isAdminOrManager ? 10 : 9}
                       align="center"
-                      sx={{ py: 8, border: "none" }}
+                      sx={{ py: 10, border: "none" }}
                     >
                       <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
-                        <ContactsIcon sx={{ fontSize: 64, color: "grey.300" }} />
-                        <Typography variant="h6" color="text.secondary" fontWeight={500}>
+                        <Box sx={{ width: 80, height: 80, borderRadius: "50%", bgcolor: "#f1f3f5", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                          <ContactsIcon sx={{ fontSize: 40, color: "#adb5bd" }} />
+                        </Box>
+                        <Typography variant="h6" sx={{ color: "#495057", fontWeight: 600, fontSize: "1.1rem" }}>
                           No leads found
                         </Typography>
-                        <Typography variant="body2" color="text.disabled">
-                          Try adjusting your search or filter criteria
+                        <Typography variant="body2" sx={{ color: "#868e96", maxWidth: 360 }}>
+                          Try adjusting your search or filter criteria, or add a new lead to get started.
                         </Typography>
+                        {(isLeadManager || user?.role === ROLES.ADMIN) && (
+                          <Button
+                            variant="contained"
+                            startIcon={<AddIcon />}
+                            onClick={() => setAddLeadDialogOpen(true)}
+                            sx={{
+                              mt: 1,
+                              bgcolor: "#1e3a5f",
+                              borderRadius: "8px",
+                              textTransform: "none",
+                              fontWeight: 600,
+                              px: 3,
+                              "&:hover": { bgcolor: "#2c4f7c" },
+                            }}
+                          >
+                            Add New Lead
+                          </Button>
+                        )}
                       </Box>
                     </TableCell>
                   </TableRow>
@@ -2848,9 +3017,8 @@ const LeadsPage = () => {
                           <TableCell
                             colSpan={9}
                             sx={{
-                              bgcolor: "background.default",
-                              borderBottom: "2px solid",
-                              borderColor: "divider",
+                              bgcolor: "#f8f9fa",
+                              borderBottom: "2px solid #dee2e6",
                               py: 3,
                             }}
                           >
@@ -2872,12 +3040,21 @@ const LeadsPage = () => {
             page={page}
             onPageChange={handleChangePage}
             onRowsPerPageChange={handleChangeRowsPerPage}
-            sx={{ minHeight: 36, height: 36, overflow: "hidden", "& .MuiTablePagination-toolbar": { minHeight: 36, height: 36, py: 0 }, "& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows": { fontSize: "0.75rem", m: 0 }, "& .MuiTablePagination-select": { fontSize: "0.75rem" } }}
+            sx={{
+              minHeight: 44,
+              height: 44,
+              overflow: "hidden",
+              borderTop: "1px solid rgba(0,0,0,0.06)",
+              bgcolor: "#fafbfc",
+              "& .MuiTablePagination-toolbar": { minHeight: 44, height: 44, py: 0 },
+              "& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows": { fontSize: "0.8rem", m: 0, color: "#495057" },
+              "& .MuiTablePagination-select": { fontSize: "0.8rem" },
+            }}
           />
         </Paper>
       </Box>
       {}
-      <Box sx={{ display: { xs: "block", md: "none" }, position: "relative" }}>
+      <Box sx={{ display: { xs: "block", md: "none" }, position: "relative", px: 2, pb: 2 }}>
         {searching && (
           <LinearProgress
             sx={{
@@ -2895,13 +3072,15 @@ const LeadsPage = () => {
             <CircularProgress />
           </Box>
         ) : leads.length === 0 ? (
-          <Paper sx={{ p: 5, textAlign: "center" }}>
+          <Paper sx={{ p: 5, textAlign: "center", borderRadius: "12px", boxShadow: "0 1px 3px rgba(0,0,0,0.08)" }}>
             <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
-              <ContactsIcon sx={{ fontSize: 64, color: "grey.300" }} />
-              <Typography variant="h6" color="text.secondary" fontWeight={500}>
+              <Box sx={{ width: 72, height: 72, borderRadius: "50%", bgcolor: "#f1f3f5", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <ContactsIcon sx={{ fontSize: 36, color: "#adb5bd" }} />
+              </Box>
+              <Typography variant="h6" sx={{ color: "#495057", fontWeight: 600 }}>
                 No leads found
               </Typography>
-              <Typography variant="body2" color="text.disabled">
+              <Typography variant="body2" sx={{ color: "#868e96" }}>
                 Try adjusting your search or filter criteria
               </Typography>
             </Box>
@@ -2914,7 +3093,7 @@ const LeadsPage = () => {
               if (!leadId) return null;
 
               return (
-                <Paper key={leadId} sx={{ p: 2 }}>
+                <Paper key={leadId} sx={{ p: 2, borderRadius: "12px", boxShadow: "0 1px 3px rgba(0,0,0,0.08)" }}>
                   <Stack spacing={2}>
                     <Box>
                       <Typography variant="subtitle1" fontWeight="bold">
@@ -3198,7 +3377,10 @@ const LeadsPage = () => {
         onLeadUpdated={handleLeadUpdated}
         sx={{
           "& .MuiBackdrop-root": {
-            backdropFilter: "blur(5px)",
+            backdropFilter: "blur(8px)",
+          },
+          "& .MuiDialog-paper": {
+            borderRadius: "12px",
           },
         }}
       />
@@ -3222,7 +3404,10 @@ const LeadsPage = () => {
         fullWidth
         sx={{
           "& .MuiBackdrop-root": {
-            backdropFilter: "blur(5px)",
+            backdropFilter: "blur(8px)",
+          },
+          "& .MuiDialog-paper": {
+            borderRadius: "12px",
           },
         }}
       >
@@ -3293,7 +3478,10 @@ const LeadsPage = () => {
         fullWidth
         sx={{
           "& .MuiBackdrop-root": {
-            backdropFilter: "blur(5px)",
+            backdropFilter: "blur(8px)",
+          },
+          "& .MuiDialog-paper": {
+            borderRadius: "12px",
           },
         }}
       >
@@ -3326,11 +3514,14 @@ const LeadsPage = () => {
         fullWidth
         sx={{
           "& .MuiBackdrop-root": {
-            backdropFilter: "blur(5px)",
+            backdropFilter: "blur(8px)",
+          },
+          "& .MuiDialog-paper": {
+            borderRadius: "12px",
           },
         }}
       >
-        <DialogTitle>Add New Lead</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 700, color: "#1e3a5f", borderBottom: "1px solid #f1f3f5" }}>Add New Lead</DialogTitle>
         <DialogContent>
           <AddLeadForm
             onLeadAdded={(lead) => {
@@ -3347,8 +3538,12 @@ const LeadsPage = () => {
         onClose={() => { setDeleteDialog({ open: false, leadId: null }); setDeleteReason(""); }}
         maxWidth="xs"
         fullWidth
+        sx={{ "& .MuiDialog-paper": { borderRadius: "12px" } }}
       >
-        <DialogTitle>Delete Lead</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 700, color: "#c62828", borderBottom: "1px solid #f1f3f5", display: "flex", alignItems: "center", gap: 1 }}>
+          <DeleteIcon sx={{ color: "#c62828" }} />
+          Delete Lead
+        </DialogTitle>
         <DialogContent>
           <DialogContentText sx={{ mb: 2 }}>
             Please provide a reason for deleting this lead (minimum 10 characters).
@@ -3385,8 +3580,12 @@ const LeadsPage = () => {
         onClose={() => setBulkDeleteDialogOpen(false)}
         maxWidth="md"
         fullWidth
+        sx={{ "& .MuiDialog-paper": { borderRadius: "12px" } }}
       >
-        <DialogTitle>Bulk Delete Leads</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 700, color: "#c62828", borderBottom: "1px solid #f1f3f5", display: "flex", alignItems: "center", gap: 1 }}>
+          <DeleteIcon sx={{ color: "#c62828" }} />
+          Bulk Delete Leads
+        </DialogTitle>
         <DialogContent>
           <DialogContentText sx={{ mb: 2 }}>
             Warning: This action will permanently delete all leads matching the
@@ -3548,9 +3747,10 @@ const LeadsPage = () => {
         onClose={() => setArchivedLeadsDialogOpen(false)}
         maxWidth="lg"
         fullWidth
+        sx={{ "& .MuiDialog-paper": { borderRadius: "12px" } }}
       >
-        <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          <ArchiveIcon color="warning" />
+        <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1, fontWeight: 700, color: "#1e3a5f", borderBottom: "1px solid #f1f3f5" }}>
+          <ArchiveIcon sx={{ color: "#f57c00" }} />
           Archived Leads
         </DialogTitle>
         <DialogContent>
@@ -3939,8 +4139,9 @@ const LeadsPage = () => {
         }}
         maxWidth="sm"
         fullWidth
+        sx={{ "& .MuiDialog-paper": { borderRadius: "12px" } }}
       >
-        <DialogTitle>Select Affiliate Manager</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 700, color: "#1e3a5f", borderBottom: "1px solid #f1f3f5" }}>Select Affiliate Manager</DialogTitle>
         <DialogContent>
           <Typography variant="body2" sx={{ mb: 2 }}>
             Choose which affiliate manager should approve this verified lead.
@@ -4169,15 +4370,15 @@ const LeadRow = React.memo(
     const greyColor = "#9e9e9e";
 
     const cellSx = {
-      borderRight: "1px solid rgba(224, 224, 224, 1)",
-      py: 0,
-      px: 0.5,
-      fontSize: "0.75rem",
+      borderRight: "1px solid #f1f3f5",
+      py: 0.5,
+      px: 1,
+      fontSize: "0.78rem",
       textAlign: "center",
-      lineHeight: 1.2,
+      lineHeight: 1.3,
     };
     const checkboxCellSx = {
-      borderRight: "1px solid rgba(224, 224, 224, 1)",
+      borderRight: "1px solid #f1f3f5",
       width: "40px",
       maxWidth: "40px",
       padding: "0",
@@ -4190,17 +4391,19 @@ const LeadRow = React.memo(
         hover
         onClick={handleRowClick}
         sx={{
-          "&:hover": { backgroundColor: "action.hover" },
+          "&:hover": { backgroundColor: "#f8f9fa !important" },
           borderLeft: (theme) =>
             isArchived
-              ? `4px solid #bdbdbd`
-              : `4px solid ${
+              ? `3px solid #ced4da`
+              : `3px solid ${
                   theme.palette[getLeadTypeColor(getDisplayLeadType(lead))]
                     ?.main || theme.palette.grey.main
                 }`,
           cursor: "pointer",
+          transition: "background-color 0.15s ease",
           ...(isArchived && {
-            bgcolor: "#f5f5f5",
+            bgcolor: "#f8f9fa",
+            opacity: 0.7,
           }),
           ...(isIPQSValidated && {
             animation: "ipqsSuccessFlash 2s ease-in-out",
@@ -4859,6 +5062,7 @@ const LeadCard = React.memo(
         onClick={handleCardClick}
         sx={{
           p: 2,
+          borderRadius: "12px",
           borderLeft: (theme) =>
             `4px solid ${
               theme.palette[getLeadTypeColor(getDisplayLeadType(lead))]?.main ||
@@ -4866,10 +5070,11 @@ const LeadCard = React.memo(
             }`,
           cursor: "pointer",
           transition: "all 0.2s ease-in-out",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
           "&:hover": {
-            backgroundColor: "action.hover",
+            backgroundColor: "#f8f9fa",
             transform: "translateX(4px)",
-            boxShadow: (theme) => theme.shadows[4],
+            boxShadow: "0 4px 12px rgba(0,0,0,0.12)",
           },
           "& .MuiChip-root": {
             transition: "all 0.2s ease-in-out",
