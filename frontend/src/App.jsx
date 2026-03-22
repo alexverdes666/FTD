@@ -49,7 +49,6 @@ const WithdrawalsPage = lazy(() => import("./pages/WithdrawalsPage.jsx"));
 const PaymentHistoryPage = lazy(() => import("./pages/PaymentHistoryPage.jsx"));
 const AffiliateManagersPage = lazy(() => import("./pages/AffiliateManagersPage.jsx"));
 const AffiliateManagerTableView = lazy(() => import("./components/AffiliateManagerTableView.jsx"));
-const AgentCommentsPage = lazy(() => import("./pages/AgentCommentsPage.jsx"));
 const RefundsPage = lazy(() => import("./pages/RefundsPage.jsx"));
 const NotFoundPage = lazy(() => import("./pages/NotFoundPage.jsx"));
 const DisclaimerPage = lazy(() => import("./pages/DisclaimerPage.jsx"));
@@ -338,14 +337,6 @@ function AppContent() {
               }
             />
             <Route path="my-table" element={<LazyPage><AffiliateManagerTableView /></LazyPage>} />
-            <Route
-              path="agent-comments"
-              element={
-                <ProtectedRoute allowedRoles={["admin", "affiliate_manager"]}>
-                  <LazyPage><AgentCommentsPage /></LazyPage>
-                </ProtectedRoute>
-              }
-            />
             <Route path="profile" element={<LazyPage><ProfilePage /></LazyPage>} />
             <Route
               path="refunds"

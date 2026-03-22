@@ -347,11 +347,6 @@ const MainLayout = () => {
               path: "/deposit-calls",
             },
             {
-              text: "Comments",
-              icon: <CommentIcon />,
-              path: "/agent-comments",
-            },
-            {
               text: "Live Monit.",
               icon: <HeadsetIcon />,
               path: "/ami-agents",
@@ -421,11 +416,6 @@ const MainLayout = () => {
               text: "Dep. Calls",
               icon: <DepositCallIcon />,
               path: "/deposit-calls",
-            },
-            {
-              text: "Comments",
-              icon: <CommentIcon />,
-              path: "/agent-comments",
             },
             {
               text: "Live Monit.",
