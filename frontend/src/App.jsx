@@ -7,7 +7,7 @@ import {
 } from "react-router-dom";
 import { Provider, useSelector, useDispatch } from "react-redux";
 import { PersistGate } from "redux-persist/integration/react";
-import { ThemeProvider, createTheme } from "@mui/material/styles";
+import { ThemeProvider } from "@mui/material/styles";
 import {
   CssBaseline,
   Box,
@@ -29,6 +29,7 @@ import MainLayout from "./layouts/MainLayout.jsx";
 import DisclaimerModal from "./components/common/DisclaimerModal.jsx";
 import ErrorBoundary from "./components/common/ErrorBoundary.jsx";
 import PageLoadingFallback from "./components/common/PageLoadingFallback.jsx";
+import theme from "./theme";
 
 // --- Lazy-loaded pages (code splitting) ---
 const LoginPage = lazy(() => import("./pages/LoginPage.jsx"));
@@ -112,57 +113,6 @@ const RoleBasedRedirect = () => {
   // All other roles go to dashboard
   return <Navigate to="/dashboard" replace />;
 };
-
-const theme = createTheme({
-  palette: {
-    primary: {
-      main: "#1976d2",
-      light: "#42a5f5",
-      dark: "#1565c0",
-    },
-    secondary: {
-      main: "#dc004e",
-      light: "#ff5983",
-      dark: "#9a0036",
-    },
-    background: {
-      default: "#f5f5f5",
-      paper: "#ffffff",
-    },
-  },
-  typography: {
-    fontFamily: '"Roboto", "Helvetica", "Arial", sans-serif',
-    h4: {
-      fontWeight: 600,
-    },
-    h5: {
-      fontWeight: 600,
-    },
-    h6: {
-      fontWeight: 600,
-    },
-  },
-  shape: {
-    borderRadius: 8,
-  },
-  components: {
-    MuiCard: {
-      styleOverrides: {
-        root: {
-          boxShadow: "0px 2px 8px rgba(0, 0, 0, 0.1)",
-        },
-      },
-    },
-    MuiButton: {
-      styleOverrides: {
-        root: {
-          textTransform: "none",
-          fontWeight: 600,
-        },
-      },
-    },
-  },
-});
 
 // Suspense wrapper with ErrorBoundary for lazy routes
 const LazyPage = ({ children }) => (
