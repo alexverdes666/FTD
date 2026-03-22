@@ -4284,19 +4284,24 @@ const LeadRow = React.memo(
             }}
           />
         </TableCell>
-        <TableCell sx={{ ...cellSx, textAlign: "left" }}>
-          <Typography
-            variant="body2"
-            sx={{
-              fontWeight: "medium",
-              fontSize: "0.8rem",
-              color: isArchived ? greyColor : "inherit",
-            }}
-          >
-            {lead.fullName || `${lead.firstName} ${lead.lastName || ""}`.trim()}
-          </Typography>
+        <TableCell sx={{ ...cellSx, textAlign: "left", "&:hover .copy-field-icon": { opacity: 1 } }}>
+          <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.3 }}>
+            <Typography
+              variant="body2"
+              sx={{
+                fontWeight: "medium",
+                fontSize: "0.8rem",
+                color: isArchived ? greyColor : "inherit",
+              }}
+            >
+              {lead.fullName || `${lead.firstName} ${lead.lastName || ""}`.trim()}
+            </Typography>
+            <IconButton className="copy-field-icon" size="small" onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(lead.fullName || `${lead.firstName} ${lead.lastName || ""}`.trim()); }} title="Copy" sx={{ opacity: 0, transition: "opacity 0.2s", p: 0.15 }}>
+              <CopyIcon sx={{ fontSize: 12 }} />
+            </IconButton>
+          </Box>
         </TableCell>
-        <TableCell sx={cellSx}>
+        <TableCell sx={{ ...cellSx, "&:hover .copy-field-icon": { opacity: 1 } }}>
           <Box
             sx={{
               display: "flex",
@@ -4311,42 +4316,47 @@ const LeadRow = React.memo(
               const hasEmailValidation = emailConfig && emailConfig.bgcolor !== "transparent";
 
               return (
-                <Tooltip
-                  title={lead.ipqsValidation ? buildIPQSTooltip(lead.ipqsValidation, "email") : "Not validated"}
-                  arrow
-                  placement="top"
-                  componentsProps={{
-                    tooltip: {
-                      sx: {
-                        bgcolor: "white",
-                        color: "#212121",
-                        boxShadow: 3,
-                        "& .MuiTooltip-arrow": { color: "white" },
-                        maxWidth: 300,
+                <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.3 }}>
+                  <Tooltip
+                    title={lead.ipqsValidation ? buildIPQSTooltip(lead.ipqsValidation, "email") : "Not validated"}
+                    arrow
+                    placement="top"
+                    componentsProps={{
+                      tooltip: {
+                        sx: {
+                          bgcolor: "white",
+                          color: "#212121",
+                          boxShadow: 3,
+                          "& .MuiTooltip-arrow": { color: "white" },
+                          maxWidth: 300,
+                        },
                       },
-                    },
-                  }}
-                >
-                  <Typography
-                    variant="body2"
-                    sx={{
-                      fontSize: "0.7rem",
-                      lineHeight: 1.1,
-                      color: isArchived ? greyColor : "#212121",
-                      cursor: "pointer",
-                      ...(hasEmailValidation && !isArchived && {
-                        backgroundColor: emailConfig.bgcolor,
-                        borderLeft: `3px solid ${emailConfig.color}`,
-                        px: 0.5,
-                        py: 0.25,
-                        borderRadius: 0.5,
-                        fontWeight: 500,
-                      }),
                     }}
                   >
-                    📧 {lead.newEmail}
-                  </Typography>
-                </Tooltip>
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        fontSize: "0.7rem",
+                        lineHeight: 1.1,
+                        color: isArchived ? greyColor : "#212121",
+                        cursor: "pointer",
+                        ...(hasEmailValidation && !isArchived && {
+                          backgroundColor: emailConfig.bgcolor,
+                          borderLeft: `3px solid ${emailConfig.color}`,
+                          px: 0.5,
+                          py: 0.25,
+                          borderRadius: 0.5,
+                          fontWeight: 500,
+                        }),
+                      }}
+                    >
+                      📧 {lead.newEmail}
+                    </Typography>
+                  </Tooltip>
+                  <IconButton className="copy-field-icon" size="small" onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(lead.newEmail || ""); }} title="Copy email" sx={{ opacity: 0, transition: "opacity 0.2s", p: 0.15 }}>
+                    <CopyIcon sx={{ fontSize: 12 }} />
+                  </IconButton>
+                </Box>
               );
             })()}
             {(() => {
@@ -4355,58 +4365,68 @@ const LeadRow = React.memo(
               const hasPhoneValidation = phoneConfig && phoneConfig.bgcolor !== "transparent";
 
               return (
-                <Tooltip
-                  title={lead.ipqsValidation ? buildIPQSTooltip(lead.ipqsValidation, "phone") : "Not validated"}
-                  arrow
-                  placement="bottom"
-                  componentsProps={{
-                    tooltip: {
-                      sx: {
-                        bgcolor: "white",
-                        color: "#212121",
-                        boxShadow: 3,
-                        "& .MuiTooltip-arrow": { color: "white" },
-                        maxWidth: 300,
+                <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.3 }}>
+                  <Tooltip
+                    title={lead.ipqsValidation ? buildIPQSTooltip(lead.ipqsValidation, "phone") : "Not validated"}
+                    arrow
+                    placement="bottom"
+                    componentsProps={{
+                      tooltip: {
+                        sx: {
+                          bgcolor: "white",
+                          color: "#212121",
+                          boxShadow: 3,
+                          "& .MuiTooltip-arrow": { color: "white" },
+                          maxWidth: 300,
+                        },
                       },
-                    },
-                  }}
-                >
-                  <Typography
-                    variant="body2"
-                    sx={{
-                      fontSize: "0.7rem",
-                      lineHeight: 1.1,
-                      color: isArchived ? greyColor : "#212121",
-                      cursor: "pointer",
-                      ...(hasPhoneValidation && !isArchived && {
-                        backgroundColor: phoneConfig.bgcolor,
-                        borderLeft: `3px solid ${phoneConfig.color}`,
-                        px: 0.5,
-                        py: 0.25,
-                        borderRadius: 0.5,
-                        fontWeight: 500,
-                      }),
                     }}
                   >
-                    📱 {formatPhoneWithCountryCode(lead.newPhone, lead.country)}
-                  </Typography>
-                </Tooltip>
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        fontSize: "0.7rem",
+                        lineHeight: 1.1,
+                        color: isArchived ? greyColor : "#212121",
+                        cursor: "pointer",
+                        ...(hasPhoneValidation && !isArchived && {
+                          backgroundColor: phoneConfig.bgcolor,
+                          borderLeft: `3px solid ${phoneConfig.color}`,
+                          px: 0.5,
+                          py: 0.25,
+                          borderRadius: 0.5,
+                          fontWeight: 500,
+                        }),
+                      }}
+                    >
+                      📱 {formatPhoneWithCountryCode(lead.newPhone, lead.country)}
+                    </Typography>
+                  </Tooltip>
+                  <IconButton className="copy-field-icon" size="small" onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(lead.newPhone || ""); }} title="Copy phone" sx={{ opacity: 0, transition: "opacity 0.2s", p: 0.15 }}>
+                    <CopyIcon sx={{ fontSize: 12 }} />
+                  </IconButton>
+                </Box>
               );
             })()}
           </Box>
         </TableCell>
-        <TableCell sx={{ ...cellSx, width: "70px", maxWidth: "70px" }}>
-          <Chip
-            label={getCountryAbbreviation(lead.country)}
-            size="small"
-            variant="outlined"
-            sx={{
-              height: "18px",
-              "& .MuiChip-label": { fontSize: "0.65rem", px: 0.75 },
-              borderColor: isArchived ? "#bdbdbd" : undefined,
-              color: isArchived ? greyColor : undefined,
-            }}
-          />
+        <TableCell sx={{ ...cellSx, width: "70px", maxWidth: "70px", "&:hover .copy-field-icon": { opacity: 1 } }}>
+          <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.3 }}>
+            <Chip
+              label={getCountryAbbreviation(lead.country)}
+              size="small"
+              variant="outlined"
+              sx={{
+                height: "18px",
+                "& .MuiChip-label": { fontSize: "0.65rem", px: 0.75 },
+                borderColor: isArchived ? "#bdbdbd" : undefined,
+                color: isArchived ? greyColor : undefined,
+              }}
+            />
+            <IconButton className="copy-field-icon" size="small" onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(lead.country || ""); }} title="Copy" sx={{ opacity: 0, transition: "opacity 0.2s", p: 0.15 }}>
+              <CopyIcon sx={{ fontSize: 12 }} />
+            </IconButton>
+          </Box>
         </TableCell>
         <TableCell sx={{ ...cellSx, width: "70px", maxWidth: "70px" }}>
           {lead.gender && lead.gender !== "not_defined" ? (
@@ -4455,16 +4475,23 @@ const LeadRow = React.memo(
           )}
         </TableCell>
         {isAdminOrManager && (
-          <TableCell sx={{ ...cellSx, width: "120px", maxWidth: "120px" }}>
-            <Typography
-              sx={{
-                fontWeight: lead.assignedAgent ? "normal" : "bold",
-                fontSize: lead.assignedAgent ? "0.8rem" : "1rem",
-                color: isArchived ? greyColor : "inherit",
-              }}
-            >
-              {lead.assignedAgent ? lead.assignedAgent.fullName : "—"}
-            </Typography>
+          <TableCell sx={{ ...cellSx, width: "120px", maxWidth: "120px", "&:hover .copy-field-icon": { opacity: 1 } }}>
+            <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.3 }}>
+              <Typography
+                sx={{
+                  fontWeight: lead.assignedAgent ? "normal" : "bold",
+                  fontSize: lead.assignedAgent ? "0.8rem" : "1rem",
+                  color: isArchived ? greyColor : "inherit",
+                }}
+              >
+                {lead.assignedAgent ? lead.assignedAgent.fullName : "—"}
+              </Typography>
+              {lead.assignedAgent && (
+                <IconButton className="copy-field-icon" size="small" onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(lead.assignedAgent.fullName || ""); }} title="Copy" sx={{ opacity: 0, transition: "opacity 0.2s", p: 0.15 }}>
+                  <CopyIcon sx={{ fontSize: 12 }} />
+                </IconButton>
+              )}
+            </Box>
           </TableCell>
         )}
         {/* Status column hidden but still filterable/searchable */}

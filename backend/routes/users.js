@@ -334,6 +334,50 @@ router.put(
   }
 );
 
+// Get user's orders filter preferences
+router.get("/preferences/orders-filters", protect, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id).select("preferences.ordersFilterConfig");
+    const filters = user?.preferences?.ordersFilterConfig || [];
+    res.json({ success: true, data: filters });
+  } catch (error) {
+    console.error("Get orders filter preferences error:", error);
+    res.status(500).json({ success: false, message: "Failed to get filter preferences" });
+  }
+});
+
+// Save user's orders filter preferences
+router.put(
+  "/preferences/orders-filters",
+  [
+    protect,
+    body("filters")
+      .isArray()
+      .withMessage("filters must be an array"),
+    body("filters.*")
+      .isString()
+      .withMessage("Each filter must be a string"),
+  ],
+  async (req, res) => {
+    try {
+      const { filters } = req.body;
+      const validFilters = ["requester", "ourNetwork", "clientNetwork", "geo", "status", "campaign"];
+      const cleaned = filters.filter((f) => validFilters.includes(f));
+
+      await User.findByIdAndUpdate(
+        req.user._id,
+        { $set: { "preferences.ordersFilterConfig": cleaned } },
+        { new: true, runValidators: true }
+      );
+
+      res.json({ success: true, message: "Filter preferences saved", data: cleaned });
+    } catch (error) {
+      console.error("Save orders filter preferences error:", error);
+      res.status(500).json({ success: false, message: "Failed to save filter preferences", error: error.message });
+    }
+  }
+);
+
 router.get("/:id", [protect, ownerOrAdmin], getUserById);
 router.post(
   "/",

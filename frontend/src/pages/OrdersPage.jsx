@@ -36,7 +36,8 @@ import {
   alpha,
   Checkbox,
   ListItemText,
-  Menu,
+  ListSubheader,
+  InputAdornment,
 } from "@mui/material";
 import {
   Add as AddIcon,
@@ -50,7 +51,6 @@ import {
   FilterListOff as FilterListOffIcon,
   Inbox as InboxIcon,
   AlternateEmail as EmailSearchIcon,
-  ArrowDropDown as ArrowDropDownIcon,
 } from "@mui/icons-material";
 import { useForm } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
@@ -66,6 +66,8 @@ import ClientBrokerManagementDialog from "../components/ClientBrokerManagementDi
 import GenderFallbackModal from "../components/GenderFallbackModal";
 import CopyPreferencesDialog, {
   copyLeadsWithPreferences,
+  loadFilterPreferences,
+  loadFilterPreferencesAsync,
 } from "../components/CopyPreferencesDialog";
 import ReplaceLeadDialog from "../components/ReplaceLeadDialog";
 import ApplyAgentFineDialog from "../components/ApplyAgentFineDialog";
@@ -206,14 +208,38 @@ const OrdersPage = () => {
     order: null,
   });
 
-  // Requester filter dropdown state
-  const [requesterAnchor, setRequesterAnchor] = useState(null);
+  // Requester filter state
   const [availableRequesters, setAvailableRequesters] = useState([]);
+  // Filter preferences state (which optional filters are visible)
+  const [visibleFilters, setVisibleFilters] = useState(() => loadFilterPreferences());
+  // Available countries for GEO filter
+  const [availableCountries, setAvailableCountries] = useState([]);
+  // Search state for filter dropdowns
+  const [filterSearch, setFilterSearch] = useState({ ourNetwork: "", clientNetwork: "", geo: "", campaign: "" });
+
   useEffect(() => {
     if (user?.role === "admin" || user?.role === "lead_manager") {
       api.get("/orders/requesters").then((res) => setAvailableRequesters(res.data.data || [])).catch(() => {});
     }
+    // Fetch filter preferences from API (overwrites localStorage cache if different)
+    loadFilterPreferencesAsync().then((f) => setVisibleFilters(f));
   }, [user?.role]);
+
+  // Fetch dropdown data for enabled filters
+  useEffect(() => {
+    if (visibleFilters.includes("geo")) {
+      api.get("/orders/countries").then((res) => setAvailableCountries(res.data.data || [])).catch(() => {});
+    }
+    if (visibleFilters.includes("ourNetwork") && ourNetworks.length === 0) {
+      fetchOurNetworks();
+    }
+    if (visibleFilters.includes("clientNetwork") && clientNetworks.length === 0) {
+      fetchClientNetworks();
+    }
+    if (visibleFilters.includes("campaign") && campaigns.length === 0) {
+      fetchCampaigns();
+    }
+  }, [visibleFilters]);
 
   // IPQS validation success state (tracks leadIds that were just successfully validated)
   const [ipqsValidationSuccess, setIpqsValidationSuccess] = useState([]);
@@ -3139,7 +3165,6 @@ const OrdersPage = () => {
           sx={{
             display: "flex",
             alignItems: "center",
-            gap: 0.75,
             px: 1,
             py: 0.5,
             background: (theme) => `linear-gradient(135deg, ${alpha(theme.palette.grey[100], 0.7)} 0%, ${alpha(theme.palette.grey[50], 0.5)} 100%)`,
@@ -3148,236 +3173,505 @@ const OrdersPage = () => {
             minHeight: 36,
           }}
         >
-          {/* Search */}
-          <TextField
-            placeholder="Search orders..."
-            value={filters.search}
-            onChange={handleFilterChange("search")}
-            size="small"
+          {/* Scrollable Filters Area */}
+          <Box
             sx={{
-              width: 180,
-              "& .MuiOutlinedInput-root": {
-                height: 28,
-                borderRadius: 6,
-                fontSize: "0.78rem",
-                bgcolor: "background.paper",
-                border: "none",
-                boxShadow: (theme) => `0 1px 2px ${alpha(theme.palette.grey[400], 0.15)}`,
-                "& fieldset": { border: "1px solid", borderColor: (theme) => alpha(theme.palette.grey[300], 0.7) },
-                "&:hover fieldset": { borderColor: (theme) => alpha(theme.palette.primary.main, 0.3) },
-                "&.Mui-focused fieldset": { borderColor: "primary.main", borderWidth: 1.5, boxShadow: (theme) => `0 0 0 2px ${alpha(theme.palette.primary.main, 0.1)}` },
-              },
-              "& input::placeholder": { fontSize: "0.75rem", opacity: 0.6 },
+              display: "flex",
+              alignItems: "center",
+              gap: 0.75,
+              flex: 1,
+              minWidth: 0,
+              overflowX: "auto",
+              scrollbarWidth: "none",
+              "&::-webkit-scrollbar": { display: "none" },
+              mr: 0.75,
             }}
-            InputProps={{
-              startAdornment: <SearchIcon sx={{ color: "action.active", mr: 0.5, fontSize: 15 }} />,
-            }}
-          />
-          <Divider orientation="vertical" flexItem sx={{ my: 0.5, borderColor: (theme) => alpha(theme.palette.grey[300], 0.6) }} />
-          {/* Email Search */}
-          <TextField
-            placeholder="Search by email..."
-            value={filters.emailSearch}
-            onChange={handleFilterChange("emailSearch")}
-            size="small"
-            sx={{
-              width: 180,
-              "& .MuiOutlinedInput-root": {
-                height: 28,
-                borderRadius: 6,
-                fontSize: "0.78rem",
-                bgcolor: "background.paper",
-                border: "none",
-                boxShadow: (theme) => `0 1px 2px ${alpha(theme.palette.grey[400], 0.15)}`,
-                "& fieldset": { border: "1px solid", borderColor: (theme) => alpha(theme.palette.grey[300], 0.7) },
-                "&:hover fieldset": { borderColor: (theme) => alpha(theme.palette.primary.main, 0.3) },
-                "&.Mui-focused fieldset": { borderColor: "primary.main", borderWidth: 1.5, boxShadow: (theme) => `0 0 0 2px ${alpha(theme.palette.primary.main, 0.1)}` },
-              },
-              "& input::placeholder": { fontSize: "0.75rem", opacity: 0.6 },
-            }}
-            InputProps={{
-              startAdornment: <EmailSearchIcon sx={{ color: "action.active", mr: 0.5, fontSize: 15 }} />,
-            }}
-          />
-          {/* Month */}
-          <FormControl size="small" sx={{ minWidth: 78, "& .MuiOutlinedInput-root": { height: 28, borderRadius: 6, fontSize: "0.75rem", bgcolor: "background.paper", boxShadow: (theme) => `0 1px 2px ${alpha(theme.palette.grey[400], 0.15)}`, "& fieldset": { borderColor: (theme) => alpha(theme.palette.grey[300], 0.7) }, "&:hover fieldset": { borderColor: (theme) => alpha(theme.palette.primary.main, 0.3) } } }}>
-            <Select
-              value={filters.createdMonth}
-              onChange={handleFilterChange("createdMonth")}
-              displayEmpty
-              renderValue={(v) => {
-                if (!v) return "Month";
-                const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-                return months[parseInt(v) - 1] || "Month";
-              }}
+          >
+            {/* Search */}
+            <TextField
+              placeholder="Search orders..."
+              value={filters.search}
+              onChange={handleFilterChange("search")}
+              size="small"
               sx={{
-                "& .MuiSelect-select": { py: 0, pl: 1, pr: "24px !important", display: "flex", alignItems: "center" },
-                "& .MuiSelect-icon": { right: 2, fontSize: 18 },
-                color: filters.createdMonth ? "text.primary" : "text.disabled",
-                fontWeight: filters.createdMonth ? 600 : 400,
+                minWidth: 160,
+                "& .MuiOutlinedInput-root": {
+                  height: 28,
+                  borderRadius: 6,
+                  fontSize: "0.78rem",
+                  bgcolor: "background.paper",
+                  border: "none",
+                  boxShadow: (theme) => `0 1px 2px ${alpha(theme.palette.grey[400], 0.15)}`,
+                  "& fieldset": { border: "1px solid", borderColor: (theme) => alpha(theme.palette.grey[300], 0.7) },
+                  "&:hover fieldset": { borderColor: (theme) => alpha(theme.palette.primary.main, 0.3) },
+                  "&.Mui-focused fieldset": { borderColor: "primary.main", borderWidth: 1.5, boxShadow: (theme) => `0 0 0 2px ${alpha(theme.palette.primary.main, 0.1)}` },
+                },
+                "& input::placeholder": { fontSize: "0.75rem", opacity: 0.6 },
               }}
-            >
-              <MenuItem value="" sx={{ fontSize: "0.8rem" }}>All Months</MenuItem>
-              {["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"].map((m, i) => (
-                <MenuItem key={i + 1} value={String(i + 1)} sx={{ fontSize: "0.8rem" }}>{m}</MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-          {/* Year */}
-          <FormControl size="small" sx={{ minWidth: 68, "& .MuiOutlinedInput-root": { height: 28, borderRadius: 6, fontSize: "0.75rem", bgcolor: "background.paper", boxShadow: (theme) => `0 1px 2px ${alpha(theme.palette.grey[400], 0.15)}`, "& fieldset": { borderColor: (theme) => alpha(theme.palette.grey[300], 0.7) }, "&:hover fieldset": { borderColor: (theme) => alpha(theme.palette.primary.main, 0.3) } } }}>
-            <Select
-              value={filters.createdYear}
-              onChange={handleFilterChange("createdYear")}
-              displayEmpty
-              renderValue={(v) => v || "Year"}
+              InputProps={{
+                startAdornment: <SearchIcon sx={{ color: "action.active", mr: 0.5, fontSize: 15 }} />,
+              }}
+            />
+            <Divider orientation="vertical" flexItem sx={{ my: 0.5, borderColor: (theme) => alpha(theme.palette.grey[300], 0.6) }} />
+            {/* Email Search */}
+            <TextField
+              placeholder="Search by email..."
+              value={filters.emailSearch}
+              onChange={handleFilterChange("emailSearch")}
+              size="small"
               sx={{
-                "& .MuiSelect-select": { py: 0, pl: 1, pr: "24px !important", display: "flex", alignItems: "center" },
-                "& .MuiSelect-icon": { right: 2, fontSize: 18 },
-                color: filters.createdYear ? "text.primary" : "text.disabled",
-                fontWeight: filters.createdYear ? 600 : 400,
+                minWidth: 160,
+                "& .MuiOutlinedInput-root": {
+                  height: 28,
+                  borderRadius: 6,
+                  fontSize: "0.78rem",
+                  bgcolor: "background.paper",
+                  border: "none",
+                  boxShadow: (theme) => `0 1px 2px ${alpha(theme.palette.grey[400], 0.15)}`,
+                  "& fieldset": { border: "1px solid", borderColor: (theme) => alpha(theme.palette.grey[300], 0.7) },
+                  "&:hover fieldset": { borderColor: (theme) => alpha(theme.palette.primary.main, 0.3) },
+                  "&.Mui-focused fieldset": { borderColor: "primary.main", borderWidth: 1.5, boxShadow: (theme) => `0 0 0 2px ${alpha(theme.palette.primary.main, 0.1)}` },
+                },
+                "& input::placeholder": { fontSize: "0.75rem", opacity: 0.6 },
               }}
-            >
-              <MenuItem value="" sx={{ fontSize: "0.8rem" }}>All Years</MenuItem>
-              {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i).map((y) => (
-                <MenuItem key={y} value={String(y)} sx={{ fontSize: "0.8rem" }}>{y}</MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-          {/* Lead Types */}
-          <FormControl size="small" sx={{ minWidth: 90, "& .MuiOutlinedInput-root": { height: 28, borderRadius: 6, fontSize: "0.75rem", bgcolor: "background.paper", boxShadow: (theme) => `0 1px 2px ${alpha(theme.palette.grey[400], 0.15)}`, "& fieldset": { borderColor: (theme) => alpha(theme.palette.grey[300], 0.7) }, "&:hover fieldset": { borderColor: (theme) => alpha(theme.palette.primary.main, 0.3) } } }}>
-            <Select
-              multiple
-              value={filters.leadTypes}
-              onChange={(e) => {
-                const value = e.target.value;
-                setFilters((prev) => ({ ...prev, leadTypes: typeof value === "string" ? value.split(",") : value }));
-                setPage(0);
+              InputProps={{
+                startAdornment: <EmailSearchIcon sx={{ color: "action.active", mr: 0.5, fontSize: 15 }} />,
               }}
-              displayEmpty
-              renderValue={(selected) => {
-                if (!selected || selected.length === 0) return "Lead Type";
-                const labels = selected.map((v) => v.toUpperCase());
-                return labels.join(", ") + (filters.leadTypesOnly ? " only" : "");
-              }}
-              sx={{
-                "& .MuiSelect-select": { py: 0, pl: 1, pr: "24px !important", display: "flex", alignItems: "center", lineHeight: "28px", fontSize: "0.7rem" },
-                "& .MuiSelect-icon": { right: 2, fontSize: 18 },
-                color: filters.leadTypes.length > 0 ? "primary.main" : "text.disabled",
-                fontWeight: filters.leadTypes.length > 0 ? 600 : 400,
-              }}
-              MenuProps={{ PaperProps: { sx: { maxHeight: 280 } } }}
-            >
-              {["ftd", "filler", "cold"].map((type) => (
-                <MenuItem key={type} value={type} sx={{ fontSize: "0.8rem", py: 0.25 }}>
-                  <Checkbox checked={filters.leadTypes.includes(type)} size="small" sx={{ p: 0.25, mr: 0.5 }} />
-                  <ListItemText primary={type.toUpperCase()} primaryTypographyProps={{ fontSize: "0.8rem" }} />
-                </MenuItem>
-              ))}
-              <Divider sx={{ my: 0.5 }} />
-              <MenuItem
-                dense
-                sx={{ fontSize: "0.8rem", py: 0.25 }}
-                onClickCapture={(e) => {
-                  e.stopPropagation();
-                  e.preventDefault();
-                  setFilters((prev) => ({ ...prev, leadTypesOnly: !prev.leadTypesOnly }));
+            />
+            {/* Month */}
+            <FormControl size="small" sx={{ minWidth: 78, "& .MuiOutlinedInput-root": { height: 28, borderRadius: 6, fontSize: "0.75rem", bgcolor: "background.paper", boxShadow: (theme) => `0 1px 2px ${alpha(theme.palette.grey[400], 0.15)}`, "& fieldset": { borderColor: (theme) => alpha(theme.palette.grey[300], 0.7) }, "&:hover fieldset": { borderColor: (theme) => alpha(theme.palette.primary.main, 0.3) } } }}>
+              <Select
+                value={filters.createdMonth}
+                onChange={handleFilterChange("createdMonth")}
+                displayEmpty
+                renderValue={(v) => {
+                  if (!v) return "Month";
+                  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+                  return months[parseInt(v) - 1] || "Month";
+                }}
+                sx={{
+                  "& .MuiSelect-select": { py: 0, pl: 1, pr: "24px !important", display: "flex", alignItems: "center" },
+                  "& .MuiSelect-icon": { right: 2, fontSize: 18 },
+                  color: filters.createdMonth ? "text.primary" : "text.disabled",
+                  fontWeight: filters.createdMonth ? 600 : 400,
+                }}
+              >
+                <MenuItem value="" sx={{ fontSize: "0.8rem" }}>All Months</MenuItem>
+                {["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"].map((m, i) => (
+                  <MenuItem key={i + 1} value={String(i + 1)} sx={{ fontSize: "0.8rem" }}>{m}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            {/* Year */}
+            <FormControl size="small" sx={{ minWidth: 68, "& .MuiOutlinedInput-root": { height: 28, borderRadius: 6, fontSize: "0.75rem", bgcolor: "background.paper", boxShadow: (theme) => `0 1px 2px ${alpha(theme.palette.grey[400], 0.15)}`, "& fieldset": { borderColor: (theme) => alpha(theme.palette.grey[300], 0.7) }, "&:hover fieldset": { borderColor: (theme) => alpha(theme.palette.primary.main, 0.3) } } }}>
+              <Select
+                value={filters.createdYear}
+                onChange={handleFilterChange("createdYear")}
+                displayEmpty
+                renderValue={(v) => v || "Year"}
+                sx={{
+                  "& .MuiSelect-select": { py: 0, pl: 1, pr: "24px !important", display: "flex", alignItems: "center" },
+                  "& .MuiSelect-icon": { right: 2, fontSize: 18 },
+                  color: filters.createdYear ? "text.primary" : "text.disabled",
+                  fontWeight: filters.createdYear ? 600 : 400,
+                }}
+              >
+                <MenuItem value="" sx={{ fontSize: "0.8rem" }}>All Years</MenuItem>
+                {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i).map((y) => (
+                  <MenuItem key={y} value={String(y)} sx={{ fontSize: "0.8rem" }}>{y}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            {/* Lead Types */}
+            <FormControl size="small" sx={{ minWidth: 90, "& .MuiOutlinedInput-root": { height: 28, borderRadius: 6, fontSize: "0.75rem", bgcolor: "background.paper", boxShadow: (theme) => `0 1px 2px ${alpha(theme.palette.grey[400], 0.15)}`, "& fieldset": { borderColor: (theme) => alpha(theme.palette.grey[300], 0.7) }, "&:hover fieldset": { borderColor: (theme) => alpha(theme.palette.primary.main, 0.3) } } }}>
+              <Select
+                multiple
+                value={filters.leadTypes}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setFilters((prev) => ({ ...prev, leadTypes: typeof value === "string" ? value.split(",") : value }));
                   setPage(0);
                 }}
-              >
-                <Checkbox checked={filters.leadTypesOnly} size="small" sx={{ p: 0.25, mr: 0.5 }} />
-                <ListItemText
-                  primary="Only selected"
-                  primaryTypographyProps={{ fontSize: "0.75rem", fontStyle: "italic", color: filters.leadTypesOnly ? "primary.main" : "text.secondary" }}
-                />
-              </MenuItem>
-            </Select>
-          </FormControl>
-          {/* Clear filters */}
-          {activeFilterCount > 0 && (
-            <>
-              <Divider orientation="vertical" flexItem sx={{ my: 0.5, borderColor: (theme) => alpha(theme.palette.grey[300], 0.6) }} />
-              <Chip
-                label={`Clear (${activeFilterCount})`}
-                size="small"
-                onDelete={clearFilters}
-                deleteIcon={<FilterListOffIcon sx={{ fontSize: "14px !important" }} />}
-                onClick={clearFilters}
-                sx={{
-                  height: 24,
-                  fontSize: "0.7rem",
-                  fontWeight: 600,
-                  bgcolor: (theme) => alpha(theme.palette.error.main, 0.08),
-                  color: "error.dark",
-                  border: "1px solid",
-                  borderColor: (theme) => alpha(theme.palette.error.main, 0.2),
-                  "& .MuiChip-deleteIcon": { color: "error.main", "&:hover": { color: "error.dark" } },
-                  "&:hover": { bgcolor: (theme) => alpha(theme.palette.error.main, 0.14) },
+                displayEmpty
+                renderValue={(selected) => {
+                  if (!selected || selected.length === 0) return "Lead Type";
+                  const labels = selected.map((v) => v.toUpperCase());
+                  return labels.join(", ") + (filters.leadTypesOnly ? " only" : "");
                 }}
-              />
-            </>
-          )}
-          {/* Spacer */}
-          <Box sx={{ flex: 1 }} />
-          {/* Action buttons */}
-          {(user?.role === "admin" || user?.role === "affiliate_manager") && (
-            <Box sx={{ display: "flex", gap: 0.5, alignItems: "center" }}>
-              <Button
-                variant="contained"
-                size="small"
-                startIcon={<AddIcon sx={{ fontSize: "15px !important" }} />}
-                onClick={handleOpenCreateDialog}
                 sx={{
-                  height: 26,
-                  textTransform: "none",
-                  fontSize: "0.72rem",
-                  fontWeight: 600,
-                  borderRadius: 6,
-                  px: 1.25,
-                  boxShadow: "none",
-                  background: (theme) => `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`,
-                  "&:hover": { boxShadow: (theme) => `0 2px 6px ${alpha(theme.palette.primary.main, 0.35)}` },
+                  "& .MuiSelect-select": { py: 0, pl: 1, pr: "24px !important", display: "flex", alignItems: "center", lineHeight: "28px", fontSize: "0.7rem" },
+                  "& .MuiSelect-icon": { right: 2, fontSize: 18 },
+                  color: filters.leadTypes.length > 0 ? "primary.main" : "text.disabled",
+                  fontWeight: filters.leadTypes.length > 0 ? 600 : 400,
                 }}
+                MenuProps={{ PaperProps: { sx: { maxHeight: 280 } } }}
               >
-                New Order
-              </Button>
-              {user?.role === "admin" && (
-                <Tooltip title="Manage Brokers" arrow>
-                  <IconButton
-                    size="small"
-                    onClick={handleManageBrokers}
-                    sx={{
-                      width: 26,
-                      height: 26,
-                      borderRadius: 6,
-                      bgcolor: (theme) => alpha(theme.palette.primary.main, 0.08),
-                      color: "primary.main",
-                      "&:hover": { bgcolor: (theme) => alpha(theme.palette.primary.main, 0.16) },
-                    }}
-                  >
-                    <BusinessIcon sx={{ fontSize: 15 }} />
-                  </IconButton>
-                </Tooltip>
-              )}
-              <Tooltip title="Copy Format Settings" arrow>
-                <IconButton
-                  size="small"
-                  onClick={() => setCopyPreferencesOpen(true)}
-                  sx={{
-                    width: 26,
-                    height: 26,
-                    borderRadius: 6,
-                    bgcolor: (theme) => alpha(theme.palette.grey[500], 0.08),
-                    color: "text.secondary",
-                    "&:hover": { bgcolor: (theme) => alpha(theme.palette.grey[500], 0.16) },
+                {["ftd", "filler", "cold"].map((type) => (
+                  <MenuItem key={type} value={type} sx={{ fontSize: "0.8rem", py: 0.25 }}>
+                    <Checkbox checked={filters.leadTypes.includes(type)} size="small" sx={{ p: 0.25, mr: 0.5 }} />
+                    <ListItemText primary={type.toUpperCase()} primaryTypographyProps={{ fontSize: "0.8rem" }} />
+                  </MenuItem>
+                ))}
+                <Divider sx={{ my: 0.5 }} />
+                <MenuItem
+                  dense
+                  sx={{ fontSize: "0.8rem", py: 0.25 }}
+                  onClickCapture={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    setFilters((prev) => ({ ...prev, leadTypesOnly: !prev.leadTypesOnly }));
+                    setPage(0);
                   }}
                 >
-                  <SettingsIcon sx={{ fontSize: 15 }} />
-                </IconButton>
-              </Tooltip>
-            </Box>
-          )}
-          {!(user?.role === "admin" || user?.role === "affiliate_manager") && (
-            <Tooltip title="Copy Format Settings" arrow>
+                  <Checkbox checked={filters.leadTypesOnly} size="small" sx={{ p: 0.25, mr: 0.5 }} />
+                  <ListItemText
+                    primary="Only selected"
+                    primaryTypographyProps={{ fontSize: "0.75rem", fontStyle: "italic", color: filters.leadTypesOnly ? "primary.main" : "text.secondary" }}
+                  />
+                </MenuItem>
+              </Select>
+            </FormControl>
+            {/* Requester Filter (conditional) */}
+            {visibleFilters.includes("requester") && (user?.role === "admin" || user?.role === "lead_manager") && (
+              <FormControl size="small" sx={{ minWidth: 110, "& .MuiOutlinedInput-root": { height: 28, borderRadius: 6, fontSize: "0.75rem", bgcolor: "background.paper", boxShadow: (theme) => `0 1px 2px ${alpha(theme.palette.grey[400], 0.15)}`, "& fieldset": { borderColor: (theme) => alpha(theme.palette.grey[300], 0.7) }, "&:hover fieldset": { borderColor: (theme) => alpha(theme.palette.primary.main, 0.3) } } }}>
+                <Select
+                  multiple
+                  value={filters.requesters}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setFilters((prev) => ({ ...prev, requesters: typeof value === "string" ? value.split(",") : value }));
+                    setPage(0);
+                  }}
+                  displayEmpty
+                  renderValue={(selected) => {
+                    if (!selected || selected.length === 0) return "Requester";
+                    if (selected.length === 1) {
+                      const r = availableRequesters.find((req) => req._id === selected[0]);
+                      return r?.fullName || "1 selected";
+                    }
+                    return `${selected.length} selected`;
+                  }}
+                  sx={{
+                    "& .MuiSelect-select": { py: 0, pl: 1, pr: "24px !important", display: "flex", alignItems: "center", lineHeight: "28px", fontSize: "0.7rem" },
+                    "& .MuiSelect-icon": { right: 2, fontSize: 18 },
+                    color: filters.requesters.length > 0 ? "warning.main" : "text.disabled",
+                    fontWeight: filters.requesters.length > 0 ? 600 : 400,
+                  }}
+                  MenuProps={{ PaperProps: { sx: { maxHeight: 300 } } }}
+                >
+                  {availableRequesters.map((r) => (
+                    <MenuItem key={r._id} value={r._id} sx={{ fontSize: "0.8rem", py: 0.25 }}>
+                      <Checkbox checked={filters.requesters.includes(r._id)} size="small" sx={{ p: 0.25, mr: 0.5 }} />
+                      <ListItemText primary={r.fullName} primaryTypographyProps={{ fontSize: "0.8rem" }} />
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            )}
+            {/* Our Network Filter (conditional) */}
+            {visibleFilters.includes("ourNetwork") && (
+              <FormControl size="small" sx={{ minWidth: 100, "& .MuiOutlinedInput-root": { height: 28, borderRadius: 6, fontSize: "0.75rem", bgcolor: "background.paper", boxShadow: (theme) => `0 1px 2px ${alpha(theme.palette.grey[400], 0.15)}`, "& fieldset": { borderColor: (theme) => alpha(theme.palette.grey[300], 0.7) }, "&:hover fieldset": { borderColor: (theme) => alpha(theme.palette.primary.main, 0.3) } } }}>
+                <Select
+                  multiple
+                  value={filters.ourNetwork}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setFilters((prev) => ({ ...prev, ourNetwork: typeof value === "string" ? value.split(",") : value }));
+                    setPage(0);
+                  }}
+                  onClose={() => setFilterSearch((prev) => ({ ...prev, ourNetwork: "" }))}
+                  displayEmpty
+                  renderValue={(selected) => {
+                    if (!selected || selected.length === 0) return "ON";
+                    if (selected.length === 1) {
+                      const n = ourNetworks.find((net) => net._id === selected[0]);
+                      return n?.name || "1 selected";
+                    }
+                    return `${selected.length} ON`;
+                  }}
+                  sx={{
+                    "& .MuiSelect-select": { py: 0, pl: 1, pr: "24px !important", display: "flex", alignItems: "center", lineHeight: "28px", fontSize: "0.7rem" },
+                    "& .MuiSelect-icon": { right: 2, fontSize: 18 },
+                    color: filters.ourNetwork.length > 0 ? "primary.main" : "text.disabled",
+                    fontWeight: filters.ourNetwork.length > 0 ? 600 : 400,
+                  }}
+                  MenuProps={{ autoFocus: false, PaperProps: { sx: { maxHeight: 350 } } }}
+                >
+                  <ListSubheader sx={{ p: 0.5, lineHeight: "unset" }}>
+                    <TextField
+                      size="small"
+                      autoFocus
+                      placeholder="Search..."
+                      fullWidth
+                      value={filterSearch.ourNetwork}
+                      onChange={(e) => setFilterSearch((prev) => ({ ...prev, ourNetwork: e.target.value }))}
+                      onKeyDown={(e) => e.stopPropagation()}
+                      InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon sx={{ fontSize: 16 }} /></InputAdornment> }}
+                      sx={{ "& .MuiOutlinedInput-root": { height: 30, fontSize: "0.78rem" } }}
+                    />
+                  </ListSubheader>
+                  {ourNetworks.filter((n) => !filterSearch.ourNetwork || n.name.toLowerCase().includes(filterSearch.ourNetwork.toLowerCase())).map((n) => (
+                    <MenuItem key={n._id} value={n._id} sx={{ fontSize: "0.8rem", py: 0.25 }}>
+                      <Checkbox checked={filters.ourNetwork.includes(n._id)} size="small" sx={{ p: 0.25, mr: 0.5 }} />
+                      <ListItemText primary={n.name} primaryTypographyProps={{ fontSize: "0.8rem" }} />
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            )}
+            {/* Client Network Filter (conditional) */}
+            {visibleFilters.includes("clientNetwork") && (
+              <FormControl size="small" sx={{ minWidth: 100, "& .MuiOutlinedInput-root": { height: 28, borderRadius: 6, fontSize: "0.75rem", bgcolor: "background.paper", boxShadow: (theme) => `0 1px 2px ${alpha(theme.palette.grey[400], 0.15)}`, "& fieldset": { borderColor: (theme) => alpha(theme.palette.grey[300], 0.7) }, "&:hover fieldset": { borderColor: (theme) => alpha(theme.palette.primary.main, 0.3) } } }}>
+                <Select
+                  multiple
+                  value={filters.clientNetwork}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setFilters((prev) => ({ ...prev, clientNetwork: typeof value === "string" ? value.split(",") : value }));
+                    setPage(0);
+                  }}
+                  onClose={() => setFilterSearch((prev) => ({ ...prev, clientNetwork: "" }))}
+                  displayEmpty
+                  renderValue={(selected) => {
+                    if (!selected || selected.length === 0) return "CN";
+                    if (selected.length === 1) {
+                      const n = clientNetworks.find((net) => net._id === selected[0]);
+                      return n?.name || "1 selected";
+                    }
+                    return `${selected.length} CN`;
+                  }}
+                  sx={{
+                    "& .MuiSelect-select": { py: 0, pl: 1, pr: "24px !important", display: "flex", alignItems: "center", lineHeight: "28px", fontSize: "0.7rem" },
+                    "& .MuiSelect-icon": { right: 2, fontSize: 18 },
+                    color: filters.clientNetwork.length > 0 ? "primary.main" : "text.disabled",
+                    fontWeight: filters.clientNetwork.length > 0 ? 600 : 400,
+                  }}
+                  MenuProps={{ autoFocus: false, PaperProps: { sx: { maxHeight: 350 } } }}
+                >
+                  <ListSubheader sx={{ p: 0.5, lineHeight: "unset" }}>
+                    <TextField
+                      size="small"
+                      autoFocus
+                      placeholder="Search..."
+                      fullWidth
+                      value={filterSearch.clientNetwork}
+                      onChange={(e) => setFilterSearch((prev) => ({ ...prev, clientNetwork: e.target.value }))}
+                      onKeyDown={(e) => e.stopPropagation()}
+                      InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon sx={{ fontSize: 16 }} /></InputAdornment> }}
+                      sx={{ "& .MuiOutlinedInput-root": { height: 30, fontSize: "0.78rem" } }}
+                    />
+                  </ListSubheader>
+                  {clientNetworks.filter((n) => !filterSearch.clientNetwork || n.name.toLowerCase().includes(filterSearch.clientNetwork.toLowerCase())).map((n) => (
+                    <MenuItem key={n._id} value={n._id} sx={{ fontSize: "0.8rem", py: 0.25 }}>
+                      <Checkbox checked={filters.clientNetwork.includes(n._id)} size="small" sx={{ p: 0.25, mr: 0.5 }} />
+                      <ListItemText primary={n.name} primaryTypographyProps={{ fontSize: "0.8rem" }} />
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            )}
+            {/* GEO Filter (conditional) */}
+            {visibleFilters.includes("geo") && (
+              <FormControl size="small" sx={{ minWidth: 80, "& .MuiOutlinedInput-root": { height: 28, borderRadius: 6, fontSize: "0.75rem", bgcolor: "background.paper", boxShadow: (theme) => `0 1px 2px ${alpha(theme.palette.grey[400], 0.15)}`, "& fieldset": { borderColor: (theme) => alpha(theme.palette.grey[300], 0.7) }, "&:hover fieldset": { borderColor: (theme) => alpha(theme.palette.primary.main, 0.3) } } }}>
+                <Select
+                  multiple
+                  value={filters.geo}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setFilters((prev) => ({ ...prev, geo: typeof value === "string" ? value.split(",") : value }));
+                    setPage(0);
+                  }}
+                  onClose={() => setFilterSearch((prev) => ({ ...prev, geo: "" }))}
+                  displayEmpty
+                  renderValue={(selected) => {
+                    if (!selected || selected.length === 0) return "GEO";
+                    if (selected.length === 1) return selected[0];
+                    return `${selected.length} GEOs`;
+                  }}
+                  sx={{
+                    "& .MuiSelect-select": { py: 0, pl: 1, pr: "24px !important", display: "flex", alignItems: "center", lineHeight: "28px", fontSize: "0.7rem" },
+                    "& .MuiSelect-icon": { right: 2, fontSize: 18 },
+                    color: filters.geo.length > 0 ? "primary.main" : "text.disabled",
+                    fontWeight: filters.geo.length > 0 ? 600 : 400,
+                  }}
+                  MenuProps={{ autoFocus: false, PaperProps: { sx: { maxHeight: 350 } } }}
+                >
+                  <ListSubheader sx={{ p: 0.5, lineHeight: "unset" }}>
+                    <TextField
+                      size="small"
+                      autoFocus
+                      placeholder="Search..."
+                      fullWidth
+                      value={filterSearch.geo}
+                      onChange={(e) => setFilterSearch((prev) => ({ ...prev, geo: e.target.value }))}
+                      onKeyDown={(e) => e.stopPropagation()}
+                      InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon sx={{ fontSize: 16 }} /></InputAdornment> }}
+                      sx={{ "& .MuiOutlinedInput-root": { height: 30, fontSize: "0.78rem" } }}
+                    />
+                  </ListSubheader>
+                  {availableCountries.filter((c) => !filterSearch.geo || c.toLowerCase().includes(filterSearch.geo.toLowerCase())).map((country) => (
+                    <MenuItem key={country} value={country} sx={{ fontSize: "0.8rem", py: 0.25 }}>
+                      <Checkbox checked={filters.geo.includes(country)} size="small" sx={{ p: 0.25, mr: 0.5 }} />
+                      <ListItemText primary={country} primaryTypographyProps={{ fontSize: "0.8rem" }} />
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            )}
+            {/* Status Filter (conditional) */}
+            {visibleFilters.includes("status") && (
+              <FormControl size="small" sx={{ minWidth: 85, "& .MuiOutlinedInput-root": { height: 28, borderRadius: 6, fontSize: "0.75rem", bgcolor: "background.paper", boxShadow: (theme) => `0 1px 2px ${alpha(theme.palette.grey[400], 0.15)}`, "& fieldset": { borderColor: (theme) => alpha(theme.palette.grey[300], 0.7) }, "&:hover fieldset": { borderColor: (theme) => alpha(theme.palette.primary.main, 0.3) } } }}>
+                <Select
+                  multiple
+                  value={filters.status}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setFilters((prev) => ({ ...prev, status: typeof value === "string" ? value.split(",") : value }));
+                    setPage(0);
+                  }}
+                  displayEmpty
+                  renderValue={(selected) => {
+                    if (!selected || selected.length === 0) return "Status";
+                    if (selected.length === 1) return selected[0].charAt(0).toUpperCase() + selected[0].slice(1);
+                    return `${selected.length} statuses`;
+                  }}
+                  sx={{
+                    "& .MuiSelect-select": { py: 0, pl: 1, pr: "24px !important", display: "flex", alignItems: "center", lineHeight: "28px", fontSize: "0.7rem" },
+                    "& .MuiSelect-icon": { right: 2, fontSize: 18 },
+                    color: filters.status.length > 0 ? "primary.main" : "text.disabled",
+                    fontWeight: filters.status.length > 0 ? 600 : 400,
+                  }}
+                  MenuProps={{ PaperProps: { sx: { maxHeight: 280 } } }}
+                >
+                  {["pending", "fulfilled", "partial", "cancelled"].map((s) => (
+                    <MenuItem key={s} value={s} sx={{ fontSize: "0.8rem", py: 0.25 }}>
+                      <Checkbox checked={filters.status.includes(s)} size="small" sx={{ p: 0.25, mr: 0.5 }} />
+                      <ListItemText primary={s.charAt(0).toUpperCase() + s.slice(1)} primaryTypographyProps={{ fontSize: "0.8rem" }} />
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            )}
+            {/* Campaign Filter (conditional) */}
+            {visibleFilters.includes("campaign") && (
+              <FormControl size="small" sx={{ minWidth: 110, "& .MuiOutlinedInput-root": { height: 28, borderRadius: 6, fontSize: "0.75rem", bgcolor: "background.paper", boxShadow: (theme) => `0 1px 2px ${alpha(theme.palette.grey[400], 0.15)}`, "& fieldset": { borderColor: (theme) => alpha(theme.palette.grey[300], 0.7) }, "&:hover fieldset": { borderColor: (theme) => alpha(theme.palette.primary.main, 0.3) } } }}>
+                <Select
+                  multiple
+                  value={filters.campaign}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setFilters((prev) => ({ ...prev, campaign: typeof value === "string" ? value.split(",") : value }));
+                    setPage(0);
+                  }}
+                  onClose={() => setFilterSearch((prev) => ({ ...prev, campaign: "" }))}
+                  displayEmpty
+                  renderValue={(selected) => {
+                    if (!selected || selected.length === 0) return "Campaign";
+                    if (selected.length === 1) {
+                      const c = campaigns.find((camp) => camp._id === selected[0]);
+                      return c?.name || "1 selected";
+                    }
+                    return `${selected.length} campaigns`;
+                  }}
+                  sx={{
+                    "& .MuiSelect-select": { py: 0, pl: 1, pr: "24px !important", display: "flex", alignItems: "center", lineHeight: "28px", fontSize: "0.7rem" },
+                    "& .MuiSelect-icon": { right: 2, fontSize: 18 },
+                    color: filters.campaign.length > 0 ? "primary.main" : "text.disabled",
+                    fontWeight: filters.campaign.length > 0 ? 600 : 400,
+                  }}
+                  MenuProps={{ autoFocus: false, PaperProps: { sx: { maxHeight: 350 } } }}
+                >
+                  <ListSubheader sx={{ p: 0.5, lineHeight: "unset" }}>
+                    <TextField
+                      size="small"
+                      autoFocus
+                      placeholder="Search..."
+                      fullWidth
+                      value={filterSearch.campaign}
+                      onChange={(e) => setFilterSearch((prev) => ({ ...prev, campaign: e.target.value }))}
+                      onKeyDown={(e) => e.stopPropagation()}
+                      InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon sx={{ fontSize: 16 }} /></InputAdornment> }}
+                      sx={{ "& .MuiOutlinedInput-root": { height: 30, fontSize: "0.78rem" } }}
+                    />
+                  </ListSubheader>
+                  {campaigns.filter((c) => !filterSearch.campaign || c.name.toLowerCase().includes(filterSearch.campaign.toLowerCase())).map((c) => (
+                    <MenuItem key={c._id} value={c._id} sx={{ fontSize: "0.8rem", py: 0.25 }}>
+                      <Checkbox checked={filters.campaign.includes(c._id)} size="small" sx={{ p: 0.25, mr: 0.5 }} />
+                      <ListItemText primary={c.name} primaryTypographyProps={{ fontSize: "0.8rem" }} />
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            )}
+            {/* Clear filters */}
+            {activeFilterCount > 0 && (
+              <>
+                <Divider orientation="vertical" flexItem sx={{ my: 0.5, borderColor: (theme) => alpha(theme.palette.grey[300], 0.6) }} />
+                <Chip
+                  label={`Clear (${activeFilterCount})`}
+                  size="small"
+                  onDelete={clearFilters}
+                  deleteIcon={<FilterListOffIcon sx={{ fontSize: "14px !important" }} />}
+                  onClick={clearFilters}
+                  sx={{
+                    height: 24,
+                    fontSize: "0.7rem",
+                    fontWeight: 600,
+                    bgcolor: (theme) => alpha(theme.palette.error.main, 0.08),
+                    color: "error.dark",
+                    border: "1px solid",
+                    borderColor: (theme) => alpha(theme.palette.error.main, 0.2),
+                    "& .MuiChip-deleteIcon": { color: "error.main", "&:hover": { color: "error.dark" } },
+                    "&:hover": { bgcolor: (theme) => alpha(theme.palette.error.main, 0.14) },
+                  }}
+                />
+              </>
+            )}
+          </Box>
+          {/* Action buttons (fixed right) */}
+          <Box sx={{ display: "flex", gap: 0.5, alignItems: "center", flexShrink: 0 }}>
+            {(user?.role === "admin" || user?.role === "affiliate_manager") && (
+              <>
+                <Button
+                  variant="contained"
+                  size="small"
+                  startIcon={<AddIcon sx={{ fontSize: "15px !important" }} />}
+                  onClick={handleOpenCreateDialog}
+                  sx={{
+                    height: 26,
+                    textTransform: "none",
+                    fontSize: "0.72rem",
+                    fontWeight: 600,
+                    borderRadius: 6,
+                    px: 1.25,
+                    boxShadow: "none",
+                    background: (theme) => `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`,
+                    "&:hover": { boxShadow: (theme) => `0 2px 6px ${alpha(theme.palette.primary.main, 0.35)}` },
+                  }}
+                >
+                  New Order
+                </Button>
+                {user?.role === "admin" && (
+                  <Tooltip title="Manage Brokers" arrow>
+                    <IconButton
+                      size="small"
+                      onClick={handleManageBrokers}
+                      sx={{
+                        width: 26,
+                        height: 26,
+                        borderRadius: 6,
+                        bgcolor: (theme) => alpha(theme.palette.primary.main, 0.08),
+                        color: "primary.main",
+                        "&:hover": { bgcolor: (theme) => alpha(theme.palette.primary.main, 0.16) },
+                      }}
+                    >
+                      <BusinessIcon sx={{ fontSize: 15 }} />
+                    </IconButton>
+                  </Tooltip>
+                )}
+              </>
+            )}
+            <Tooltip title="Preferences" arrow>
               <IconButton
                 size="small"
                 onClick={() => setCopyPreferencesOpen(true)}
@@ -3393,7 +3687,7 @@ const OrdersPage = () => {
                 <SettingsIcon sx={{ fontSize: 15 }} />
               </IconButton>
             </Tooltip>
-          )}
+          </Box>
         </Box>
         <Box sx={{ display: "flex", flex: 1, minHeight: 0 }}>
           {/* Left side: Orders Table */}
@@ -3455,52 +3749,7 @@ const OrdersPage = () => {
                   Order ID
                 </TableCell>
                 <TableCell sx={{ display: { xs: "none", md: "table-cell" }, textAlign: "center", width: orderPanelId ? "11%" : "13%" }}>
-                  <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    Requester
-                    {(user?.role === "admin" || user?.role === "lead_manager") && (
-                      <IconButton
-                        size="small"
-                        onClick={(e) => setRequesterAnchor(e.currentTarget)}
-                        sx={{ p: 0, ml: 0.25 }}
-                      >
-                        <ArrowDropDownIcon sx={{ fontSize: 18, color: filters.requesters.length > 0 ? "warning.main" : "primary.main" }} />
-                      </IconButton>
-                    )}
-                  </Box>
-                  <Menu
-                    anchorEl={requesterAnchor}
-                    open={Boolean(requesterAnchor)}
-                    onClose={() => setRequesterAnchor(null)}
-                    PaperProps={{ sx: { maxHeight: 300, minWidth: 180 } }}
-                  >
-                    {filters.requesters.length > 0 && (
-                      <MenuItem
-                        dense
-                        onClick={() => { setFilters((prev) => ({ ...prev, requesters: [] })); setPage(0); setRequesterAnchor(null); }}
-                        sx={{ fontSize: "0.75rem", color: "error.main", fontStyle: "italic" }}
-                      >
-                        Clear filter
-                      </MenuItem>
-                    )}
-                    {availableRequesters.map((r) => (
-                      <MenuItem
-                        key={r._id}
-                        dense
-                        onClick={() => {
-                          setFilters((prev) => {
-                            const current = prev.requesters;
-                            const next = current.includes(r._id) ? current.filter((id) => id !== r._id) : [...current, r._id];
-                            return { ...prev, requesters: next };
-                          });
-                          setPage(0);
-                        }}
-                        sx={{ fontSize: "0.8rem", py: 0.25 }}
-                      >
-                        <Checkbox checked={filters.requesters.includes(r._id)} size="small" sx={{ p: 0.25, mr: 0.5 }} />
-                        <ListItemText primary={r.fullName} primaryTypographyProps={{ fontSize: "0.8rem" }} />
-                      </MenuItem>
-                    ))}
-                  </Menu>
+                  Requester
                 </TableCell>
                 <TableCell sx={{ display: { xs: "none", md: "table-cell" }, textAlign: "center", width: orderPanelId ? "8%" : "10%" }}>
                   CN
@@ -4311,6 +4560,13 @@ const OrdersPage = () => {
         onSave={() => {
           setNotification({
             message: "Copy preferences saved",
+            severity: "success",
+          });
+        }}
+        onFilterPrefsChange={(newFilters) => {
+          setVisibleFilters(newFilters);
+          setNotification({
+            message: "Filter preferences saved",
             severity: "success",
           });
         }}

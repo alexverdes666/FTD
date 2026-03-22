@@ -23,6 +23,11 @@ const useOrdersData = ({ user, searchParams, setSearchParams, setNotification })
       leadTypes: [],
       leadTypesOnly: false,
       requesters: [],
+      status: [],
+      geo: [],
+      ourNetwork: [],
+      clientNetwork: [],
+      campaign: [],
     };
   });
 
@@ -79,6 +84,36 @@ const useOrdersData = ({ user, searchParams, setSearchParams, setNotification })
         if (key === "requesters") {
           if (Array.isArray(value) && value.length > 0) {
             params.append("requesters", value.join(","));
+          }
+          return;
+        }
+        if (key === "status") {
+          if (Array.isArray(value) && value.length > 0) {
+            params.append("status", value.join(","));
+          }
+          return;
+        }
+        if (key === "geo") {
+          if (Array.isArray(value) && value.length > 0) {
+            params.append("countryFilter", value.join(","));
+          }
+          return;
+        }
+        if (key === "ourNetwork") {
+          if (Array.isArray(value) && value.length > 0) {
+            params.append("ourNetwork", value.join(","));
+          }
+          return;
+        }
+        if (key === "clientNetwork") {
+          if (Array.isArray(value) && value.length > 0) {
+            params.append("clientNetwork", value.join(","));
+          }
+          return;
+        }
+        if (key === "campaign") {
+          if (Array.isArray(value) && value.length > 0) {
+            params.append("campaign", value.join(","));
           }
           return;
         }
@@ -146,7 +181,7 @@ const useOrdersData = ({ user, searchParams, setSearchParams, setNotification })
   );
 
   const clearFilters = useCallback(() => {
-    setFilters({ search: "", emailSearch: "", startDate: "", endDate: "", createdMonth: "", createdYear: "", leadTypes: [], leadTypesOnly: false, requesters: [] });
+    setFilters({ search: "", emailSearch: "", startDate: "", endDate: "", createdMonth: "", createdYear: "", leadTypes: [], leadTypesOnly: false, requesters: [], status: [], geo: [], ourNetwork: [], clientNetwork: [], campaign: [] });
     setPage(0);
   }, []);
 
@@ -156,6 +191,11 @@ const useOrdersData = ({ user, searchParams, setSearchParams, setNotification })
       if (key === "leadTypes") return Array.isArray(value) && value.length > 0;
       if (key === "leadTypesOnly") return false; // counted with leadTypes
       if (key === "requesters") return Array.isArray(value) && value.length > 0;
+      if (key === "status") return Array.isArray(value) && value.length > 0;
+      if (key === "geo") return Array.isArray(value) && value.length > 0;
+      if (key === "ourNetwork") return Array.isArray(value) && value.length > 0;
+      if (key === "clientNetwork") return Array.isArray(value) && value.length > 0;
+      if (key === "campaign") return Array.isArray(value) && value.length > 0;
       return value !== "";
     }).length;
   }, [filters]);

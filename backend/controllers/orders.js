@@ -3286,7 +3286,7 @@ exports.getOrders = async (req, res, next) => {
         errors: errors.array(),
       });
     }
-    const { page = 1, limit = 10, startDate, endDate, search, emailSearch, createdMonth, createdYear, leadTypes, leadTypesOnly, requesters: requestersParam } = req.query;
+    const { page = 1, limit = 10, startDate, endDate, search, emailSearch, createdMonth, createdYear, leadTypes, leadTypesOnly, requesters: requestersParam, status: statusParam, countryFilter: countryFilterParam, ourNetwork: ourNetworkParam, clientNetwork: clientNetworkParam, campaign: campaignParam } = req.query;
     let query = {};
     // Admin and lead_manager can see all orders; others see only their own
     if (req.user.role !== "admin" && req.user.role !== "lead_manager") {
@@ -3297,6 +3297,41 @@ exports.getOrders = async (req, res, next) => {
       const requesterIds = requestersParam.split(",").map((id) => id.trim()).filter((id) => id.length > 0);
       if (requesterIds.length > 0) {
         query.requester = { $in: requesterIds };
+      }
+    }
+    // Status filter
+    if (statusParam && statusParam.trim()) {
+      const statuses = statusParam.split(",").map((s) => s.trim().toLowerCase()).filter((s) => s.length > 0);
+      if (statuses.length > 0) {
+        query.status = { $in: statuses };
+      }
+    }
+    // GEO (countryFilter) filter
+    if (countryFilterParam && countryFilterParam.trim()) {
+      const countries = countryFilterParam.split(",").map((c) => c.trim()).filter((c) => c.length > 0);
+      if (countries.length > 0) {
+        query.countryFilter = { $in: countries };
+      }
+    }
+    // Our Network filter
+    if (ourNetworkParam && ourNetworkParam.trim()) {
+      const networkIds = ourNetworkParam.split(",").map((id) => id.trim()).filter((id) => id.length > 0);
+      if (networkIds.length > 0) {
+        query.selectedOurNetwork = { $in: networkIds };
+      }
+    }
+    // Client Network filter
+    if (clientNetworkParam && clientNetworkParam.trim()) {
+      const networkIds = clientNetworkParam.split(",").map((id) => id.trim()).filter((id) => id.length > 0);
+      if (networkIds.length > 0) {
+        query.selectedClientNetwork = { $in: networkIds };
+      }
+    }
+    // Campaign filter
+    if (campaignParam && campaignParam.trim()) {
+      const campaignIds = campaignParam.split(",").map((id) => id.trim()).filter((id) => id.length > 0);
+      if (campaignIds.length > 0) {
+        query.selectedCampaign = { $in: campaignIds };
       }
     }
     if (startDate || endDate) {
@@ -8284,6 +8319,17 @@ exports.getOrderRequesters = async (req, res, next) => {
       .sort({ fullName: 1 })
       .lean();
     res.status(200).json({ success: true, data: requesters });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Get distinct countries from orders (for GEO filter dropdown)
+exports.getOrderCountries = async (req, res, next) => {
+  try {
+    const countries = await Order.distinct("countryFilter");
+    const filtered = countries.filter((c) => c && c !== "Any" && c !== "Mixed").sort();
+    res.status(200).json({ success: true, data: filtered });
   } catch (error) {
     next(error);
   }

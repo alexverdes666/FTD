@@ -145,6 +145,11 @@ const userSchema = new mongoose.Schema({
     depositCallsColumns: {
       type: [String],
       default: []
+    },
+    // Orders page visible filter bar filters
+    ordersFilterConfig: {
+      type: [String],
+      default: []
     }
   }
 }, {

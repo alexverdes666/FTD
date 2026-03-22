@@ -39,6 +39,10 @@ import {
   ICON_18_SX,
   ACTIONS_BOX_SX,
   DIVIDER_SX,
+  COPY_HOVER_BOX_SX,
+  COPY_CELL_HOVER_SX,
+  COPY_ICON_BTN_SX,
+  COPY_ICON_SX,
   getStatusChipSx,
   getPriorityChipSx,
 } from "./ordersUtils";
@@ -82,16 +86,24 @@ const OrderRow = React.memo(({
   return (
     <React.Fragment>
       <TableRow hover={!isSelected} sx={rowSx}>
-        <TableCell>
-          <Typography noWrap sx={ID_CELL_SX}>
-            {order._id.slice(-8)}
-          </Typography>
+        <TableCell sx={COPY_CELL_HOVER_SX}>
+          <Box sx={COPY_HOVER_BOX_SX}>
+            <Typography noWrap sx={ID_CELL_SX}>
+              {order._id.slice(-8)}
+            </Typography>
+            <IconButton className="copy-field-icon" size="small" onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(order._id.slice(-8)); }} title="Copy" sx={COPY_ICON_BTN_SX}>
+              <ContentCopyIcon sx={COPY_ICON_SX} />
+            </IconButton>
+          </Box>
         </TableCell>
-        <TableCell align="center" sx={ROW_CELL_HIDDEN_MD}>
+        <TableCell align="center" sx={{ ...ROW_CELL_HIDDEN_MD, ...COPY_CELL_HOVER_SX }}>
           <Box sx={REQUESTER_BOX_SX}>
             <Typography noWrap sx={REQUESTER_NAME_SX}>
               {order.requester?.fullName}
             </Typography>
+            <IconButton className="copy-field-icon" size="small" onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(order.requester?.fullName || ""); }} title="Copy" sx={COPY_ICON_BTN_SX}>
+              <ContentCopyIcon sx={COPY_ICON_SX} />
+            </IconButton>
             {user?.role === "admin" && (
               <IconButton
                 className="edit-requester-icon"
@@ -105,15 +117,25 @@ const OrderRow = React.memo(({
             )}
           </Box>
         </TableCell>
-        <TableCell align="center" sx={ROW_CELL_HIDDEN_MD}>
-          <Typography noWrap sx={CELL_FONT_SMALL}>
-            {order.selectedClientNetwork?.name || "-"}
-          </Typography>
+        <TableCell align="center" sx={{ ...ROW_CELL_HIDDEN_MD, ...COPY_CELL_HOVER_SX }}>
+          <Box sx={COPY_HOVER_BOX_SX}>
+            <Typography noWrap sx={CELL_FONT_SMALL}>
+              {order.selectedClientNetwork?.name || "-"}
+            </Typography>
+            <IconButton className="copy-field-icon" size="small" onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(order.selectedClientNetwork?.name || ""); }} title="Copy" sx={COPY_ICON_BTN_SX}>
+              <ContentCopyIcon sx={COPY_ICON_SX} />
+            </IconButton>
+          </Box>
         </TableCell>
-        <TableCell align="center" sx={ROW_CELL_HIDDEN_MD}>
-          <Typography noWrap sx={CELL_FONT_SMALL}>
-            {order.selectedOurNetwork?.name || "-"}
-          </Typography>
+        <TableCell align="center" sx={{ ...ROW_CELL_HIDDEN_MD, ...COPY_CELL_HOVER_SX }}>
+          <Box sx={COPY_HOVER_BOX_SX}>
+            <Typography noWrap sx={CELL_FONT_SMALL}>
+              {order.selectedOurNetwork?.name || "-"}
+            </Typography>
+            <IconButton className="copy-field-icon" size="small" onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(order.selectedOurNetwork?.name || ""); }} title="Copy" sx={COPY_ICON_BTN_SX}>
+              <ContentCopyIcon sx={COPY_ICON_SX} />
+            </IconButton>
+          </Box>
         </TableCell>
         <TableCell align="center">
           <Box sx={FULFILLMENT_BOX_SX}>
@@ -134,20 +156,30 @@ const OrderRow = React.memo(({
             })}
           </Box>
         </TableCell>
-        <TableCell align="center">
-          <Tooltip title={statusTooltip} placement="top" arrow componentsProps={TOOLTIP_WIDE_SX}>
-            <Chip
-              label={order.status}
-              variant="outlined"
-              size="small"
-              sx={{ ...CHIP_BASE_SX, ...getStatusChipSx(order.status) }}
-            />
-          </Tooltip>
+        <TableCell align="center" sx={COPY_CELL_HOVER_SX}>
+          <Box sx={COPY_HOVER_BOX_SX}>
+            <Tooltip title={statusTooltip} placement="top" arrow componentsProps={TOOLTIP_WIDE_SX}>
+              <Chip
+                label={order.status}
+                variant="outlined"
+                size="small"
+                sx={{ ...CHIP_BASE_SX, ...getStatusChipSx(order.status) }}
+              />
+            </Tooltip>
+            <IconButton className="copy-field-icon" size="small" onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(order.status); }} title="Copy" sx={COPY_ICON_BTN_SX}>
+              <ContentCopyIcon sx={COPY_ICON_SX} />
+            </IconButton>
+          </Box>
         </TableCell>
-        <TableCell align="center" sx={ROW_CELL_HIDDEN_SM}>
-          <Typography noWrap sx={CELL_FONT_SMALL}>
-            {order.countryFilter || "Any"}
-          </Typography>
+        <TableCell align="center" sx={{ ...ROW_CELL_HIDDEN_SM, ...COPY_CELL_HOVER_SX }}>
+          <Box sx={COPY_HOVER_BOX_SX}>
+            <Typography noWrap sx={CELL_FONT_SMALL}>
+              {order.countryFilter || "Any"}
+            </Typography>
+            <IconButton className="copy-field-icon" size="small" onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(order.countryFilter || "Any"); }} title="Copy" sx={COPY_ICON_BTN_SX}>
+              <ContentCopyIcon sx={COPY_ICON_SX} />
+            </IconButton>
+          </Box>
         </TableCell>
         <TableCell align="center" sx={ROW_CELL_HIDDEN_SM}>
           <Chip
@@ -157,10 +189,15 @@ const OrderRow = React.memo(({
             sx={{ ...CHIP_BASE_SX, ...getPriorityChipSx(order.priority) }}
           />
         </TableCell>
-        <TableCell align="center" sx={ROW_CELL_HIDDEN_SM}>
-          <Typography noWrap sx={CELL_FONT_SMALL}>
-            {order.plannedDate ? new Date(order.plannedDate).toLocaleDateString() : "N/A"}
-          </Typography>
+        <TableCell align="center" sx={{ ...ROW_CELL_HIDDEN_SM, ...COPY_CELL_HOVER_SX }}>
+          <Box sx={COPY_HOVER_BOX_SX}>
+            <Typography noWrap sx={CELL_FONT_SMALL}>
+              {order.plannedDate ? new Date(order.plannedDate).toLocaleDateString() : "N/A"}
+            </Typography>
+            <IconButton className="copy-field-icon" size="small" onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(order.plannedDate ? new Date(order.plannedDate).toLocaleDateString() : "N/A"); }} title="Copy" sx={COPY_ICON_BTN_SX}>
+              <ContentCopyIcon sx={COPY_ICON_SX} />
+            </IconButton>
+          </Box>
         </TableCell>
         <TableCell align="right">
           <Box sx={ACTIONS_BOX_SX}>

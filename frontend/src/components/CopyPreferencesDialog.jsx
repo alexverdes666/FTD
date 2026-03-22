@@ -16,6 +16,10 @@ import {
   Tooltip,
   Alert,
   CircularProgress,
+  Tabs,
+  Tab,
+  Switch,
+  alpha,
 } from "@mui/material";
 import {
   Close as CloseIcon,
@@ -23,6 +27,7 @@ import {
   Settings as SettingsIcon,
   ContentCopy as CopyIcon,
   RestartAlt as ResetIcon,
+  FilterList as FilterListIcon,
 } from "@mui/icons-material";
 import { Reorder, useDragControls } from "framer-motion";
 import api from "../services/api";
@@ -84,6 +89,70 @@ const DEFAULT_CONFIG = {
 };
 
 const STORAGE_KEY = "ordersCopyPreferences";
+const FILTER_PREFS_KEY = "ordersFilterPreferences";
+
+// Available filter options for the filter bar
+const AVAILABLE_FILTERS = [
+  { id: "requester", label: "Requester" },
+  { id: "ourNetwork", label: "Our Network" },
+  { id: "clientNetwork", label: "Client Network" },
+  { id: "geo", label: "GEO" },
+  { id: "status", label: "Status" },
+  { id: "campaign", label: "Campaign" },
+];
+
+const DEFAULT_FILTER_PREFS = [];
+
+// Load filter preferences from localStorage (cache/fallback)
+const loadFilterPrefsFromLocalStorage = () => {
+  try {
+    const stored = localStorage.getItem(FILTER_PREFS_KEY);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (err) {
+    console.error("Failed to load filter preferences from localStorage:", err);
+  }
+  return DEFAULT_FILTER_PREFS;
+};
+
+const saveFilterPrefsToLocalStorage = (enabledFilters) => {
+  try {
+    localStorage.setItem(FILTER_PREFS_KEY, JSON.stringify(enabledFilters));
+  } catch (err) {
+    console.error("Failed to save filter preferences to localStorage:", err);
+  }
+};
+
+// Sync version for initial load (uses cached localStorage)
+export const loadFilterPreferences = () => {
+  return loadFilterPrefsFromLocalStorage();
+};
+
+// Async version that fetches from API and caches to localStorage
+export const loadFilterPreferencesAsync = async () => {
+  try {
+    const response = await api.get("/users/preferences/orders-filters");
+    if (response.data.success && Array.isArray(response.data.data)) {
+      saveFilterPrefsToLocalStorage(response.data.data);
+      return response.data.data;
+    }
+  } catch (err) {
+    // Silent fail, fallback to localStorage
+  }
+  return loadFilterPrefsFromLocalStorage();
+};
+
+export const saveFilterPreferences = async (enabledFilters) => {
+  saveFilterPrefsToLocalStorage(enabledFilters);
+  try {
+    await api.put("/users/preferences/orders-filters", { filters: enabledFilters });
+    return true;
+  } catch (err) {
+    return false;
+  }
+};
 
 // Load preferences from localStorage (cache/fallback)
 const loadFromLocalStorage = () => {
@@ -219,11 +288,15 @@ const DraggableFieldItem = ({ field, isEnabled, onToggle }) => {
   );
 };
 
-const CopyPreferencesDialog = ({ open, onClose, onSave }) => {
+const CopyPreferencesDialog = ({ open, onClose, onSave, onFilterPrefsChange }) => {
+  const [activeTab, setActiveTab] = useState(0);
   const [fields, setFields] = useState([]);
   const [enabledFields, setEnabledFields] = useState(new Set());
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  // Filter preferences state
+  const [enabledFilters, setEnabledFilters] = useState([]);
 
   // Initialize from API
   useEffect(() => {
@@ -240,6 +313,7 @@ const CopyPreferencesDialog = ({ open, onClose, onSave }) => {
         }
       };
       fetchPreferences();
+      loadFilterPreferencesAsync().then((f) => setEnabledFilters(f));
     }
   }, [open]);
 
@@ -289,46 +363,74 @@ const CopyPreferencesDialog = ({ open, onClose, onSave }) => {
     setFields(updatedFields);
   };
 
+  // Handle toggling a filter preference
+  const handleFilterToggle = (filterId) => {
+    setEnabledFilters((prev) => {
+      if (prev.includes(filterId)) {
+        return prev.filter((id) => id !== filterId);
+      }
+      return [...prev, filterId];
+    });
+  };
+
   // Handle save
   const handleSave = async () => {
-    // Get enabled fields in order
-    const orderedEnabledFields = fields
-      .filter((f) => enabledFields.has(f.id))
-      .sort((a, b) => a.order - b.order)
-      .map((f) => f.id);
+    if (activeTab === 0) {
+      // Save copy preferences
+      const orderedEnabledFields = fields
+        .filter((f) => enabledFields.has(f.id))
+        .sort((a, b) => a.order - b.order)
+        .map((f) => f.id);
 
-    const config = {
-      fields: orderedEnabledFields,
-      separator: "\t",
-    };
+      const config = {
+        fields: orderedEnabledFields,
+        separator: "\t",
+      };
 
-    setSaving(true);
-    try {
-      await saveCopyPreferences(config);
-      onSave?.(config);
-      onClose();
-    } catch (err) {
-      console.error("Failed to save preferences:", err);
-    } finally {
-      setSaving(false);
+      setSaving(true);
+      try {
+        await saveCopyPreferences(config);
+        onSave?.(config);
+        onClose();
+      } catch (err) {
+        console.error("Failed to save preferences:", err);
+      } finally {
+        setSaving(false);
+      }
+    } else {
+      // Save filter preferences
+      setSaving(true);
+      try {
+        await saveFilterPreferences(enabledFilters);
+        onFilterPrefsChange?.(enabledFilters);
+        onClose();
+      } catch (err) {
+        console.error("Failed to save filter preferences:", err);
+      } finally {
+        setSaving(false);
+      }
     }
   };
 
   // Handle reset to defaults
   const handleReset = () => {
-    const orderedFields = DEFAULT_CONFIG.fields.map((fieldId, index) => ({
-      id: fieldId,
-      order: index,
-    }));
+    if (activeTab === 0) {
+      const orderedFields = DEFAULT_CONFIG.fields.map((fieldId, index) => ({
+        id: fieldId,
+        order: index,
+      }));
 
-    AVAILABLE_FIELDS.forEach((field) => {
-      if (!DEFAULT_CONFIG.fields.includes(field.id)) {
-        orderedFields.push({ id: field.id, order: orderedFields.length });
-      }
-    });
+      AVAILABLE_FIELDS.forEach((field) => {
+        if (!DEFAULT_CONFIG.fields.includes(field.id)) {
+          orderedFields.push({ id: field.id, order: orderedFields.length });
+        }
+      });
 
-    setFields(orderedFields);
-    setEnabledFields(new Set(DEFAULT_CONFIG.fields));
+      setFields(orderedFields);
+      setEnabledFields(new Set(DEFAULT_CONFIG.fields));
+    } else {
+      setEnabledFilters([]);
+    }
   };
 
   // Get preview of copy format
@@ -346,7 +448,7 @@ const CopyPreferencesDialog = ({ open, onClose, onSave }) => {
         const fieldInfo = AVAILABLE_FIELDS.find((fi) => fi.id === f.id);
         return `[${fieldInfo?.label || f.id}]`;
       })
-      .join(" → ");
+      .join(" \u2192 ");
   };
 
   return (
@@ -359,7 +461,7 @@ const CopyPreferencesDialog = ({ open, onClose, onSave }) => {
         sx: { maxHeight: "85vh" },
       }}
     >
-      <DialogTitle>
+      <DialogTitle sx={{ pb: 0 }}>
         <Box
           sx={{
             display: "flex",
@@ -369,82 +471,129 @@ const CopyPreferencesDialog = ({ open, onClose, onSave }) => {
         >
           <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
             <SettingsIcon color="primary" />
-            <Typography variant="h6">Copy Preferences</Typography>
+            <Typography variant="h6">Preferences</Typography>
           </Box>
           <IconButton onClick={onClose} size="small">
             <CloseIcon />
           </IconButton>
         </Box>
+        <Tabs
+          value={activeTab}
+          onChange={(_, v) => setActiveTab(v)}
+          sx={{ mt: 1, minHeight: 36, "& .MuiTab-root": { minHeight: 36, py: 0.5, textTransform: "none", fontSize: "0.85rem" } }}
+        >
+          <Tab icon={<CopyIcon sx={{ fontSize: 16 }} />} iconPosition="start" label="Copy Preferences" />
+          <Tab icon={<FilterListIcon sx={{ fontSize: 16 }} />} iconPosition="start" label="Filter Preferences" />
+        </Tabs>
       </DialogTitle>
 
       <DialogContent dividers>
-        {loading ? (
-          <Box
-            sx={{
-              display: "flex",
-              justifyContent: "center",
-              alignItems: "center",
-              py: 6,
-            }}
-          >
-            <CircularProgress />
-          </Box>
-        ) : (
+        {activeTab === 0 && (
           <>
-            <Alert severity="info" sx={{ mb: 2 }}>
-              Select and drag fields to customize what gets copied. Fields are
-              copied in order, separated by tabs (for easy pasting into
-              spreadsheets).
-            </Alert>
-
-            {/* Preview */}
-            <Paper
-              variant="outlined"
-              sx={{
-                p: 2,
-                mb: 2,
-                bgcolor: "grey.50",
-                borderRadius: 1,
-              }}
-            >
-              <Typography variant="caption" color="text.secondary" gutterBottom>
-                Copy Format Preview:
-              </Typography>
-              <Typography
-                variant="body2"
+            {loading ? (
+              <Box
                 sx={{
-                  fontFamily: "monospace",
-                  wordBreak: "break-word",
-                  color:
-                    enabledFields.size > 0 ? "text.primary" : "text.secondary",
+                  display: "flex",
+                  justifyContent: "center",
+                  alignItems: "center",
+                  py: 6,
                 }}
               >
-                {getPreview()}
-              </Typography>
-            </Paper>
+                <CircularProgress />
+              </Box>
+            ) : (
+              <>
+                <Alert severity="info" sx={{ mb: 2 }}>
+                  Select and drag fields to customize what gets copied. Fields are
+                  copied in order, separated by tabs (for easy pasting into
+                  spreadsheets).
+                </Alert>
 
-            <Divider sx={{ mb: 2 }} />
+                {/* Preview */}
+                <Paper
+                  variant="outlined"
+                  sx={{
+                    p: 2,
+                    mb: 2,
+                    bgcolor: "grey.50",
+                    borderRadius: 1,
+                  }}
+                >
+                  <Typography variant="caption" color="text.secondary" gutterBottom>
+                    Copy Format Preview:
+                  </Typography>
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      fontFamily: "monospace",
+                      wordBreak: "break-word",
+                      color:
+                        enabledFields.size > 0 ? "text.primary" : "text.secondary",
+                    }}
+                  >
+                    {getPreview()}
+                  </Typography>
+                </Paper>
 
-            <Typography variant="subtitle2" gutterBottom>
-              Available Fields (drag to reorder, check to include)
-            </Typography>
+                <Divider sx={{ mb: 2 }} />
 
-            {/* Draggable list */}
-            <Reorder.Group
-              axis="y"
-              values={fields}
-              onReorder={handleReorder}
-              style={{ padding: 0, margin: 0 }}
-            >
-              {fields.map((field) => (
-                <DraggableFieldItem
-                  key={field.id}
-                  field={field}
-                  isEnabled={enabledFields.has(field.id)}
-                  onToggle={handleToggle}
+                <Typography variant="subtitle2" gutterBottom>
+                  Available Fields (drag to reorder, check to include)
+                </Typography>
+
+                {/* Draggable list */}
+                <Reorder.Group
+                  axis="y"
+                  values={fields}
+                  onReorder={handleReorder}
+                  style={{ padding: 0, margin: 0 }}
+                >
+                  {fields.map((field) => (
+                    <DraggableFieldItem
+                      key={field.id}
+                      field={field}
+                      isEnabled={enabledFields.has(field.id)}
+                      onToggle={handleToggle}
+                    />
+                  ))}
+                </Reorder.Group>
+              </>
+            )}
+          </>
+        )}
+
+        {activeTab === 1 && (
+          <>
+            <Alert severity="info" sx={{ mb: 2 }}>
+              Choose which filter dropdowns appear in the orders filter bar.
+            </Alert>
+
+            {AVAILABLE_FILTERS.map((filter) => (
+              <Paper
+                key={filter.id}
+                elevation={1}
+                sx={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  p: 1.5,
+                  mb: 1,
+                  borderRadius: 1,
+                  bgcolor: enabledFilters.includes(filter.id) ? "background.paper" : "action.disabledBackground",
+                  opacity: enabledFilters.includes(filter.id) ? 1 : 0.7,
+                  transition: "all 0.2s",
+                }}
+              >
+                <Typography variant="body2" fontWeight={500}>
+                  {filter.label}
+                </Typography>
+                <Switch
+                  checked={enabledFilters.includes(filter.id)}
+                  onChange={() => handleFilterToggle(filter.id)}
+                  size="small"
                 />
-              ))}
-            </Reorder.Group>
+              </Paper>
+            ))}
           </>
         )}
       </DialogContent>
@@ -470,11 +619,13 @@ const CopyPreferencesDialog = ({ open, onClose, onSave }) => {
           startIcon={
             saving ? (
               <CircularProgress size={18} color="inherit" />
-            ) : (
+            ) : activeTab === 0 ? (
               <CopyIcon />
+            ) : (
+              <FilterListIcon />
             )
           }
-          disabled={enabledFields.size === 0 || loading || saving}
+          disabled={(activeTab === 0 && (enabledFields.size === 0 || loading)) || saving}
         >
           {saving ? "Saving..." : "Save Preferences"}
         </Button>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { lazy, Suspense, useState, useEffect, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
   Box,
@@ -34,12 +34,30 @@ import {
   Hub as NetworkIcon,
   Business as BrokerIcon,
   Add as AddIcon,
+  Lan as OurNetworkIcon,
+  Campaign as CampaignIcon,
+  Payment as PSPIcon,
+  CreditCard as CardIssuerIcon,
 } from "@mui/icons-material";
 import { useForm, Controller } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
 import * as yup from "yup";
 import api from "../services/api";
 import toast from "react-hot-toast";
+
+// Lazy-loaded standalone pages (new)
+const ClientNetworksPageNew = lazy(() => import("./ClientNetworksPage.jsx"));
+const ClientBrokersPageNew = lazy(() => import("./ClientBrokersPage.jsx"));
+const OurNetworksPage = lazy(() => import("./OurNetworksPage.jsx"));
+const CampaignsPage = lazy(() => import("./CampaignsPage.jsx"));
+const ClientPSPsPage = lazy(() => import("./ClientPSPsPage.jsx"));
+const CardIssuersPage = lazy(() => import("./CardIssuersPage.jsx"));
+
+const tabFallback = (
+  <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", py: 6 }}>
+    <CircularProgress size={28} />
+  </Box>
+);
 
 const brokerSchema = yup.object({
   name: yup.string().required("Name is required").max(100, "Name must be less than 100 characters"),
@@ -88,44 +106,43 @@ const compactTableSx = {
   },
 };
 
-const CrmPage = () => {
+// ─── Old inline CRM views ───────────────────────────────────────────────────
+
+const OldClientNetworksTab = () => {
   const navigate = useNavigate();
-  const location = useLocation();
-  const [tab, setTab] = useState(location.state?.tab ?? 0);
   const [search, setSearch] = useState("");
   const [openDialog, setOpenDialog] = useState(false);
   const [creating, setCreating] = useState(false);
-
-  // Network dialog state (matches ReferenceSelector design)
   const [newNetworkName, setNewNetworkName] = useState("");
   const [newNetworkDescription, setNewNetworkDescription] = useState("");
   const [employees, setEmployees] = useState([]);
   const [empName, setEmpName] = useState("");
   const [empTelegram, setEmpTelegram] = useState("");
   const [empPosition, setEmpPosition] = useState("");
-
-  const brokerForm = useForm({
-    resolver: yupResolver(brokerSchema),
-    defaultValues: { name: "", domain: "", description: "" },
+  const [networks, setNetworks] = useState([]);
+  const [networksLoading, setNetworksLoading] = useState(false);
+  const [networksPagination, setNetworksPagination] = useState({
+    current: 1,
+    pages: 1,
+    total: 0,
+    limit: 50,
+  });
+  const [networkStats, setNetworkStats] = useState({
+    networkStats: {},
+    commentStats: {},
   });
 
   const handleOpenDialog = () => {
-    if (tab === 0) {
-      setNewNetworkName("");
-      setNewNetworkDescription("");
-      setEmployees([]);
-      setEmpName("");
-      setEmpTelegram("");
-      setEmpPosition("");
-    } else {
-      brokerForm.reset({ name: "", domain: "", description: "" });
-    }
+    setNewNetworkName("");
+    setNewNetworkDescription("");
+    setEmployees([]);
+    setEmpName("");
+    setEmpTelegram("");
+    setEmpPosition("");
     setOpenDialog(true);
   };
 
-  const handleCloseDialog = () => {
-    setOpenDialog(false);
-  };
+  const handleCloseDialog = () => setOpenDialog(false);
 
   const handleAddEmployee = () => {
     if (!empName.trim() || !empPosition) return;
@@ -181,41 +198,6 @@ const CrmPage = () => {
     }
   };
 
-  const onBrokerSubmit = async (data) => {
-    try {
-      await api.post("/client-brokers", data);
-      toast.success("Broker created successfully");
-      handleCloseDialog();
-      fetchBrokers(1);
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to create broker");
-    }
-  };
-
-  // Client Networks state
-  const [networks, setNetworks] = useState([]);
-  const [networksLoading, setNetworksLoading] = useState(false);
-  const [networksPagination, setNetworksPagination] = useState({
-    current: 1,
-    pages: 1,
-    total: 0,
-    limit: 50,
-  });
-  const [networkStats, setNetworkStats] = useState({
-    networkStats: {},
-    commentStats: {},
-  });
-
-  // Client Brokers state
-  const [brokers, setBrokers] = useState([]);
-  const [brokersLoading, setBrokersLoading] = useState(false);
-  const [brokersPagination, setBrokersPagination] = useState({
-    current: 1,
-    pages: 1,
-    total: 0,
-    limit: 50,
-  });
-
   const fetchNetworks = useCallback(
     async (page = 1) => {
       try {
@@ -243,291 +225,165 @@ const CrmPage = () => {
     }
   }, []);
 
-  const fetchBrokers = useCallback(
-    async (page = 1) => {
-      try {
-        setBrokersLoading(true);
-        const response = await api.get("/client-brokers", {
-          params: { page, limit: 50, search: search || undefined },
-        });
-        setBrokers(response.data.data);
-        setBrokersPagination({
-          current: response.data.pagination.page,
-          pages: response.data.pagination.pages,
-          total: response.data.pagination.total,
-          limit: response.data.pagination.limit,
-        });
-      } catch (error) {
-        toast.error("Failed to load client brokers");
-      } finally {
-        setBrokersLoading(false);
-      }
-    },
-    [search]
-  );
-
   useEffect(() => {
-    if (tab === 0) {
-      fetchNetworks();
-      fetchNetworkStats();
-    } else {
-      fetchBrokers();
-      fetchNetworkStats();
-    }
-  }, [tab, fetchNetworks, fetchBrokers, fetchNetworkStats]);
+    fetchNetworks();
+    fetchNetworkStats();
+  }, [fetchNetworks, fetchNetworkStats]);
 
   const handleSearchKeyDown = (e) => {
     if (e.key === "Enter") {
-      if (tab === 0) {
-        fetchNetworks(1);
-        fetchNetworkStats();
-      } else {
-        fetchBrokers(1);
-      }
+      fetchNetworks(1);
+      fetchNetworkStats();
     }
   };
 
-  const getNetworkDealsCount = (networkId) => {
-    return networkStats.networkStats?.[networkId]?.ordersCount || 0;
-  };
+  const getNetworkDealsCount = (networkId) =>
+    networkStats.networkStats?.[networkId]?.ordersCount || 0;
 
-  const getNetworkUnresolvedComments = (networkId) => {
-    return networkStats.commentStats?.[networkId] || 0;
-  };
+  const getNetworkUnresolvedComments = (networkId) =>
+    networkStats.commentStats?.[networkId] || 0;
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
       <Paper sx={{ px: 2, py: 0.5, mb: 1, flexShrink: 0 }}>
-        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <Tabs value={tab} onChange={(e, v) => setTab(v)} sx={{ minHeight: 36, "& .MuiTab-root": { minHeight: 36, py: 0.3, fontSize: "0.8rem" } }}>
-            <Tab icon={<NetworkIcon sx={{ fontSize: 16 }} />} iconPosition="start" label="Client Networks" />
-            <Tab icon={<BrokerIcon sx={{ fontSize: 16 }} />} iconPosition="start" label="Client Brokers" />
-          </Tabs>
-          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-            <TextField
-              size="small"
-              placeholder="Search..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              onKeyDown={handleSearchKeyDown}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <SearchIcon sx={{ fontSize: 16 }} />
-                  </InputAdornment>
-                ),
-              }}
-              sx={{ width: 220, "& .MuiInputBase-root": { height: 30, fontSize: "0.8rem", borderRadius: "20px" } }}
-            />
-            <IconButton
-              size="small"
-              color="primary"
-              onClick={handleOpenDialog}
-              sx={{
-                width: 30,
-                height: 30,
-                bgcolor: "primary.main",
-                color: "#fff",
-                "&:hover": { bgcolor: "primary.dark" },
-              }}
-            >
-              <AddIcon sx={{ fontSize: 18 }} />
-            </IconButton>
-          </Box>
+        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 1 }}>
+          <TextField
+            size="small"
+            placeholder="Search..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={handleSearchKeyDown}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon sx={{ fontSize: 16 }} />
+                </InputAdornment>
+              ),
+            }}
+            sx={{ width: 220, "& .MuiInputBase-root": { height: 30, fontSize: "0.8rem", borderRadius: "20px" } }}
+          />
+          <IconButton
+            size="small"
+            color="primary"
+            onClick={handleOpenDialog}
+            sx={{
+              width: 30, height: 30,
+              bgcolor: "primary.main", color: "#fff",
+              "&:hover": { bgcolor: "primary.dark" },
+            }}
+          >
+            <AddIcon sx={{ fontSize: 18 }} />
+          </IconButton>
         </Box>
       </Paper>
 
-      {/* Client Networks Tab */}
-      {tab === 0 && (
-        <Paper sx={{ borderRadius: 2, border: 1, borderColor: "divider", boxShadow: "0 1px 3px rgba(0,0,0,0.08)", overflow: "hidden", flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
-          <TableContainer sx={{ flex: 1, overflow: "auto" }}>
-            <Table size="small" stickyHeader sx={compactTableSx}>
-              <TableHead>
+      <Paper sx={{ borderRadius: 2, border: 1, borderColor: "divider", boxShadow: "0 1px 3px rgba(0,0,0,0.08)", overflow: "hidden", flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
+        <TableContainer sx={{ flex: 1, overflow: "auto" }}>
+          <Table size="small" stickyHeader sx={compactTableSx}>
+            <TableHead>
+              <TableRow>
+                <TableCell sx={{ width: "26%" }}>Name</TableCell>
+                <TableCell sx={{ textAlign: "center", width: "9%" }}>Status</TableCell>
+                <TableCell sx={{ textAlign: "center", width: "10%" }}>Deal Type</TableCell>
+                <TableCell sx={{ textAlign: "center", width: "11%" }}>Employees</TableCell>
+                <TableCell sx={{ textAlign: "center", width: "11%" }}>Brokers</TableCell>
+                <TableCell sx={{ textAlign: "center", width: "11%" }}>CRM Deals</TableCell>
+                <TableCell sx={{ textAlign: "center", width: "11%" }}>Open Comments</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {networksLoading ? (
                 <TableRow>
-                  <TableCell sx={{ width: "26%" }}>Name</TableCell>
-                  <TableCell sx={{ textAlign: "center", width: "9%" }}>Status</TableCell>
-                  <TableCell sx={{ textAlign: "center", width: "10%" }}>Deal Type</TableCell>
-                  <TableCell sx={{ textAlign: "center", width: "11%" }}>Employees</TableCell>
-                  <TableCell sx={{ textAlign: "center", width: "11%" }}>Brokers</TableCell>
-                  <TableCell sx={{ textAlign: "center", width: "11%" }}>CRM Deals</TableCell>
-                  <TableCell sx={{ textAlign: "center", width: "11%" }}>Open Comments</TableCell>
+                  <TableCell colSpan={7} align="center" sx={{ py: 3 }}>
+                    <CircularProgress size={22} />
+                  </TableCell>
                 </TableRow>
-              </TableHead>
-              <TableBody>
-                {networksLoading ? (
-                  <TableRow>
-                    <TableCell colSpan={7} align="center" sx={{ py: 3 }}>
-                      <CircularProgress size={22} />
-                    </TableCell>
-                  </TableRow>
-                ) : networks.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={7} align="center" sx={{ py: 3 }}>
-                      <Typography variant="caption" color="text.secondary">
-                        No client networks found
+              ) : networks.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={7} align="center" sx={{ py: 3 }}>
+                    <Typography variant="caption" color="text.secondary">
+                      No client networks found
+                    </Typography>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                networks.map((network) => (
+                  <TableRow
+                    key={network._id}
+                    hover
+                    sx={{ cursor: "pointer", height: 32 }}
+                    onClick={() => navigate(`/client-network/${network._id}`)}
+                  >
+                    <TableCell>
+                      <Typography noWrap sx={{ fontWeight: 500, fontSize: "0.78rem" }}>
+                        {network.name}
                       </Typography>
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  networks.map((network) => (
-                    <TableRow
-                      key={network._id}
-                      hover
-                      sx={{ cursor: "pointer", height: 32 }}
-                      onClick={() => navigate(`/client-network/${network._id}`)}
-                    >
-                      <TableCell>
-                        <Typography noWrap sx={{ fontWeight: 500, fontSize: "0.78rem" }}>
-                          {network.name}
+                      {network.description && (
+                        <Typography noWrap sx={{ fontSize: "0.65rem", color: "text.secondary" }}>
+                          {network.description}
                         </Typography>
-                        {network.description && (
-                          <Typography noWrap sx={{ fontSize: "0.65rem", color: "text.secondary" }}>
-                            {network.description}
-                          </Typography>
-                        )}
-                      </TableCell>
-                      <TableCell sx={{ textAlign: "center" }}>
+                      )}
+                    </TableCell>
+                    <TableCell sx={{ textAlign: "center" }}>
+                      <Chip
+                        label={network.isActive ? "Active" : "Inactive"}
+                        color={network.isActive ? "success" : "default"}
+                        size="small"
+                      />
+                    </TableCell>
+                    <TableCell sx={{ textAlign: "center" }}>
+                      {network.dealType ? (
                         <Chip
-                          label={network.isActive ? "Active" : "Inactive"}
-                          color={network.isActive ? "success" : "default"}
+                          label={network.dealType === "both" ? "Both" : network.dealType === "buy" ? "Buy" : "Sell"}
+                          color={network.dealType === "buy" ? "success" : network.dealType === "sell" ? "error" : "info"}
+                          size="small"
+                          variant="outlined"
+                        />
+                      ) : (
+                        <Typography sx={{ fontSize: "0.75rem", color: "text.disabled" }}>-</Typography>
+                      )}
+                    </TableCell>
+                    <TableCell sx={{ textAlign: "center" }}>
+                      {network.employees?.length || 0}
+                    </TableCell>
+                    <TableCell sx={{ textAlign: "center" }}>
+                      {networkStats.networkStats?.[network._id]?.brokerCount || 0}
+                    </TableCell>
+                    <TableCell sx={{ textAlign: "center" }}>
+                      {getNetworkDealsCount(network._id)}
+                    </TableCell>
+                    <TableCell sx={{ textAlign: "center" }}>
+                      {getNetworkUnresolvedComments(network._id) > 0 ? (
+                        <Chip
+                          label={getNetworkUnresolvedComments(network._id)}
+                          color="warning"
                           size="small"
                         />
-                      </TableCell>
-                      <TableCell sx={{ textAlign: "center" }}>
-                        {network.dealType ? (
-                          <Chip
-                            label={network.dealType === "both" ? "Both" : network.dealType === "buy" ? "Buy" : "Sell"}
-                            color={network.dealType === "buy" ? "success" : network.dealType === "sell" ? "error" : "info"}
-                            size="small"
-                            variant="outlined"
-                          />
-                        ) : (
-                          <Typography sx={{ fontSize: "0.75rem", color: "text.disabled" }}>-</Typography>
-                        )}
-                      </TableCell>
-                      <TableCell sx={{ textAlign: "center" }}>
-                        {network.employees?.length || 0}
-                      </TableCell>
-                      <TableCell sx={{ textAlign: "center" }}>
-                        {networkStats.networkStats?.[network._id]?.brokerCount || 0}
-                      </TableCell>
-                      <TableCell sx={{ textAlign: "center" }}>
-                        {getNetworkDealsCount(network._id)}
-                      </TableCell>
-                      <TableCell sx={{ textAlign: "center" }}>
-                        {getNetworkUnresolvedComments(network._id) > 0 ? (
-                          <Chip
-                            label={getNetworkUnresolvedComments(network._id)}
-                            color="warning"
-                            size="small"
-                          />
-                        ) : (
-                          <Typography sx={{ fontSize: "0.75rem", color: "text.disabled" }}>0</Typography>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
-          {networksPagination.total > 0 && (
-            <TablePagination
-              component="div"
-              count={networksPagination.total}
-              page={networksPagination.current - 1}
-              onPageChange={(e, p) => fetchNetworks(p + 1)}
-              rowsPerPage={networksPagination.limit}
-              rowsPerPageOptions={[networksPagination.limit]}
-              sx={{ flexShrink: 0, borderTop: 1, borderColor: "divider", "& .MuiTablePagination-toolbar": { minHeight: 36 }, "& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows": { fontSize: "0.75rem" } }}
-            />
-          )}
-        </Paper>
-      )}
+                      ) : (
+                        <Typography sx={{ fontSize: "0.75rem", color: "text.disabled" }}>0</Typography>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
+        {networksPagination.total > 0 && (
+          <TablePagination
+            component="div"
+            count={networksPagination.total}
+            page={networksPagination.current - 1}
+            onPageChange={(e, p) => fetchNetworks(p + 1)}
+            rowsPerPage={networksPagination.limit}
+            rowsPerPageOptions={[networksPagination.limit]}
+            sx={{ flexShrink: 0, borderTop: 1, borderColor: "divider", "& .MuiTablePagination-toolbar": { minHeight: 36 }, "& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows": { fontSize: "0.75rem" } }}
+          />
+        )}
+      </Paper>
 
-      {/* Client Brokers Tab */}
-      {tab === 1 && (
-        <Paper sx={{ borderRadius: 2, border: 1, borderColor: "divider", boxShadow: "0 1px 3px rgba(0,0,0,0.08)", overflow: "hidden", flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
-          <TableContainer sx={{ flex: 1, overflow: "auto" }}>
-            <Table size="small" stickyHeader sx={compactTableSx}>
-              <TableHead>
-                <TableRow>
-                  <TableCell sx={{ width: "30%" }}>Name</TableCell>
-                  <TableCell sx={{ width: "25%" }}>Domain</TableCell>
-                  <TableCell sx={{ textAlign: "center", width: "15%" }}>Status</TableCell>
-                  <TableCell sx={{ textAlign: "center", width: "15%" }}>PSPs</TableCell>
-                  <TableCell sx={{ textAlign: "center", width: "15%" }}>Total Leads</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {brokersLoading ? (
-                  <TableRow>
-                    <TableCell colSpan={5} align="center" sx={{ py: 3 }}>
-                      <CircularProgress size={22} />
-                    </TableCell>
-                  </TableRow>
-                ) : brokers.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={5} align="center" sx={{ py: 3 }}>
-                      <Typography variant="caption" color="text.secondary">
-                        No client brokers found
-                      </Typography>
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  brokers.map((broker) => (
-                    <TableRow
-                      key={broker._id}
-                      hover
-                      sx={{ cursor: "pointer", height: 32 }}
-                      onClick={() => navigate(`/client-broker/${broker._id}`)}
-                    >
-                      <TableCell>
-                        <Typography noWrap sx={{ fontWeight: 500, fontSize: "0.78rem" }}>
-                          {broker.name}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Typography noWrap sx={{ fontSize: "0.75rem", color: "text.secondary" }}>
-                          {broker.domain && !broker.domain.startsWith("autogen-")
-                            ? broker.domain
-                            : "-"}
-                        </Typography>
-                      </TableCell>
-                      <TableCell sx={{ textAlign: "center" }}>
-                        <Chip
-                          label={broker.isActive ? "Active" : "Inactive"}
-                          color={broker.isActive ? "success" : "default"}
-                          size="small"
-                        />
-                      </TableCell>
-                      <TableCell sx={{ textAlign: "center" }}>
-                        {networkStats.brokerStats?.[broker._id]?.pspCount || 0}
-                      </TableCell>
-                      <TableCell sx={{ textAlign: "center" }}>
-                        {networkStats.brokerStats?.[broker._id]?.totalLeads || 0}
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
-          {brokersPagination.total > 0 && (
-            <TablePagination
-              component="div"
-              count={brokersPagination.total}
-              page={brokersPagination.current - 1}
-              onPageChange={(e, p) => fetchBrokers(p + 1)}
-              rowsPerPage={brokersPagination.limit}
-              rowsPerPageOptions={[brokersPagination.limit]}
-              sx={{ flexShrink: 0, borderTop: 1, borderColor: "divider", "& .MuiTablePagination-toolbar": { minHeight: 36 }, "& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows": { fontSize: "0.75rem" } }}
-            />
-          )}
-        </Paper>
-      )}
       {/* Add Network Dialog */}
-      <Dialog open={openDialog && tab === 0} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
+      <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
         <DialogTitle>Add Client Network</DialogTitle>
         <DialogContent>
           <Box sx={{ display: "flex", flexDirection: "column", gap: 2, pt: 1 }}>
@@ -551,7 +407,6 @@ const CrmPage = () => {
               inputProps={{ maxLength: 500 }}
             />
 
-            {/* Employees Section */}
             <Divider sx={{ my: 0.5 }} />
             <Typography variant="subtitle2" color="text.secondary">
               Employees (optional)
@@ -638,9 +493,207 @@ const CrmPage = () => {
           </Button>
         </DialogActions>
       </Dialog>
+    </Box>
+  );
+};
+
+const OldClientBrokersTab = () => {
+  const navigate = useNavigate();
+  const [search, setSearch] = useState("");
+  const [openDialog, setOpenDialog] = useState(false);
+  const [brokers, setBrokers] = useState([]);
+  const [brokersLoading, setBrokersLoading] = useState(false);
+  const [brokersPagination, setBrokersPagination] = useState({
+    current: 1,
+    pages: 1,
+    total: 0,
+    limit: 50,
+  });
+  const [networkStats, setNetworkStats] = useState({
+    brokerStats: {},
+  });
+
+  const brokerForm = useForm({
+    resolver: yupResolver(brokerSchema),
+    defaultValues: { name: "", domain: "", description: "" },
+  });
+
+  const handleOpenDialog = () => {
+    brokerForm.reset({ name: "", domain: "", description: "" });
+    setOpenDialog(true);
+  };
+
+  const handleCloseDialog = () => setOpenDialog(false);
+
+  const onBrokerSubmit = async (data) => {
+    try {
+      await api.post("/client-brokers", data);
+      toast.success("Broker created successfully");
+      handleCloseDialog();
+      fetchBrokers(1);
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to create broker");
+    }
+  };
+
+  const fetchBrokers = useCallback(
+    async (page = 1) => {
+      try {
+        setBrokersLoading(true);
+        const response = await api.get("/client-brokers", {
+          params: { page, limit: 50, search: search || undefined },
+        });
+        setBrokers(response.data.data);
+        setBrokersPagination({
+          current: response.data.pagination.page,
+          pages: response.data.pagination.pages,
+          total: response.data.pagination.total,
+          limit: response.data.pagination.limit,
+        });
+      } catch (error) {
+        toast.error("Failed to load client brokers");
+      } finally {
+        setBrokersLoading(false);
+      }
+    },
+    [search]
+  );
+
+  const fetchNetworkStats = useCallback(async () => {
+    try {
+      const response = await api.get("/crm-deals/dashboard-stats");
+      setNetworkStats(response.data.data);
+    } catch (error) {
+      console.error("Failed to load CRM stats", error);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchBrokers();
+    fetchNetworkStats();
+  }, [fetchBrokers, fetchNetworkStats]);
+
+  const handleSearchKeyDown = (e) => {
+    if (e.key === "Enter") {
+      fetchBrokers(1);
+    }
+  };
+
+  return (
+    <Box sx={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
+      <Paper sx={{ px: 2, py: 0.5, mb: 1, flexShrink: 0 }}>
+        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 1 }}>
+          <TextField
+            size="small"
+            placeholder="Search..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={handleSearchKeyDown}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon sx={{ fontSize: 16 }} />
+                </InputAdornment>
+              ),
+            }}
+            sx={{ width: 220, "& .MuiInputBase-root": { height: 30, fontSize: "0.8rem", borderRadius: "20px" } }}
+          />
+          <IconButton
+            size="small"
+            color="primary"
+            onClick={handleOpenDialog}
+            sx={{
+              width: 30, height: 30,
+              bgcolor: "primary.main", color: "#fff",
+              "&:hover": { bgcolor: "primary.dark" },
+            }}
+          >
+            <AddIcon sx={{ fontSize: 18 }} />
+          </IconButton>
+        </Box>
+      </Paper>
+
+      <Paper sx={{ borderRadius: 2, border: 1, borderColor: "divider", boxShadow: "0 1px 3px rgba(0,0,0,0.08)", overflow: "hidden", flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
+        <TableContainer sx={{ flex: 1, overflow: "auto" }}>
+          <Table size="small" stickyHeader sx={compactTableSx}>
+            <TableHead>
+              <TableRow>
+                <TableCell sx={{ width: "30%" }}>Name</TableCell>
+                <TableCell sx={{ width: "25%" }}>Domain</TableCell>
+                <TableCell sx={{ textAlign: "center", width: "15%" }}>Status</TableCell>
+                <TableCell sx={{ textAlign: "center", width: "15%" }}>PSPs</TableCell>
+                <TableCell sx={{ textAlign: "center", width: "15%" }}>Total Leads</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {brokersLoading ? (
+                <TableRow>
+                  <TableCell colSpan={5} align="center" sx={{ py: 3 }}>
+                    <CircularProgress size={22} />
+                  </TableCell>
+                </TableRow>
+              ) : brokers.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} align="center" sx={{ py: 3 }}>
+                    <Typography variant="caption" color="text.secondary">
+                      No client brokers found
+                    </Typography>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                brokers.map((broker) => (
+                  <TableRow
+                    key={broker._id}
+                    hover
+                    sx={{ cursor: "pointer", height: 32 }}
+                    onClick={() => navigate(`/client-broker/${broker._id}`)}
+                  >
+                    <TableCell>
+                      <Typography noWrap sx={{ fontWeight: 500, fontSize: "0.78rem" }}>
+                        {broker.name}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>
+                      <Typography noWrap sx={{ fontSize: "0.75rem", color: "text.secondary" }}>
+                        {broker.domain && !broker.domain.startsWith("autogen-")
+                          ? broker.domain
+                          : "-"}
+                      </Typography>
+                    </TableCell>
+                    <TableCell sx={{ textAlign: "center" }}>
+                      <Chip
+                        label={broker.isActive ? "Active" : "Inactive"}
+                        color={broker.isActive ? "success" : "default"}
+                        size="small"
+                      />
+                    </TableCell>
+                    <TableCell sx={{ textAlign: "center" }}>
+                      {networkStats.brokerStats?.[broker._id]?.pspCount || 0}
+                    </TableCell>
+                    <TableCell sx={{ textAlign: "center" }}>
+                      {networkStats.brokerStats?.[broker._id]?.totalLeads || 0}
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
+        {brokersPagination.total > 0 && (
+          <TablePagination
+            component="div"
+            count={brokersPagination.total}
+            page={brokersPagination.current - 1}
+            onPageChange={(e, p) => fetchBrokers(p + 1)}
+            rowsPerPage={brokersPagination.limit}
+            rowsPerPageOptions={[brokersPagination.limit]}
+            sx={{ flexShrink: 0, borderTop: 1, borderColor: "divider", "& .MuiTablePagination-toolbar": { minHeight: 36 }, "& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows": { fontSize: "0.75rem" } }}
+          />
+        )}
+      </Paper>
 
       {/* Add Broker Dialog */}
-      <Dialog open={openDialog && tab === 1} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
+      <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
         <form onSubmit={brokerForm.handleSubmit(onBrokerSubmit)}>
           <DialogTitle>Add Client Broker</DialogTitle>
           <DialogContent>
@@ -696,6 +749,60 @@ const CrmPage = () => {
           </DialogActions>
         </form>
       </Dialog>
+    </Box>
+  );
+};
+
+// ─── Tab config ──────────────────────────────────────────────────────────────
+
+const tabs = [
+  { label: "Client Networks (old)", icon: <NetworkIcon sx={{ fontSize: 16 }} /> },
+  { label: "Client Brokers (old)", icon: <BrokerIcon sx={{ fontSize: 16 }} /> },
+  { label: "Our Networks", icon: <OurNetworkIcon sx={{ fontSize: 16 }} /> },
+  { label: "Client Networks (new)", icon: <NetworkIcon sx={{ fontSize: 16 }} /> },
+  { label: "Client Brokers (new)", icon: <BrokerIcon sx={{ fontSize: 16 }} /> },
+  { label: "Campaigns", icon: <CampaignIcon sx={{ fontSize: 16 }} /> },
+  { label: "PSPs", icon: <PSPIcon sx={{ fontSize: 16 }} /> },
+  { label: "Card Issuers", icon: <CardIssuerIcon sx={{ fontSize: 16 }} /> },
+];
+
+// ─── Main CRM Page ──────────────────────────────────────────────────────────
+
+const CrmPage = () => {
+  const location = useLocation();
+  const [tab, setTab] = useState(location.state?.tab ?? 0);
+
+  return (
+    <Box sx={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
+      <Paper sx={{ px: 2, py: 0.5, mb: 1, flexShrink: 0 }}>
+        <Tabs
+          value={tab}
+          onChange={(e, v) => setTab(v)}
+          variant="scrollable"
+          scrollButtons="auto"
+          sx={{
+            minHeight: 36,
+            "& .MuiTab-root": { minHeight: 36, py: 0.3, fontSize: "0.8rem", minWidth: "auto", px: 1.5 },
+          }}
+        >
+          {tabs.map((t, i) => (
+            <Tab key={i} icon={t.icon} iconPosition="start" label={t.label} />
+          ))}
+        </Tabs>
+      </Paper>
+
+      <Box sx={{ flex: 1, minHeight: 0, overflow: "auto" }}>
+        {tab === 0 && <OldClientNetworksTab />}
+        {tab === 1 && <OldClientBrokersTab />}
+        <Suspense fallback={tabFallback}>
+          {tab === 2 && <OurNetworksPage />}
+          {tab === 3 && <ClientNetworksPageNew />}
+          {tab === 4 && <ClientBrokersPageNew />}
+          {tab === 5 && <CampaignsPage />}
+          {tab === 6 && <ClientPSPsPage />}
+          {tab === 7 && <CardIssuersPage />}
+        </Suspense>
+      </Box>
     </Box>
   );
 };

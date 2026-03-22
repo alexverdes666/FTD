@@ -310,44 +310,6 @@ const MainLayout = () => {
           ],
         },
         {
-          text: "Networks",
-          icon: <NetworkIcon />,
-          isExpandable: true,
-          key: "networks",
-          children: [
-            {
-              text: "Client Nets",
-              icon: <NetworkIcon />,
-              path: "/client-networks",
-            },
-            {
-              text: "Our Nets",
-              icon: <NetworkIcon />,
-              path: "/our-networks",
-            },
-            {
-              text: "Brokers",
-              icon: <BusinessIcon />,
-              path: "/client-brokers",
-            },
-            {
-              text: "PSPs",
-              icon: <PSPIcon />,
-              path: "/client-psps",
-            },
-            {
-              text: "Issuers",
-              icon: <CardIssuerIcon />,
-              path: "/card-issuers",
-            },
-            {
-              text: "Campaigns",
-              icon: <CampaignIcon />,
-              path: "/campaigns",
-            },
-          ],
-        },
-        {
           text: "Payroll",
           icon: <PaymentIcon />,
           isExpandable: true,
@@ -461,7 +423,6 @@ const MainLayout = () => {
         ...commonItems,
         { text: "Orders", icon: <OrdersIcon />, path: "/orders" },
         { text: "Leads", icon: <LeadsIcon />, path: "/leads" },
-        { text: "Our Nets", icon: <NetworkIcon />, path: "/our-networks" },
         { text: "CRM", icon: <CrmIcon />, path: "/crm" },
         { text: "My Table", icon: <TableIcon />, path: "/my-table" },
         { text: "Targets", icon: <TargetIcon />, path: "/am-targets" },
