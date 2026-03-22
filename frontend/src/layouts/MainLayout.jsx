@@ -18,6 +18,8 @@ import {
   Divider,
   useTheme,
   useMediaQuery,
+  Tooltip,
+  Chip,
 } from "@mui/material";
 import {
   Menu as MenuIcon,
@@ -59,6 +61,8 @@ import {
   Gavel as GavelIcon,
   Vaccines as InjectionIcon,
   AccountBalance as FinanceIcon,
+  ChevronLeft as ChevronLeftIcon,
+  ChevronRight as ChevronRightIcon,
 } from "@mui/icons-material";
 import {
   logout,
@@ -84,12 +88,18 @@ import QRCodeLogin from "../components/QRCodeLogin";
 import { Reorder, useDragControls } from "framer-motion";
 import debounce from "lodash.debounce";
 import { loadNavOrder, saveNavOrder, applyNavOrder, loadNavOrderFromCache, clearNavOrderCache } from "../utils/sidebarNavOrder";
-const drawerWidth = 150;
 
-const SidebarNavItem = ({ item, isSelected, iconColor, primaryColor, onNavigate }) => {
+const SIDEBAR_WIDTH_EXPANDED = 280;
+const SIDEBAR_WIDTH_COLLAPSED = 72;
+const HEADER_HEIGHT = 64;
+const ACCENT_COLOR = "#f57c00";
+
+const SIDEBAR_BG = "linear-gradient(180deg, #1e3a5f 0%, #152d4a 100%)";
+
+const SidebarNavItem = ({ item, isSelected, onNavigate, collapsed }) => {
   const dragControls = useDragControls();
 
-  return (
+  const navItemContent = (
     <Reorder.Item
       value={item}
       dragListener={false}
@@ -101,31 +111,37 @@ const SidebarNavItem = ({ item, isSelected, iconColor, primaryColor, onNavigate 
         onClick={() => onNavigate(item.path)}
         selected={isSelected}
         sx={{
-          py: 0.4,
-          px: 1,
-          minHeight: 32,
-          width: "100%",
+          py: 1,
+          px: collapsed ? 0 : 2,
+          mx: collapsed ? 0 : 1,
+          my: 0.3,
+          minHeight: 44,
+          width: collapsed ? "100%" : "calc(100% - 16px)",
           boxSizing: "border-box",
+          borderRadius: collapsed ? 0 : "10px",
+          justifyContent: collapsed ? "center" : "flex-start",
+          borderLeft: isSelected ? `3px solid ${ACCENT_COLOR}` : "3px solid transparent",
+          transition: "all 0.2s ease",
+          "&:hover": {
+            backgroundColor: "rgba(255, 255, 255, 0.08)",
+          },
           "&.Mui-selected": {
-            backgroundColor: primaryColor + "20",
-            borderRight: `3px solid ${primaryColor}`,
-            "& .MuiListItemIcon-root": {
-              color: primaryColor,
-            },
-            "& .MuiListItemText-primary": {
-              color: primaryColor,
-              fontWeight: 600,
+            backgroundColor: "rgba(255, 255, 255, 0.15)",
+            "&:hover": {
+              backgroundColor: "rgba(255, 255, 255, 0.18)",
             },
           },
         }}
       >
         <ListItemIcon
           sx={{
-            color: isSelected ? primaryColor : iconColor,
-            minWidth: 28,
+            color: isSelected ? "#fff" : "rgba(255, 255, 255, 0.7)",
+            minWidth: collapsed ? 0 : 36,
+            justifyContent: "center",
             cursor: "grab",
             "&:active": { cursor: "grabbing" },
-            "& .MuiSvgIcon-root": { fontSize: 18 },
+            "& .MuiSvgIcon-root": { fontSize: 22 },
+            transition: "color 0.2s ease",
           }}
           onPointerDown={(e) => {
             e.preventDefault();
@@ -134,17 +150,46 @@ const SidebarNavItem = ({ item, isSelected, iconColor, primaryColor, onNavigate 
         >
           {item.icon}
         </ListItemIcon>
-        <ListItemText primary={item.text} sx={{ flex: 1, minWidth: 0 }} primaryTypographyProps={{ fontSize: 13, noWrap: true }} />
+        {!collapsed && (
+          <ListItemText
+            primary={item.text}
+            sx={{ flex: 1, minWidth: 0, ml: 0.5 }}
+            primaryTypographyProps={{
+              fontSize: 14,
+              fontWeight: isSelected ? 600 : 500,
+              noWrap: true,
+              color: isSelected ? "#fff" : "rgba(255, 255, 255, 0.85)",
+              sx: { transition: "color 0.2s ease" },
+            }}
+          />
+        )}
       </ListItem>
     </Reorder.Item>
   );
+
+  if (collapsed) {
+    return (
+      <Tooltip title={item.text} placement="right" arrow>
+        {navItemContent}
+      </Tooltip>
+    );
+  }
+
+  return navItemContent;
 };
 
 const MainLayout = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [desktopOpen, setDesktopOpen] = useState(true);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try {
+      const stored = localStorage.getItem("sidebarCollapsed");
+      return stored === "true";
+    } catch {
+      return false;
+    }
+  });
   const [anchorEl, setAnchorEl] = useState(null);
   const [quickSwitcherOpen, setQuickSwitcherOpen] = useState(false);
   const [navOrder, setNavOrder] = useState(() => loadNavOrderFromCache());
@@ -157,6 +202,9 @@ const MainLayout = () => {
   const [show2FADialog, setShow2FADialog] = useState(false);
   const [showQRDialog, setShowQRDialog] = useState(false);
   const [twoFactorError, setTwoFactorError] = useState('');
+
+  const currentSidebarWidth = isMobile ? SIDEBAR_WIDTH_EXPANDED : (sidebarCollapsed ? SIDEBAR_WIDTH_COLLAPSED : SIDEBAR_WIDTH_EXPANDED);
+
   // Handle 2FA/QR Dialog visibility based on Redux state
   useEffect(() => {
     if (requires2FA && twoFactorUserId) {
@@ -220,7 +268,7 @@ const MainLayout = () => {
     await dispatch(completeQRLogin({ token, user }));
     setShowQRDialog(false);
   };
-  
+
   const handleFallbackTo2FA = () => {
     setShowQRDialog(false);
     setShow2FADialog(true);
@@ -230,9 +278,20 @@ const MainLayout = () => {
     if (isMobile) {
       setMobileOpen(!mobileOpen);
     } else {
-      setDesktopOpen(!desktopOpen);
+      setSidebarCollapsed(!sidebarCollapsed);
+      try {
+        localStorage.setItem("sidebarCollapsed", String(!sidebarCollapsed));
+      } catch {}
     }
   };
+
+  const handleSidebarCollapse = () => {
+    setSidebarCollapsed(!sidebarCollapsed);
+    try {
+      localStorage.setItem("sidebarCollapsed", String(!sidebarCollapsed));
+    } catch {}
+  };
+
   const handleProfileMenuOpen = (event) => {
     setAnchorEl(event.currentTarget);
   };
@@ -274,6 +333,7 @@ const MainLayout = () => {
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, []);
+
   const handleNavigation = (path) => {
     navigate(path);
     if (isMobile) {
@@ -672,19 +732,94 @@ const MainLayout = () => {
   }, [debouncedSaveNavOrder]);
 
   const allNavigationPaths = flatNavigationItems;
-  const primaryColor = theme.palette.primary.main;
 
-  const drawer = (
-    <Box sx={{ display: "flex", flexDirection: "column", height: "100%" }}>
-      <Box sx={{ height: 42, display: "flex", alignItems: "center", px: 1, overflow: "hidden" }}>
-        <img
-          src="/leadflow.png"
-          alt="LeadFlow"
-          style={{ width: "150%", maxHeight: 70, objectFit: "contain", objectPosition: "left", marginLeft: -17 }}
-        />
+  const getRoleBadgeLabel = (role) => {
+    const labels = {
+      admin: "Admin",
+      affiliate_manager: "AM",
+      agent: "Agent",
+      lead_manager: "LM",
+      refunds_manager: "Refunds",
+      inventory_manager: "Inventory",
+    };
+    return labels[role] || "User";
+  };
+
+  const drawer = (collapsed = false) => (
+    <Box
+      sx={{
+        display: "flex",
+        flexDirection: "column",
+        height: "100%",
+        background: SIDEBAR_BG,
+        overflow: "hidden",
+      }}
+    >
+      {/* Logo Section */}
+      <Box
+        sx={{
+          height: HEADER_HEIGHT,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: collapsed ? "center" : "flex-start",
+          px: collapsed ? 1 : 2.5,
+          flexShrink: 0,
+        }}
+      >
+        {collapsed ? (
+          <Typography
+            variant="h5"
+            sx={{
+              fontWeight: 800,
+              color: "#fff",
+              letterSpacing: 1,
+              userSelect: "none",
+            }}
+          >
+            F
+            <Box component="span" sx={{ color: ACCENT_COLOR }}>.</Box>
+          </Typography>
+        ) : (
+          <Typography
+            variant="h5"
+            sx={{
+              fontWeight: 800,
+              color: "#fff",
+              letterSpacing: 1,
+              userSelect: "none",
+            }}
+          >
+            FTD
+            <Box component="span" sx={{ color: ACCENT_COLOR, ml: 0.5 }}>Hub</Box>
+          </Typography>
+        )}
       </Box>
-      <Divider />
-      <Box sx={{ flex: 1, overflow: "auto", width: "100%" }}>
+
+      {/* Divider */}
+      <Divider sx={{ borderColor: "rgba(255, 255, 255, 0.1)", mx: collapsed ? 1 : 2 }} />
+
+      {/* Navigation Area */}
+      <Box
+        sx={{
+          flex: 1,
+          overflow: "auto",
+          width: "100%",
+          py: 1,
+          "&::-webkit-scrollbar": {
+            width: 4,
+          },
+          "&::-webkit-scrollbar-track": {
+            background: "transparent",
+          },
+          "&::-webkit-scrollbar-thumb": {
+            background: "rgba(255, 255, 255, 0.15)",
+            borderRadius: 2,
+          },
+          "&::-webkit-scrollbar-thumb:hover": {
+            background: "rgba(255, 255, 255, 0.25)",
+          },
+        }}
+      >
         <Reorder.Group
           axis="y"
           values={orderedItems}
@@ -697,66 +832,178 @@ const MainLayout = () => {
               key={item.path}
               item={item}
               isSelected={location.pathname === item.path}
-              iconColor={iconColorMap[item.path] || theme.palette.text.secondary}
-              primaryColor={primaryColor}
               onNavigate={handleNavigation}
+              collapsed={collapsed}
             />
           ))}
         </Reorder.Group>
       </Box>
+
+      {/* Divider */}
+      <Divider sx={{ borderColor: "rgba(255, 255, 255, 0.1)", mx: collapsed ? 1 : 2 }} />
+
+      {/* User Info Section */}
+      <Box
+        sx={{
+          py: 1.5,
+          px: collapsed ? 1 : 2,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: collapsed ? "center" : "flex-start",
+          gap: collapsed ? 0 : 1.5,
+          flexShrink: 0,
+        }}
+      >
+        {collapsed ? (
+          <Tooltip title={`${user?.fullName || "User"} (${getRoleBadgeLabel(user?.role)})`} placement="right" arrow>
+            <Avatar
+              sx={{
+                width: 36,
+                height: 36,
+                bgcolor: ACCENT_COLOR,
+                fontSize: "0.875rem",
+                fontWeight: 600,
+                cursor: "default",
+              }}
+            >
+              {user?.fullName?.charAt(0)?.toUpperCase()}
+            </Avatar>
+          </Tooltip>
+        ) : (
+          <>
+            <Avatar
+              sx={{
+                width: 36,
+                height: 36,
+                bgcolor: ACCENT_COLOR,
+                fontSize: "0.875rem",
+                fontWeight: 600,
+              }}
+            >
+              {user?.fullName?.charAt(0)?.toUpperCase()}
+            </Avatar>
+            <Box sx={{ minWidth: 0, flex: 1 }}>
+              <Typography
+                variant="body2"
+                noWrap
+                sx={{ color: "#fff", fontWeight: 600, fontSize: 13, lineHeight: 1.3 }}
+              >
+                {user?.fullName}
+              </Typography>
+              <Chip
+                label={getRoleBadgeLabel(user?.role)}
+                size="small"
+                sx={{
+                  height: 18,
+                  fontSize: 10,
+                  fontWeight: 600,
+                  color: ACCENT_COLOR,
+                  borderColor: "rgba(245, 124, 0, 0.4)",
+                  bgcolor: "rgba(245, 124, 0, 0.1)",
+                  mt: 0.3,
+                  "& .MuiChip-label": { px: 1 },
+                }}
+                variant="outlined"
+              />
+            </Box>
+          </>
+        )}
+      </Box>
+
+      {/* Collapse Toggle Button (desktop only) */}
+      {!isMobile && (
+        <>
+          <Divider sx={{ borderColor: "rgba(255, 255, 255, 0.1)", mx: collapsed ? 1 : 2 }} />
+          <Box
+            sx={{
+              py: 1,
+              display: "flex",
+              justifyContent: "center",
+              flexShrink: 0,
+            }}
+          >
+            <IconButton
+              onClick={handleSidebarCollapse}
+              size="small"
+              sx={{
+                color: "rgba(255, 255, 255, 0.6)",
+                "&:hover": {
+                  color: "#fff",
+                  bgcolor: "rgba(255, 255, 255, 0.08)",
+                },
+                transition: "all 0.2s ease",
+              }}
+            >
+              {collapsed ? <ChevronRightIcon /> : <ChevronLeftIcon />}
+            </IconButton>
+          </Box>
+        </>
+      )}
     </Box>
   );
+
   return (
     <Box sx={{ display: "flex" }}>
       <CssBaseline />
-      {}
+
+      {/* AppBar / Header */}
       <AppBar
         position="fixed"
         elevation={0}
         sx={{
-          width: { md: desktopOpen ? `calc(100% - ${drawerWidth}px)` : "100%" },
-          ml: { md: desktopOpen ? `${drawerWidth}px` : 0 },
-          transition: theme.transitions.create(["width", "margin"], {
-            easing: theme.transitions.easing.sharp,
-            duration: theme.transitions.duration.enteringScreen,
-          }),
+          width: { md: `calc(100% - ${currentSidebarWidth}px)` },
+          ml: { md: `${currentSidebarWidth}px` },
+          transition: "width 300ms ease, margin-left 300ms ease",
+          bgcolor: "#fff",
+          color: "text.primary",
           borderBottom: "1px solid",
-          borderColor: "rgba(255,255,255,0.12)",
+          borderColor: "rgba(0, 0, 0, 0.08)",
         }}
       >
         <Toolbar
-          variant="dense"
-          sx={{ minHeight: 42, height: 42, px: { xs: 1, sm: 1.5 } }}
+          sx={{ minHeight: HEADER_HEIGHT, height: HEADER_HEIGHT, px: { xs: 2, sm: 3 } }}
         >
+          {/* Mobile hamburger */}
           <IconButton
             color="inherit"
             aria-label="open drawer"
             edge="start"
             onClick={handleDrawerToggle}
-            size="small"
-            sx={{ mr: 1 }}
+            sx={{
+              mr: 2,
+              display: { md: "none" },
+              color: "text.secondary",
+            }}
           >
-            <MenuIcon fontSize="small" />
+            <MenuIcon />
           </IconButton>
+
+          {/* Page Title */}
           <Typography
-            variant="subtitle2"
+            variant="h6"
             noWrap
             component="div"
             sx={{
               display: { xs: "none", sm: "block" },
-              fontWeight: 600,
-              letterSpacing: 0.3,
-              opacity: 0.95,
+              fontWeight: 700,
+              fontSize: 18,
+              color: "text.primary",
+              letterSpacing: -0.3,
             }}
           >
             {allNavigationPaths.find((item) => item.path === location.pathname)
               ?.text || "Dashboard"}
           </Typography>
-          <Box sx={{ ml: 1.5, display: { xs: "none", md: "block" } }}>
+
+          {/* Global Search */}
+          <Box sx={{ ml: 3, display: { xs: "none", md: "block" } }}>
             <GlobalSearch />
           </Box>
+
           <Box sx={{ flexGrow: 1 }} />
-          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+
+          {/* Right side actions */}
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
             <UserSwitcher onOpenQuickSwitcher={handleOpenQuickSwitcher} />
             <TicketHeaderButton />
             <NotificationBell />
@@ -764,22 +1011,24 @@ const MainLayout = () => {
               sx={{
                 display: "flex",
                 alignItems: "center",
-                gap: 0.5,
+                gap: 1,
                 cursor: "pointer",
-                borderRadius: 1,
-                px: 0.5,
-                py: 0.25,
-                "&:hover": { bgcolor: "rgba(255,255,255,0.08)" },
+                borderRadius: 2,
+                px: 1,
+                py: 0.5,
+                ml: 0.5,
+                "&:hover": { bgcolor: "rgba(0, 0, 0, 0.04)" },
+                transition: "background-color 0.2s ease",
               }}
               onClick={handleProfileMenuOpen}
             >
               <Box position="relative">
                 <Avatar
                   sx={{
-                    width: 26,
-                    height: 26,
-                    bgcolor: "secondary.main",
-                    fontSize: "0.75rem",
+                    width: 34,
+                    height: 34,
+                    bgcolor: "#1e3a5f",
+                    fontSize: "0.875rem",
                     fontWeight: 600,
                   }}
                 >
@@ -790,9 +1039,9 @@ const MainLayout = () => {
                     color="warning"
                     sx={{
                       position: "absolute",
-                      bottom: -3,
-                      right: -3,
-                      fontSize: 13,
+                      bottom: -2,
+                      right: -2,
+                      fontSize: 14,
                       bgcolor: "background.paper",
                       borderRadius: "50%",
                     }}
@@ -800,13 +1049,14 @@ const MainLayout = () => {
                 )}
               </Box>
               <Typography
-                variant="caption"
+                variant="body2"
                 noWrap
                 sx={{
                   display: { xs: "none", sm: "block" },
                   fontWeight: 500,
-                  maxWidth: 120,
-                  opacity: 0.9,
+                  maxWidth: 140,
+                  color: "text.primary",
+                  fontSize: 14,
                 }}
               >
                 {user?.fullName}
@@ -815,12 +1065,13 @@ const MainLayout = () => {
           </Box>
         </Toolbar>
       </AppBar>
-      {}
+
+      {/* Profile Menu */}
       <Menu
         id="menu-appbar"
         anchorEl={anchorEl}
         anchorOrigin={{
-          vertical: "top",
+          vertical: "bottom",
           horizontal: "right",
         }}
         keepMounted
@@ -830,12 +1081,21 @@ const MainLayout = () => {
         }}
         open={Boolean(anchorEl)}
         onClose={handleProfileMenuClose}
+        PaperProps={{
+          sx: {
+            mt: 1,
+            borderRadius: 2,
+            boxShadow: "0 4px 20px rgba(0,0,0,0.1)",
+            minWidth: 180,
+          },
+        }}
       >
         <MenuItem
           onClick={() => {
             handleNavigation("/profile");
             handleProfileMenuClose();
           }}
+          sx={{ py: 1.2, px: 2 }}
         >
           <ListItemIcon>
             <AccountIcon fontSize="small" />
@@ -843,78 +1103,81 @@ const MainLayout = () => {
           Profile
         </MenuItem>
         <Divider />
-        <MenuItem onClick={handleLogout}>
+        <MenuItem onClick={handleLogout} sx={{ py: 1.2, px: 2 }}>
           <ListItemIcon>
             <LogoutIcon fontSize="small" />
           </ListItemIcon>
           Logout
         </MenuItem>
       </Menu>
-      {}
+
+      {/* Sidebar Navigation */}
       <Box
         component="nav"
         sx={{
-          width: { md: desktopOpen ? drawerWidth : 0 },
+          width: { md: currentSidebarWidth },
           flexShrink: { md: 0 },
-          transition: theme.transitions.create("width", {
-            easing: theme.transitions.easing.sharp,
-            duration: theme.transitions.duration.enteringScreen,
-          }),
+          transition: "width 300ms ease",
         }}
         aria-label="navigation menu"
       >
-        {/* The implementation can be swapped with js to avoid SEO duplication of links. */}
+        {/* Mobile drawer (temporary overlay) */}
         <Drawer
           variant="temporary"
           open={mobileOpen}
           onClose={handleDrawerToggle}
           ModalProps={{
-            keepMounted: true, // Better open performance on mobile.
+            keepMounted: true,
           }}
           sx={{
             display: { xs: "block", md: "none" },
             "& .MuiDrawer-paper": {
               boxSizing: "border-box",
-              width: drawerWidth,
+              width: SIDEBAR_WIDTH_EXPANDED,
+              border: "none",
             },
           }}
         >
-          {drawer}
+          {drawer(false)}
         </Drawer>
-        {/* Desktop drawer */}
+
+        {/* Desktop drawer (permanent) */}
         <Drawer
-          variant="persistent"
+          variant="permanent"
           sx={{
             display: { xs: "none", md: "block" },
             "& .MuiDrawer-paper": {
               boxSizing: "border-box",
-              width: drawerWidth,
+              width: currentSidebarWidth,
+              border: "none",
+              transition: "width 300ms ease",
+              overflowX: "hidden",
             },
           }}
-          open={desktopOpen}
+          open
         >
-          {drawer}
+          {drawer(sidebarCollapsed)}
         </Drawer>
       </Box>
-      {}
+
+      {/* Main Content Area */}
       <Box
         component="main"
         sx={{
           flexGrow: 1,
-          p: location.pathname === "/notes" ? 0 : 2,
-          width: { md: desktopOpen ? `calc(100% - ${drawerWidth}px)` : "100%" },
-          transition: theme.transitions.create(["width", "margin"], {
-            easing: theme.transitions.easing.sharp,
-            duration: theme.transitions.duration.enteringScreen,
-          }),
+          p: location.pathname === "/notes" ? 0 : { xs: 2, md: 3 },
+          width: { md: `calc(100% - ${currentSidebarWidth}px)` },
+          transition: "width 300ms ease",
           display: "flex",
           flexDirection: "column",
           minHeight: "100vh",
+          bgcolor: "#f8f9fa",
           overflow: (location.pathname === "/notes" || location.pathname === "/orders" || location.pathname === "/crm" || location.pathname === "/leads" || location.pathname === "/client-psps" || location.pathname === "/card-issuers" || location.pathname === "/sms" || location.pathname === "/deposit-calls" || location.pathname === "/call-declarations") ? "hidden" : "auto",
           height: (location.pathname === "/notes" || location.pathname === "/orders" || location.pathname === "/crm" || location.pathname === "/leads" || location.pathname === "/client-psps" || location.pathname === "/card-issuers" || location.pathname === "/sms" || location.pathname === "/deposit-calls" || location.pathname === "/call-declarations") ? "100vh" : "auto",
         }}
       >
-        <Box sx={{ minHeight: 42 }} />
+        {/* Spacer for fixed header */}
+        <Box sx={{ minHeight: HEADER_HEIGHT }} />
         <Box
           component="div"
           sx={{
