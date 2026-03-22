@@ -1,199 +1,119 @@
-body {
-  margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
+/* ===== Animations ===== */
 
-code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
-    monospace;
-}
-
-.login-page {
-  height: 100vh;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  overflow: hidden;
-}
-
-.login-container {
-  display: flex;
-  width: 900px;
-  height: 600px;
-  background-color: #fff;
-  border-radius: 15px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
-  overflow: hidden;
-  animation: fade-in 0.8s ease-in-out;
-}
-
-.login-branding {
-  width: 50%;
-  padding: 50px;
-  background-color: #f3f4f6;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  text-align: center;
-  color: #333;
-}
-
-.login-branding h1 {
-  font-size: 2.5rem;
-  font-weight: 700;
-  margin-bottom: 10px;
-}
-
-.login-branding p {
-  font-size: 1.1rem;
-  color: #555;
-}
-
-.login-form-container {
-  width: 50%;
-  padding: 50px;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-}
-
-.login-form-container h2 {
-  margin-bottom: 20px;
-  font-size: 2rem;
-  color: #333;
-  text-align: center;
-}
-
-.form-group {
-  margin-bottom: 20px;
-  position: relative;
-}
-
-.form-group input {
-  width: 100%;
-  padding: 15px 15px 15px 45px;
-  border: 1px solid #ccc;
-  border-radius: 8px;
-  font-size: 1rem;
-  transition: all 0.3s ease;
-}
-
-.form-group input:focus {
-  outline: none;
-  border-color: #667eea;
-  box-shadow: 0 0 5px rgba(102, 126, 234, 0.5);
-}
-
-.form-group .icon {
-  position: absolute;
-  top: 50%;
-  left: 15px;
-  transform: translateY(-50%);
-  color: #aaa;
-}
-
-.login-btn {
-  width: 100%;
-  padding: 15px;
-  border: none;
-  border-radius: 8px;
-  background-color: #667eea;
-  color: #fff;
-  font-size: 1.1rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background-color 0.3s ease;
-}
-
-.login-btn:hover {
-  background-color: #5a6edc;
-}
-
-.login-btn:disabled {
-  background-color: #ccc;
-  cursor: not-allowed;
-}
-
-.error-message {
-  color: #f44336;
-  font-size: 0.875rem;
-  margin-top: 5px;
-}
-
-@keyframes fade-in {
+@keyframes loginFadeInUp {
   from {
     opacity: 0;
-    transform: translateY(20px);
+    transform: translateY(30px);
   }
-
   to {
     opacity: 1;
     transform: translateY(0);
   }
 }
 
+@keyframes loginFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
 
-
-@media (max-width: 768px) {
-  .login-container {
-    flex-direction: column;
-    width: 90%;
-    max-width: 400px;
-    height: auto;
-    padding: 20px;
+@keyframes loginSlideInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-40px);
   }
-
-  .login-branding {
-    width: 100%;
-    padding: 30px;
-    order: 1;
-  }
-
-  .login-branding h1 {
-    font-size: 1.8rem;
-  }
-
-  .login-branding p {
-    font-size: 0.9rem;
-  }
-
-  .login-form-container {
-    width: 100%;
-    padding: 30px;
-    order: 2;
-  }
-
-  .login-form-container h2 {
-    font-size: 1.5rem;
-  }
-
-  .form-group .MuiIconButton-root {
-    right: 5px !important;
+  to {
+    opacity: 1;
+    transform: translateX(0);
   }
 }
 
-@media (max-width: 480px) {
-  .login-container {
-    width: 95%;
-    padding: 15px;
-  }
+@keyframes decoFloat {
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(10px, -15px); }
+}
 
-  .login-branding,
-  .login-form-container {
-    padding: 20px;
-  }
+@keyframes decoFloatAlt {
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(-12px, 10px); }
+}
 
-  .login-branding h1 {
-    font-size: 1.5rem;
-  }
+/* ===== Left Panel ===== */
 
-  .login-form-container h2 {
-    font-size: 1.3rem;
-  }
+.login-left-panel {
+  animation: loginFadeIn 0.6s ease-out;
+}
+
+.login-brand-content {
+  animation: loginSlideInLeft 0.7s ease-out 0.2s both;
+}
+
+.login-feature-item {
+  animation: loginSlideInLeft 0.5s ease-out both;
+}
+
+/* ===== Decorative Shapes ===== */
+
+.login-deco-circle {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.login-deco-circle-1 {
+  width: 320px;
+  height: 320px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  top: -80px;
+  right: -60px;
+  animation: decoFloat 8s ease-in-out infinite;
+}
+
+.login-deco-circle-2 {
+  width: 180px;
+  height: 180px;
+  background: rgba(245, 124, 0, 0.06);
+  bottom: 60px;
+  left: -40px;
+  animation: decoFloatAlt 10s ease-in-out infinite;
+}
+
+.login-deco-circle-3 {
+  width: 100px;
+  height: 100px;
+  border: 2px solid rgba(255, 255, 255, 0.04);
+  top: 45%;
+  right: 20%;
+  animation: decoFloat 12s ease-in-out infinite 2s;
+}
+
+.login-deco-line {
+  position: absolute;
+  pointer-events: none;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.login-deco-line-1 {
+  width: 200px;
+  height: 1px;
+  transform: rotate(-35deg);
+  bottom: 120px;
+  right: 30px;
+}
+
+.login-deco-line-2 {
+  width: 140px;
+  height: 1px;
+  transform: rotate(25deg);
+  top: 100px;
+  left: 50px;
+}
+
+/* ===== Right Panel & Form Card ===== */
+
+.login-right-panel {
+  animation: loginFadeIn 0.5s ease-out;
+}
+
+.login-form-card {
+  animation: loginFadeInUp 0.6s ease-out 0.15s both;
 }
