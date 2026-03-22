@@ -27,6 +27,9 @@ import {
   ListItem,
   ListItemAvatar,
   ListItemText,
+  Button,
+  useMediaQuery,
+  useTheme,
 } from "@mui/material";
 import {
   TrendingUp as TrendingUpIcon,
@@ -56,6 +59,10 @@ import {
   Info as InfoIcon,
   Person as PersonIcon,
   TrendingFlat as TrendingFlatIcon,
+  OpenInNew as OpenInNewIcon,
+  MoreVert as MoreVertIcon,
+  BarChart as BarChartIcon,
+  PieChart as PieChartOutlineIcon,
 } from "@mui/icons-material";
 import { motion } from "framer-motion";
 import {
@@ -89,53 +96,59 @@ const USER_ROLES = {
   INVENTORY_MANAGER: "inventory_manager",
 };
 
-// Clean color palette - professional blues and grays
+// Professional color palette
 const COLORS = {
-  primary: "#1976d2",
-  primaryLight: "#e3f2fd",
-  primaryDark: "#1565c0",
+  primary: "#1e3a5f",
+  primaryLight: "#e8edf3",
+  primaryDark: "#152c4a",
+  accent: "#f57c00",
+  accentLight: "#fff3e0",
   success: "#2e7d32",
   successLight: "#e8f5e9",
   warning: "#ed6c02",
   warningLight: "#fff3e0",
-  error: "#d32f2f",
+  error: "#c62828",
   errorLight: "#ffebee",
-  info: "#0288d1",
+  info: "#0277bd",
   infoLight: "#e1f5fe",
   gray: "#64748b",
   grayLight: "#f1f5f9",
   border: "#e2e8f0",
-  background: "#fafbfc",
+  background: "transparent",
+  cardBg: "#ffffff",
   text: "#1e293b",
   textSecondary: "#64748b",
 };
 
-const CHART_COLORS = ["#1976d2", "#2e7d32", "#ed6c02", "#9c27b0", "#00bcd4", "#ff5722"];
+const CHART_COLORS = ["#1e3a5f", "#2e7d32", "#f57c00", "#7b1fa2", "#0097a7", "#e65100"];
+
+const cardShadow = "0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06)";
+const cardHoverShadow = "0 4px 12px rgba(0,0,0,0.12), 0 2px 4px rgba(0,0,0,0.08)";
 
 // Motion variants
 const containerVariants = {
   hidden: { opacity: 0 },
   visible: {
     opacity: 1,
-    transition: { staggerChildren: 0.05, delayChildren: 0.05 },
+    transition: { staggerChildren: 0.06, delayChildren: 0.04 },
   },
 };
 
 const itemVariants = {
-  hidden: { opacity: 0, y: 10 },
+  hidden: { opacity: 0, y: 16 },
   visible: {
     opacity: 1,
     y: 0,
-    transition: { duration: 0.3, ease: "easeOut" },
+    transition: { duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] },
   },
 };
 
 // Time-based greeting
 const getGreeting = () => {
   const hour = new Date().getHours();
-  if (hour < 12) return "Good morning";
-  if (hour < 17) return "Good afternoon";
-  return "Good evening";
+  if (hour < 12) return "Good Morning";
+  if (hour < 17) return "Good Afternoon";
+  return "Good Evening";
 };
 
 // Format numbers with K/M suffix
@@ -165,7 +178,17 @@ const formatDate = (date) => {
   });
 };
 
-// Welcome header component
+// Format today's date nicely
+const formatTodayDate = () => {
+  return new Date().toLocaleDateString("en-US", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+};
+
+// ─── Welcome Header ───────────────────────────────────────────────────────────
 const WelcomeHeader = React.memo(({ name, role, onRefresh, isRefreshing }) => {
   const roleLabels = {
     admin: "Administrator",
@@ -176,262 +199,343 @@ const WelcomeHeader = React.memo(({ name, role, onRefresh, isRefreshing }) => {
     inventory_manager: "Inventory Manager",
   };
 
-  const now = new Date();
-
   return (
     <motion.div variants={itemVariants}>
-      <Card
+      <Box
         sx={{
+          display: "flex",
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          flexWrap: "wrap",
+          gap: 2,
           mb: 3,
-          border: `1px solid ${COLORS.border}`,
-          boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
         }}
       >
-        <CardContent sx={{ py: 2.5, px: 3 }}>
-          <Box
+        <Box>
+          <Typography
+            variant="h4"
             sx={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              flexWrap: "wrap",
-              gap: 2,
+              fontWeight: 700,
+              color: COLORS.text,
+              fontSize: { xs: "1.5rem", md: "1.85rem" },
+              letterSpacing: "-0.02em",
+              lineHeight: 1.3,
             }}
           >
-            <Box>
-              <Typography
-                variant="h5"
-                sx={{
-                  fontWeight: 600,
-                  color: COLORS.text,
-                  mb: 0.5,
-                }}
-              >
-                {getGreeting()}, {name?.split(" ")[0] || "there"}
-              </Typography>
-              <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
-                <Chip
-                  size="small"
-                  label={roleLabels[role] || role}
-                  sx={{
-                    bgcolor: COLORS.primaryLight,
-                    color: COLORS.primary,
-                    fontWeight: 500,
-                    fontSize: "0.75rem",
-                  }}
-                />
-                <Typography variant="body2" color="text.secondary">
-                  Here's your dashboard overview
-                </Typography>
-              </Box>
+            {getGreeting()},{" "}
+            <Box component="span" sx={{ color: COLORS.primary }}>
+              {name?.split(" ")[0] || "there"}
             </Box>
-            <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-              <Box sx={{ textAlign: "right" }}>
-                <Typography
-                  variant="body2"
-                  sx={{ fontWeight: 500, color: COLORS.text }}
-                >
-                  {now.toLocaleDateString("en-US", {
-                    weekday: "long",
-                    month: "long",
-                    day: "numeric",
-                  })}
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  {now.toLocaleTimeString("en-US", {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </Typography>
-              </Box>
-              <Tooltip title="Refresh data">
-                <IconButton
-                  onClick={onRefresh}
-                  disabled={isRefreshing}
-                  size="small"
-                  sx={{
-                    bgcolor: COLORS.grayLight,
-                    "&:hover": { bgcolor: COLORS.border },
-                  }}
-                >
-                  <RefreshIcon
-                    fontSize="small"
-                    sx={{
-                      animation: isRefreshing ? "spin 1s linear infinite" : "none",
-                      "@keyframes spin": {
-                        "0%": { transform: "rotate(0deg)" },
-                        "100%": { transform: "rotate(360deg)" },
-                      },
-                    }}
-                  />
-                </IconButton>
-              </Tooltip>
-            </Box>
+          </Typography>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mt: 0.75 }}>
+            <Typography
+              variant="body2"
+              sx={{ color: COLORS.textSecondary, fontSize: "0.875rem" }}
+            >
+              {formatTodayDate()}
+            </Typography>
+            <Box
+              sx={{
+                width: 4,
+                height: 4,
+                borderRadius: "50%",
+                bgcolor: COLORS.border,
+              }}
+            />
+            <Chip
+              size="small"
+              label={roleLabels[role] || role}
+              sx={{
+                bgcolor: COLORS.primaryLight,
+                color: COLORS.primary,
+                fontWeight: 600,
+                fontSize: "0.7rem",
+                height: 22,
+                borderRadius: "6px",
+              }}
+            />
           </Box>
-        </CardContent>
-      </Card>
+        </Box>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+          <Tooltip title="Refresh dashboard data">
+            <IconButton
+              onClick={onRefresh}
+              disabled={isRefreshing}
+              size="small"
+              sx={{
+                bgcolor: COLORS.cardBg,
+                border: `1px solid ${COLORS.border}`,
+                boxShadow: cardShadow,
+                width: 38,
+                height: 38,
+                "&:hover": {
+                  bgcolor: COLORS.grayLight,
+                  borderColor: COLORS.primary,
+                },
+              }}
+            >
+              <RefreshIcon
+                sx={{
+                  fontSize: 18,
+                  color: COLORS.primary,
+                  animation: isRefreshing ? "spin 1s linear infinite" : "none",
+                  "@keyframes spin": {
+                    "0%": { transform: "rotate(0deg)" },
+                    "100%": { transform: "rotate(360deg)" },
+                  },
+                }}
+              />
+            </IconButton>
+          </Tooltip>
+        </Box>
+      </Box>
+      {isRefreshing && (
+        <LinearProgress
+          sx={{
+            mb: 2,
+            borderRadius: 1,
+            height: 2,
+            bgcolor: COLORS.primaryLight,
+            "& .MuiLinearProgress-bar": { bgcolor: COLORS.primary },
+          }}
+        />
+      )}
     </motion.div>
   );
 });
 
-// Clean stat card
+// ─── KPI Stat Card ────────────────────────────────────────────────────────────
 const StatCard = React.memo(
-  ({ title, value, subtitle, icon, iconColor, trend, trendValue, onClick }) => (
-    <motion.div variants={itemVariants}>
+  ({ title, value, subtitle, icon, accentColor, trend, trendValue, onClick }) => (
+    <motion.div variants={itemVariants} style={{ height: "100%" }}>
       <Card
         onClick={onClick}
         sx={{
           height: "100%",
-          border: `1px solid ${COLORS.border}`,
-          boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+          bgcolor: COLORS.cardBg,
+          borderRadius: "12px",
+          boxShadow: cardShadow,
+          border: "1px solid transparent",
+          borderBottom: `3px solid ${accentColor || COLORS.primary}`,
           cursor: onClick ? "pointer" : "default",
-          transition: "all 0.2s ease",
-          "&:hover": onClick
-            ? {
-                borderColor: COLORS.primary,
-                boxShadow: "0 4px 12px rgba(25, 118, 210, 0.15)",
-              }
-            : {},
+          transition: "all 0.25s ease",
+          position: "relative",
+          overflow: "visible",
+          "&:hover": {
+            boxShadow: cardHoverShadow,
+            transform: onClick ? "translateY(-2px)" : "none",
+            borderColor: onClick ? accentColor || COLORS.primary : "transparent",
+            borderBottomColor: accentColor || COLORS.primary,
+          },
         }}
       >
-        <CardContent sx={{ p: 2.5 }}>
-          <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
-            <Box sx={{ flex: 1 }}>
-              <Typography
-                variant="body2"
-                sx={{
-                  color: COLORS.textSecondary,
-                  fontWeight: 500,
-                  fontSize: "0.8rem",
-                  mb: 0.5,
-                }}
-              >
-                {title}
-              </Typography>
-              <Typography
-                variant="h4"
-                sx={{
-                  fontWeight: 700,
-                  color: COLORS.text,
-                  fontSize: "1.75rem",
-                  lineHeight: 1.2,
-                }}
-              >
-                {value}
-              </Typography>
-              {subtitle && (
-                <Typography
-                  variant="caption"
-                  sx={{ color: COLORS.textSecondary, display: "block", mt: 0.5 }}
-                >
-                  {subtitle}
-                </Typography>
-              )}
-              {trend !== undefined && (
-                <Box sx={{ display: "flex", alignItems: "center", mt: 1, gap: 0.5 }}>
-                  {trend === "up" ? (
-                    <ArrowUpIcon sx={{ color: COLORS.success, fontSize: 16 }} />
-                  ) : trend === "down" ? (
-                    <ArrowDownIcon sx={{ color: COLORS.error, fontSize: 16 }} />
-                  ) : (
-                    <TrendingFlatIcon sx={{ color: COLORS.gray, fontSize: 16 }} />
-                  )}
-                  <Typography
-                    variant="caption"
-                    sx={{
-                      color:
-                        trend === "up"
-                          ? COLORS.success
-                          : trend === "down"
-                          ? COLORS.error
-                          : COLORS.gray,
-                      fontWeight: 600,
-                    }}
-                  >
-                    {trendValue}
-                  </Typography>
-                </Box>
-              )}
-            </Box>
+        <CardContent sx={{ p: 2.5, "&:last-child": { pb: 2.5 } }}>
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "flex-start",
+              justifyContent: "space-between",
+              mb: 1.5,
+            }}
+          >
+            <Typography
+              variant="body2"
+              sx={{
+                color: COLORS.textSecondary,
+                fontWeight: 500,
+                fontSize: "0.78rem",
+                textTransform: "uppercase",
+                letterSpacing: "0.04em",
+              }}
+            >
+              {title}
+            </Typography>
             <Avatar
               sx={{
-                bgcolor: iconColor + "15",
-                color: iconColor,
-                width: 44,
-                height: 44,
+                bgcolor: (accentColor || COLORS.primary) + "14",
+                color: accentColor || COLORS.primary,
+                width: 40,
+                height: 40,
+                borderRadius: "10px",
               }}
             >
               {icon}
             </Avatar>
           </Box>
+          <Typography
+            variant="h4"
+            sx={{
+              fontWeight: 800,
+              color: COLORS.text,
+              fontSize: { xs: "1.6rem", md: "1.85rem" },
+              lineHeight: 1.1,
+              mb: 0.5,
+              letterSpacing: "-0.02em",
+            }}
+          >
+            {value}
+          </Typography>
+          {subtitle && (
+            <Typography
+              variant="caption"
+              sx={{
+                color: COLORS.textSecondary,
+                display: "block",
+                fontSize: "0.75rem",
+              }}
+            >
+              {subtitle}
+            </Typography>
+          )}
+          {trend !== undefined && (
+            <Box
+              sx={{
+                display: "inline-flex",
+                alignItems: "center",
+                mt: 1,
+                gap: 0.3,
+                px: 0.8,
+                py: 0.2,
+                borderRadius: "6px",
+                bgcolor:
+                  trend === "up"
+                    ? COLORS.successLight
+                    : trend === "down"
+                    ? COLORS.errorLight
+                    : COLORS.grayLight,
+              }}
+            >
+              {trend === "up" ? (
+                <ArrowUpIcon sx={{ color: COLORS.success, fontSize: 14 }} />
+              ) : trend === "down" ? (
+                <ArrowDownIcon sx={{ color: COLORS.error, fontSize: 14 }} />
+              ) : (
+                <TrendingFlatIcon sx={{ color: COLORS.gray, fontSize: 14 }} />
+              )}
+              <Typography
+                variant="caption"
+                sx={{
+                  color:
+                    trend === "up"
+                      ? COLORS.success
+                      : trend === "down"
+                      ? COLORS.error
+                      : COLORS.gray,
+                  fontWeight: 700,
+                  fontSize: "0.7rem",
+                }}
+              >
+                {trendValue}
+              </Typography>
+            </Box>
+          )}
         </CardContent>
       </Card>
     </motion.div>
   )
 );
 
-// Section card wrapper
+// ─── Section Card Wrapper ─────────────────────────────────────────────────────
 const SectionCard = React.memo(({ title, subtitle, action, children, noPadding }) => (
-  <motion.div variants={itemVariants}>
+  <motion.div variants={itemVariants} style={{ height: "100%" }}>
     <Card
       sx={{
         height: "100%",
-        border: `1px solid ${COLORS.border}`,
-        boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+        bgcolor: COLORS.cardBg,
+        borderRadius: "12px",
+        boxShadow: cardShadow,
+        border: "none",
+        display: "flex",
+        flexDirection: "column",
+        transition: "box-shadow 0.25s ease",
+        "&:hover": { boxShadow: cardHoverShadow },
       }}
     >
       {(title || action) && (
-        <>
-          <Box
-            sx={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              px: 2.5,
-              py: 2,
-            }}
-          >
-            <Box>
-              <Typography variant="subtitle1" sx={{ fontWeight: 600, color: COLORS.text }}>
-                {title}
+        <Box
+          sx={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            px: 2.5,
+            pt: 2.5,
+            pb: 1.5,
+          }}
+        >
+          <Box>
+            <Typography
+              variant="subtitle1"
+              sx={{
+                fontWeight: 700,
+                color: COLORS.text,
+                fontSize: "0.95rem",
+                letterSpacing: "-0.01em",
+              }}
+            >
+              {title}
+            </Typography>
+            {subtitle && (
+              <Typography
+                variant="caption"
+                sx={{ color: COLORS.textSecondary, fontSize: "0.75rem" }}
+              >
+                {subtitle}
               </Typography>
-              {subtitle && (
-                <Typography variant="caption" color="text.secondary">
-                  {subtitle}
-                </Typography>
-              )}
-            </Box>
-            {action}
+            )}
           </Box>
-          <Divider />
-        </>
+          {action}
+        </Box>
       )}
-      <Box sx={{ p: noPadding ? 0 : 2.5 }}>{children}</Box>
+      <Box sx={{ p: noPadding ? 0 : 2.5, pt: noPadding ? 0 : 1, flex: 1 }}>
+        {children}
+      </Box>
     </Card>
   </motion.div>
 ));
 
-// Custom tooltip for charts
+// ─── Custom Chart Tooltip ─────────────────────────────────────────────────────
 const CustomTooltip = ({ active, payload, label }) => {
   if (active && payload && payload.length) {
     return (
       <Paper
         sx={{
           p: 1.5,
-          border: `1px solid ${COLORS.border}`,
-          boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+          borderRadius: "8px",
+          border: "none",
+          boxShadow: "0 4px 16px rgba(0,0,0,0.12)",
+          backdropFilter: "blur(8px)",
+          bgcolor: "rgba(255,255,255,0.96)",
         }}
       >
-        <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
+        <Typography
+          variant="body2"
+          sx={{ fontWeight: 700, mb: 0.5, color: COLORS.text, fontSize: "0.8rem" }}
+        >
           {label}
         </Typography>
         {payload.map((entry, index) => (
-          <Typography
+          <Box
             key={index}
-            variant="caption"
-            sx={{ color: entry.color, display: "block" }}
+            sx={{ display: "flex", alignItems: "center", gap: 0.75, mt: 0.25 }}
           >
-            {entry.name}: {formatNumber(entry.value)}
-          </Typography>
+            <Box
+              sx={{
+                width: 8,
+                height: 8,
+                borderRadius: "50%",
+                bgcolor: entry.color,
+              }}
+            />
+            <Typography
+              variant="caption"
+              sx={{ color: COLORS.textSecondary, fontSize: "0.75rem" }}
+            >
+              {entry.name}:{" "}
+              <Box component="span" sx={{ fontWeight: 600, color: COLORS.text }}>
+                {formatNumber(entry.value)}
+              </Box>
+            </Typography>
+          </Box>
         ))}
       </Paper>
     );
@@ -439,7 +543,7 @@ const CustomTooltip = ({ active, payload, label }) => {
   return null;
 };
 
-// Status badge component
+// ─── Status Badge ─────────────────────────────────────────────────────────────
 const StatusBadge = ({ status }) => {
   const statusConfig = {
     active: { color: COLORS.success, bg: COLORS.successLight, label: "Active" },
@@ -466,24 +570,26 @@ const StatusBadge = ({ status }) => {
       sx={{
         bgcolor: config.bg,
         color: config.color,
-        fontWeight: 500,
-        fontSize: "0.7rem",
+        fontWeight: 600,
+        fontSize: "0.68rem",
         height: 22,
+        borderRadius: "6px",
+        border: `1px solid ${config.color}20`,
       }}
     />
   );
 };
 
-// Mini progress bar
+// ─── Mini Progress Bar ────────────────────────────────────────────────────────
 const MiniProgress = ({ value, maxValue, color = COLORS.primary }) => {
   const percentage = maxValue ? Math.min((value / maxValue) * 100, 100) : 0;
   return (
     <Box sx={{ width: "100%" }}>
       <Box sx={{ display: "flex", justifyContent: "space-between", mb: 0.5 }}>
-        <Typography variant="caption" color="text.secondary">
+        <Typography variant="caption" sx={{ color: COLORS.textSecondary, fontSize: "0.7rem" }}>
           {formatNumber(value)} / {formatNumber(maxValue)}
         </Typography>
-        <Typography variant="caption" sx={{ fontWeight: 600, color }}>
+        <Typography variant="caption" sx={{ fontWeight: 700, color, fontSize: "0.7rem" }}>
           {Math.round(percentage)}%
         </Typography>
       </Box>
@@ -491,9 +597,9 @@ const MiniProgress = ({ value, maxValue, color = COLORS.primary }) => {
         variant="determinate"
         value={percentage}
         sx={{
-          height: 6,
+          height: 5,
           borderRadius: 3,
-          bgcolor: COLORS.grayLight,
+          bgcolor: color + "15",
           "& .MuiLinearProgress-bar": {
             bgcolor: color,
             borderRadius: 3,
@@ -504,7 +610,7 @@ const MiniProgress = ({ value, maxValue, color = COLORS.primary }) => {
   );
 };
 
-// Admin Dashboard Component
+// ─── Admin Dashboard ──────────────────────────────────────────────────────────
 const AdminDashboard = React.memo(({ data }) => {
   const leadTypes = useMemo(
     () =>
@@ -514,7 +620,6 @@ const AdminDashboard = React.memo(({ data }) => {
     [data.leadsStats]
   );
 
-  // Prepare chart data
   const pieChartData = useMemo(
     () =>
       leadTypes.map(([type, stats], index) => ({
@@ -535,7 +640,6 @@ const AdminDashboard = React.memo(({ data }) => {
     [leadTypes]
   );
 
-  // Simulated activity data
   const weeklyData = useMemo(
     () => [
       { name: "Mon", leads: 45, orders: 12, conversions: 8 },
@@ -556,22 +660,23 @@ const AdminDashboard = React.memo(({ data }) => {
   const totalUsers = data.usersStats?.total || 0;
   const activeAgents = data.usersStats?.activeAgents || 0;
 
-  // Calculate additional metrics
   const assignmentRate = totalLeads ? Math.round((assignedLeads / totalLeads) * 100) : 0;
   const agentActiveRate = totalUsers ? Math.round((activeAgents / totalUsers) * 100) : 0;
   const pendingOrders = recentOrders.filter((o) => o.status === "pending").length;
-  const completedOrders = recentOrders.filter((o) => o.status === "fulfilled" || o.status === "completed").length;
+  const completedOrders = recentOrders.filter(
+    (o) => o.status === "fulfilled" || o.status === "completed"
+  ).length;
 
   return (
-    <Grid container spacing={2.5}>
-      {/* Top Stats Row */}
+    <Grid container spacing={3}>
+      {/* KPI Cards Row */}
       <Grid item xs={6} sm={6} md={3}>
         <StatCard
           title="Total Users"
           value={formatNumber(totalUsers)}
           subtitle={`${activeAgents} active agents`}
-          icon={<PeopleIcon fontSize="small" />}
-          iconColor={COLORS.primary}
+          icon={<PeopleIcon sx={{ fontSize: 20 }} />}
+          accentColor={COLORS.primary}
           trend="up"
           trendValue={`${agentActiveRate}% active`}
         />
@@ -581,8 +686,8 @@ const AdminDashboard = React.memo(({ data }) => {
           title="Total Leads"
           value={formatNumber(totalLeads)}
           subtitle={`${assignmentRate}% assigned`}
-          icon={<AssignmentIcon fontSize="small" />}
-          iconColor={COLORS.success}
+          icon={<AssignmentIcon sx={{ fontSize: 20 }} />}
+          accentColor={COLORS.success}
           trend="up"
           trendValue={`${assignedLeads} assigned`}
         />
@@ -592,8 +697,8 @@ const AdminDashboard = React.memo(({ data }) => {
           title="Available Leads"
           value={formatNumber(availableLeads)}
           subtitle="Ready for assignment"
-          icon={<InventoryIcon fontSize="small" />}
-          iconColor={COLORS.warning}
+          icon={<InventoryIcon sx={{ fontSize: 20 }} />}
+          accentColor={COLORS.accent}
         />
       </Grid>
       <Grid item xs={6} sm={6} md={3}>
@@ -601,36 +706,65 @@ const AdminDashboard = React.memo(({ data }) => {
           title="Active Agents"
           value={formatNumber(activeAgents)}
           subtitle="Currently working"
-          icon={<GroupsIcon fontSize="small" />}
-          iconColor={COLORS.info}
+          icon={<GroupsIcon sx={{ fontSize: 20 }} />}
+          accentColor={COLORS.info}
         />
       </Grid>
 
       {/* Lead Type Breakdown Cards */}
       {leadTypes.slice(0, 4).map(([type, stats], index) => (
         <Grid item xs={6} sm={6} md={3} key={type}>
-          <motion.div variants={itemVariants}>
+          <motion.div variants={itemVariants} style={{ height: "100%" }}>
             <Card
               sx={{
-                border: `1px solid ${COLORS.border}`,
-                boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+                height: "100%",
+                borderRadius: "12px",
+                boxShadow: cardShadow,
+                border: "none",
+                transition: "all 0.25s ease",
+                "&:hover": { boxShadow: cardHoverShadow },
               }}
             >
-              <CardContent sx={{ p: 2 }}>
-                <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1.5 }}>
+              <CardContent sx={{ p: 2.5, "&:last-child": { pb: 2.5 } }}>
+                <Box
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    mb: 1.5,
+                  }}
+                >
                   <Typography
                     variant="body2"
                     sx={{
                       color: COLORS.textSecondary,
-                      fontWeight: 500,
+                      fontWeight: 600,
                       textTransform: "capitalize",
+                      fontSize: "0.78rem",
                     }}
                   >
                     {type} Leads
                   </Typography>
-                  <CircleIcon sx={{ fontSize: 10, color: CHART_COLORS[index % CHART_COLORS.length] }} />
+                  <Box
+                    sx={{
+                      width: 10,
+                      height: 10,
+                      borderRadius: "50%",
+                      bgcolor: CHART_COLORS[index % CHART_COLORS.length],
+                      boxShadow: `0 0 0 3px ${CHART_COLORS[index % CHART_COLORS.length]}25`,
+                    }}
+                  />
                 </Box>
-                <Typography variant="h5" sx={{ fontWeight: 700, color: COLORS.text, mb: 1 }}>
+                <Typography
+                  variant="h5"
+                  sx={{
+                    fontWeight: 800,
+                    color: COLORS.text,
+                    mb: 1.5,
+                    fontSize: "1.4rem",
+                    letterSpacing: "-0.02em",
+                  }}
+                >
                   {formatNumber(stats.total || 0)}
                 </Typography>
                 <MiniProgress
@@ -640,18 +774,30 @@ const AdminDashboard = React.memo(({ data }) => {
                 />
                 <Box sx={{ display: "flex", justifyContent: "space-between", mt: 1.5 }}>
                   <Box>
-                    <Typography variant="caption" color="text.secondary">
+                    <Typography
+                      variant="caption"
+                      sx={{ color: COLORS.textSecondary, fontSize: "0.68rem" }}
+                    >
                       Assigned
                     </Typography>
-                    <Typography variant="body2" sx={{ fontWeight: 600, color: COLORS.success }}>
+                    <Typography
+                      variant="body2"
+                      sx={{ fontWeight: 700, color: COLORS.success, fontSize: "0.85rem" }}
+                    >
                       {formatNumber(stats.assigned || 0)}
                     </Typography>
                   </Box>
                   <Box sx={{ textAlign: "right" }}>
-                    <Typography variant="caption" color="text.secondary">
+                    <Typography
+                      variant="caption"
+                      sx={{ color: COLORS.textSecondary, fontSize: "0.68rem" }}
+                    >
                       Available
                     </Typography>
-                    <Typography variant="body2" sx={{ fontWeight: 600, color: COLORS.warning }}>
+                    <Typography
+                      variant="body2"
+                      sx={{ fontWeight: 700, color: COLORS.accent, fontSize: "0.85rem" }}
+                    >
                       {formatNumber(stats.available || 0)}
                     </Typography>
                   </Box>
@@ -670,43 +816,63 @@ const AdminDashboard = React.memo(({ data }) => {
               <AreaChart data={weeklyData}>
                 <defs>
                   <linearGradient id="colorLeads" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor={COLORS.primary} stopOpacity={0.1} />
+                    <stop offset="5%" stopColor={COLORS.primary} stopOpacity={0.15} />
                     <stop offset="95%" stopColor={COLORS.primary} stopOpacity={0} />
                   </linearGradient>
                   <linearGradient id="colorOrders" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor={COLORS.success} stopOpacity={0.1} />
+                    <stop offset="5%" stopColor={COLORS.success} stopOpacity={0.15} />
                     <stop offset="95%" stopColor={COLORS.success} stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke={COLORS.border} />
-                <XAxis dataKey="name" stroke={COLORS.textSecondary} fontSize={12} tickLine={false} />
-                <YAxis stroke={COLORS.textSecondary} fontSize={12} tickLine={false} axisLine={false} />
+                <CartesianGrid strokeDasharray="3 3" stroke={COLORS.border} vertical={false} />
+                <XAxis
+                  dataKey="name"
+                  stroke={COLORS.textSecondary}
+                  fontSize={12}
+                  tickLine={false}
+                  axisLine={false}
+                />
+                <YAxis
+                  stroke={COLORS.textSecondary}
+                  fontSize={12}
+                  tickLine={false}
+                  axisLine={false}
+                />
                 <RechartsTooltip content={<CustomTooltip />} />
-                <Legend />
+                <Legend
+                  iconType="circle"
+                  iconSize={8}
+                  wrapperStyle={{ fontSize: "12px", paddingTop: "8px" }}
+                />
                 <Area
                   type="monotone"
                   dataKey="leads"
                   stroke={COLORS.primary}
-                  strokeWidth={2}
+                  strokeWidth={2.5}
                   fillOpacity={1}
                   fill="url(#colorLeads)"
                   name="Leads"
+                  dot={false}
+                  activeDot={{ r: 5, strokeWidth: 2, fill: "#fff" }}
                 />
                 <Area
                   type="monotone"
                   dataKey="orders"
                   stroke={COLORS.success}
-                  strokeWidth={2}
+                  strokeWidth={2.5}
                   fillOpacity={1}
                   fill="url(#colorOrders)"
                   name="Orders"
+                  dot={false}
+                  activeDot={{ r: 5, strokeWidth: 2, fill: "#fff" }}
                 />
                 <Line
                   type="monotone"
                   dataKey="conversions"
-                  stroke={COLORS.warning}
-                  strokeWidth={2}
-                  dot={{ fill: COLORS.warning, r: 3 }}
+                  stroke={COLORS.accent}
+                  strokeWidth={2.5}
+                  dot={false}
+                  activeDot={{ r: 5, strokeWidth: 2, fill: "#fff", stroke: COLORS.accent }}
                   name="Conversions"
                 />
               </AreaChart>
@@ -718,17 +884,25 @@ const AdminDashboard = React.memo(({ data }) => {
       {/* Lead Distribution */}
       <Grid item xs={12} lg={4}>
         <SectionCard title="Lead Distribution" subtitle="By lead type">
-          <Box sx={{ height: 300, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <Box
+            sx={{
+              height: 300,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
                   data={pieChartData}
                   cx="50%"
-                  cy="50%"
-                  innerRadius={50}
-                  outerRadius={80}
-                  paddingAngle={3}
+                  cy="45%"
+                  innerRadius={55}
+                  outerRadius={85}
+                  paddingAngle={4}
                   dataKey="value"
+                  strokeWidth={0}
                 >
                   {pieChartData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
@@ -738,6 +912,8 @@ const AdminDashboard = React.memo(({ data }) => {
                 <Legend
                   verticalAlign="bottom"
                   height={40}
+                  iconType="circle"
+                  iconSize={8}
                   formatter={(value) => (
                     <span style={{ color: COLORS.textSecondary, fontSize: 12 }}>{value}</span>
                   )}
@@ -753,14 +929,29 @@ const AdminDashboard = React.memo(({ data }) => {
         <SectionCard title="Assignment Status" subtitle="Assigned vs Available by type">
           <Box sx={{ height: 280 }}>
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={barChartData} barGap={4} barSize={20}>
-                <CartesianGrid strokeDasharray="3 3" stroke={COLORS.border} />
-                <XAxis dataKey="name" stroke={COLORS.textSecondary} fontSize={12} tickLine={false} />
-                <YAxis stroke={COLORS.textSecondary} fontSize={12} tickLine={false} axisLine={false} />
+              <BarChart data={barChartData} barGap={4} barSize={22}>
+                <CartesianGrid strokeDasharray="3 3" stroke={COLORS.border} vertical={false} />
+                <XAxis
+                  dataKey="name"
+                  stroke={COLORS.textSecondary}
+                  fontSize={12}
+                  tickLine={false}
+                  axisLine={false}
+                />
+                <YAxis
+                  stroke={COLORS.textSecondary}
+                  fontSize={12}
+                  tickLine={false}
+                  axisLine={false}
+                />
                 <RechartsTooltip content={<CustomTooltip />} />
-                <Legend />
-                <Bar dataKey="Assigned" fill={COLORS.primary} radius={[4, 4, 0, 0]} />
-                <Bar dataKey="Available" fill={COLORS.success} radius={[4, 4, 0, 0]} />
+                <Legend
+                  iconType="circle"
+                  iconSize={8}
+                  wrapperStyle={{ fontSize: "12px", paddingTop: "8px" }}
+                />
+                <Bar dataKey="Assigned" fill={COLORS.primary} radius={[6, 6, 0, 0]} />
+                <Bar dataKey="Available" fill={COLORS.success} radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </Box>
@@ -778,23 +969,84 @@ const AdminDashboard = React.memo(({ data }) => {
             <TableContainer>
               <Table size="small">
                 <TableHead>
-                  <TableRow sx={{ bgcolor: COLORS.grayLight }}>
-                    <TableCell sx={{ fontWeight: 600, fontSize: "0.75rem" }}>Order ID</TableCell>
-                    <TableCell sx={{ fontWeight: 600, fontSize: "0.75rem" }}>FTD</TableCell>
-                    <TableCell sx={{ fontWeight: 600, fontSize: "0.75rem" }}>Filler</TableCell>
-                    <TableCell sx={{ fontWeight: 600, fontSize: "0.75rem" }}>Status</TableCell>
+                  <TableRow>
+                    <TableCell
+                      sx={{
+                        fontWeight: 700,
+                        fontSize: "0.72rem",
+                        color: COLORS.textSecondary,
+                        textTransform: "uppercase",
+                        letterSpacing: "0.05em",
+                        bgcolor: COLORS.grayLight,
+                        borderBottom: "none",
+                        py: 1.5,
+                      }}
+                    >
+                      Order ID
+                    </TableCell>
+                    <TableCell
+                      sx={{
+                        fontWeight: 700,
+                        fontSize: "0.72rem",
+                        color: COLORS.textSecondary,
+                        textTransform: "uppercase",
+                        letterSpacing: "0.05em",
+                        bgcolor: COLORS.grayLight,
+                        borderBottom: "none",
+                        py: 1.5,
+                      }}
+                    >
+                      FTD
+                    </TableCell>
+                    <TableCell
+                      sx={{
+                        fontWeight: 700,
+                        fontSize: "0.72rem",
+                        color: COLORS.textSecondary,
+                        textTransform: "uppercase",
+                        letterSpacing: "0.05em",
+                        bgcolor: COLORS.grayLight,
+                        borderBottom: "none",
+                        py: 1.5,
+                      }}
+                    >
+                      Filler
+                    </TableCell>
+                    <TableCell
+                      sx={{
+                        fontWeight: 700,
+                        fontSize: "0.72rem",
+                        color: COLORS.textSecondary,
+                        textTransform: "uppercase",
+                        letterSpacing: "0.05em",
+                        bgcolor: COLORS.grayLight,
+                        borderBottom: "none",
+                        py: 1.5,
+                      }}
+                    >
+                      Status
+                    </TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {recentOrders.slice(0, 5).map((order) => (
-                    <TableRow key={order._id} hover>
-                      <TableCell sx={{ fontSize: "0.8rem" }}>
+                    <TableRow
+                      key={order._id}
+                      hover
+                      sx={{
+                        "&:last-child td": { borderBottom: 0 },
+                        "&:hover": { bgcolor: COLORS.grayLight + "80" },
+                      }}
+                    >
+                      <TableCell
+                        sx={{ fontSize: "0.82rem", fontWeight: 500, color: COLORS.text }}
+                      >
                         #{order._id?.slice(-6) || "N/A"}
                       </TableCell>
-                      <TableCell sx={{ fontSize: "0.8rem" }}>
+                      <TableCell sx={{ fontSize: "0.82rem", color: COLORS.textSecondary }}>
                         {order.requests?.ftd || 0}
                       </TableCell>
-                      <TableCell sx={{ fontSize: "0.8rem" }}>
+                      <TableCell sx={{ fontSize: "0.82rem", color: COLORS.textSecondary }}>
                         {order.requests?.filler || 0}
                       </TableCell>
                       <TableCell>
@@ -806,8 +1058,8 @@ const AdminDashboard = React.memo(({ data }) => {
               </Table>
             </TableContainer>
           ) : (
-            <Box sx={{ p: 3, textAlign: "center" }}>
-              <Typography variant="body2" color="text.secondary">
+            <Box sx={{ p: 4, textAlign: "center" }}>
+              <Typography variant="body2" sx={{ color: COLORS.textSecondary }}>
                 No recent orders
               </Typography>
             </Box>
@@ -815,70 +1067,57 @@ const AdminDashboard = React.memo(({ data }) => {
         </SectionCard>
       </Grid>
 
-      {/* Quick Stats Summary */}
+      {/* System Overview KPI Row */}
       <Grid item xs={12}>
         <SectionCard title="System Overview" subtitle="Key performance indicators">
-          <Grid container spacing={3}>
-            <Grid item xs={6} sm={4} md={2}>
-              <Box sx={{ textAlign: "center", p: 1.5, bgcolor: COLORS.grayLight, borderRadius: 2 }}>
-                <Typography variant="h5" sx={{ fontWeight: 700, color: COLORS.primary }}>
-                  {assignmentRate}%
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  Assignment Rate
-                </Typography>
-              </Box>
-            </Grid>
-            <Grid item xs={6} sm={4} md={2}>
-              <Box sx={{ textAlign: "center", p: 1.5, bgcolor: COLORS.grayLight, borderRadius: 2 }}>
-                <Typography variant="h5" sx={{ fontWeight: 700, color: COLORS.success }}>
-                  {completedOrders}
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  Completed Orders
-                </Typography>
-              </Box>
-            </Grid>
-            <Grid item xs={6} sm={4} md={2}>
-              <Box sx={{ textAlign: "center", p: 1.5, bgcolor: COLORS.grayLight, borderRadius: 2 }}>
-                <Typography variant="h5" sx={{ fontWeight: 700, color: COLORS.warning }}>
-                  {pendingOrders}
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  Pending Orders
-                </Typography>
-              </Box>
-            </Grid>
-            <Grid item xs={6} sm={4} md={2}>
-              <Box sx={{ textAlign: "center", p: 1.5, bgcolor: COLORS.grayLight, borderRadius: 2 }}>
-                <Typography variant="h5" sx={{ fontWeight: 700, color: COLORS.info }}>
-                  {leadTypes.length}
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  Lead Types
-                </Typography>
-              </Box>
-            </Grid>
-            <Grid item xs={6} sm={4} md={2}>
-              <Box sx={{ textAlign: "center", p: 1.5, bgcolor: COLORS.grayLight, borderRadius: 2 }}>
-                <Typography variant="h5" sx={{ fontWeight: 700, color: COLORS.primary }}>
-                  {agentActiveRate}%
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  Agent Activity
-                </Typography>
-              </Box>
-            </Grid>
-            <Grid item xs={6} sm={4} md={2}>
-              <Box sx={{ textAlign: "center", p: 1.5, bgcolor: COLORS.grayLight, borderRadius: 2 }}>
-                <Typography variant="h5" sx={{ fontWeight: 700, color: COLORS.success }}>
-                  {formatNumber(totalLeads)}
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  Total Leads
-                </Typography>
-              </Box>
-            </Grid>
+          <Grid container spacing={2}>
+            {[
+              { label: "Assignment Rate", value: `${assignmentRate}%`, color: COLORS.primary },
+              { label: "Completed Orders", value: completedOrders, color: COLORS.success },
+              { label: "Pending Orders", value: pendingOrders, color: COLORS.accent },
+              { label: "Lead Types", value: leadTypes.length, color: COLORS.info },
+              { label: "Agent Activity", value: `${agentActiveRate}%`, color: COLORS.primary },
+              { label: "Total Leads", value: formatNumber(totalLeads), color: COLORS.success },
+            ].map((item, index) => (
+              <Grid item xs={6} sm={4} md={2} key={index}>
+                <Box
+                  sx={{
+                    textAlign: "center",
+                    p: 2,
+                    bgcolor: item.color + "08",
+                    borderRadius: "10px",
+                    border: `1px solid ${item.color}15`,
+                    transition: "all 0.2s ease",
+                    "&:hover": {
+                      bgcolor: item.color + "12",
+                      transform: "translateY(-1px)",
+                    },
+                  }}
+                >
+                  <Typography
+                    variant="h5"
+                    sx={{
+                      fontWeight: 800,
+                      color: item.color,
+                      fontSize: "1.3rem",
+                      letterSpacing: "-0.02em",
+                    }}
+                  >
+                    {item.value}
+                  </Typography>
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      color: COLORS.textSecondary,
+                      fontWeight: 500,
+                      fontSize: "0.7rem",
+                    }}
+                  >
+                    {item.label}
+                  </Typography>
+                </Box>
+              </Grid>
+            ))}
           </Grid>
         </SectionCard>
       </Grid>
@@ -886,13 +1125,12 @@ const AdminDashboard = React.memo(({ data }) => {
   );
 });
 
-// Agent Dashboard Component
+// ─── Agent Dashboard ──────────────────────────────────────────────────────────
 const AgentDashboard = React.memo(({ data }) => {
   const performance = data.performance || {};
   const assignedLeads = data.leadsStats?.assigned || 0;
   const recentLeads = data.recentLeads || [];
 
-  // Weekly performance data
   const weeklyPerformance = [
     { day: "Mon", calls: 12, conversions: 3 },
     { day: "Tue", calls: 18, conversions: 5 },
@@ -907,15 +1145,15 @@ const AgentDashboard = React.memo(({ data }) => {
   const progressPercentage = Math.min((assignedLeads / dailyTarget) * 100, 100);
 
   return (
-    <Grid container spacing={2.5}>
+    <Grid container spacing={3}>
       {/* Top Stats */}
       <Grid item xs={6} sm={6} md={3}>
         <StatCard
           title="Assigned Leads"
           value={formatNumber(assignedLeads)}
           subtitle="Active leads to call"
-          icon={<AssignmentIcon fontSize="small" />}
-          iconColor={COLORS.primary}
+          icon={<AssignmentIcon sx={{ fontSize: 20 }} />}
+          accentColor={COLORS.primary}
         />
       </Grid>
       <Grid item xs={6} sm={6} md={3}>
@@ -923,8 +1161,8 @@ const AgentDashboard = React.memo(({ data }) => {
           title="Calls Today"
           value={formatNumber(performance.totalCalls || 0)}
           subtitle="Completed calls"
-          icon={<PhoneIcon fontSize="small" />}
-          iconColor={COLORS.success}
+          icon={<PhoneIcon sx={{ fontSize: 20 }} />}
+          accentColor={COLORS.success}
           trend="up"
           trendValue="+5 from yesterday"
         />
@@ -934,8 +1172,8 @@ const AgentDashboard = React.memo(({ data }) => {
           title="Earnings Today"
           value={formatCurrency(performance.totalEarnings || 0)}
           subtitle="Commission earned"
-          icon={<MoneyIcon fontSize="small" />}
-          iconColor={COLORS.info}
+          icon={<MoneyIcon sx={{ fontSize: 20 }} />}
+          accentColor={COLORS.info}
         />
       </Grid>
       <Grid item xs={6} sm={6} md={3}>
@@ -943,8 +1181,8 @@ const AgentDashboard = React.memo(({ data }) => {
           title="Conversion Rate"
           value={`${performance.conversionRate || 0}%`}
           subtitle="Lead to sale ratio"
-          icon={<TrendingUpIcon fontSize="small" />}
-          iconColor={COLORS.warning}
+          icon={<TrendingUpIcon sx={{ fontSize: 20 }} />}
+          accentColor={COLORS.accent}
         />
       </Grid>
 
@@ -958,7 +1196,12 @@ const AgentDashboard = React.memo(({ data }) => {
                 value={progressPercentage}
                 size={140}
                 thickness={4}
-                sx={{ color: COLORS.primary }}
+                sx={{
+                  color: COLORS.primary,
+                  "& .MuiCircularProgress-circle": {
+                    strokeLinecap: "round",
+                  },
+                }}
               />
               <CircularProgress
                 variant="determinate"
@@ -966,7 +1209,7 @@ const AgentDashboard = React.memo(({ data }) => {
                 size={140}
                 thickness={4}
                 sx={{
-                  color: COLORS.grayLight,
+                  color: COLORS.primary + "12",
                   position: "absolute",
                   left: 0,
                   zIndex: -1,
@@ -985,15 +1228,23 @@ const AgentDashboard = React.memo(({ data }) => {
                   flexDirection: "column",
                 }}
               >
-                <Typography variant="h4" sx={{ fontWeight: 700, color: COLORS.text }}>
+                <Typography
+                  variant="h4"
+                  sx={{
+                    fontWeight: 800,
+                    color: COLORS.text,
+                    fontSize: "1.75rem",
+                    letterSpacing: "-0.02em",
+                  }}
+                >
                   {Math.round(progressPercentage)}%
                 </Typography>
-                <Typography variant="caption" color="text.secondary">
+                <Typography variant="caption" sx={{ color: COLORS.textSecondary }}>
                   of target
                 </Typography>
               </Box>
             </Box>
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="body2" sx={{ color: COLORS.textSecondary }}>
               {assignedLeads} of {dailyTarget} leads completed
             </Typography>
           </Box>
@@ -1006,13 +1257,38 @@ const AgentDashboard = React.memo(({ data }) => {
           <Box sx={{ height: 240 }}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={weeklyPerformance} barGap={4} barSize={24}>
-                <CartesianGrid strokeDasharray="3 3" stroke={COLORS.border} />
-                <XAxis dataKey="day" stroke={COLORS.textSecondary} fontSize={12} tickLine={false} />
-                <YAxis stroke={COLORS.textSecondary} fontSize={12} tickLine={false} axisLine={false} />
+                <CartesianGrid strokeDasharray="3 3" stroke={COLORS.border} vertical={false} />
+                <XAxis
+                  dataKey="day"
+                  stroke={COLORS.textSecondary}
+                  fontSize={12}
+                  tickLine={false}
+                  axisLine={false}
+                />
+                <YAxis
+                  stroke={COLORS.textSecondary}
+                  fontSize={12}
+                  tickLine={false}
+                  axisLine={false}
+                />
                 <RechartsTooltip content={<CustomTooltip />} />
-                <Legend />
-                <Bar dataKey="calls" fill={COLORS.primary} name="Calls" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="conversions" fill={COLORS.success} name="Conversions" radius={[4, 4, 0, 0]} />
+                <Legend
+                  iconType="circle"
+                  iconSize={8}
+                  wrapperStyle={{ fontSize: "12px", paddingTop: "8px" }}
+                />
+                <Bar
+                  dataKey="calls"
+                  fill={COLORS.primary}
+                  name="Calls"
+                  radius={[6, 6, 0, 0]}
+                />
+                <Bar
+                  dataKey="conversions"
+                  fill={COLORS.success}
+                  name="Conversions"
+                  radius={[6, 6, 0, 0]}
+                />
               </BarChart>
             </ResponsiveContainer>
           </Box>
@@ -1024,30 +1300,72 @@ const AgentDashboard = React.memo(({ data }) => {
         <SectionCard title="Performance Metrics" subtitle="Your key statistics">
           <Grid container spacing={2}>
             {[
-              { label: "Total Calls", value: performance.totalCalls || 0, icon: <PhoneIcon />, color: COLORS.primary },
-              { label: "Conversions", value: performance.conversions || 0, icon: <CheckCircleIcon />, color: COLORS.success },
-              { label: "Pending Follow-ups", value: performance.pendingFollowUps || 0, icon: <ScheduleIcon />, color: COLORS.warning },
-              { label: "This Month", value: formatCurrency(performance.monthlyEarnings || 0), icon: <MoneyIcon />, color: COLORS.info },
+              {
+                label: "Total Calls",
+                value: performance.totalCalls || 0,
+                icon: <PhoneIcon />,
+                color: COLORS.primary,
+              },
+              {
+                label: "Conversions",
+                value: performance.conversions || 0,
+                icon: <CheckCircleIcon />,
+                color: COLORS.success,
+              },
+              {
+                label: "Pending Follow-ups",
+                value: performance.pendingFollowUps || 0,
+                icon: <ScheduleIcon />,
+                color: COLORS.accent,
+              },
+              {
+                label: "This Month",
+                value: formatCurrency(performance.monthlyEarnings || 0),
+                icon: <MoneyIcon />,
+                color: COLORS.info,
+              },
             ].map((metric, index) => (
               <Grid item xs={6} key={index}>
                 <Box
                   sx={{
                     p: 2,
-                    border: `1px solid ${COLORS.border}`,
-                    borderRadius: 2,
+                    borderRadius: "10px",
+                    bgcolor: metric.color + "08",
+                    border: `1px solid ${metric.color}15`,
                     display: "flex",
                     alignItems: "center",
                     gap: 1.5,
+                    transition: "all 0.2s ease",
+                    "&:hover": {
+                      bgcolor: metric.color + "12",
+                      transform: "translateY(-1px)",
+                    },
                   }}
                 >
-                  <Avatar sx={{ bgcolor: metric.color + "15", color: metric.color, width: 36, height: 36 }}>
-                    {React.cloneElement(metric.icon, { fontSize: "small" })}
+                  <Avatar
+                    sx={{
+                      bgcolor: metric.color + "18",
+                      color: metric.color,
+                      width: 38,
+                      height: 38,
+                      borderRadius: "10px",
+                    }}
+                  >
+                    {React.cloneElement(metric.icon, { sx: { fontSize: 18 } })}
                   </Avatar>
                   <Box>
-                    <Typography variant="body1" sx={{ fontWeight: 600, color: COLORS.text }}>
-                      {typeof metric.value === "number" ? formatNumber(metric.value) : metric.value}
+                    <Typography
+                      variant="body1"
+                      sx={{ fontWeight: 700, color: COLORS.text, fontSize: "0.95rem" }}
+                    >
+                      {typeof metric.value === "number"
+                        ? formatNumber(metric.value)
+                        : metric.value}
                     </Typography>
-                    <Typography variant="caption" color="text.secondary">
+                    <Typography
+                      variant="caption"
+                      sx={{ color: COLORS.textSecondary, fontSize: "0.7rem" }}
+                    >
                       {metric.label}
                     </Typography>
                   </Box>
@@ -1063,22 +1381,63 @@ const AgentDashboard = React.memo(({ data }) => {
         <SectionCard title="Performance Tips" subtitle="Maximize your productivity">
           <List dense sx={{ p: 0 }}>
             {[
-              { icon: <PhoneIcon />, title: "Prime Call Hours", desc: "Best response rates between 10 AM - 2 PM" },
-              { icon: <ScheduleIcon />, title: "Follow Up", desc: "Second calls have 40% higher conversion" },
-              { icon: <CheckCircleIcon />, title: "Complete Notes", desc: "Detailed notes improve future conversions" },
-              { icon: <SpeedIcon />, title: "Quick Response", desc: "First 5 minutes are critical for new leads" },
+              {
+                icon: <PhoneIcon />,
+                title: "Prime Call Hours",
+                desc: "Best response rates between 10 AM - 2 PM",
+              },
+              {
+                icon: <ScheduleIcon />,
+                title: "Follow Up",
+                desc: "Second calls have 40% higher conversion",
+              },
+              {
+                icon: <CheckCircleIcon />,
+                title: "Complete Notes",
+                desc: "Detailed notes improve future conversions",
+              },
+              {
+                icon: <SpeedIcon />,
+                title: "Quick Response",
+                desc: "First 5 minutes are critical for new leads",
+              },
             ].map((tip, index) => (
-              <ListItem key={index} sx={{ px: 0, py: 1 }}>
+              <ListItem
+                key={index}
+                sx={{
+                  px: 1.5,
+                  py: 1,
+                  borderRadius: "8px",
+                  mb: 0.5,
+                  transition: "all 0.15s ease",
+                  "&:hover": { bgcolor: COLORS.grayLight },
+                }}
+              >
                 <ListItemAvatar>
-                  <Avatar sx={{ bgcolor: COLORS.primaryLight, color: COLORS.primary, width: 36, height: 36 }}>
-                    {React.cloneElement(tip.icon, { fontSize: "small" })}
+                  <Avatar
+                    sx={{
+                      bgcolor: COLORS.primary + "12",
+                      color: COLORS.primary,
+                      width: 36,
+                      height: 36,
+                      borderRadius: "10px",
+                    }}
+                  >
+                    {React.cloneElement(tip.icon, { sx: { fontSize: 18 } })}
                   </Avatar>
                 </ListItemAvatar>
                 <ListItemText
                   primary={tip.title}
                   secondary={tip.desc}
-                  primaryTypographyProps={{ fontWeight: 500, fontSize: "0.875rem" }}
-                  secondaryTypographyProps={{ fontSize: "0.75rem" }}
+                  primaryTypographyProps={{
+                    fontWeight: 600,
+                    fontSize: "0.85rem",
+                    color: COLORS.text,
+                  }}
+                  secondaryTypographyProps={{
+                    fontSize: "0.75rem",
+                    color: COLORS.textSecondary,
+                  }}
                 />
               </ListItem>
             ))}
@@ -1089,25 +1448,27 @@ const AgentDashboard = React.memo(({ data }) => {
   );
 });
 
-// Affiliate Manager Dashboard Component
+// ─── Affiliate Manager Dashboard ──────────────────────────────────────────────
 const AffiliateManagerDashboard = React.memo(({ data }) => {
   const assignedLeads = data.leadsStats?.assigned || 0;
   const ordersStats = data.ordersStats || {};
   const recentOrders = data.recentActivity || [];
 
   const pendingOrders = recentOrders.filter((o) => o.status === "pending").length;
-  const completedOrders = recentOrders.filter((o) => o.status === "fulfilled" || o.status === "completed").length;
+  const completedOrders = recentOrders.filter(
+    (o) => o.status === "fulfilled" || o.status === "completed"
+  ).length;
 
   return (
-    <Grid container spacing={2.5}>
+    <Grid container spacing={3}>
       {/* Stat Cards */}
       <Grid item xs={6} sm={6} md={3}>
         <StatCard
           title="Team Leads"
           value={formatNumber(assignedLeads)}
           subtitle="Under management"
-          icon={<AssignmentIcon fontSize="small" />}
-          iconColor={COLORS.primary}
+          icon={<AssignmentIcon sx={{ fontSize: 20 }} />}
+          accentColor={COLORS.primary}
         />
       </Grid>
       <Grid item xs={6} sm={6} md={3}>
@@ -1115,8 +1476,8 @@ const AffiliateManagerDashboard = React.memo(({ data }) => {
           title="Pending Orders"
           value={formatNumber(ordersStats.pending || pendingOrders)}
           subtitle="Awaiting fulfillment"
-          icon={<PendingIcon fontSize="small" />}
-          iconColor={COLORS.warning}
+          icon={<PendingIcon sx={{ fontSize: 20 }} />}
+          accentColor={COLORS.accent}
         />
       </Grid>
       <Grid item xs={6} sm={6} md={3}>
@@ -1124,8 +1485,8 @@ const AffiliateManagerDashboard = React.memo(({ data }) => {
           title="Completed Today"
           value={formatNumber(ordersStats.completed || completedOrders)}
           subtitle="Successfully fulfilled"
-          icon={<TaskAltIcon fontSize="small" />}
-          iconColor={COLORS.success}
+          icon={<TaskAltIcon sx={{ fontSize: 20 }} />}
+          accentColor={COLORS.success}
         />
       </Grid>
       <Grid item xs={6} sm={6} md={3}>
@@ -1133,31 +1494,83 @@ const AffiliateManagerDashboard = React.memo(({ data }) => {
           title="Fulfillment Rate"
           value={`${ordersStats.fulfillmentRate || 85}%`}
           subtitle="Team performance"
-          icon={<ShowChartIcon fontSize="small" />}
-          iconColor={COLORS.info}
+          icon={<ShowChartIcon sx={{ fontSize: 20 }} />}
+          accentColor={COLORS.info}
         />
       </Grid>
 
       {/* Recent Orders Summary */}
       <Grid item xs={12} md={6}>
-        <SectionCard title="Recent Orders" subtitle={`${recentOrders.length} latest orders`} noPadding>
+        <SectionCard
+          title="Recent Orders"
+          subtitle={`${recentOrders.length} latest orders`}
+          noPadding
+        >
           {recentOrders.length > 0 ? (
             <TableContainer>
               <Table size="small">
                 <TableHead>
-                  <TableRow sx={{ bgcolor: COLORS.grayLight }}>
-                    <TableCell sx={{ fontWeight: 600, fontSize: "0.75rem" }}>Order ID</TableCell>
-                    <TableCell sx={{ fontWeight: 600, fontSize: "0.75rem" }}>Requests</TableCell>
-                    <TableCell sx={{ fontWeight: 600, fontSize: "0.75rem" }}>Status</TableCell>
+                  <TableRow>
+                    <TableCell
+                      sx={{
+                        fontWeight: 700,
+                        fontSize: "0.72rem",
+                        color: COLORS.textSecondary,
+                        textTransform: "uppercase",
+                        letterSpacing: "0.05em",
+                        bgcolor: COLORS.grayLight,
+                        borderBottom: "none",
+                        py: 1.5,
+                      }}
+                    >
+                      Order ID
+                    </TableCell>
+                    <TableCell
+                      sx={{
+                        fontWeight: 700,
+                        fontSize: "0.72rem",
+                        color: COLORS.textSecondary,
+                        textTransform: "uppercase",
+                        letterSpacing: "0.05em",
+                        bgcolor: COLORS.grayLight,
+                        borderBottom: "none",
+                        py: 1.5,
+                      }}
+                    >
+                      Requests
+                    </TableCell>
+                    <TableCell
+                      sx={{
+                        fontWeight: 700,
+                        fontSize: "0.72rem",
+                        color: COLORS.textSecondary,
+                        textTransform: "uppercase",
+                        letterSpacing: "0.05em",
+                        bgcolor: COLORS.grayLight,
+                        borderBottom: "none",
+                        py: 1.5,
+                      }}
+                    >
+                      Status
+                    </TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {recentOrders.slice(0, 5).map((order) => (
-                    <TableRow key={order._id} hover>
-                      <TableCell sx={{ fontSize: "0.8rem" }}>
+                    <TableRow
+                      key={order._id}
+                      hover
+                      sx={{
+                        "&:last-child td": { borderBottom: 0 },
+                        "&:hover": { bgcolor: COLORS.grayLight + "80" },
+                      }}
+                    >
+                      <TableCell
+                        sx={{ fontSize: "0.82rem", fontWeight: 500, color: COLORS.text }}
+                      >
                         #{order._id?.slice(-6) || "N/A"}
                       </TableCell>
-                      <TableCell sx={{ fontSize: "0.8rem" }}>
+                      <TableCell sx={{ fontSize: "0.82rem", color: COLORS.textSecondary }}>
                         FTD: {order.requests?.ftd || 0}, Filler: {order.requests?.filler || 0}
                       </TableCell>
                       <TableCell>
@@ -1169,8 +1582,8 @@ const AffiliateManagerDashboard = React.memo(({ data }) => {
               </Table>
             </TableContainer>
           ) : (
-            <Box sx={{ p: 3, textAlign: "center" }}>
-              <Typography variant="body2" color="text.secondary">
+            <Box sx={{ p: 4, textAlign: "center" }}>
+              <Typography variant="body2" sx={{ color: COLORS.textSecondary }}>
                 No recent orders
               </Typography>
             </Box>
@@ -1182,46 +1595,51 @@ const AffiliateManagerDashboard = React.memo(({ data }) => {
       <Grid item xs={12} md={6}>
         <SectionCard title="Team Overview" subtitle="Performance summary">
           <Grid container spacing={2}>
-            <Grid item xs={6}>
-              <Box sx={{ p: 2, bgcolor: COLORS.grayLight, borderRadius: 2, textAlign: "center" }}>
-                <Typography variant="h4" sx={{ fontWeight: 700, color: COLORS.primary }}>
-                  {formatNumber(assignedLeads)}
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  Total Leads
-                </Typography>
-              </Box>
-            </Grid>
-            <Grid item xs={6}>
-              <Box sx={{ p: 2, bgcolor: COLORS.grayLight, borderRadius: 2, textAlign: "center" }}>
-                <Typography variant="h4" sx={{ fontWeight: 700, color: COLORS.success }}>
-                  {completedOrders}
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  Completed
-                </Typography>
-              </Box>
-            </Grid>
-            <Grid item xs={6}>
-              <Box sx={{ p: 2, bgcolor: COLORS.grayLight, borderRadius: 2, textAlign: "center" }}>
-                <Typography variant="h4" sx={{ fontWeight: 700, color: COLORS.warning }}>
-                  {pendingOrders}
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  Pending
-                </Typography>
-              </Box>
-            </Grid>
-            <Grid item xs={6}>
-              <Box sx={{ p: 2, bgcolor: COLORS.grayLight, borderRadius: 2, textAlign: "center" }}>
-                <Typography variant="h4" sx={{ fontWeight: 700, color: COLORS.info }}>
-                  {recentOrders.length}
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  Total Orders
-                </Typography>
-              </Box>
-            </Grid>
+            {[
+              { label: "Total Leads", value: formatNumber(assignedLeads), color: COLORS.primary },
+              { label: "Completed", value: completedOrders, color: COLORS.success },
+              { label: "Pending", value: pendingOrders, color: COLORS.accent },
+              { label: "Total Orders", value: recentOrders.length, color: COLORS.info },
+            ].map((item, index) => (
+              <Grid item xs={6} key={index}>
+                <Box
+                  sx={{
+                    p: 2.5,
+                    bgcolor: item.color + "08",
+                    borderRadius: "10px",
+                    textAlign: "center",
+                    border: `1px solid ${item.color}15`,
+                    transition: "all 0.2s ease",
+                    "&:hover": {
+                      bgcolor: item.color + "12",
+                      transform: "translateY(-1px)",
+                    },
+                  }}
+                >
+                  <Typography
+                    variant="h4"
+                    sx={{
+                      fontWeight: 800,
+                      color: item.color,
+                      fontSize: "1.5rem",
+                      letterSpacing: "-0.02em",
+                    }}
+                  >
+                    {item.value}
+                  </Typography>
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      color: COLORS.textSecondary,
+                      fontWeight: 500,
+                      fontSize: "0.72rem",
+                    }}
+                  >
+                    {item.label}
+                  </Typography>
+                </Box>
+              </Grid>
+            ))}
           </Grid>
         </SectionCard>
       </Grid>
@@ -1236,36 +1654,97 @@ const AffiliateManagerDashboard = React.memo(({ data }) => {
   );
 });
 
-// Generic Manager Dashboard (for Lead Manager, Refunds Manager, Inventory Manager)
+// ─── Generic Manager Dashboard ────────────────────────────────────────────────
 const GenericManagerDashboard = React.memo(({ data, role }) => {
   const configs = {
     lead_manager: {
       title: "Lead Management",
       stats: [
-        { title: "Pending Verifications", value: data.pendingVerifications || 0, icon: <PendingIcon />, color: COLORS.warning },
-        { title: "Verified Today", value: data.verifiedToday || 0, icon: <CheckCircleIcon />, color: COLORS.success },
-        { title: "Total Managed", value: data.totalManaged || 0, icon: <AssignmentIcon />, color: COLORS.primary },
-        { title: "Approval Rate", value: `${data.approvalRate || 92}%`, icon: <TrendingUpIcon />, color: COLORS.info },
+        {
+          title: "Pending Verifications",
+          value: data.pendingVerifications || 0,
+          icon: <PendingIcon />,
+          color: COLORS.accent,
+        },
+        {
+          title: "Verified Today",
+          value: data.verifiedToday || 0,
+          icon: <CheckCircleIcon />,
+          color: COLORS.success,
+        },
+        {
+          title: "Total Managed",
+          value: data.totalManaged || 0,
+          icon: <AssignmentIcon />,
+          color: COLORS.primary,
+        },
+        {
+          title: "Approval Rate",
+          value: `${data.approvalRate || 92}%`,
+          icon: <TrendingUpIcon />,
+          color: COLORS.info,
+        },
       ],
-      description: "Access the Verifications page from the sidebar to manage pending lead verifications.",
+      description:
+        "Access the Verifications page from the sidebar to manage pending lead verifications.",
     },
     refunds_manager: {
       title: "Refunds Management",
       stats: [
-        { title: "Pending Refunds", value: data.pendingRefunds || 0, icon: <ReceiptIcon />, color: COLORS.warning },
-        { title: "Processed Today", value: data.processedToday || 0, icon: <CheckCircleIcon />, color: COLORS.success },
-        { title: "Total Amount", value: formatCurrency(data.totalAmount || 0), icon: <MoneyIcon />, color: COLORS.primary },
-        { title: "Avg Processing Time", value: `${data.avgProcessingTime || 24}h`, icon: <ScheduleIcon />, color: COLORS.info },
+        {
+          title: "Pending Refunds",
+          value: data.pendingRefunds || 0,
+          icon: <ReceiptIcon />,
+          color: COLORS.accent,
+        },
+        {
+          title: "Processed Today",
+          value: data.processedToday || 0,
+          icon: <CheckCircleIcon />,
+          color: COLORS.success,
+        },
+        {
+          title: "Total Amount",
+          value: formatCurrency(data.totalAmount || 0),
+          icon: <MoneyIcon />,
+          color: COLORS.primary,
+        },
+        {
+          title: "Avg Processing Time",
+          value: `${data.avgProcessingTime || 24}h`,
+          icon: <ScheduleIcon />,
+          color: COLORS.info,
+        },
       ],
       description: "Access the Refunds page from the sidebar to manage all refund requests.",
     },
     inventory_manager: {
       title: "Inventory Management",
       stats: [
-        { title: "Active SIM Cards", value: data.activeSims || 0, icon: <InventoryIcon />, color: COLORS.success },
-        { title: "Available SIMs", value: data.availableSims || 0, icon: <ShippingIcon />, color: COLORS.primary },
-        { title: "Gateway Devices", value: data.gatewayDevices || 0, icon: <SpeedIcon />, color: COLORS.info },
-        { title: "Low Stock Alert", value: data.lowStockItems || 0, icon: <WarningIcon />, color: COLORS.warning },
+        {
+          title: "Active SIM Cards",
+          value: data.activeSims || 0,
+          icon: <InventoryIcon />,
+          color: COLORS.success,
+        },
+        {
+          title: "Available SIMs",
+          value: data.availableSims || 0,
+          icon: <ShippingIcon />,
+          color: COLORS.primary,
+        },
+        {
+          title: "Gateway Devices",
+          value: data.gatewayDevices || 0,
+          icon: <SpeedIcon />,
+          color: COLORS.info,
+        },
+        {
+          title: "Low Stock Alert",
+          value: data.lowStockItems || 0,
+          icon: <WarningIcon />,
+          color: COLORS.accent,
+        },
       ],
       description: "Use the SIM Cards and Gateway Devices pages to manage inventory.",
     },
@@ -1274,23 +1753,43 @@ const GenericManagerDashboard = React.memo(({ data, role }) => {
   const config = configs[role] || configs.lead_manager;
 
   return (
-    <Grid container spacing={2.5}>
+    <Grid container spacing={3}>
       {config.stats.map((stat, index) => (
         <Grid item xs={6} sm={6} md={3} key={index}>
           <StatCard
             title={stat.title}
             value={typeof stat.value === "number" ? formatNumber(stat.value) : stat.value}
-            icon={React.cloneElement(stat.icon, { fontSize: "small" })}
-            iconColor={stat.color}
+            icon={React.cloneElement(stat.icon, { sx: { fontSize: 20 } })}
+            accentColor={stat.color}
           />
         </Grid>
       ))}
 
       <Grid item xs={12}>
         <SectionCard title={config.title} subtitle="Quick navigation guide">
-          <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-            <InfoIcon sx={{ color: COLORS.info }} />
-            <Typography variant="body2" color="text.secondary">
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              gap: 2,
+              p: 2,
+              bgcolor: COLORS.infoLight,
+              borderRadius: "10px",
+              border: `1px solid ${COLORS.info}20`,
+            }}
+          >
+            <Avatar
+              sx={{
+                bgcolor: COLORS.info + "18",
+                color: COLORS.info,
+                width: 40,
+                height: 40,
+                borderRadius: "10px",
+              }}
+            >
+              <InfoIcon sx={{ fontSize: 20 }} />
+            </Avatar>
+            <Typography variant="body2" sx={{ color: COLORS.text, fontWeight: 500 }}>
               {config.description}
             </Typography>
           </Box>
@@ -1300,32 +1799,69 @@ const GenericManagerDashboard = React.memo(({ data, role }) => {
   );
 });
 
-// Loading skeleton
+// ─── Loading Skeleton ─────────────────────────────────────────────────────────
 const DashboardSkeleton = () => (
   <Box>
-    <Skeleton variant="rounded" height={80} sx={{ mb: 3, borderRadius: 2 }} animation="wave" />
-    <Grid container spacing={2.5}>
+    {/* Header skeleton */}
+    <Box sx={{ mb: 3 }}>
+      <Skeleton
+        variant="text"
+        width={280}
+        height={40}
+        sx={{ borderRadius: "8px" }}
+        animation="wave"
+      />
+      <Skeleton
+        variant="text"
+        width={200}
+        height={20}
+        sx={{ borderRadius: "6px", mt: 0.5 }}
+        animation="wave"
+      />
+    </Box>
+    {/* KPI cards skeleton */}
+    <Grid container spacing={3}>
       {[1, 2, 3, 4].map((i) => (
         <Grid item xs={6} sm={6} md={3} key={i}>
-          <Skeleton variant="rounded" height={120} sx={{ borderRadius: 2 }} animation="wave" />
+          <Skeleton
+            variant="rounded"
+            height={140}
+            sx={{ borderRadius: "12px" }}
+            animation="wave"
+          />
         </Grid>
       ))}
       {[1, 2, 3, 4].map((i) => (
         <Grid item xs={6} sm={6} md={3} key={`type-${i}`}>
-          <Skeleton variant="rounded" height={140} sx={{ borderRadius: 2 }} animation="wave" />
+          <Skeleton
+            variant="rounded"
+            height={160}
+            sx={{ borderRadius: "12px" }}
+            animation="wave"
+          />
         </Grid>
       ))}
       <Grid item xs={12} lg={8}>
-        <Skeleton variant="rounded" height={380} sx={{ borderRadius: 2 }} animation="wave" />
+        <Skeleton
+          variant="rounded"
+          height={380}
+          sx={{ borderRadius: "12px" }}
+          animation="wave"
+        />
       </Grid>
       <Grid item xs={12} lg={4}>
-        <Skeleton variant="rounded" height={380} sx={{ borderRadius: 2 }} animation="wave" />
+        <Skeleton
+          variant="rounded"
+          height={380}
+          sx={{ borderRadius: "12px" }}
+          animation="wave"
+        />
       </Grid>
     </Grid>
   </Box>
 );
 
-// Main Dashboard Component
+// ─── Main Dashboard Component ─────────────────────────────────────────────────
 const DashboardPage = () => {
   const user = useSelector(selectUser);
   const [loading, setLoading] = useState(true);
@@ -1425,7 +1961,7 @@ const DashboardPage = () => {
 
   if (loading) {
     return (
-      <Box sx={{ p: { xs: 2, md: 3 }, bgcolor: COLORS.background, minHeight: "100vh" }}>
+      <Box sx={{ p: { xs: 2, md: 3 }, minHeight: "100vh" }}>
         <DashboardSkeleton />
       </Box>
     );
@@ -1436,6 +1972,12 @@ const DashboardPage = () => {
       <Box sx={{ p: 3 }}>
         <Alert
           severity="error"
+          variant="outlined"
+          sx={{
+            borderRadius: "12px",
+            border: `1px solid ${COLORS.error}40`,
+            bgcolor: COLORS.errorLight,
+          }}
           action={
             <IconButton color="inherit" size="small" onClick={handleRefresh}>
               <RefreshIcon />
@@ -1464,7 +2006,10 @@ const DashboardPage = () => {
         return <GenericManagerDashboard data={dashboardData} role={user.role} />;
       default:
         return (
-          <Alert severity="info">
+          <Alert
+            severity="info"
+            sx={{ borderRadius: "12px", border: `1px solid ${COLORS.info}30` }}
+          >
             Welcome! Your dashboard is being configured.
           </Alert>
         );
@@ -1472,7 +2017,7 @@ const DashboardPage = () => {
   };
 
   return (
-    <Box sx={{ p: { xs: 2, md: 3 }, bgcolor: COLORS.background, minHeight: "100vh" }}>
+    <Box sx={{ p: { xs: 2, md: 3 }, minHeight: "100vh" }}>
       <motion.div variants={containerVariants} initial="hidden" animate="visible">
         <WelcomeHeader
           name={user?.fullName || user?.email}
