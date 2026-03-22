@@ -71,7 +71,7 @@ import {
 import AffiliateManagerTableEditor from "../components/AffiliateManagerTableEditor";
 import api from "../services/api";
 
-const AffiliateManagersPage = () => {
+const AffiliateManagersPage = ({ embedded = false }) => {
   const user = useSelector(selectUser);
 
   // Tab state - starts at 0 (Performance Tables) since Overview was removed
@@ -1342,7 +1342,7 @@ const AffiliateManagersPage = () => {
 
   return (
     <LocalizationProvider dateAdapter={AdapterDayjs}>
-      <Box sx={{ width: "100%", typography: "body1", backgroundColor: "#f5f5f5", minHeight: "100vh" }}>
+      <Box sx={{ width: "100%", typography: "body1", backgroundColor: embedded ? "transparent" : "#f5f5f5", minHeight: embedded ? 0 : "100vh" }}>
         {alert.show && (
           <Alert severity={alert.severity} sx={{ mb: 2 }}>
             {alert.message}
@@ -1350,6 +1350,7 @@ const AffiliateManagersPage = () => {
         )}
 
         {/* Header */}
+        {!embedded && (
         <Card sx={{ mb: 3 }}>
           <CardHeader
             title={
@@ -1379,6 +1380,7 @@ const AffiliateManagersPage = () => {
             </Typography>
           </CardContent>
         </Card>
+        )}
 
         {/* Navigation Tabs */}
         <Card sx={{ mb: 3 }}>

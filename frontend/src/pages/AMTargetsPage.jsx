@@ -49,7 +49,7 @@ import { selectUser } from '../store/slices/authSlice';
 import amTargetService from '../services/amTargetService';
 import toast from 'react-hot-toast';
 
-const AMTargetsPage = () => {
+const AMTargetsPage = ({ embedded = false }) => {
   const theme = useTheme();
   const user = useSelector(selectUser);
   const isAdmin = user?.role === 'admin' || user?.role === 'lead_manager';
@@ -463,6 +463,7 @@ const AMTargetsPage = () => {
   return (
     <Box sx={{ width: "100%", typography: "body1" }}>
       {/* Header */}
+      {!embedded && (
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={4}>
         <Box display="flex" alignItems="center" gap={2}>
           <TargetIcon fontSize="large" color="primary" />
@@ -494,6 +495,7 @@ const AMTargetsPage = () => {
           )}
         </Box>
       </Box>
+      )}
 
       {/* Filters */}
       <Paper sx={{ p: 2, mb: 3 }}>
@@ -501,8 +503,8 @@ const AMTargetsPage = () => {
           <FilterIcon color="action" />
           <Typography variant="subtitle2">Filters</Typography>
         </Box>
-        <Grid container spacing={2} alignItems="center">
-          <Grid item xs={12} sm={6} md={3}>
+        <Grid container spacing={1} alignItems="center">
+          <Grid item xs={6} sm={4} md={2}>
             <FormControl fullWidth size="small">
               <InputLabel>Status</InputLabel>
               <Select
@@ -518,7 +520,7 @@ const AMTargetsPage = () => {
             </FormControl>
           </Grid>
           {isAdmin && (
-            <Grid item xs={12} sm={6} md={3}>
+            <Grid item xs={6} sm={4} md={2}>
               <FormControl fullWidth size="small">
                 <InputLabel>Affiliate Manager</InputLabel>
                 <Select
@@ -536,7 +538,7 @@ const AMTargetsPage = () => {
               </FormControl>
             </Grid>
           )}
-          <Grid item xs={12} sm={6} md={2}>
+          <Grid item xs={6} sm={4} md={2}>
             <TextField
               fullWidth
               size="small"
@@ -547,7 +549,7 @@ const AMTargetsPage = () => {
               InputLabelProps={{ shrink: true }}
             />
           </Grid>
-          <Grid item xs={12} sm={6} md={2}>
+          <Grid item xs={6} sm={4} md={2}>
             <TextField
               fullWidth
               size="small"
@@ -558,16 +560,30 @@ const AMTargetsPage = () => {
               InputLabelProps={{ shrink: true }}
             />
           </Grid>
-          <Grid item xs={12} sm={6} md={2}>
+          <Grid item xs={6} sm={4} md={2}>
             <Button
               fullWidth
               variant="outlined"
+              size="small"
               startIcon={<ClearIcon />}
               onClick={clearFilters}
             >
               Clear
             </Button>
           </Grid>
+          {embedded && isAdmin && (
+            <Grid item xs={6} sm={4} md={2}>
+              <Button
+                fullWidth
+                variant="contained"
+                size="small"
+                startIcon={<AddIcon />}
+                onClick={handleOpenCreate}
+              >
+                Assign Target
+              </Button>
+            </Grid>
+          )}
         </Grid>
       </Paper>
 

@@ -33,7 +33,6 @@ import {
   FormControlLabel
 } from '@mui/material';
 import {
-  Refresh as RefreshIcon,
   Visibility as ViewIcon,
   Edit as EditIcon,
   FilterList as FilterIcon,
@@ -744,166 +743,93 @@ const RefundsPage = () => {
 
   return (
     <Box sx={{ width: "100%", typography: "body1" }}>
-      <Typography variant="h4" gutterBottom>
-        Refunds Management
-      </Typography>
-
-      {/* Statistics Cards */}
-      <Grid container spacing={3} sx={{ mb: 3 }}>
-        {REFUND_STATUSES.map((status) => (
-          <Grid item xs={12} sm={6} md={3} key={status.value}>
-            <Card>
-              <CardContent>
-                <Typography variant="h6" component="div">
-                  {stats.statusCounts?.[status.value] || 0}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  {status.label}
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
-        ))}
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" component="div">
-                {stats.totalAssignments || 0}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Total Assignments
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-      </Grid>
-
       {/* Filters and Actions */}
-      <Card sx={{ mb: 3 }}>
-        <CardContent>
-          <Grid container spacing={2} alignItems="center">
-            <Grid item xs={12} sm={6} md={2}>
-              <FormControl fullWidth size="small">
-                <InputLabel>Status Filter</InputLabel>
-                <Select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                  label="Status Filter"
-                >
-                  <MenuItem value="all">All Statuses</MenuItem>
-                  {REFUND_STATUSES.map((status) => (
-                    <MenuItem key={status.value} value={status.value}>
-                      {status.label}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
-            <Grid item xs={12} sm={6} md={3}>
-              <TextField
-                fullWidth
-                size="small"
-                placeholder="Search by name, email, phone..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </Grid>
-            <Grid item xs={12} sm={6} md={2}>
-              <TextField
-                fullWidth
-                size="small"
-                type="date"
-                label="From Date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                InputLabelProps={{ shrink: true }}
-                sx={{
-                  '& .MuiInputLabel-root': {
-                    color: startDate ? 'primary.main' : 'text.secondary'
-                  }
-                }}
-              />
-            </Grid>
-            <Grid item xs={12} sm={6} md={2}>
-              <TextField
-                fullWidth
-                size="small"
-                type="date"
-                label="To Date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                InputLabelProps={{ shrink: true }}
-                sx={{
-                  '& .MuiInputLabel-root': {
-                    color: endDate ? 'primary.main' : 'text.secondary'
-                  }
-                }}
-              />
-            </Grid>
-            <Grid item xs={12} sm={6} md={1}>
-              <Button
-                fullWidth
-                variant="outlined"
-                startIcon={<RefreshIcon />}
-                onClick={fetchAssignments}
-                disabled={loading}
+      <Card sx={{ mb: 2, borderRadius: 3 }}>
+        <CardContent sx={{ py: 1, px: 1.5, '&:last-child': { pb: 1 } }}>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, alignItems: 'center' }}>
+            <FormControl size="small" sx={{ minWidth: 130 }}>
+              <InputLabel sx={{ fontSize: '0.75rem' }}>Status</InputLabel>
+              <Select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                label="Status"
+                sx={{ borderRadius: 2, fontSize: '0.75rem', height: 30 }}
               >
-                Refresh
-              </Button>
-            </Grid>
-            <Grid item xs={12} sm={6} md={1}>
-              <Button
-                fullWidth
-                variant="outlined"
-                onClick={() => {
-                  setStartDate('');
-                  setEndDate('');
-                  setStatusFilter('all');
-                  setSearchTerm('');
-                }}
-                disabled={loading}
-              >
-                Clear Filters
-              </Button>
-            </Grid>
-            <Grid item xs={12} sm={6} md={2}>
-              <Button
-                fullWidth
-                variant="contained"
-                startIcon={<UploadIcon />}
+                <MenuItem value="all" sx={{ fontSize: '0.8rem' }}>All Statuses</MenuItem>
+                {REFUND_STATUSES.map((status) => (
+                  <MenuItem key={status.value} value={status.value} sx={{ fontSize: '0.8rem' }}>
+                    {status.label}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <TextField
+              size="small"
+              placeholder="Search..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              sx={{ minWidth: 160, '& .MuiOutlinedInput-root': { borderRadius: 2, fontSize: '0.75rem', height: 30 } }}
+            />
+            <TextField
+              size="small"
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              InputLabelProps={{ shrink: true }}
+              inputProps={{ title: 'From date' }}
+              sx={{
+                width: 125,
+                '& .MuiOutlinedInput-root': { borderRadius: 2, fontSize: '0.7rem', height: 30 },
+              }}
+            />
+            <TextField
+              size="small"
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              InputLabelProps={{ shrink: true }}
+              inputProps={{ title: 'To date' }}
+              sx={{
+                width: 125,
+                '& .MuiOutlinedInput-root': { borderRadius: 2, fontSize: '0.7rem', height: 30 },
+              }}
+            />
+            <Box sx={{ flexGrow: 1 }} />
+            <Tooltip title="Import CSV">
+              <IconButton
+                size="small"
                 onClick={() => setUploadDialogOpen(true)}
                 color="primary"
+                sx={{ border: '1px solid', borderColor: 'primary.main', borderRadius: 2, width: 30, height: 30 }}
               >
-                Import CSV
-              </Button>
-            </Grid>
-            <Grid item xs={12} sm={6} md={2}>
-              <Button
-                fullWidth
-                variant="outlined"
-                startIcon={<AddIcon />}
+                <UploadIcon sx={{ fontSize: '1rem' }} />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Add Manual Refund">
+              <IconButton
+                size="small"
                 onClick={() => setManualRefundDialogOpen(true)}
                 color="primary"
+                sx={{ border: '1px solid', borderColor: 'primary.main', borderRadius: 2, width: 30, height: 30 }}
               >
-                Add Manual Refund
-              </Button>
-            </Grid>
+                <AddIcon sx={{ fontSize: '1rem' }} />
+              </IconButton>
+            </Tooltip>
             {isAdmin && (
-              <Grid item xs={12} sm={6} md={2}>
-                <Button
-                  fullWidth
-                  variant="outlined"
-                  startIcon={<SupervisorIcon />}
+              <Tooltip title={superiorManager ? 'Change Superior Manager' : 'Set Superior Manager'}>
+                <IconButton
+                  size="small"
                   onClick={() => setSuperiorManagerDialogOpen(true)}
                   color="secondary"
+                  sx={{ border: '1px solid', borderColor: 'secondary.main', borderRadius: 2, width: 30, height: 30 }}
                 >
-                  {superiorManager ? 'Change Superior Manager' : 'Set Superior Manager'}
-                </Button>
-              </Grid>
+                  <SupervisorIcon sx={{ fontSize: '1rem' }} />
+                </IconButton>
+              </Tooltip>
             )}
-          </Grid>
+          </Box>
           {isAdmin && superiorManager && (
-            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
               Superior Lead Manager: <strong>{superiorManager.fullName}</strong> ({superiorManager.email})
             </Typography>
           )}

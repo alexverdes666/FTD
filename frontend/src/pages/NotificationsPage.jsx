@@ -63,6 +63,7 @@ import {
   updateUnreadCount,
   clearError
 } from '../store/slices/notificationSlice';
+import { selectUser } from '../store/slices/authSlice';
 import chatService from '../services/chatService';
 import toast from 'react-hot-toast';
 import { formatDistanceToNow, format } from 'date-fns';
@@ -72,6 +73,7 @@ const NotificationsPage = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
 
+  const user = useSelector(selectUser);
   const notifications = useSelector(selectNotifications);
   const unreadCount = useSelector(selectUnreadCount);
   const loading = useSelector(selectNotificationsLoading);
@@ -187,8 +189,11 @@ const NotificationsPage = () => {
 
     // Navigate to related page
     if (notification.type.startsWith('ticket_')) {
-      // For all ticket-related notifications, navigate to tickets page
-      navigate('/tickets');
+      if (user?.role === 'admin') {
+        navigate('/admin', { state: { tab: 3 } });
+      } else {
+        navigate('/tickets');
+      }
     } else if (notification.actionUrl) {
       navigate(notification.actionUrl);
     } else {
@@ -619,7 +624,11 @@ const NotificationsPage = () => {
                 <Button
                   onClick={() => {
                     if (selectedNotification.type.startsWith('ticket_')) {
-                      navigate('/tickets');
+                      if (user?.role === 'admin') {
+                        navigate('/admin', { state: { tab: 3 } });
+                      } else {
+                        navigate('/tickets');
+                      }
                     } else {
                       navigate(selectedNotification.actionUrl);
                     }

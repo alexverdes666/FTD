@@ -92,7 +92,11 @@ const FineNotificationPopup = () => {
       }
 
       if (goToPayroll) {
-        navigate('/fines');
+        if (user?.role === 'admin') {
+          navigate('/finance', { state: { tab: 3 } });
+        } else {
+          navigate('/fines');
+        }
       }
     } catch (err) {
       console.error('Error acknowledging fine:', err);

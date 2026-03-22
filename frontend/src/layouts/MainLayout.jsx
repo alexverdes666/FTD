@@ -58,6 +58,7 @@ import {
   Headset as HeadsetIcon,
   Gavel as GavelIcon,
   Vaccines as InjectionIcon,
+  AccountBalance as FinanceIcon,
 } from "@mui/icons-material";
 import {
   logout,
@@ -77,6 +78,7 @@ import GlobalSearch from "../components/GlobalSearch";
 import Force2FASetup from "../components/Force2FASetup";
 import AnnouncementPopup from "../components/AnnouncementPopup";
 import FineNotificationPopup from "../components/FineNotificationPopup";
+import TicketHeaderButton from "../components/TicketHeaderButton";
 import TwoFactorVerification from "../components/TwoFactorVerification";
 import QRCodeLogin from "../components/QRCodeLogin";
 import { Reorder, useDragControls } from "framer-motion";
@@ -291,54 +293,10 @@ const MainLayout = () => {
         { text: "Leads", icon: <LeadsIcon />, path: "/leads" },
         { text: "CRM", icon: <CrmIcon />, path: "/crm" },
         // { text: "Workspace", icon: <WorkspaceIcon />, path: "/workspace" }, // Temporarily hidden
-        {
-          text: "Users",
-          icon: <UsersIcon />,
-          isExpandable: true,
-          key: "users",
-          children: [
-            {
-              text: "Users",
-              icon: <UsersIcon />,
-              path: "/users",
-            },
-            {
-              text: "Accounts",
-              icon: <AdminIcon />,
-              path: "/account-management",
-            },
-          ],
-        },
-        {
-          text: "Payroll",
-          icon: <PaymentIcon />,
-          isExpandable: true,
-          key: "payroll",
-          children: [
-            {
-              text: "Agents",
-              icon: <PaymentIcon />,
-              path: "/payroll",
-            },
-            {
-              text: "AM Payroll",
-              icon: <TableIcon />,
-              path: "/affiliate-managers",
-            },
-            {
-              text: "AM Expenses",
-              icon: <ReceiptLongIcon />,
-              path: "/am-expenses",
-            },
-            {
-              text: "Withdraw",
-              icon: <WithdrawIcon />,
-              path: "/withdrawals",
-            },
-          ],
-        },
+        { text: "Admin", icon: <AdminIcon />, path: "/admin" },
+        { text: "Payroll", icon: <PaymentIcon />, path: "/payroll" },
+        { text: "Finance", icon: <FinanceIcon />, path: "/finance" },
         { text: "Refunds", icon: <RefundsIcon />, path: "/refunds" },
-        { text: "Fines", icon: <GavelIcon />, path: "/fines" },
         {
           text: "ERP",
           icon: <BusinessIcon />,
@@ -354,16 +312,6 @@ const MainLayout = () => {
               text: "SMS Gateway",
               icon: <SmsIcon />,
               path: "/sms",
-            },
-            {
-              text: "Targets",
-              icon: <TargetIcon />,
-              path: "/am-targets",
-            },
-            {
-              text: "Announce",
-              icon: <AnnouncementIcon />,
-              path: "/announcements",
             },
             {
               text: "Verify",
@@ -415,7 +363,6 @@ const MainLayout = () => {
             },
           ],
         },
-        { text: "Tickets", icon: <TicketIcon />, path: "/tickets" },
         { text: "Sheets", icon: <SheetsIcon />, path: "/sheets" },
       ];
     } else if (user?.role === "affiliate_manager") {
@@ -645,6 +592,7 @@ const MainLayout = () => {
     "/orders": "#ff7043",
     "/leads": "#66bb6a",
     "/crm": "#ec407a",
+    "/admin": "#7e57c2",
     "/users": "#ab47bc",
     "/account-management": "#7e57c2",
     "/client-networks": "#29b6f6",
@@ -654,6 +602,7 @@ const MainLayout = () => {
     "/card-issuers": "#ffa726",
     "/campaigns": "#ef5350",
     "/payroll": "#4caf50",
+    "/finance": "#2e7d32",
     "/affiliate-managers": "#42a5f5",
     "/am-expenses": "#e91e63",
     "/withdrawals": "#ef5350",
@@ -819,6 +768,7 @@ const MainLayout = () => {
           <Box sx={{ flexGrow: 1 }} />
           <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
             <UserSwitcher onOpenQuickSwitcher={handleOpenQuickSwitcher} />
+            <TicketHeaderButton />
             <NotificationBell />
             <Box
               sx={{
@@ -988,7 +938,7 @@ const MainLayout = () => {
             <Outlet />
           </Force2FASetup>
         </Box>
-        {location.pathname !== "/notes" && location.pathname !== "/orders" && location.pathname !== "/crm" && location.pathname !== "/leads" && location.pathname !== "/client-psps" && location.pathname !== "/card-issuers" && location.pathname !== "/am-expenses" && location.pathname !== "/sms" && location.pathname !== "/fines" && location.pathname !== "/numbers" && location.pathname !== "/approve-am-calls" && location.pathname !== "/deposit-calls" && location.pathname !== "/call-declarations" && !location.pathname.startsWith("/client-network/") && !location.pathname.startsWith("/client-broker/") && <Footer />}
+        {location.pathname !== "/notes" && location.pathname !== "/orders" && location.pathname !== "/crm" && location.pathname !== "/leads" && location.pathname !== "/client-psps" && location.pathname !== "/card-issuers" && location.pathname !== "/admin" && location.pathname !== "/finance" && location.pathname !== "/am-expenses" && location.pathname !== "/sms" && location.pathname !== "/fines" && location.pathname !== "/numbers" && location.pathname !== "/approve-am-calls" && location.pathname !== "/deposit-calls" && location.pathname !== "/call-declarations" && !location.pathname.startsWith("/client-network/") && !location.pathname.startsWith("/client-broker/") && <Footer />}
       </Box>
 
       {/* Floating Chat Button */}

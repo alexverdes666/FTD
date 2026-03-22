@@ -47,6 +47,7 @@ import {
   addNewNotification,
   updateUnreadCount,
 } from '../store/slices/notificationSlice';
+import { selectUser } from '../store/slices/authSlice';
 import chatService from '../services/chatService';
 import notificationService from '../services/notificationService';
 import toast from 'react-hot-toast';
@@ -61,6 +62,7 @@ const NotificationBell = () => {
   const [page, setPage] = useState(1);
   const [popup, setPopup] = useState(null);
 
+  const user = useSelector(selectUser);
   const notifications = useSelector(selectNotifications);
   const unreadCount = useSelector(selectUnreadCount);
   const loading = useSelector(selectNotificationsLoading);
@@ -145,7 +147,11 @@ const NotificationBell = () => {
     }
 
     if (notification.type.startsWith('ticket_')) {
-      navigate('/tickets');
+      if (user?.role === 'admin') {
+        navigate('/admin', { state: { tab: 3 } });
+      } else {
+        navigate('/tickets');
+      }
       handleClose();
     } else if (notification.actionUrl) {
       navigate(notification.actionUrl);
@@ -298,7 +304,11 @@ const NotificationBell = () => {
           }}
           onClick={() => {
             if (popup?.type?.startsWith('ticket_')) {
-              navigate('/tickets');
+              if (user?.role === 'admin') {
+                navigate('/admin', { state: { tab: 3 } });
+              } else {
+                navigate('/tickets');
+              }
             } else {
               navigate('/notifications');
             }
