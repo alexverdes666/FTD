@@ -496,6 +496,8 @@ exports.getAssignedLeads = async (req, res, next) => {
       orderPriority,
       orderCreatedStart,
       orderCreatedEnd,
+      search,
+      country,
     } = req.query;
     const pageNum = parseInt(page, 10);
     const limitNum = parseInt(limit, 10);
@@ -506,6 +508,19 @@ exports.getAssignedLeads = async (req, res, next) => {
     };
     if (status) filter.status = status;
     if (leadType) filter.leadType = leadType;
+    if (country) filter.country = country;
+
+    // Apply search filter across name, email, phone, country
+    if (search && search.trim().length >= 2) {
+      const searchRegex = new RegExp(search.trim(), "i");
+      filter.$or = [
+        { firstName: searchRegex },
+        { lastName: searchRegex },
+        { newEmail: searchRegex },
+        { newPhone: searchRegex },
+        { country: searchRegex },
+      ];
+    }
 
     // Step 1: Get all unique leads assigned to this agent
     const assignedLeads = await Lead.find(filter)
@@ -713,6 +728,18 @@ exports.getAssignedLeads = async (req, res, next) => {
     });
   } catch (error) {
     console.error("Error in getAssignedLeads:", error);
+    next(error);
+  }
+};
+exports.getAssignedLeadCountries = async (req, res, next) => {
+  try {
+    const countries = await Lead.distinct("country", {
+      assignedAgent: new mongoose.Types.ObjectId(req.user.id),
+    });
+    const sorted = countries.filter(Boolean).sort((a, b) => a.localeCompare(b));
+    res.status(200).json({ success: true, data: sorted });
+  } catch (error) {
+    console.error("Error in getAssignedLeadCountries:", error);
     next(error);
   }
 };

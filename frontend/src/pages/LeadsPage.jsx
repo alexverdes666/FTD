@@ -49,6 +49,7 @@ import {
   Menu,
   ListItemIcon,
   ListItemText,
+  Autocomplete,
 } from "@mui/material";
 import { alpha } from "@mui/material/styles";
 import {
@@ -1134,6 +1135,7 @@ const LeadsPage = () => {
       orderCreatedEnd: "",
       ipqsType: "",
       ipqsResult: "",
+      country: "",
     };
   });
 
@@ -1271,6 +1273,18 @@ const LeadsPage = () => {
     return stats;
   }, [leads, isAgent]);
 
+  // Fetch distinct countries for agent's assigned leads
+  const [agentCountries, setAgentCountries] = useState([]);
+  useEffect(() => {
+    if (!isAgent) return;
+    api
+      .get("/leads/assigned/countries")
+      .then((res) => {
+        if (res.data.success) setAgentCountries(res.data.data);
+      })
+      .catch(() => {});
+  }, [isAgent]);
+
   // Compute active filter count for the filter toggle badge
   const activeFilterCount = useMemo(() => {
     let count = 0;
@@ -1284,6 +1298,7 @@ const LeadsPage = () => {
     if (filters.orderCreatedEnd) count++;
     if (filters.ipqsType) count++;
     if (filters.ipqsResult) count++;
+    if (filters.country) count++;
     return count;
   }, [filters]);
 
@@ -1366,6 +1381,9 @@ const LeadsPage = () => {
       }
       if (filters.ipqsResult === "") {
         params.delete("ipqsResult");
+      }
+      if (filters.country === "") {
+        params.delete("country");
       }
       const endpoint = isAgent ? "/leads/assigned" : "/leads";
       const response = await api.get(`${endpoint}?${params}`, {
@@ -2172,6 +2190,9 @@ const LeadsPage = () => {
       assignedToMe: false,
       orderCreatedStart: "",
       orderCreatedEnd: "",
+      ipqsType: "",
+      ipqsResult: "",
+      country: "",
     });
     setSearchInput(""); // Also clear the local search input
     setPage(0);
@@ -2455,7 +2476,43 @@ const LeadsPage = () => {
               }}
             />
             <Divider orientation="vertical" flexItem sx={{ my: 0.5, borderColor: (theme) => alpha(theme.palette.grey[300], 0.6) }} />
+            {/* Country (for agents) */}
+            {isAgent && (
+              <Autocomplete
+                size="small"
+                options={agentCountries}
+                value={filters.country || null}
+                onChange={(_, v) => handleFilterChange("country", v || "")}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    placeholder="Country"
+                    sx={{
+                      width: 150,
+                      "& .MuiOutlinedInput-root": {
+                        height: 28,
+                        borderRadius: 6,
+                        fontSize: "0.75rem",
+                        bgcolor: "background.paper",
+                        boxShadow: (theme) => `0 1px 2px ${alpha(theme.palette.grey[400], 0.15)}`,
+                        "& fieldset": { borderColor: (theme) => alpha(theme.palette.grey[300], 0.7) },
+                        "&:hover fieldset": { borderColor: (theme) => alpha(theme.palette.primary.main, 0.3) },
+                        "&.Mui-focused fieldset": { borderColor: "primary.main", borderWidth: 1.5 },
+                        py: "0 !important",
+                      },
+                      "& input::placeholder": { fontSize: "0.75rem", opacity: 0.6 },
+                    }}
+                  />
+                )}
+                slotProps={{
+                  paper: { sx: { fontSize: "0.8rem" } },
+                  listbox: { sx: { "& .MuiAutocomplete-option": { fontSize: "0.8rem", minHeight: 28 } } },
+                }}
+                disableClearable={!filters.country}
+              />
+            )}
             {/* Order */}
+            {!isAgent && (
             <FormControl size="small" sx={{ minWidth: 130, "& .MuiOutlinedInput-root": { height: 28, borderRadius: 6, fontSize: "0.75rem", bgcolor: "background.paper", boxShadow: (theme) => `0 1px 2px ${alpha(theme.palette.grey[400], 0.15)}`, "& fieldset": { borderColor: (theme) => alpha(theme.palette.grey[300], 0.7) }, "&:hover fieldset": { borderColor: (theme) => alpha(theme.palette.primary.main, 0.3) } } }}>
               <Select
                 value={filters.orderId}
@@ -2483,7 +2540,9 @@ const LeadsPage = () => {
                 ))}
               </Select>
             </FormControl>
+            )}
             {/* IPQS Type */}
+            {!isAgent && (
             <FormControl size="small" sx={{ minWidth: 85, "& .MuiOutlinedInput-root": { height: 28, borderRadius: 6, fontSize: "0.75rem", bgcolor: "background.paper", boxShadow: (theme) => `0 1px 2px ${alpha(theme.palette.grey[400], 0.15)}`, "& fieldset": { borderColor: (theme) => alpha(theme.palette.grey[300], 0.7) }, "&:hover fieldset": { borderColor: (theme) => alpha(theme.palette.primary.main, 0.3) } } }}>
               <Select
                 value={filters.ipqsType}
@@ -2503,8 +2562,9 @@ const LeadsPage = () => {
                 <MenuItem value="both" sx={{ fontSize: "0.8rem" }}>Both</MenuItem>
               </Select>
             </FormControl>
+            )}
             {/* IPQS Result (conditional) */}
-            {filters.ipqsType && (
+            {!isAgent && filters.ipqsType && (
               <FormControl size="small" sx={{ minWidth: 95, "& .MuiOutlinedInput-root": { height: 28, borderRadius: 6, fontSize: "0.75rem", bgcolor: "background.paper", boxShadow: (theme) => `0 1px 2px ${alpha(theme.palette.grey[400], 0.15)}`, "& fieldset": { borderColor: (theme) => alpha(theme.palette.grey[300], 0.7) }, "&:hover fieldset": { borderColor: (theme) => alpha(theme.palette.primary.main, 0.3) } } }}>
                 <Select
                   value={filters.ipqsResult}

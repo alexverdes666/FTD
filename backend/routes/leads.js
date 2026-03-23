@@ -54,6 +54,7 @@ const {
   assignSimCardToLeads,
   getGlobalLeadAuditLogs,
   batchValidateIPQS,
+  getAssignedLeadCountries,
 } = require("../controllers/leads");
 const router = express.Router();
 router.get(
@@ -136,8 +137,15 @@ router.get(
       .optional()
       .isIn(["active", "contacted", "converted", "inactive"])
       .withMessage("Status must be active, contacted, converted, or inactive"),
+    query("search").optional().isString().trim(),
+    query("country").optional().isString().trim(),
   ],
   getAssignedLeads
+);
+router.get(
+  "/assigned/countries",
+  [protect, isAgent],
+  getAssignedLeadCountries
 );
 router.get(
   "/stats",

@@ -27,7 +27,7 @@ const tabFallback = (
 
 const tabs = [
   { label: "Users", icon: <UsersIcon sx={{ fontSize: 16 }} /> },
-  { label: "Accounts", icon: <AccountsIcon sx={{ fontSize: 16 }} /> },
+  { label: "Linked Accounts", icon: <AccountsIcon sx={{ fontSize: 16 }} /> },
   { label: "Announcements", icon: <AnnouncementsIcon sx={{ fontSize: 16 }} /> },
   { label: "Tickets", icon: <TicketsIcon sx={{ fontSize: 16 }} /> },
 ];
