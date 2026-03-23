@@ -408,9 +408,10 @@ router.post(
         "lead_manager",
         "refunds_manager",
         "inventory_manager",
+        "employee",
       ])
       .withMessage(
-        "Role must be admin, affiliate_manager, agent, lead_manager, refunds_manager, or inventory_manager"
+        "Role must be admin, affiliate_manager, agent, lead_manager, refunds_manager, inventory_manager, or employee"
       ),
     body("fourDigitCode")
       .optional()
@@ -450,6 +451,9 @@ router.put(
       "affiliate_manager",
       "agent",
       "lead_manager",
+      "refunds_manager",
+      "inventory_manager",
+      "employee",
     ]),
   ],
   approveUser
@@ -478,9 +482,10 @@ router.put(
         "lead_manager",
         "refunds_manager",
         "inventory_manager",
+        "employee",
       ])
       .withMessage(
-        "Role must be admin, affiliate_manager, agent, lead_manager, refunds_manager, or inventory_manager"
+        "Role must be admin, affiliate_manager, agent, lead_manager, refunds_manager, inventory_manager, or employee"
       ),
     body("fourDigitCode")
       .optional()

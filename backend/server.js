@@ -67,6 +67,7 @@ const crmDealRoutes = require("./routes/crmDeals");
 const amiAgentRoutes = require("./routes/amiAgents");
 const refundApprovalRoutes = require("./routes/refundApprovals");
 const refundApprovalImageRoutes = require("./routes/refundApprovalImages");
+const employeePayRoutes = require("./routes/employeePay");
 const errorHandler = require("./middleware/errorHandler");
 const { changeTracker } = require("./middleware/changeTracker");
 const { activityLogger } = require("./middleware/activityLogger");
@@ -723,6 +724,7 @@ const amExpensesRoutes = require("./routes/amExpenses");
 app.use("/api/am-expenses", amExpensesRoutes);
 const injectionRoutes = require("./routes/injections");
 app.use("/api/injections", injectionRoutes);
+app.use("/api/employee-pay", employeePayRoutes);
 app.use(errorHandler);
 app.use("*", (req, res) => {
   res.status(404).json({

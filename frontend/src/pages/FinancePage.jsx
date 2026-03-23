@@ -13,6 +13,7 @@ import {
   ReceiptLong as ExpensesIcon,
   Gavel as FinesIcon,
   AccountBalanceWallet as WithdrawIcon,
+  BadgeOutlined as EmployeeIcon,
 } from "@mui/icons-material";
 
 const AffiliateManagersPage = lazy(() => import("./AffiliateManagersPage.jsx"));
@@ -20,6 +21,7 @@ const AMTargetsPage = lazy(() => import("./AMTargetsPage.jsx"));
 const AMExpensesPage = lazy(() => import("./AMExpensesPage.jsx"));
 const FinesPage = lazy(() => import("./FinesPage.jsx"));
 const WithdrawalsPage = lazy(() => import("./WithdrawalsPage.jsx"));
+const EmployeePayManagementPage = lazy(() => import("./EmployeePayManagementPage.jsx"));
 
 const tabFallback = (
   <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", py: 6 }}>
@@ -33,6 +35,7 @@ const tabs = [
   { label: "AM Expenses", icon: <ExpensesIcon sx={{ fontSize: 16 }} /> },
   { label: "Fines", icon: <FinesIcon sx={{ fontSize: 16 }} /> },
   { label: "Withdraw", icon: <WithdrawIcon sx={{ fontSize: 16 }} /> },
+  { label: "Employees", icon: <EmployeeIcon sx={{ fontSize: 16 }} /> },
 ];
 
 const FinancePage = () => {
@@ -65,6 +68,7 @@ const FinancePage = () => {
           {tab === 2 && <AMExpensesPage />}
           {tab === 3 && <FinesPage />}
           {tab === 4 && <WithdrawalsPage />}
+          {tab === 5 && <EmployeePayManagementPage />}
         </Suspense>
       </Box>
     </Box>

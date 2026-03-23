@@ -148,7 +148,7 @@ const NotificationBell = () => {
 
     if (notification.type.startsWith('ticket_')) {
       if (user?.role === 'admin') {
-        navigate('/admin', { state: { tab: 3 } });
+        navigate('/admin', { state: { tab: 2 } });
       } else {
         navigate('/tickets');
       }
@@ -305,7 +305,7 @@ const NotificationBell = () => {
           onClick={() => {
             if (popup?.type?.startsWith('ticket_')) {
               if (user?.role === 'admin') {
-                navigate('/admin', { state: { tab: 3 } });
+                navigate('/admin', { state: { tab: 2 } });
               } else {
                 navigate('/tickets');
               }

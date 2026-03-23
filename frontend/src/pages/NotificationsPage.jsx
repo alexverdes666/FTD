@@ -190,7 +190,7 @@ const NotificationsPage = () => {
     // Navigate to related page
     if (notification.type.startsWith('ticket_')) {
       if (user?.role === 'admin') {
-        navigate('/admin', { state: { tab: 3 } });
+        navigate('/admin', { state: { tab: 2 } });
       } else {
         navigate('/tickets');
       }
@@ -625,7 +625,7 @@ const NotificationsPage = () => {
                   onClick={() => {
                     if (selectedNotification.type.startsWith('ticket_')) {
                       if (user?.role === 'admin') {
-                        navigate('/admin', { state: { tab: 3 } });
+                        navigate('/admin', { state: { tab: 2 } });
                       } else {
                         navigate('/tickets');
                       }

@@ -568,6 +568,13 @@ const MainLayout = () => {
         { text: "Fines", icon: <GavelIcon />, path: "/fines" },
         { text: "Tickets", icon: <TicketIcon />, path: "/tickets" },
       ];
+    } else if (user?.role === "employee") {
+      return [
+        ...commonItems,
+        { text: "My Pay", icon: <PaymentIcon />, path: "/employee-dashboard" },
+        { text: "Fines", icon: <GavelIcon />, path: "/fines" },
+        { text: "Tickets", icon: <TicketIcon />, path: "/tickets" },
+      ];
     }
     return [
       ...commonItems,
@@ -617,6 +624,7 @@ const MainLayout = () => {
     "/fines": "#ff9800",
     "/injections": "#9c27b0",
     "/call-declarations": "#e91e63",
+    "/employee-dashboard": "#4caf50",
   };
 
   // Flatten navigation items: expand all children into a single flat list

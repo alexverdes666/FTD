@@ -21,7 +21,7 @@ const userSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ['admin', 'affiliate_manager', 'agent', 'pending_approval', 'lead_manager', 'refunds_manager', 'inventory_manager'],
+    enum: ['admin', 'affiliate_manager', 'agent', 'pending_approval', 'lead_manager', 'refunds_manager', 'inventory_manager', 'employee'],
     default: 'pending_approval',
     required: true
   },

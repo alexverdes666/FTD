@@ -56,6 +56,7 @@ const ROLES = [
   { value: "lead_manager", label: "Lead Manager" },
   { value: "refunds_manager", label: "Refunds Manager" },
   { value: "inventory_manager", label: "Inventory Manager" },
+  { value: "employee", label: "Employee" },
 ];
 
 const getRoleColor = (role) => {
@@ -66,6 +67,7 @@ const getRoleColor = (role) => {
     lead_manager: "info",
     refunds_manager: "warning",
     inventory_manager: "secondary",
+    employee: "default",
   };
   return colorMap[role] || "default";
 };
@@ -78,6 +80,7 @@ const getRoleLabel = (role) => {
     lead_manager: "Lead Manager",
     refunds_manager: "Refunds Manager",
     inventory_manager: "Inventory Manager",
+    employee: "Employee",
   };
   return labelMap[role] || role;
 };

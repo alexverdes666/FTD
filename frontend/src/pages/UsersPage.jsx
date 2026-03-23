@@ -38,6 +38,9 @@ import {
   useTheme,
   alpha,
   useMediaQuery,
+  Autocomplete,
+  Avatar,
+  Badge,
 } from "@mui/material";
 import { styled } from "@mui/material/styles";
 import {
@@ -54,6 +57,10 @@ import {
   ManageAccounts as ManagerIcon,
   Logout as LogoutIcon,
   Search as SearchIcon,
+  Link as LinkIcon,
+  LinkOff as UnlinkIcon,
+  SwapHoriz as SwitchIcon,
+  Group as GroupIcon,
 } from "@mui/icons-material";
 import { useForm, Controller } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
@@ -108,6 +115,11 @@ const ROLES = {
     color: "warning",
   },
   agent: { label: "Agent", icon: <AgentIcon />, color: "success" },
+  employee: {
+    label: "Employee",
+    icon: <PersonIcon />,
+    color: "default",
+  },
   pending_approval: {
     label: "Pending Approval",
     icon: <PersonIcon />,
@@ -485,6 +497,13 @@ const UsersPage = () => {
     isActive: "true",
     status: "",
   });
+  // Linked accounts state
+  const [linkDialogOpen, setLinkDialogOpen] = useState(false);
+  const [availableUsers, setAvailableUsers] = useState([]);
+  const [selectedPrimary, setSelectedPrimary] = useState(null);
+  const [selectedLinked, setSelectedLinked] = useState([]);
+  const [linkLoading, setLinkLoading] = useState(false);
+
   // Initialize search from URL params (for global search integration)
   const [searchValue, setSearchValue] = useState(() => searchParams.get("search") || "");
   
@@ -748,6 +767,61 @@ const UsersPage = () => {
     setFilters({ role: "", isActive: "true", status: "" });
     setSearchValue("");
   }, []);
+
+  // Linked accounts handlers
+  const fetchAvailableUsers = async () => {
+    try {
+      const response = await api.get("/account-management/available-users");
+      setAvailableUsers(response.data.data);
+    } catch (err) {
+      setError("Failed to load available users");
+    }
+  };
+
+  const handleOpenLinkDialog = () => {
+    fetchAvailableUsers();
+    setSelectedPrimary(null);
+    setSelectedLinked([]);
+    setLinkDialogOpen(true);
+  };
+
+  const handleLinkAccounts = async () => {
+    if (!selectedPrimary || selectedLinked.length === 0) {
+      setError("Please select a primary account and at least one account to link");
+      return;
+    }
+    try {
+      setLinkLoading(true);
+      await api.post("/account-management/link-accounts", {
+        primaryAccountId: selectedPrimary._id,
+        linkedAccountIds: selectedLinked.map((u) => u._id),
+      });
+      showSuccess("Accounts linked successfully");
+      setLinkDialogOpen(false);
+      fetchUsers();
+    } catch (err) {
+      setError(err.response?.data?.message || "Failed to link accounts");
+    } finally {
+      setLinkLoading(false);
+    }
+  };
+
+  const handleUnlinkAccount = async (userId) => {
+    if (!window.confirm("Remove this account from its linked group?")) return;
+    try {
+      await api.delete(`/account-management/remove-from-group/${userId}`);
+      showSuccess("Account unlinked successfully");
+      fetchUsers();
+    } catch (err) {
+      setError(err.response?.data?.message || "Failed to unlink account");
+    }
+  };
+
+  const getFilteredLinkedOptions = () => {
+    if (!selectedPrimary) return [];
+    return availableUsers.filter((u) => u._id !== selectedPrimary._id);
+  };
+
   const canManageUsers = useMemo(
     () => currentUser?.role === "admin",
     [currentUser]
@@ -788,110 +862,117 @@ const UsersPage = () => {
           {error}
         </Alert>
       )}
-      <StyledCard sx={{ mb: 2 }}>
-        <CardContent>
-          <Grid container spacing={2} alignItems="center">
-              <Grid item xs={12} sm={6} md={3}>
-                <TextField
-                  fullWidth
-                  placeholder="Search by name or email..."
-                  value={searchValue}
-                  onChange={handleSearchChange}
-                  InputProps={{
-                    startAdornment: (
-                      <SearchIcon sx={{ color: "text.secondary", mr: 1 }} />
-                    ),
-                  }}
-                  size="small"
-                  sx={{
-                    "& .MuiOutlinedInput-root": {
-                      bgcolor: "background.paper",
-                    },
-                  }}
-                />
-              </Grid>
-              <Grid item xs={6} sm={3} md={2}>
-                <FormControl fullWidth size="small">
-                  <InputLabel>Role</InputLabel>
-                  <Select
-                    value={filters.role}
-                    label="Role"
-                    onChange={handleFilterChange("role")}
-                  >
-                    <MenuItem value="">All Roles</MenuItem>
-                    {Object.entries(ROLES).map(([key, { label }]) => (
-                      <MenuItem key={key} value={key}>
-                        {label}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid item xs={6} sm={3} md={2}>
-                <FormControl fullWidth size="small">
-                  <InputLabel>Status</InputLabel>
-                  <Select
-                    value={filters.status}
-                    label="Status"
-                    onChange={handleFilterChange("status")}
-                  >
-                    <MenuItem value="">All Statuses</MenuItem>
-                    {Object.entries(STATUSES).map(([key, { label }]) => (
-                      <MenuItem key={key} value={key}>
-                        {label}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid item xs={6} sm={3} md={1.5}>
-                <FormControl fullWidth size="small">
-                  <InputLabel>Activity</InputLabel>
-                  <Select
-                    value={filters.isActive}
-                    label="Activity"
-                    onChange={handleFilterChange("isActive")}
-                  >
-                    <MenuItem value="">All</MenuItem>
-                    <MenuItem value="true">Active</MenuItem>
-                    <MenuItem value="false">Inactive</MenuItem>
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid item xs={6} sm={3} md={1.5}>
-                <Button
-                  onClick={clearFilters}
-                  variant="outlined"
-                  fullWidth
-                  size="small"
-                  sx={{ height: "40px" }}
-                >
-                  Clear
-                </Button>
-              </Grid>
-              <Grid item xs={12} sm={6} md={2}>
-                <Button
-                  variant="contained"
-                  fullWidth
-                  size="small"
-                  startIcon={<AddIcon />}
-                  onClick={() => setDialogState({ type: "user", user: null })}
-                  sx={{
-                    height: "40px",
-                    background: `linear-gradient(45deg, ${theme.palette.primary.main}, ${theme.palette.primary.dark})`,
-                    transition: "all 0.3s ease-in-out",
-                    "&:hover": {
-                      transform: "translateY(-2px)",
-                      boxShadow: theme.shadows[8],
-                    },
-                  }}
-                >
-                  Add User
-                </Button>
-              </Grid>
-            </Grid>
-          </CardContent>
-        </StyledCard>
+      <Paper sx={{ px: 2, py: 1, mb: 2 }}>
+        <Box display="flex" alignItems="center" gap={1.5}>
+          <TextField
+            placeholder="Search..."
+            value={searchValue}
+            onChange={handleSearchChange}
+            InputProps={{
+              startAdornment: (
+                <SearchIcon sx={{ color: "text.secondary", mr: 0.5, fontSize: 18 }} />
+              ),
+            }}
+            size="small"
+            sx={{
+              width: 200,
+              "& .MuiOutlinedInput-root": {
+                borderRadius: 5,
+                height: 34,
+                fontSize: "0.82rem",
+              },
+            }}
+          />
+          <FormControl size="small" sx={{ minWidth: 130 }}>
+            <Select
+              value={filters.role}
+              onChange={handleFilterChange("role")}
+              displayEmpty
+              sx={{
+                borderRadius: 5,
+                height: 34,
+                fontSize: "0.82rem",
+              }}
+            >
+              <MenuItem value="">All Roles</MenuItem>
+              {Object.entries(ROLES).map(([key, { label }]) => (
+                <MenuItem key={key} value={key}>
+                  {label}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <FormControl size="small" sx={{ minWidth: 110 }}>
+            <Select
+              value={filters.status}
+              onChange={handleFilterChange("status")}
+              displayEmpty
+              sx={{
+                borderRadius: 5,
+                height: 34,
+                fontSize: "0.82rem",
+              }}
+            >
+              <MenuItem value="">All Statuses</MenuItem>
+              {Object.entries(STATUSES).map(([key, { label }]) => (
+                <MenuItem key={key} value={key}>
+                  {label}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <FormControl size="small" sx={{ minWidth: 90 }}>
+            <Select
+              value={filters.isActive}
+              onChange={handleFilterChange("isActive")}
+              displayEmpty
+              sx={{
+                borderRadius: 5,
+                height: 34,
+                fontSize: "0.82rem",
+              }}
+            >
+              <MenuItem value="">Activity</MenuItem>
+              <MenuItem value="true">Active</MenuItem>
+              <MenuItem value="false">Inactive</MenuItem>
+            </Select>
+          </FormControl>
+          <Box sx={{ ml: "auto", display: "flex", gap: 1 }}>
+            <Tooltip title="Link Accounts" arrow>
+              <IconButton
+                onClick={handleOpenLinkDialog}
+                sx={{
+                  border: 1,
+                  borderColor: "divider",
+                  width: 34,
+                  height: 34,
+                }}
+              >
+                <LinkIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Add User" arrow>
+              <IconButton
+                onClick={() => setDialogState({ type: "user", user: null })}
+                color="primary"
+                sx={{
+                  bgcolor: "primary.main",
+                  color: "white",
+                  width: 34,
+                  height: 34,
+                  "&:hover": {
+                    bgcolor: "primary.dark",
+                    transform: "scale(1.05)",
+                  },
+                  transition: "all 0.2s ease-in-out",
+                }}
+              >
+                <AddIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          </Box>
+        </Box>
+      </Paper>
       <Paper
         elevation={3}
         sx={{
@@ -967,10 +1048,20 @@ const UsersPage = () => {
                       fontWeight: "bold",
                       backgroundColor: "grey.200",
                       textAlign: "center",
-                      width: "10%",
+                      width: "8%",
                     }}
                   >
                     Created
+                  </TableCell>
+                  <TableCell
+                    sx={{
+                      fontWeight: "bold",
+                      backgroundColor: "grey.200",
+                      textAlign: "center",
+                      width: "7%",
+                    }}
+                  >
+                    Linked
                   </TableCell>
                   <TableCell
                     sx={{
@@ -987,7 +1078,7 @@ const UsersPage = () => {
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={8} align="center" sx={{ py: 5 }}>
+                    <TableCell colSpan={9} align="center" sx={{ py: 5 }}>
                       <CircularProgress
                         sx={{
                           animation: "pulse 1.5s ease-in-out infinite",
@@ -1002,7 +1093,7 @@ const UsersPage = () => {
                   </TableRow>
                 ) : filteredUsers.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} align="center" sx={{ py: 5 }}>
+                    <TableCell colSpan={9} align="center" sx={{ py: 5 }}>
                       <Typography variant="body1" color="text.secondary">
                         {searchValue ? "No users match your search." : "No users found."}
                       </Typography>
@@ -1093,6 +1184,30 @@ const UsersPage = () => {
                           </TableCell>
                           <TableCell align="center">
                             {new Date(user.createdAt).toLocaleDateString()}
+                          </TableCell>
+                          <TableCell align="center">
+                            {user.linkedAccounts?.length > 0 ? (
+                              <Tooltip
+                                title={`Linked to ${user.linkedAccounts.length} account(s). Click to unlink.`}
+                                arrow
+                              >
+                                <IconButton
+                                  size="small"
+                                  color="primary"
+                                  onClick={() => handleUnlinkAccount(user._id)}
+                                >
+                                  <Badge
+                                    badgeContent={user.linkedAccounts.length}
+                                    color="primary"
+                                    max={9}
+                                  >
+                                    <GroupIcon fontSize="small" />
+                                  </Badge>
+                                </IconButton>
+                              </Tooltip>
+                            ) : (
+                              "—"
+                            )}
                           </TableCell>
                           <TableCell align="right">
                             <Stack direction="row" spacing={0.5} justifyContent="flex-end">
@@ -1383,6 +1498,131 @@ const UsersPage = () => {
             {dialogState.user?._id === currentUser?.id
               ? "Kick My Session"
               : "Kick Session"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Link Accounts Dialog */}
+      <Dialog open={linkDialogOpen} onClose={() => setLinkDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+            <LinkIcon />
+            Link Accounts Together
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 3, pt: 1 }}>
+            <Alert severity="info" variant="outlined">
+              All selected accounts will be able to switch between each other using the quick switcher
+              (Ctrl+Shift+S).
+            </Alert>
+
+            <Autocomplete
+              options={availableUsers}
+              getOptionLabel={(option) => `${option.fullName} (${option.email})`}
+              value={selectedPrimary}
+              onChange={(e, newValue) => {
+                setSelectedPrimary(newValue);
+                if (newValue) {
+                  setSelectedLinked((prev) => prev.filter((u) => u._id !== newValue._id));
+                }
+              }}
+              renderInput={(params) => (
+                <TextField {...params} label="Primary Account" placeholder="Select primary account" />
+              )}
+              renderOption={(props, option) => (
+                <li {...props} key={option._id}>
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                    <Avatar sx={{ width: 32, height: 32 }}>
+                      {option.fullName?.charAt(0)?.toUpperCase()}
+                    </Avatar>
+                    <Box>
+                      <Typography variant="body2">{option.fullName}</Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {option.email} &bull; {ROLES[option.role]?.label || option.role}
+                      </Typography>
+                    </Box>
+                  </Box>
+                </li>
+              )}
+            />
+
+            <Autocomplete
+              multiple
+              options={getFilteredLinkedOptions()}
+              getOptionLabel={(option) => `${option.fullName} (${option.email})`}
+              value={selectedLinked}
+              onChange={(e, newValue) => setSelectedLinked(newValue)}
+              disabled={!selectedPrimary}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Accounts to Link"
+                  placeholder={selectedPrimary ? "Select accounts to link" : "Select primary first"}
+                />
+              )}
+              renderOption={(props, option) => (
+                <li {...props} key={option._id}>
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                    <Avatar sx={{ width: 32, height: 32 }}>
+                      {option.fullName?.charAt(0)?.toUpperCase()}
+                    </Avatar>
+                    <Box>
+                      <Typography variant="body2">{option.fullName}</Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {option.email} &bull; {ROLES[option.role]?.label || option.role}
+                      </Typography>
+                    </Box>
+                  </Box>
+                </li>
+              )}
+              renderTags={(value, getTagProps) =>
+                value.map((option, index) => (
+                  <Chip
+                    {...getTagProps({ index })}
+                    key={option._id}
+                    avatar={<Avatar>{option.fullName?.charAt(0)?.toUpperCase()}</Avatar>}
+                    label={option.fullName}
+                    size="small"
+                  />
+                ))
+              }
+            />
+
+            {selectedPrimary && selectedLinked.length > 0 && (
+              <Paper variant="outlined" sx={{ p: 2 }}>
+                <Typography variant="subtitle2" gutterBottom>
+                  Preview: Account Group
+                </Typography>
+                <Box sx={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 1 }}>
+                  <Chip
+                    avatar={<Avatar>{selectedPrimary.fullName?.charAt(0)?.toUpperCase()}</Avatar>}
+                    label={selectedPrimary.fullName}
+                    color="primary"
+                  />
+                  {selectedLinked.map((account) => (
+                    <React.Fragment key={account._id}>
+                      <SwitchIcon color="action" />
+                      <Chip
+                        avatar={<Avatar>{account.fullName?.charAt(0)?.toUpperCase()}</Avatar>}
+                        label={account.fullName}
+                      />
+                    </React.Fragment>
+                  ))}
+                </Box>
+              </Paper>
+            )}
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setLinkDialogOpen(false)}>Cancel</Button>
+          <Button
+            variant="contained"
+            onClick={handleLinkAccounts}
+            disabled={linkLoading || !selectedPrimary || selectedLinked.length === 0}
+            startIcon={linkLoading ? <CircularProgress size={16} /> : <LinkIcon />}
+          >
+            Link Accounts
           </Button>
         </DialogActions>
       </Dialog>

@@ -85,6 +85,7 @@ const InjectionPage = lazy(() => import("./pages/InjectionPage.jsx"));
 const CallDeclarationsPage = lazy(() => import("./pages/CallDeclarationsPage.jsx"));
 const FinancePage = lazy(() => import("./pages/FinancePage.jsx"));
 const AdminPage = lazy(() => import("./pages/AdminPage.jsx"));
+const EmployeeDashboardPage = lazy(() => import("./pages/EmployeeDashboardPage.jsx"));
 
 // Component to handle role-based default routing
 const RoleBasedRedirect = () => {
@@ -102,6 +103,11 @@ const RoleBasedRedirect = () => {
   // Redirect refunds manager to refunds page
   if (user.role === "refunds_manager") {
     return <Navigate to="/refunds" replace />;
+  }
+
+  // Redirect employees to their dashboard
+  if (user.role === "employee") {
+    return <Navigate to="/employee-dashboard" replace />;
   }
 
   // Redirect inventory manager to SMS gateway page
@@ -507,6 +513,14 @@ function AppContent() {
               element={
                 <ProtectedRoute allowedRoles={["admin", "affiliate_manager", "agent"]}>
                   <LazyPage><InjectionPage /></LazyPage>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="employee-dashboard"
+              element={
+                <ProtectedRoute allowedRoles={["employee", "admin"]}>
+                  <LazyPage><EmployeeDashboardPage /></LazyPage>
                 </ProtectedRoute>
               }
             />

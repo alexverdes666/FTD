@@ -9,13 +9,11 @@ import {
 } from "@mui/material";
 import {
   People as UsersIcon,
-  AdminPanelSettings as AccountsIcon,
   Announcement as AnnouncementsIcon,
   SupportAgent as TicketsIcon,
 } from "@mui/icons-material";
 
 const UsersPage = lazy(() => import("./UsersPage.jsx"));
-const AccountManagementPage = lazy(() => import("./AccountManagementPage.jsx"));
 const AnnouncementsPage = lazy(() => import("./AnnouncementsPage.jsx"));
 const TicketsPage = lazy(() => import("./TicketsPage.jsx"));
 
@@ -27,7 +25,6 @@ const tabFallback = (
 
 const tabs = [
   { label: "Users", icon: <UsersIcon sx={{ fontSize: 16 }} /> },
-  { label: "Linked Accounts", icon: <AccountsIcon sx={{ fontSize: 16 }} /> },
   { label: "Announcements", icon: <AnnouncementsIcon sx={{ fontSize: 16 }} /> },
   { label: "Tickets", icon: <TicketsIcon sx={{ fontSize: 16 }} /> },
 ];
@@ -58,9 +55,8 @@ const AdminPage = () => {
       <Box sx={{ flex: 1, minHeight: 0, overflow: "auto" }}>
         <Suspense fallback={tabFallback}>
           {tab === 0 && <UsersPage />}
-          {tab === 1 && <AccountManagementPage />}
-          {tab === 2 && <AnnouncementsPage />}
-          {tab === 3 && <TicketsPage />}
+          {tab === 1 && <AnnouncementsPage />}
+          {tab === 2 && <TicketsPage />}
         </Suspense>
       </Box>
     </Box>
