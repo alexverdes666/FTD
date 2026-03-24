@@ -45,7 +45,6 @@ import {
   TrendingUp as TrendingUpIcon,
   AccessTime as AccessTimeIcon,
   Assessment as AssessmentIcon,
-  Settings as SettingsIcon,
   AccountBalanceWallet as WithdrawIcon,
   FilterList as FilterListIcon,
   DateRange as DateRangeIcon,
@@ -82,7 +81,6 @@ import {
 } from "../services/salaryConfiguration";
 import { getAllAffiliateManagersWithMetrics } from "../services/affiliateManagerMetrics";
 import { getAffiliateManagerTable } from "../services/affiliateManagerTable";
-import AdminBonusManagement from "../components/AdminBonusManagement";
 import WithdrawalModal from "../components/WithdrawalModal";
 import AffiliateManagerWithdrawalModal from "../components/AffiliateManagerWithdrawalModal";
 import AgentMonthlyHistory from "../components/AgentMonthlyHistory";
@@ -1606,7 +1604,7 @@ const PayrollPage = () => {
 
         {/* Tabs Section - For Admins and Affiliate Managers only */}
         {user?.role && user.role !== "agent" && (
-          <Box sx={{ borderBottom: 1, borderColor: "divider", mb: 3 }}>
+          <Box sx={{ borderBottom: 1, borderColor: "divider", mb: 1.5 }}>
             <Tabs
               value={tabValue}
               onChange={handleTabChange}
@@ -1615,27 +1613,28 @@ const PayrollPage = () => {
               scrollButtons="auto"
               allowScrollButtonsMobile
               sx={{
+                minHeight: 36,
                 '& .MuiTab-root': {
-                  minWidth: { xs: 100, sm: 160 },
-                  fontSize: { xs: '0.75rem', sm: '0.875rem' }
+                  minWidth: { xs: 80, sm: 120 },
+                  minHeight: 36,
+                  py: 0.5,
+                  fontSize: '0.8rem',
+                  textTransform: 'none',
                 }
               }}
             >
               {user.role === "admin" && (
-                <Tab icon={<PhoneIcon sx={{ color: "#1976d2" }} />} label="Agent Calls" />
+                <Tab label="Agent Calls" />
               )}
               {(user.role === "admin" || user.role === "affiliate_manager") && (
-                <Tab icon={<PhoneIcon sx={{ color: "#2e7d32" }} />} label="Call Bonuses" />
-              )}
-              {(user.role === "admin" || user.role === "affiliate_manager") && (
-                <Tab icon={<SettingsIcon sx={{ color: "#ed6c02" }} />} label="Bonus Management" />
+                <Tab label="Call Bonuses" />
               )}
             </Tabs>
           </Box>
         )}
 
-        {/* Header Section - Only for Agents and Admins */}
-        {user?.role !== "affiliate_manager" && (
+        {/* Header Section - Only for Agents */}
+        {user?.role === "agent" && (
           <Box
             sx={{
               display: "flex",
@@ -1647,14 +1646,9 @@ const PayrollPage = () => {
             }}
           >
             <Typography variant="h4" gutterBottom sx={{ fontSize: { xs: '1.5rem', sm: '2rem' } }}>
-              {user.role === "admin"
-                ? "All Agents Payroll"
-                : user.role === "agent"
-                ? "My Earnings"
-                : "Payroll Dashboard"}
+              My Earnings
             </Typography>
             <Stack direction="row" spacing={{ xs: 1, sm: 2 }}>
-              {/* Filter button removed - no longer needed */}
               <Button
                 variant="outlined"
                 startIcon={<RefreshIcon sx={{ fontSize: { xs: '1rem', sm: '1.25rem' } }} />}
@@ -2941,557 +2935,111 @@ const PayrollPage = () => {
             animate={{ opacity: 1 }}
             transition={{ duration: 0.3 }}
           >
-            <Grid container spacing={{ xs: 2, sm: 3 }}>
-              {/* Period Selection */}
+            <Grid container spacing={1.5}>
+              {/* Period Selection - compact inline */}
               <Grid item xs={12}>
-                <Paper sx={{ p: { xs: 2, sm: 3 } }}>
-                  <Grid container spacing={{ xs: 2, sm: 3 }} alignItems="center">
-                    <Grid item xs={12} sm={6} md={4}>
-                      <FormControl fullWidth>
-                        <InputLabel>Select Period</InputLabel>
-                        <Select
-                          value={selectedPeriod || ""}
-                          onChange={handlePeriodChange}
-                          label="Select Period"
-                          disabled={agentCallsLoading}
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 0.5 }}>
+                  <FormControl size="small" sx={{
+                    minWidth: 160,
+                    '& .MuiOutlinedInput-root': {
+                      borderRadius: 5,
+                      fontSize: '0.8rem',
+                      height: 32,
+                    },
+                  }}>
+                    <InputLabel sx={{ fontSize: '0.8rem' }}>Period</InputLabel>
+                    <Select
+                      value={selectedPeriod || ""}
+                      onChange={handlePeriodChange}
+                      label="Period"
+                      disabled={agentCallsLoading}
+                    >
+                      {availableMonths.map((monthData) => (
+                        <MenuItem
+                          key={`${monthData.year}-${monthData.month}`}
+                          value={`${monthData.year}-${monthData.month}`}
                         >
-                          {availableMonths.map((monthData) => (
-                            <MenuItem
-                              key={`${monthData.year}-${monthData.month}`}
-                              value={`${monthData.year}-${monthData.month}`}
-                            >
-                              {formatMonthYear(monthData.year, monthData.month)}
-                            </MenuItem>
-                          ))}
-                        </Select>
-                      </FormControl>
-                    </Grid>
-
-                    <Grid item xs={12} sm={6} md={8}>
-                      <Box
-                        sx={{ display: "flex", alignItems: "center", gap: { xs: 1, sm: 2 } }}
-                      >
-                        <PhoneIcon color="primary" sx={{ fontSize: { xs: '1.25rem', sm: '1.5rem' } }} />
-                        <Typography variant="h6" sx={{ fontSize: { xs: '1rem', sm: '1.25rem' } }}>
-                          {selectedPeriod
-                            ? formatMonthYear(
-                                ...selectedPeriod.split("-").map(Number)
-                              )
-                            : "Select Period"}
-                        </Typography>
-                        {agentCallsLoading && <CircularProgress size={20} />}
-                      </Box>
-                    </Grid>
-                  </Grid>
-                </Paper>
+                          {formatMonthYear(monthData.year, monthData.month)}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                  {agentCallsLoading && <CircularProgress size={16} />}
+                </Box>
               </Grid>
 
-              {/* Statistics Cards */}
+              {/* Compact Statistics Overview */}
               {agentCallsStats && (
                 <Grid item xs={12}>
-                  <Grid container spacing={{ xs: 2, sm: 3 }}>
-                    <Grid item xs={6} sm={6} md={2.4}>
-                      <Card
-                        elevation={2}
-                        sx={{
-                          height: "100%",
-                          background: "#fafafa",
-                          border: "1px solid rgba(0, 0, 0, 0.08)",
-                          "&:hover": {
-                            transform: "translateY(-2px)",
-                            boxShadow: 3,
-                            transition: "all 0.2s ease-in-out",
-                          },
-                        }}
-                      >
-                        <CardContent sx={{ textAlign: "center", p: { xs: 1.5, sm: 2, md: 3 } }}>
-                          <Box
-                            sx={{
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              mb: { xs: 1, sm: 1.5, md: 2 },
-                              flexDirection: { xs: 'column', sm: 'row' }
-                            }}
-                          >
-                            <PeopleIcon
-                              sx={{
-                                fontSize: { xs: 20, sm: 24, md: 28 },
-                                color: "text.primary",
-                                mr: { xs: 0, sm: 1 },
-                                mb: { xs: 0.5, sm: 0 }
-                              }}
-                            />
-                            <Typography
-                              variant="h3"
-                              color="text.primary"
-                              fontWeight="bold"
-                              sx={{ fontSize: { xs: '1.5rem', sm: '2rem', md: '3rem' } }}
-                            >
-                              {agentCallsStats.totalAgents}
-                            </Typography>
-                          </Box>
-                          <Typography
-                            variant="subtitle1"
-                            color="text.secondary"
-                            fontWeight="medium"
-                            sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem', md: '1rem' } }}
-                          >
-                            Total Agents
-                          </Typography>
-                        </CardContent>
-                      </Card>
-                    </Grid>
-
-                    <Grid item xs={6} sm={6} md={2.4}>
-                      <Card
-                        elevation={2}
-                        sx={{
-                          height: "100%",
-                          background: "#fafafa",
-                          border: "1px solid rgba(0, 0, 0, 0.08)",
-                          "&:hover": {
-                            transform: "translateY(-2px)",
-                            boxShadow: 3,
-                            transition: "all 0.2s ease-in-out",
-                          },
-                        }}
-                      >
-                        <CardContent sx={{ textAlign: "center", p: { xs: 1.5, sm: 2, md: 3 } }}>
-                          <Box
-                            sx={{
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              mb: { xs: 1, sm: 1.5 },
-                              flexDirection: { xs: 'column', sm: 'row' }
-                            }}
-                          >
-                            <PhoneIcon
-                              sx={{
-                                fontSize: { xs: 20, sm: 24, md: 28 },
-                                color: "text.primary",
-                                mr: { xs: 0, sm: 1 },
-                                mb: { xs: 0.5, sm: 0 }
-                              }}
-                            />
-                            <Typography
-                              variant="h3"
-                              color="success.main"
-                              fontWeight="bold"
-                              sx={{ fontSize: { xs: '1.5rem', sm: '2rem', md: '3rem' } }}
-                            >
-                              {agentCallsStats.totalCalls}
-                            </Typography>
-                          </Box>
-                          <Typography
-                            variant="subtitle1"
-                            color="success.dark"
-                            fontWeight="medium"
-                            mb={1}
-                            sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem', md: '1rem' } }}
-                          >
-                            Total Calls
-                          </Typography>
-                          <Typography
-                            variant="caption"
-                            color="success.dark"
-                            sx={{
-                              background: "rgba(0, 0, 0, 0.05)",
-                              px: { xs: 1, sm: 1.5 },
-                              py: 0.5,
-                              borderRadius: 1,
-                              fontWeight: 500,
-                              fontSize: { xs: '0.65rem', sm: '0.75rem' },
-                              display: { xs: 'none', sm: 'inline' }
-                            }}
-                          >
-                            {agentCallsStats.avgCallsPerAgent} avg per agent
-                          </Typography>
-                        </CardContent>
-                      </Card>
-                    </Grid>
-
-                    <Grid item xs={6} sm={6} md={2.4}>
-                      <Card
-                        elevation={2}
-                        sx={{
-                          height: "100%",
-                          background: "#fafafa",
-                          border: "1px solid rgba(0, 0, 0, 0.08)",
-                          "&:hover": {
-                            transform: "translateY(-2px)",
-                            boxShadow: 3,
-                            transition: "all 0.2s ease-in-out",
-                          },
-                        }}
-                      >
-                        <CardContent sx={{ textAlign: "center", p: { xs: 1.5, sm: 2, md: 3 } }}>
-                          <Box
-                            sx={{
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              mb: { xs: 1, sm: 1.5 },
-                              flexDirection: { xs: 'column', sm: 'row' }
-                            }}
-                          >
-                            <CheckCircleIcon
-                              sx={{
-                                fontSize: { xs: 20, sm: 24, md: 28 },
-                                color: "text.primary",
-                                mr: { xs: 0, sm: 1 },
-                                mb: { xs: 0.5, sm: 0 }
-                              }}
-                            />
-                            <Typography
-                              variant="h3"
-                              color="warning.main"
-                              fontWeight="bold"
-                              sx={{ fontSize: { xs: '1.5rem', sm: '2rem', md: '3rem' } }}
-                            >
-                              {agentCallsStats.avgSuccessRate}%
-                            </Typography>
-                          </Box>
-                          <Typography
-                            variant="subtitle1"
-                            color="warning.dark"
-                            fontWeight="medium"
-                            mb={1}
-                            sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem', md: '1rem' } }}
-                          >
-                            Success Rate
-                          </Typography>
-                          <Typography
-                            variant="caption"
-                            color="warning.dark"
-                            sx={{
-                              background: "rgba(0, 0, 0, 0.05)",
-                              px: { xs: 1, sm: 1.5 },
-                              py: 0.5,
-                              borderRadius: 1,
-                              fontWeight: 500,
-                              fontSize: { xs: '0.65rem', sm: '0.75rem' },
-                              display: { xs: 'none', sm: 'inline' }
-                            }}
-                          >
-                            {agentCallsStats.totalSuccessful} successful
-                          </Typography>
-                        </CardContent>
-                      </Card>
-                    </Grid>
-
-                    <Grid item xs={6} sm={6} md={2.4}>
-                      <Card
-                        elevation={2}
-                        sx={{
-                          height: "100%",
-                          background: "#fafafa",
-                          border: "1px solid rgba(0, 0, 0, 0.08)",
-                          "&:hover": {
-                            transform: "translateY(-2px)",
-                            boxShadow: 3,
-                            transition: "all 0.2s ease-in-out",
-                          },
-                        }}
-                      >
-                        <CardContent sx={{ textAlign: "center", p: { xs: 1.5, sm: 2, md: 3 } }}>
-                          <Box
-                            sx={{
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              mb: { xs: 1, sm: 1.5 },
-                              flexDirection: { xs: 'column', sm: 'row' }
-                            }}
-                          >
-                            <LocalAtmIcon
-                              sx={{
-                                fontSize: { xs: 20, sm: 24, md: 28 },
-                                color: "text.primary",
-                                mr: { xs: 0, sm: 1 },
-                                mb: { xs: 0.5, sm: 0 }
-                              }}
-                            />
-                            <Typography
-                              variant="h3"
-                              color="info.main"
-                              fontWeight="bold"
-                              sx={{ fontSize: { xs: '1.25rem', sm: '1.75rem', md: '3rem' } }}
-                            >
-                              {calculateTotalPayableStats()
-                                ? formatCurrency(
-                                    calculateTotalPayableStats().totalTalkTimePay
-                                  )
-                                : "0.00"}
-                            </Typography>
-                          </Box>
-                          <Typography
-                            variant="subtitle1"
-                            color="info.dark"
-                            fontWeight="medium"
-                            mb={1}
-                            sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem', md: '1rem' } }}
-                          >
-                            Money from Calls
-                          </Typography>
-                          <Typography
-                            variant="caption"
-                            color="info.dark"
-                            sx={{
-                              background: "rgba(0, 0, 0, 0.05)",
-                              px: { xs: 1, sm: 1.5 },
-                              py: 0.5,
-                              borderRadius: 1,
-                              fontWeight: 500,
-                              fontSize: { xs: '0.65rem', sm: '0.75rem' },
-                              display: { xs: 'none', sm: 'inline' }
-                            }}
-                          >
-                            {agentCallsStats.totalTalkTime} talk time
-                          </Typography>
-                        </CardContent>
-                      </Card>
-                    </Grid>
-
-                    {/* Monthly Bonuses Card */}
-                    <Grid item xs={6} sm={6} md={2.4}>
-                      <Card
-                        elevation={2}
-                        sx={{
-                          height: "100%",
-                          background: "#fafafa",
-                          border: "1px solid rgba(0, 0, 0, 0.08)",
-                          "&:hover": {
-                            transform: "translateY(-2px)",
-                            boxShadow: 3,
-                            transition: "all 0.2s ease-in-out",
-                          },
-                        }}
-                      >
-                        <CardContent sx={{ textAlign: "center", p: { xs: 1.5, sm: 2, md: 3 } }}>
-                          <Box
-                            sx={{
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              mb: { xs: 1, sm: 1.5 },
-                              flexDirection: { xs: 'column', sm: 'row' }
-                            }}
-                          >
-                            <StarIcon
-                              sx={{
-                                fontSize: { xs: 20, sm: 24, md: 28 },
-                                color: "text.primary",
-                                mr: { xs: 0, sm: 1 },
-                                mb: { xs: 0.5, sm: 0 }
-                              }}
-                            />
-                            <Typography
-                              variant="h3"
-                              color="success.main"
-                              fontWeight="bold"
-                              sx={{ fontSize: { xs: '1.25rem', sm: '1.75rem', md: '3rem' } }}
-                            >
-                              {declarationTotals.length > 0
-                                ? formatCurrency(declarationTotals.reduce((sum, d) => sum + (d.totalBonus || 0), 0))
-                                : bonusesStats
-                                  ? formatCurrency(bonusesStats.totalBonus)
-                                  : "0.00"}
-                            </Typography>
-                          </Box>
-                          <Typography
-                            variant="subtitle1"
-                            color="success.dark"
-                            fontWeight="medium"
-                            mb={1}
-                            sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem', md: '1rem' } }}
-                          >
-                            Monthly Bonuses
-                          </Typography>
-                          <Typography
-                            variant="caption"
-                            color="success.dark"
-                            sx={{
-                              background: "rgba(0, 0, 0, 0.05)",
-                              px: { xs: 1, sm: 1.5 },
-                              py: 0.5,
-                              borderRadius: 1,
-                              fontWeight: 500,
-                              fontSize: { xs: '0.65rem', sm: '0.75rem' },
-                              display: { xs: 'none', sm: 'inline' }
-                            }}
-                          >
-                            {bonusesStats
-                              ? `${formatCurrency(
-                                  bonusesStats.avgBonusPerAgent
-                                )} avg per agent`
-                              : "Loading..."}
-                          </Typography>
-                          {bonusesLoading && (
-                            <Box sx={{ mt: 1.5 }}>
-                              <CircularProgress size={20} color="success" />
-                            </Box>
-                          )}
-                        </CardContent>
-                      </Card>
-                    </Grid>
-                  </Grid>
-
-                  {/* Second Row - Additional Cards */}
-                  <Grid container spacing={{ xs: 2, sm: 3 }} sx={{ mt: { xs: 1, sm: 2 } }}>
-                    {/* Monthly Fines Card */}
-                    <Grid item xs={12} sm={6} md={6}>
-                      <Card
-                        elevation={2}
-                        sx={{
-                          height: "100%",
-                          background: "#fafafa",
-                          border: "1px solid rgba(0, 0, 0, 0.08)",
-                          "&:hover": {
-                            transform: "translateY(-2px)",
-                            boxShadow: 3,
-                            transition: "all 0.2s ease-in-out",
-                          },
-                        }}
-                      >
-                        <CardContent sx={{ textAlign: "center", p: { xs: 2, sm: 3 } }}>
-                          <Box
-                            sx={{
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              mb: { xs: 1, sm: 1.5 },
-                            }}
-                          >
-                            <WarningIcon
-                              sx={{
-                                fontSize: { xs: 24, sm: 28 },
-                                color: "text.primary",
-                                mr: 1,
-                              }}
-                            />
-                            <Typography
-                              variant="h3"
-                              color="error.main"
-                              fontWeight="bold"
-                              sx={{ fontSize: { xs: '1.5rem', sm: '2.125rem', md: '3rem' } }}
-                            >
-                              {finesStats
-                                ? formatCurrency(finesStats.activeAmount)
-                                : "0.00"}
-                            </Typography>
-                          </Box>
-                          <Typography
-                            variant="subtitle1"
-                            color="error.dark"
-                            fontWeight="medium"
-                            mb={1}
-                            sx={{ fontSize: { xs: '0.875rem', sm: '1rem' } }}
-                          >
-                            Active Fines
-                          </Typography>
-                          <Typography
-                            variant="caption"
-                            color="error.dark"
-                            sx={{
-                              background: "rgba(0, 0, 0, 0.05)",
-                              px: { xs: 1, sm: 1.5 },
-                              py: 0.5,
-                              borderRadius: 1,
-                              fontWeight: 500,
-                              fontSize: { xs: '0.65rem', sm: '0.75rem' }
-                            }}
-                          >
-                            {finesStats
-                              ? `${finesStats.activeFines} active fines`
-                              : "Loading..."}
-                          </Typography>
-                          {finesLoading && (
-                            <Box sx={{ mt: 1.5 }}>
-                              <CircularProgress size={20} color="error" />
-                            </Box>
-                          )}
-                        </CardContent>
-                      </Card>
-                    </Grid>
-
-                    {/* Total Payable Card */}
-                    <Grid item xs={12} sm={6} md={6}>
-                      <Card
-                        elevation={4}
-                        sx={{
-                          height: "100%",
-                          background: "#fafafa",
-                          border: "2px solid rgba(63, 81, 181, 0.2)",
-                          "&:hover": {
-                            transform: "translateY(-6px)",
-                            boxShadow: 6,
-                            transition: "all 0.3s ease-in-out",
-                          },
-                        }}
-                      >
-                        <CardContent sx={{ textAlign: "center", p: { xs: 2, sm: 3, md: 4 } }}>
-                          <Box
-                            sx={{
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              mb: { xs: 1, sm: 1.5 },
-                            }}
-                          >
-                            <LocalAtmIcon
-                              sx={{
-                                fontSize: { xs: 28, sm: 32 },
-                                color: "text.primary",
-                                mr: { xs: 1, sm: 1.5 },
-                              }}
-                            />
-                            <Typography
-                              variant="h2"
-                              color="primary.main"
-                              fontWeight="bold"
-                              sx={{ fontSize: { xs: '1.75rem', sm: '2.5rem', md: '3.75rem' } }}
-                            >
-                              {calculateTotalPayableStats()
-                                ? formatCurrency(
-                                    calculateTotalPayableStats().totalPayable
-                                  )
-                                : "0.00"}
-                            </Typography>
-                          </Box>
-                          <Typography
-                            variant="h6"
-                            color="primary.dark"
-                            fontWeight="medium"
-                            mb={1}
-                            sx={{ fontSize: { xs: '1rem', sm: '1.25rem' } }}
-                          >
-                            Total Payable
-                          </Typography>
-                          <Typography
-                            variant="caption"
-                            color="primary.dark"
-                            sx={{
-                              background: "rgba(0, 0, 0, 0.05)",
-                              px: { xs: 1.5, sm: 2 },
-                              py: 0.5,
-                              borderRadius: 1,
-                              fontWeight: 500,
-                              fontSize: { xs: '0.65rem', sm: '0.75rem' },
-                            }}
-                          >
-                            {calculateTotalPayableStats()
-                              ? `${formatCurrency(
-                                  calculateTotalPayableStats()
-                                    .avgPayablePerAgent
-                                )} avg per agent`
-                              : "Loading..."}
-                          </Typography>
-                        </CardContent>
-                      </Card>
-                    </Grid>
-                  </Grid>
+                  <Paper
+                    variant="outlined"
+                    sx={{
+                      px: 2,
+                      py: 1.5,
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      gap: { xs: 1.5, sm: 2.5 },
+                      alignItems: 'center',
+                      borderRadius: 2,
+                      bgcolor: '#fafafa',
+                    }}
+                  >
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                      <PeopleIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
+                      <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 500 }}>Agents</Typography>
+                      <Typography variant="body2" fontWeight="bold">{agentCallsStats.totalAgents}</Typography>
+                    </Box>
+                    <Divider orientation="vertical" flexItem sx={{ display: { xs: 'none', sm: 'block' } }} />
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                      <PhoneIcon sx={{ fontSize: 16, color: 'success.main' }} />
+                      <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 500 }}>Calls</Typography>
+                      <Typography variant="body2" fontWeight="bold" color="success.main">{agentCallsStats.totalCalls}</Typography>
+                      <Typography variant="caption" color="text.disabled">({agentCallsStats.avgCallsPerAgent} avg)</Typography>
+                    </Box>
+                    <Divider orientation="vertical" flexItem sx={{ display: { xs: 'none', sm: 'block' } }} />
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                      <CheckCircleIcon sx={{ fontSize: 16, color: 'warning.main' }} />
+                      <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 500 }}>Success</Typography>
+                      <Typography variant="body2" fontWeight="bold" color="warning.main">{agentCallsStats.avgSuccessRate}%</Typography>
+                      <Typography variant="caption" color="text.disabled">({agentCallsStats.totalSuccessful})</Typography>
+                    </Box>
+                    <Divider orientation="vertical" flexItem sx={{ display: { xs: 'none', sm: 'block' } }} />
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                      <LocalAtmIcon sx={{ fontSize: 16, color: 'info.main' }} />
+                      <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 500 }}>Talk Pay</Typography>
+                      <Typography variant="body2" fontWeight="bold" color="info.main">
+                        {calculateTotalPayableStats() ? formatCurrency(calculateTotalPayableStats().totalTalkTimePay) : "$0.00"}
+                      </Typography>
+                      <Typography variant="caption" color="text.disabled">({agentCallsStats.totalTalkTime})</Typography>
+                    </Box>
+                    <Divider orientation="vertical" flexItem sx={{ display: { xs: 'none', sm: 'block' } }} />
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                      <StarIcon sx={{ fontSize: 16, color: 'success.main' }} />
+                      <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 500 }}>Bonuses</Typography>
+                      <Typography variant="body2" fontWeight="bold" color="success.main">
+                        {declarationTotals.length > 0
+                          ? formatCurrency(declarationTotals.reduce((sum, d) => sum + (d.totalBonus || 0), 0))
+                          : bonusesStats ? formatCurrency(bonusesStats.totalBonus) : "$0.00"}
+                      </Typography>
+                      {bonusesLoading && <CircularProgress size={12} color="success" />}
+                    </Box>
+                    <Divider orientation="vertical" flexItem sx={{ display: { xs: 'none', sm: 'block' } }} />
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                      <WarningIcon sx={{ fontSize: 16, color: 'error.main' }} />
+                      <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 500 }}>Fines</Typography>
+                      <Typography variant="body2" fontWeight="bold" color="error.main">
+                        {finesStats ? formatCurrency(finesStats.activeAmount) : "$0.00"}
+                      </Typography>
+                      {finesLoading && <CircularProgress size={12} color="error" />}
+                    </Box>
+                    <Divider orientation="vertical" flexItem sx={{ display: { xs: 'none', sm: 'block' } }} />
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, ml: 'auto' }}>
+                      <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>Total Payable</Typography>
+                      <Typography variant="body2" fontWeight="bold" color="primary.main" sx={{ fontSize: '0.95rem' }}>
+                        {calculateTotalPayableStats() ? formatCurrency(calculateTotalPayableStats().totalPayable) : "$0.00"}
+                      </Typography>
+                    </Box>
+                  </Paper>
                 </Grid>
               )}
 
@@ -3516,24 +3064,10 @@ const PayrollPage = () => {
             animate={{ opacity: 1 }}
             transition={{ duration: 0.3 }}
           >
-            <Card>
-              <CardContent>
-                <CallBonusesSection />
-              </CardContent>
-            </Card>
+            <CallBonusesSection />
           </motion.div>
         )}
 
-        {/* Bonus Management Tab (Admin and Affiliate Manager) */}
-        {((tabValue === 2 && user?.role === "admin") || (tabValue === 1 && user?.role === "affiliate_manager")) && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.3 }}
-          >
-            <AdminBonusManagement />
-          </motion.div>
-        )}
 
         {/* Withdrawal Modal - Agent */}
         {user?.role === "agent" && (

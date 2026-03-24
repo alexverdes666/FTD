@@ -16,14 +16,16 @@ import {
   Divider,
   Badge,
   Chip,
+  TextField,
+  InputAdornment,
 } from '@mui/material';
 import {
   Phone as PhoneIcon,
   AttachMoney as MoneyIcon,
-  Pending as PendingIcon,
   FiberNew as NewIcon,
   HourglassEmpty as HourglassIcon,
   CheckCircle as CheckCircleIcon,
+  Search as SearchIcon,
 } from '@mui/icons-material';
 import { useSelector } from 'react-redux';
 import { selectUser } from '../store/slices/authSlice';
@@ -47,6 +49,7 @@ const CallBonusesSection = ({ leads: passedLeads = [] }) => {
   const [agentTab, setAgentTab] = useState(0);
   const [error, setError] = useState(null);
   const [successMessage, setSuccessMessage] = useState(null);
+  const [searchFilter, setSearchFilter] = useState('');
 
   // CDR calls data (all calls with declaration status)
   const [cdrCalls, setCdrCalls] = useState([]);
@@ -310,64 +313,70 @@ const CallBonusesSection = ({ leads: passedLeads = [] }) => {
         );
       })()}
 
-      {/* Manager Pending Queue Badge */}
-      {isManager && pendingDeclarations.length > 0 && (
-        <Alert severity="warning" sx={{ mb: 2 }}>
-          <Box display="flex" alignItems="center" gap={1}>
-            <Badge badgeContent={pendingDeclarations.length} color="error">
-              <PendingIcon />
-            </Badge>
-            <Typography>
-              You have {pendingDeclarations.length} pending declaration{pendingDeclarations.length > 1 ? 's' : ''} to review
-            </Typography>
-          </Box>
-        </Alert>
-      )}
-
-      {/* Tabs - Only for managers */}
+      {/* Tabs + Filters inline - Only for managers */}
       {isManager && (
-        <Paper sx={{ mb: 2 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1, mb: 1.5 }}>
           <Tabs
             value={tabValue}
             onChange={(e, newValue) => setTabValue(newValue)}
-            variant="scrollable"
-            scrollButtons="auto"
+            sx={{
+              minHeight: 36,
+              '& .MuiTab-root': { minHeight: 36, py: 0.5, fontSize: '0.8rem', textTransform: 'none' },
+            }}
           >
+            <Tab label="All Declarations" />
             <Tab
               label={
-                <Box display="flex" alignItems="center" gap={1}>
-                  All Declarations
-                </Box>
-              }
-            />
-            <Tab
-              label={
-                <Badge badgeContent={pendingDeclarations.length} color="error">
+                <Badge badgeContent={pendingDeclarations.length} color="error" sx={{ '& .MuiBadge-badge': { fontSize: '0.65rem', height: 16, minWidth: 16 } }}>
                   Pending Approvals
                 </Badge>
               }
             />
           </Tabs>
-        </Paper>
-      )}
-
-      {/* Month Filter - Only for managers */}
-      {isManager && (
-        <Box display="flex" justifyContent="flex-end" mb={2}>
-          <FormControl size="small" sx={{ minWidth: 200 }}>
-            <InputLabel>Month</InputLabel>
-            <Select
-              value={selectedMonth}
-              onChange={(e) => setSelectedMonth(e.target.value)}
-              label="Month"
-            >
-              {getMonthOptions().map((option) => (
-                <MenuItem key={option.value} value={option.value}>
-                  {option.label}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <TextField
+              size="small"
+              placeholder="Search..."
+              value={searchFilter}
+              onChange={(e) => setSearchFilter(e.target.value)}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon sx={{ fontSize: 14, color: 'text.disabled' }} />
+                  </InputAdornment>
+                ),
+              }}
+              sx={{
+                width: 160,
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: 5,
+                  fontSize: '0.75rem',
+                  height: 28,
+                },
+              }}
+            />
+            <FormControl size="small" sx={{
+              minWidth: 140,
+              '& .MuiOutlinedInput-root': {
+                borderRadius: 5,
+                fontSize: '0.75rem',
+                height: 28,
+              },
+            }}>
+              <InputLabel sx={{ fontSize: '0.75rem' }}>Month</InputLabel>
+              <Select
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(e.target.value)}
+                label="Month"
+              >
+                {getMonthOptions().map((option) => (
+                  <MenuItem key={option.value} value={option.value}>
+                    {option.label}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Box>
         </Box>
       )}
 
@@ -375,7 +384,13 @@ const CallBonusesSection = ({ leads: passedLeads = [] }) => {
       {isManager && tabValue === 0 && (
         <Box>
           <CallDeclarationsTable
-            declarations={myDeclarations}
+            declarations={searchFilter
+              ? myDeclarations.filter(d =>
+                  (d.agentName || d.agent?.fullName || '').toLowerCase().includes(searchFilter.toLowerCase()) ||
+                  (d.status || '').toLowerCase().includes(searchFilter.toLowerCase()) ||
+                  (d.leadName || '').toLowerCase().includes(searchFilter.toLowerCase())
+                )
+              : myDeclarations}
             loading={declarationsLoading}
             error={declarationsError}
             onViewDetails={setSelectedDeclarationForApproval}
@@ -388,11 +403,14 @@ const CallBonusesSection = ({ leads: passedLeads = [] }) => {
       {/* Manager View - Pending Approvals Tab */}
       {isManager && tabValue === 1 && (
         <Box>
-          <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-            Declarations pending your review
-          </Typography>
           <CallDeclarationsTable
-            declarations={pendingDeclarations}
+            declarations={searchFilter
+              ? pendingDeclarations.filter(d =>
+                  (d.agentName || d.agent?.fullName || '').toLowerCase().includes(searchFilter.toLowerCase()) ||
+                  (d.status || '').toLowerCase().includes(searchFilter.toLowerCase()) ||
+                  (d.leadName || '').toLowerCase().includes(searchFilter.toLowerCase())
+                )
+              : pendingDeclarations}
             loading={pendingLoading}
             onViewDetails={setSelectedDeclarationForApproval}
             showAgent={true}

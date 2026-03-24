@@ -10,17 +10,39 @@ import {
   Chip,
   Box,
   Typography,
-  Tooltip
 } from '@mui/material';
 import {
-  Phone,
-  PhoneCallback,
-  AccessTime,
   Person,
-  Star,
-  Warning,
-  AttachMoney
 } from '@mui/icons-material';
+
+const COMPACT_TABLE_SX = {
+  tableLayout: "fixed",
+  "& .MuiTableHead-root .MuiTableCell-head": {
+    background: "linear-gradient(135deg, #1e293b 0%, #334155 100%)",
+    color: "#fff",
+    fontWeight: 700,
+    fontSize: "0.65rem",
+    textTransform: "uppercase",
+    letterSpacing: "0.5px",
+    borderBottom: "2px solid #3b82f6",
+    py: 0.6,
+    px: 1,
+    lineHeight: 1.2,
+  },
+  "& .MuiTableBody-root .MuiTableCell-root": {
+    py: 0.4,
+    px: 1,
+    fontSize: "0.78rem",
+    lineHeight: 1.3,
+  },
+  "& .MuiTableBody-root .MuiTableRow-root:nth-of-type(even)": {
+    bgcolor: "rgba(0, 0, 0, 0.015)",
+  },
+  "& .MuiTableBody-root .MuiTableRow-root:hover": {
+    bgcolor: "rgba(25, 118, 210, 0.06)",
+    transition: "background-color 0.15s ease",
+  },
+};
 
 const AgentCallsTable = ({ agentCalls, loading = false, agentBonusesData = [], agentFinesData = [], declarationTotals = [] }) => {
   const getSuccessRateColor = (rate) => {
@@ -85,8 +107,8 @@ const AgentCallsTable = ({ agentCalls, loading = false, agentBonusesData = [], a
 
   if (loading) {
     return (
-      <TableContainer component={Paper}>
-        <Table>
+      <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
+        <Table size="small" sx={COMPACT_TABLE_SX}>
           <TableHead>
             <TableRow>
               <TableCell>Agent</TableCell>
@@ -95,25 +117,18 @@ const AgentCallsTable = ({ agentCalls, loading = false, agentBonusesData = [], a
               <TableCell align="center">Outgoing</TableCell>
               <TableCell align="center">Success Rate</TableCell>
               <TableCell align="center">Talk Time</TableCell>
-              <TableCell align="center">Money from Calls</TableCell>
-              <TableCell align="center">Monthly Bonus</TableCell>
-              <TableCell align="center">Active Fines</TableCell>
+              <TableCell align="center">Talk Pay</TableCell>
+              <TableCell align="center">Bonus</TableCell>
+              <TableCell align="center">Fines</TableCell>
               <TableCell align="center">Total Payable</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {[...Array(5)].map((_, index) => (
               <TableRow key={index}>
-                <TableCell>Loading...</TableCell>
-                <TableCell>Loading...</TableCell>
-                <TableCell>Loading...</TableCell>
-                <TableCell>Loading...</TableCell>
-                <TableCell>Loading...</TableCell>
-                <TableCell>Loading...</TableCell>
-                <TableCell>Loading...</TableCell>
-                <TableCell>Loading...</TableCell>
-                <TableCell>Loading...</TableCell>
-                <TableCell>Loading...</TableCell>
+                {[...Array(10)].map((_, i) => (
+                  <TableCell key={i}><Typography variant="caption" color="text.disabled">...</Typography></TableCell>
+                ))}
               </TableRow>
             ))}
           </TableBody>
@@ -191,20 +206,20 @@ const AgentCallsTable = ({ agentCalls, loading = false, agentBonusesData = [], a
   }
 
   return (
-    <TableContainer component={Paper}>
-      <Table>
+    <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
+      <Table size="small" sx={COMPACT_TABLE_SX}>
         <TableHead>
           <TableRow>
-            <TableCell>Agent</TableCell>
-            <TableCell align="center">Total Calls</TableCell>
-            <TableCell align="center">Incoming</TableCell>
-            <TableCell align="center">Outgoing</TableCell>
-            <TableCell align="center">Success Rate</TableCell>
-            <TableCell align="center">Talk Time</TableCell>
-            <TableCell align="center">Money from Calls</TableCell>
-            <TableCell align="center">Monthly Bonus</TableCell>
-            <TableCell align="center">Active Fines</TableCell>
-            <TableCell align="center">Total Payable</TableCell>
+            <TableCell sx={{ width: '18%' }}>Agent</TableCell>
+            <TableCell align="center" sx={{ width: '8%' }}>Total Calls</TableCell>
+            <TableCell align="center" sx={{ width: '8%' }}>Incoming</TableCell>
+            <TableCell align="center" sx={{ width: '8%' }}>Outgoing</TableCell>
+            <TableCell align="center" sx={{ width: '10%' }}>Success Rate</TableCell>
+            <TableCell align="center" sx={{ width: '10%' }}>Talk Time</TableCell>
+            <TableCell align="center" sx={{ width: '10%' }}>Talk Pay</TableCell>
+            <TableCell align="center" sx={{ width: '10%' }}>Bonus</TableCell>
+            <TableCell align="center" sx={{ width: '8%' }}>Fines</TableCell>
+            <TableCell align="center" sx={{ width: '10%' }}>Total Payable</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
@@ -215,93 +230,58 @@ const AgentCallsTable = ({ agentCalls, loading = false, agentBonusesData = [], a
             const totalPayable = calculateTotalPayable(agent);
 
             return (
-              <TableRow key={agent.id || agent.agentName} hover>
+              <TableRow key={agent.id || agent.agentName}>
                 <TableCell>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <Person fontSize="small" color="primary" />
-                    <Box>
-                      <Typography variant="body2" fontWeight="bold">
-                        {agent.agentName}
-                      </Typography>
-                      <Typography variant="caption" color="textSecondary">
-                        #{agent.agentNumber}
-                      </Typography>
-                    </Box>
-                  </Box>
-                </TableCell>
-                
-                <TableCell align="center">
-                  <Chip 
-                    label={agent.totalCalls} 
-                    color="primary" 
-                    variant="outlined" 
-                    size="small"
-                  />
-                </TableCell>
-                
-                <TableCell align="center">
-                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5 }}>
-                    <Phone fontSize="small" color="success" />
-                    <Typography variant="body2">{agent.incomingCalls}</Typography>
-                  </Box>
-                </TableCell>
-                
-                <TableCell align="center">
-                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5 }}>
-                    <PhoneCallback fontSize="small" color="info" />
-                    <Typography variant="body2">{agent.outgoingCalls}</Typography>
-                  </Box>
-                </TableCell>
-                
-                <TableCell align="center">
-                  <Chip 
-                    label={`${agent.successRate}%`}
-                    color={getSuccessRateColor(agent.successRate)}
-                    size="small"
-                  />
-                </TableCell>
-                
-                <TableCell align="center">
-                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5 }}>
-                    <AccessTime fontSize="small" color="action" />
-                    <Typography variant="body2">{agent.totalTalkTime}</Typography>
-                  </Box>
-                </TableCell>
-                
-                <TableCell align="center">
-                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5 }}>
-                    <AttachMoney fontSize="small" color="info" />
-                    <Typography variant="body2" fontWeight="bold" color="info.main">
-                      ${talkTimePay.toFixed(2)}
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                    <Person sx={{ fontSize: 15, color: 'primary.main' }} />
+                    <Typography variant="body2" fontWeight={600} sx={{ fontSize: '0.78rem' }}>
+                      {agent.agentName}
                     </Typography>
                   </Box>
                 </TableCell>
 
                 <TableCell align="center">
-                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5 }}>
-                    <Star fontSize="small" color="success" />
-                    <Typography variant="body2" fontWeight="bold" color="success.main">
-                      ${agentBonus.toFixed(2)}
-                    </Typography>
-                  </Box>
+                  <Chip label={agent.totalCalls} color="primary" variant="outlined" size="small" sx={{ height: 20, fontSize: '0.7rem', '& .MuiChip-label': { px: 0.75 } }} />
                 </TableCell>
 
                 <TableCell align="center">
-                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5 }}>
-                    <Warning fontSize="small" color="error" />
-                    <Typography variant="body2" fontWeight="bold" color="error.main">
-                      ${agentFines.toFixed(2)}
-                    </Typography>
-                  </Box>
+                  <Typography variant="body2" sx={{ fontSize: '0.78rem' }}>{agent.incomingCalls}</Typography>
                 </TableCell>
 
                 <TableCell align="center">
-                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5 }}>
-                    <AttachMoney fontSize="small" color="primary" />
-                    <Typography variant="body2" fontWeight="bold" color="primary.main">
-                      ${totalPayable.toFixed(2)}
-                    </Typography>
-                  </Box>
+                  <Typography variant="body2" sx={{ fontSize: '0.78rem' }}>{agent.outgoingCalls}</Typography>
+                </TableCell>
+
+                <TableCell align="center">
+                  <Chip label={`${agent.successRate}%`} color={getSuccessRateColor(agent.successRate)} size="small" sx={{ height: 20, fontSize: '0.7rem', '& .MuiChip-label': { px: 0.75 } }} />
+                </TableCell>
+
+                <TableCell align="center">
+                  <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.78rem' }}>{agent.totalTalkTime}</Typography>
+                </TableCell>
+
+                <TableCell align="center">
+                  <Typography variant="body2" fontWeight={600} color="info.main" sx={{ fontSize: '0.78rem' }}>
+                    ${talkTimePay.toFixed(2)}
+                  </Typography>
+                </TableCell>
+
+                <TableCell align="center">
+                  <Typography variant="body2" fontWeight={600} color="success.main" sx={{ fontSize: '0.78rem' }}>
+                    ${agentBonus.toFixed(2)}
+                  </Typography>
+                </TableCell>
+
+                <TableCell align="center">
+                  <Typography variant="body2" fontWeight={600} color={agentFines > 0 ? "error.main" : "text.disabled"} sx={{ fontSize: '0.78rem' }}>
+                    ${agentFines.toFixed(2)}
+                  </Typography>
+                </TableCell>
+
+                <TableCell align="center">
+                  <Typography variant="body2" fontWeight={700} color="primary.main" sx={{ fontSize: '0.82rem' }}>
+                    ${totalPayable.toFixed(2)}
+                  </Typography>
                 </TableCell>
               </TableRow>
             );
