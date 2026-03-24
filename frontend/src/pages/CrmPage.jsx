@@ -28,6 +28,9 @@ import {
   FormControl,
   InputLabel,
   Select,
+  Switch,
+  FormControlLabel,
+  Tooltip,
 } from "@mui/material";
 import {
   Search as SearchIcon,
@@ -38,16 +41,21 @@ import {
   Campaign as CampaignIcon,
   Payment as PSPIcon,
   CreditCard as CardIssuerIcon,
+  Edit as EditIcon,
+  Delete as DeleteIcon,
 } from "@mui/icons-material";
 import { useForm, Controller } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
 import * as yup from "yup";
 import api from "../services/api";
 import toast from "react-hot-toast";
+import { useSelector } from "react-redux";
+import { selectUser } from "../store/slices/authSlice";
+import CommentButton from "../components/CommentButton";
+import useSensitiveAction from "../hooks/useSensitiveAction";
+import SensitiveActionModal from "../components/SensitiveActionModal";
 
-// Lazy-loaded standalone pages (new)
-const ClientNetworksPageNew = lazy(() => import("./ClientNetworksPage.jsx"));
-const ClientBrokersPageNew = lazy(() => import("./ClientBrokersPage.jsx"));
+// Lazy-loaded standalone pages
 const OurNetworksPage = lazy(() => import("./OurNetworksPage.jsx"));
 const CampaignsPage = lazy(() => import("./CampaignsPage.jsx"));
 const ClientPSPsPage = lazy(() => import("./ClientPSPsPage.jsx"));
@@ -110,8 +118,14 @@ const compactTableSx = {
 
 const OldClientNetworksTab = () => {
   const navigate = useNavigate();
+  const user = useSelector(selectUser);
+  const isAdmin = user?.role === "admin";
+  const { executeSensitiveAction, sensitiveActionState, resetSensitiveAction } =
+    useSensitiveAction();
   const [search, setSearch] = useState("");
+  const [showActiveOnly, setShowActiveOnly] = useState(false);
   const [openDialog, setOpenDialog] = useState(false);
+  const [editingNetwork, setEditingNetwork] = useState(null);
   const [creating, setCreating] = useState(false);
   const [newNetworkName, setNewNetworkName] = useState("");
   const [newNetworkDescription, setNewNetworkDescription] = useState("");
@@ -132,17 +146,27 @@ const OldClientNetworksTab = () => {
     commentStats: {},
   });
 
-  const handleOpenDialog = () => {
-    setNewNetworkName("");
-    setNewNetworkDescription("");
-    setEmployees([]);
+  const handleOpenDialog = (network = null) => {
+    setEditingNetwork(network);
+    if (network) {
+      setNewNetworkName(network.name || "");
+      setNewNetworkDescription(network.description || "");
+      setEmployees([]);
+    } else {
+      setNewNetworkName("");
+      setNewNetworkDescription("");
+      setEmployees([]);
+    }
     setEmpName("");
     setEmpTelegram("");
     setEmpPosition("");
     setOpenDialog(true);
   };
 
-  const handleCloseDialog = () => setOpenDialog(false);
+  const handleCloseDialog = () => {
+    setOpenDialog(false);
+    setEditingNetwork(null);
+  };
 
   const handleAddEmployee = () => {
     if (!empName.trim() || !empPosition) return;
@@ -170,31 +194,72 @@ const OldClientNetworksTab = () => {
     }
     try {
       setCreating(true);
-      const response = await api.post("/client-networks", {
-        name: newNetworkName.trim(),
-        description: newNetworkDescription.trim() || undefined,
-      });
-      const newNetwork = response.data.data;
+      if (editingNetwork) {
+        await api.put(`/client-networks/${editingNetwork._id}`, {
+          name: newNetworkName.trim(),
+          description: newNetworkDescription.trim() || undefined,
+        });
+        toast.success(`Network "${newNetworkName.trim()}" updated`);
+      } else {
+        const response = await api.post("/client-networks", {
+          name: newNetworkName.trim(),
+          description: newNetworkDescription.trim() || undefined,
+        });
+        const newNetwork = response.data.data;
 
-      if (employees.length > 0) {
-        const results = await Promise.allSettled(
-          employees.map((emp) =>
-            api.post(`/client-networks/${newNetwork._id}/employees`, emp)
-          )
-        );
-        const failed = results.filter((r) => r.status === "rejected").length;
-        if (failed > 0) {
-          toast.error(`Failed to add ${failed} employee(s)`);
+        if (employees.length > 0) {
+          const results = await Promise.allSettled(
+            employees.map((emp) =>
+              api.post(`/client-networks/${newNetwork._id}/employees`, emp)
+            )
+          );
+          const failed = results.filter((r) => r.status === "rejected").length;
+          if (failed > 0) {
+            toast.error(`Failed to add ${failed} employee(s)`);
+          }
         }
+        toast.success(`Network "${newNetwork.name}" created`);
       }
-
-      toast.success(`Network "${newNetwork.name}" created`);
       handleCloseDialog();
-      fetchNetworks(1);
+      fetchNetworks(networksPagination.current);
     } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to create network");
+      toast.error(error.response?.data?.message || "Failed to save network");
     } finally {
       setCreating(false);
+    }
+  };
+
+  const handleToggleActive = async (network, e) => {
+    e.stopPropagation();
+    try {
+      await api.put(`/client-networks/${network._id}`, {
+        isActive: !network.isActive,
+      });
+      toast.success(`Network "${network.name}" ${!network.isActive ? "activated" : "deactivated"}`);
+      fetchNetworks(networksPagination.current);
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to update network status");
+    }
+  };
+
+  const handleDelete = async (network, e) => {
+    e.stopPropagation();
+    if (!window.confirm(`Are you sure you want to delete "${network.name}"? This requires 2FA verification.`)) {
+      return;
+    }
+    try {
+      await executeSensitiveAction({
+        actionName: "Delete Client Network",
+        actionDescription: `This will permanently delete the client network "${network.name}".`,
+        apiCall: async (headers) => {
+          return await api.delete(`/client-networks/${network._id}`, { headers });
+        },
+      });
+      toast.success(`Network "${network.name}" deleted`);
+      fetchNetworks(1);
+    } catch (error) {
+      if (error.message === "User cancelled sensitive action") return;
+      toast.error(error.response?.data?.message || "Failed to delete network");
     }
   };
 
@@ -203,7 +268,12 @@ const OldClientNetworksTab = () => {
       try {
         setNetworksLoading(true);
         const response = await api.get("/client-networks", {
-          params: { page, limit: 50, search: search || undefined },
+          params: {
+            page,
+            limit: 50,
+            search: search || undefined,
+            ...(showActiveOnly && { isActive: "true" }),
+          },
         });
         setNetworks(response.data.data);
         setNetworksPagination(response.data.pagination);
@@ -213,7 +283,7 @@ const OldClientNetworksTab = () => {
         setNetworksLoading(false);
       }
     },
-    [search]
+    [search, showActiveOnly]
   );
 
   const fetchNetworkStats = useCallback(async () => {
@@ -243,10 +313,23 @@ const OldClientNetworksTab = () => {
   const getNetworkUnresolvedComments = (networkId) =>
     networkStats.commentStats?.[networkId] || 0;
 
+  const colSpan = isAdmin ? 9 : 8;
+
   return (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
       <Paper sx={{ px: 2, py: 0.5, mb: 1, flexShrink: 0 }}>
         <Box sx={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 1 }}>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={showActiveOnly}
+                onChange={(e) => setShowActiveOnly(e.target.checked)}
+                size="small"
+              />
+            }
+            label={<Typography sx={{ fontSize: "0.75rem" }}>Active only</Typography>}
+            sx={{ mr: 0 }}
+          />
           <TextField
             size="small"
             placeholder="Search..."
@@ -262,18 +345,20 @@ const OldClientNetworksTab = () => {
             }}
             sx={{ width: 220, "& .MuiInputBase-root": { height: 30, fontSize: "0.8rem", borderRadius: "20px" } }}
           />
-          <IconButton
-            size="small"
-            color="primary"
-            onClick={handleOpenDialog}
-            sx={{
-              width: 30, height: 30,
-              bgcolor: "primary.main", color: "#fff",
-              "&:hover": { bgcolor: "primary.dark" },
-            }}
-          >
-            <AddIcon sx={{ fontSize: 18 }} />
-          </IconButton>
+          {isAdmin && (
+            <IconButton
+              size="small"
+              color="primary"
+              onClick={() => handleOpenDialog()}
+              sx={{
+                width: 30, height: 30,
+                bgcolor: "primary.main", color: "#fff",
+                "&:hover": { bgcolor: "primary.dark" },
+              }}
+            >
+              <AddIcon sx={{ fontSize: 18 }} />
+            </IconButton>
+          )}
         </Box>
       </Paper>
 
@@ -282,25 +367,29 @@ const OldClientNetworksTab = () => {
           <Table size="small" stickyHeader sx={compactTableSx}>
             <TableHead>
               <TableRow>
-                <TableCell sx={{ width: "26%" }}>Name</TableCell>
-                <TableCell sx={{ textAlign: "center", width: "9%" }}>Status</TableCell>
-                <TableCell sx={{ textAlign: "center", width: "10%" }}>Deal Type</TableCell>
-                <TableCell sx={{ textAlign: "center", width: "11%" }}>Employees</TableCell>
-                <TableCell sx={{ textAlign: "center", width: "11%" }}>Brokers</TableCell>
-                <TableCell sx={{ textAlign: "center", width: "11%" }}>CRM Deals</TableCell>
-                <TableCell sx={{ textAlign: "center", width: "11%" }}>Open Comments</TableCell>
+                <TableCell sx={{ width: "22%" }}>Name</TableCell>
+                <TableCell sx={{ textAlign: "center", width: "8%" }}>Status</TableCell>
+                <TableCell sx={{ textAlign: "center", width: "9%" }}>Deal Type</TableCell>
+                <TableCell sx={{ textAlign: "center", width: "9%" }}>Employees</TableCell>
+                <TableCell sx={{ textAlign: "center", width: "9%" }}>Brokers</TableCell>
+                <TableCell sx={{ textAlign: "center", width: "9%" }}>CRM Deals</TableCell>
+                <TableCell sx={{ textAlign: "center", width: "9%" }}>Open Comments</TableCell>
+                <TableCell sx={{ textAlign: "center", width: "5%" }}>Notes</TableCell>
+                {isAdmin && (
+                  <TableCell sx={{ textAlign: "right", width: "18%" }}>Actions</TableCell>
+                )}
               </TableRow>
             </TableHead>
             <TableBody>
               {networksLoading ? (
                 <TableRow>
-                  <TableCell colSpan={7} align="center" sx={{ py: 3 }}>
+                  <TableCell colSpan={colSpan} align="center" sx={{ py: 3 }}>
                     <CircularProgress size={22} />
                   </TableCell>
                 </TableRow>
               ) : networks.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} align="center" sx={{ py: 3 }}>
+                  <TableCell colSpan={colSpan} align="center" sx={{ py: 3 }}>
                     <Typography variant="caption" color="text.secondary">
                       No client networks found
                     </Typography>
@@ -363,6 +452,46 @@ const OldClientNetworksTab = () => {
                         <Typography sx={{ fontSize: "0.75rem", color: "text.disabled" }}>0</Typography>
                       )}
                     </TableCell>
+                    <TableCell sx={{ textAlign: "center" }} onClick={(e) => e.stopPropagation()}>
+                      <CommentButton
+                        targetType="client_network"
+                        targetId={network._id}
+                        targetName={network.name}
+                      />
+                    </TableCell>
+                    {isAdmin && (
+                      <TableCell sx={{ textAlign: "right" }}>
+                        <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 0.25 }}>
+                          <Tooltip title="Edit">
+                            <IconButton
+                              size="small"
+                              onClick={(e) => { e.stopPropagation(); handleOpenDialog(network); }}
+                              sx={{ p: 0.25 }}
+                            >
+                              <EditIcon sx={{ fontSize: 16 }} />
+                            </IconButton>
+                          </Tooltip>
+                          <Tooltip title={network.isActive ? "Deactivate" : "Activate"}>
+                            <Switch
+                              checked={network.isActive}
+                              size="small"
+                              onClick={(e) => handleToggleActive(network, e)}
+                              sx={{ mx: 0 }}
+                            />
+                          </Tooltip>
+                          <Tooltip title="Delete">
+                            <IconButton
+                              size="small"
+                              color="error"
+                              onClick={(e) => handleDelete(network, e)}
+                              sx={{ p: 0.25 }}
+                            >
+                              <DeleteIcon sx={{ fontSize: 16 }} />
+                            </IconButton>
+                          </Tooltip>
+                        </Box>
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))
               )}
@@ -382,9 +511,9 @@ const OldClientNetworksTab = () => {
         )}
       </Paper>
 
-      {/* Add Network Dialog */}
+      {/* Add/Edit Network Dialog */}
       <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
-        <DialogTitle>Add Client Network</DialogTitle>
+        <DialogTitle>{editingNetwork ? "Edit Client Network" : "Add Client Network"}</DialogTitle>
         <DialogContent>
           <Box sx={{ display: "flex", flexDirection: "column", gap: 2, pt: 1 }}>
             <TextField
@@ -393,7 +522,7 @@ const OldClientNetworksTab = () => {
               onChange={(e) => setNewNetworkName(e.target.value)}
               fullWidth
               required
-              placeholder="Enter new network name..."
+              placeholder="Enter network name..."
               inputProps={{ maxLength: 100 }}
             />
             <TextField
@@ -407,79 +536,83 @@ const OldClientNetworksTab = () => {
               inputProps={{ maxLength: 500 }}
             />
 
-            <Divider sx={{ my: 0.5 }} />
-            <Typography variant="subtitle2" color="text.secondary">
-              Employees (optional)
-            </Typography>
+            {!editingNetwork && (
+              <>
+                <Divider sx={{ my: 0.5 }} />
+                <Typography variant="subtitle2" color="text.secondary">
+                  Employees (optional)
+                </Typography>
 
-            {employees.length > 0 && (
-              <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
-                {employees.map((emp, idx) => (
-                  <Chip
-                    key={idx}
-                    label={`${emp.name} - ${positionOptions.find((p) => p.value === emp.position)?.label || emp.position}${emp.telegramUsername ? ` (@${emp.telegramUsername})` : ""}`}
-                    onDelete={() => handleRemoveEmployee(idx)}
+                {employees.length > 0 && (
+                  <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+                    {employees.map((emp, idx) => (
+                      <Chip
+                        key={idx}
+                        label={`${emp.name} - ${positionOptions.find((p) => p.value === emp.position)?.label || emp.position}${emp.telegramUsername ? ` (@${emp.telegramUsername})` : ""}`}
+                        onDelete={() => handleRemoveEmployee(idx)}
+                        size="small"
+                        variant="outlined"
+                      />
+                    ))}
+                  </Box>
+                )}
+
+                <Box sx={{ display: "flex", gap: 1, alignItems: "flex-start" }}>
+                  <TextField
+                    label="Name"
+                    value={empName}
+                    onChange={(e) => setEmpName(e.target.value)}
                     size="small"
-                    variant="outlined"
+                    sx={{ flex: 1 }}
+                    inputProps={{ maxLength: 100 }}
                   />
-                ))}
-              </Box>
+                  <TextField
+                    label="Telegram"
+                    value={empTelegram}
+                    onChange={(e) => setEmpTelegram(e.target.value.replace(/^@+/, ""))}
+                    size="small"
+                    sx={{ flex: 1 }}
+                    placeholder="username"
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start" sx={{ mr: 0 }}>
+                          <span style={{ fontWeight: 700, color: "#1976d2" }}>@</span>
+                        </InputAdornment>
+                      ),
+                    }}
+                    inputProps={{ maxLength: 100 }}
+                  />
+                </Box>
+                <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+                  <FormControl size="small" sx={{ flex: 1 }}>
+                    <InputLabel>Position</InputLabel>
+                    <Select
+                      value={empPosition}
+                      onChange={(e) => setEmpPosition(e.target.value)}
+                      label="Position"
+                    >
+                      {positionOptions.map((option) => (
+                        <MenuItem key={option.value} value={option.value}>
+                          {option.label}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                  <IconButton
+                    color="primary"
+                    onClick={handleAddEmployee}
+                    disabled={!empName.trim() || !empPosition}
+                    sx={{
+                      border: "1px solid",
+                      borderColor: !empName.trim() || !empPosition ? "action.disabled" : "primary.main",
+                      borderRadius: 1,
+                    }}
+                  >
+                    <AddIcon />
+                  </IconButton>
+                </Box>
+              </>
             )}
-
-            <Box sx={{ display: "flex", gap: 1, alignItems: "flex-start" }}>
-              <TextField
-                label="Name"
-                value={empName}
-                onChange={(e) => setEmpName(e.target.value)}
-                size="small"
-                sx={{ flex: 1 }}
-                inputProps={{ maxLength: 100 }}
-              />
-              <TextField
-                label="Telegram"
-                value={empTelegram}
-                onChange={(e) => setEmpTelegram(e.target.value.replace(/^@+/, ""))}
-                size="small"
-                sx={{ flex: 1 }}
-                placeholder="username"
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start" sx={{ mr: 0 }}>
-                      <span style={{ fontWeight: 700, color: "#1976d2" }}>@</span>
-                    </InputAdornment>
-                  ),
-                }}
-                inputProps={{ maxLength: 100 }}
-              />
-            </Box>
-            <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
-              <FormControl size="small" sx={{ flex: 1 }}>
-                <InputLabel>Position</InputLabel>
-                <Select
-                  value={empPosition}
-                  onChange={(e) => setEmpPosition(e.target.value)}
-                  label="Position"
-                >
-                  {positionOptions.map((option) => (
-                    <MenuItem key={option.value} value={option.value}>
-                      {option.label}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-              <IconButton
-                color="primary"
-                onClick={handleAddEmployee}
-                disabled={!empName.trim() || !empPosition}
-                sx={{
-                  border: "1px solid",
-                  borderColor: !empName.trim() || !empPosition ? "action.disabled" : "primary.main",
-                  borderRadius: 1,
-                }}
-              >
-                <AddIcon />
-              </IconButton>
-            </Box>
           </Box>
         </DialogContent>
         <DialogActions>
@@ -489,18 +622,39 @@ const OldClientNetworksTab = () => {
             variant="contained"
             disabled={creating || !newNetworkName.trim()}
           >
-            {creating ? <CircularProgress size={20} /> : "Create"}
+            {creating ? <CircularProgress size={20} /> : editingNetwork ? "Update" : "Create"}
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Sensitive Action 2FA Modal */}
+      <SensitiveActionModal
+        open={sensitiveActionState.showModal}
+        onClose={resetSensitiveAction}
+        onVerify={(code, useBackup) => sensitiveActionState.handleVerify(code, useBackup)}
+        onQRVerify={(token) => sensitiveActionState.handleQRVerify(token)}
+        actionName={sensitiveActionState.actionName}
+        actionDescription={sensitiveActionState.actionDescription}
+        loading={sensitiveActionState.verifying}
+        error={sensitiveActionState.error}
+        requires2FASetup={sensitiveActionState.requires2FASetup}
+        userId={sensitiveActionState.userId}
+        qrAuthEnabled={sensitiveActionState.qrAuthEnabled}
+      />
     </Box>
   );
 };
 
 const OldClientBrokersTab = () => {
   const navigate = useNavigate();
+  const user = useSelector(selectUser);
+  const isAdmin = user?.role === "admin";
+  const canManageBrokers = user?.role === "admin" || user?.role === "affiliate_manager";
   const [search, setSearch] = useState("");
   const [openDialog, setOpenDialog] = useState(false);
+  const [editingBroker, setEditingBroker] = useState(null);
+  const [deleteConfirmBroker, setDeleteConfirmBroker] = useState(null);
+  const [deleting, setDeleting] = useState(false);
   const [brokers, setBrokers] = useState([]);
   const [brokersLoading, setBrokersLoading] = useState(false);
   const [brokersPagination, setBrokersPagination] = useState({
@@ -518,21 +672,53 @@ const OldClientBrokersTab = () => {
     defaultValues: { name: "", domain: "", description: "" },
   });
 
-  const handleOpenDialog = () => {
-    brokerForm.reset({ name: "", domain: "", description: "" });
+  const handleOpenDialog = (broker = null) => {
+    setEditingBroker(broker);
+    if (broker) {
+      brokerForm.reset({
+        name: broker.name || "",
+        domain: broker.domain || "",
+        description: broker.description || "",
+      });
+    } else {
+      brokerForm.reset({ name: "", domain: "", description: "" });
+    }
     setOpenDialog(true);
   };
 
-  const handleCloseDialog = () => setOpenDialog(false);
+  const handleCloseDialog = () => {
+    setOpenDialog(false);
+    setEditingBroker(null);
+  };
 
   const onBrokerSubmit = async (data) => {
     try {
-      await api.post("/client-brokers", data);
-      toast.success("Broker created successfully");
+      if (editingBroker) {
+        await api.put(`/client-brokers/${editingBroker._id}`, data);
+        toast.success(`Broker "${data.name}" updated`);
+      } else {
+        await api.post("/client-brokers", data);
+        toast.success("Broker created successfully");
+      }
       handleCloseDialog();
+      fetchBrokers(editingBroker ? brokersPagination.current : 1);
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to save broker");
+    }
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteConfirmBroker) return;
+    try {
+      setDeleting(true);
+      await api.delete(`/client-brokers/${deleteConfirmBroker._id}`);
+      toast.success(`Broker "${deleteConfirmBroker.name}" deleted`);
+      setDeleteConfirmBroker(null);
       fetchBrokers(1);
     } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to create broker");
+      toast.error(error.response?.data?.message || "Failed to delete broker");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -541,7 +727,11 @@ const OldClientBrokersTab = () => {
       try {
         setBrokersLoading(true);
         const response = await api.get("/client-brokers", {
-          params: { page, limit: 50, search: search || undefined },
+          params: {
+            page,
+            limit: 50,
+            search: search || undefined,
+          },
         });
         setBrokers(response.data.data);
         setBrokersPagination({
@@ -579,6 +769,8 @@ const OldClientBrokersTab = () => {
     }
   };
 
+  const colSpan = canManageBrokers ? 8 : 7;
+
   return (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
       <Paper sx={{ px: 2, py: 0.5, mb: 1, flexShrink: 0 }}>
@@ -598,18 +790,20 @@ const OldClientBrokersTab = () => {
             }}
             sx={{ width: 220, "& .MuiInputBase-root": { height: 30, fontSize: "0.8rem", borderRadius: "20px" } }}
           />
-          <IconButton
-            size="small"
-            color="primary"
-            onClick={handleOpenDialog}
-            sx={{
-              width: 30, height: 30,
-              bgcolor: "primary.main", color: "#fff",
-              "&:hover": { bgcolor: "primary.dark" },
-            }}
-          >
-            <AddIcon sx={{ fontSize: 18 }} />
-          </IconButton>
+          {canManageBrokers && (
+            <IconButton
+              size="small"
+              color="primary"
+              onClick={() => handleOpenDialog()}
+              sx={{
+                width: 30, height: 30,
+                bgcolor: "primary.main", color: "#fff",
+                "&:hover": { bgcolor: "primary.dark" },
+              }}
+            >
+              <AddIcon sx={{ fontSize: 18 }} />
+            </IconButton>
+          )}
         </Box>
       </Paper>
 
@@ -618,23 +812,27 @@ const OldClientBrokersTab = () => {
           <Table size="small" stickyHeader sx={compactTableSx}>
             <TableHead>
               <TableRow>
-                <TableCell sx={{ width: "30%" }}>Name</TableCell>
-                <TableCell sx={{ width: "25%" }}>Domain</TableCell>
-                <TableCell sx={{ textAlign: "center", width: "15%" }}>Status</TableCell>
-                <TableCell sx={{ textAlign: "center", width: "15%" }}>PSPs</TableCell>
-                <TableCell sx={{ textAlign: "center", width: "15%" }}>Total Leads</TableCell>
+                <TableCell sx={{ width: "24%" }}>Name</TableCell>
+                <TableCell sx={{ width: "18%" }}>Domain</TableCell>
+                <TableCell sx={{ textAlign: "center", width: "10%" }}>Status</TableCell>
+                <TableCell sx={{ textAlign: "center", width: "10%" }}>PSPs</TableCell>
+                <TableCell sx={{ textAlign: "center", width: "10%" }}>Total Leads</TableCell>
+                <TableCell sx={{ textAlign: "center", width: "5%" }}>Notes</TableCell>
+                {canManageBrokers && (
+                  <TableCell sx={{ textAlign: "right", width: "18%" }}>Actions</TableCell>
+                )}
               </TableRow>
             </TableHead>
             <TableBody>
               {brokersLoading ? (
                 <TableRow>
-                  <TableCell colSpan={5} align="center" sx={{ py: 3 }}>
+                  <TableCell colSpan={colSpan} align="center" sx={{ py: 3 }}>
                     <CircularProgress size={22} />
                   </TableCell>
                 </TableRow>
               ) : brokers.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} align="center" sx={{ py: 3 }}>
+                  <TableCell colSpan={colSpan} align="center" sx={{ py: 3 }}>
                     <Typography variant="caption" color="text.secondary">
                       No client brokers found
                     </Typography>
@@ -673,6 +871,40 @@ const OldClientBrokersTab = () => {
                     <TableCell sx={{ textAlign: "center" }}>
                       {networkStats.brokerStats?.[broker._id]?.totalLeads || 0}
                     </TableCell>
+                    <TableCell sx={{ textAlign: "center" }} onClick={(e) => e.stopPropagation()}>
+                      <CommentButton
+                        targetType="client_broker"
+                        targetId={broker._id}
+                        targetName={broker.name}
+                      />
+                    </TableCell>
+                    {canManageBrokers && (
+                      <TableCell sx={{ textAlign: "right" }}>
+                        <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 0.25 }}>
+                          <Tooltip title="Edit">
+                            <IconButton
+                              size="small"
+                              onClick={(e) => { e.stopPropagation(); handleOpenDialog(broker); }}
+                              sx={{ p: 0.25 }}
+                            >
+                              <EditIcon sx={{ fontSize: 16 }} />
+                            </IconButton>
+                          </Tooltip>
+                          {isAdmin && (
+                            <Tooltip title="Delete">
+                              <IconButton
+                                size="small"
+                                color="error"
+                                onClick={(e) => { e.stopPropagation(); setDeleteConfirmBroker(broker); }}
+                                sx={{ p: 0.25 }}
+                              >
+                                <DeleteIcon sx={{ fontSize: 16 }} />
+                              </IconButton>
+                            </Tooltip>
+                          )}
+                        </Box>
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))
               )}
@@ -692,10 +924,10 @@ const OldClientBrokersTab = () => {
         )}
       </Paper>
 
-      {/* Add Broker Dialog */}
+      {/* Add/Edit Broker Dialog */}
       <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
         <form onSubmit={brokerForm.handleSubmit(onBrokerSubmit)}>
-          <DialogTitle>Add Client Broker</DialogTitle>
+          <DialogTitle>{editingBroker ? "Edit Client Broker" : "Add Client Broker"}</DialogTitle>
           <DialogContent>
             <Box sx={{ display: "flex", flexDirection: "column", gap: 2, pt: 1 }}>
               <Controller
@@ -744,10 +976,35 @@ const OldClientBrokersTab = () => {
           <DialogActions>
             <Button onClick={handleCloseDialog}>Cancel</Button>
             <Button type="submit" variant="contained" disabled={brokerForm.formState.isSubmitting}>
-              {brokerForm.formState.isSubmitting ? <CircularProgress size={20} /> : "Create"}
+              {brokerForm.formState.isSubmitting ? <CircularProgress size={20} /> : editingBroker ? "Update" : "Create"}
             </Button>
           </DialogActions>
         </form>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={!!deleteConfirmBroker} onClose={() => setDeleteConfirmBroker(null)} maxWidth="xs">
+        <DialogTitle>Confirm Delete</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Are you sure you want to delete broker "{deleteConfirmBroker?.name}"?
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            This action cannot be undone.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteConfirmBroker(null)} disabled={deleting}>Cancel</Button>
+          <Button
+            onClick={handleDeleteConfirm}
+            variant="contained"
+            color="error"
+            disabled={deleting}
+            startIcon={deleting ? <CircularProgress size={16} /> : <DeleteIcon />}
+          >
+            {deleting ? "Deleting..." : "Delete"}
+          </Button>
+        </DialogActions>
       </Dialog>
     </Box>
   );
@@ -756,14 +1013,12 @@ const OldClientBrokersTab = () => {
 // ─── Tab config ──────────────────────────────────────────────────────────────
 
 const tabs = [
-  { label: "Client Networks (old)", icon: <NetworkIcon sx={{ fontSize: 16 }} /> },
-  { label: "Client Brokers (old)", icon: <BrokerIcon sx={{ fontSize: 16 }} /> },
-  { label: "Our Networks", icon: <OurNetworkIcon sx={{ fontSize: 16 }} /> },
-  { label: "Client Networks (new)", icon: <NetworkIcon sx={{ fontSize: 16 }} /> },
-  { label: "Client Brokers (new)", icon: <BrokerIcon sx={{ fontSize: 16 }} /> },
-  { label: "Campaigns", icon: <CampaignIcon sx={{ fontSize: 16 }} /> },
-  { label: "PSPs", icon: <PSPIcon sx={{ fontSize: 16 }} /> },
-  { label: "Card Issuers", icon: <CardIssuerIcon sx={{ fontSize: 16 }} /> },
+  { label: "Client Networks", icon: <NetworkIcon sx={{ fontSize: 16, color: "#1976d2" }} /> },
+  { label: "Client Brokers", icon: <BrokerIcon sx={{ fontSize: 16, color: "#7b1fa2" }} /> },
+  { label: "Our Networks", icon: <OurNetworkIcon sx={{ fontSize: 16, color: "#2e7d32" }} /> },
+  { label: "Campaigns", icon: <CampaignIcon sx={{ fontSize: 16, color: "#ed6c02" }} /> },
+  { label: "PSPs", icon: <PSPIcon sx={{ fontSize: 16, color: "#d32f2f" }} /> },
+  { label: "Card Issuers", icon: <CardIssuerIcon sx={{ fontSize: 16, color: "#0288d1" }} /> },
 ];
 
 // ─── Main CRM Page ──────────────────────────────────────────────────────────
@@ -796,11 +1051,9 @@ const CrmPage = () => {
         {tab === 1 && <OldClientBrokersTab />}
         <Suspense fallback={tabFallback}>
           {tab === 2 && <OurNetworksPage />}
-          {tab === 3 && <ClientNetworksPageNew />}
-          {tab === 4 && <ClientBrokersPageNew />}
-          {tab === 5 && <CampaignsPage />}
-          {tab === 6 && <ClientPSPsPage />}
-          {tab === 7 && <CardIssuersPage />}
+          {tab === 3 && <CampaignsPage />}
+          {tab === 4 && <ClientPSPsPage />}
+          {tab === 5 && <CardIssuersPage />}
         </Suspense>
       </Box>
     </Box>

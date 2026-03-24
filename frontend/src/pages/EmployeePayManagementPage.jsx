@@ -242,8 +242,8 @@ const EmployeePayManagementPage = () => {
             onChange={(e, v) => setTab(v)}
             sx={{ minHeight: 36, "& .MuiTab-root": { minHeight: 36, py: 0.3, fontSize: "0.8rem" } }}
           >
-            <Tab icon={<SalaryIcon sx={{ fontSize: 16 }} />} iconPosition="start" label="Salary" />
-            <Tab icon={<BonusIcon sx={{ fontSize: 16 }} />} iconPosition="start" label="Bonuses" />
+            <Tab icon={<SalaryIcon sx={{ fontSize: 16, color: "#2e7d32" }} />} iconPosition="start" label="Salary" />
+            <Tab icon={<BonusIcon sx={{ fontSize: 16, color: "#ed6c02" }} />} iconPosition="start" label="Bonuses" />
           </Tabs>
           <Box sx={{ ml: "auto" }} />
           {tab === 1 && (

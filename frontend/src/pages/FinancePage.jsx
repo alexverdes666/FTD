@@ -32,13 +32,13 @@ const tabFallback = (
 );
 
 const tabs = [
-  { label: "AM Payrolls", icon: <TableIcon sx={{ fontSize: 16 }} /> },
-  { label: "Targets", icon: <TargetIcon sx={{ fontSize: 16 }} /> },
-  { label: "AM Expenses", icon: <ExpensesIcon sx={{ fontSize: 16 }} /> },
-  { label: "Fines", icon: <FinesIcon sx={{ fontSize: 16 }} /> },
-  { label: "Withdraw", icon: <WithdrawIcon sx={{ fontSize: 16 }} /> },
-  { label: "Employees", icon: <EmployeeIcon sx={{ fontSize: 16 }} /> },
-  { label: "Payroll", icon: <PayrollIcon sx={{ fontSize: 16 }} /> },
+  { label: "AM Payrolls", icon: <TableIcon sx={{ fontSize: 16, color: "#1976d2" }} /> },
+  { label: "Targets", icon: <TargetIcon sx={{ fontSize: 16, color: "#d32f2f" }} /> },
+  { label: "AM Expenses", icon: <ExpensesIcon sx={{ fontSize: 16, color: "#ed6c02" }} /> },
+  { label: "Fines", icon: <FinesIcon sx={{ fontSize: 16, color: "#7b1fa2" }} /> },
+  { label: "Withdraw", icon: <WithdrawIcon sx={{ fontSize: 16, color: "#2e7d32" }} /> },
+  { label: "Employees", icon: <EmployeeIcon sx={{ fontSize: 16, color: "#0288d1" }} /> },
+  { label: "Payroll", icon: <PayrollIcon sx={{ fontSize: 16, color: "#388e3c" }} /> },
 ];
 
 const FinancePage = () => {

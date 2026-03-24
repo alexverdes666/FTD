@@ -45,7 +45,7 @@ router.post(
     "/",
     [
         protect,
-        isAdmin,
+        authorize("admin", "affiliate_manager"),
         body("name")
             .trim()
             .isLength({ min: 1, max: 100 })
@@ -67,7 +67,7 @@ router.put(
     "/:id",
     [
         protect,
-        isAdmin,
+        authorize("admin", "affiliate_manager"),
         body("name")
             .optional()
             .trim()

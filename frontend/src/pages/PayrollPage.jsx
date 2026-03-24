@@ -1622,13 +1622,13 @@ const PayrollPage = () => {
               }}
             >
               {user.role === "admin" && (
-                <Tab icon={<PhoneIcon />} label="Agent Calls" />
+                <Tab icon={<PhoneIcon sx={{ color: "#1976d2" }} />} label="Agent Calls" />
               )}
               {(user.role === "admin" || user.role === "affiliate_manager") && (
-                <Tab icon={<PhoneIcon />} label="Call Bonuses" />
+                <Tab icon={<PhoneIcon sx={{ color: "#2e7d32" }} />} label="Call Bonuses" />
               )}
               {(user.role === "admin" || user.role === "affiliate_manager") && (
-                <Tab icon={<SettingsIcon />} label="Bonus Management" />
+                <Tab icon={<SettingsIcon sx={{ color: "#ed6c02" }} />} label="Bonus Management" />
               )}
             </Tabs>
           </Box>

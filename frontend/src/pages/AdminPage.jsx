@@ -24,9 +24,9 @@ const tabFallback = (
 );
 
 const tabs = [
-  { label: "Users", icon: <UsersIcon sx={{ fontSize: 16 }} /> },
-  { label: "Announcements", icon: <AnnouncementsIcon sx={{ fontSize: 16 }} /> },
-  { label: "Tickets", icon: <TicketsIcon sx={{ fontSize: 16 }} /> },
+  { label: "Users", icon: <UsersIcon sx={{ fontSize: 16, color: "#1976d2" }} /> },
+  { label: "Announcements", icon: <AnnouncementsIcon sx={{ fontSize: 16, color: "#ed6c02" }} /> },
+  { label: "Tickets", icon: <TicketsIcon sx={{ fontSize: 16, color: "#2e7d32" }} /> },
 ];
 
 const AdminPage = () => {

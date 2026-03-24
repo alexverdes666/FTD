@@ -1390,17 +1390,17 @@ const AffiliateManagersPage = ({ embedded = false }) => {
             aria-label="affiliate manager tabs"
           >
             <Tab
-              icon={<TableChartIcon />}
+              icon={<TableChartIcon sx={{ color: "#1976d2" }} />}
               label="Performance Tables"
               iconPosition="start"
             />
             <Tab
-              icon={<SalaryIcon />}
+              icon={<SalaryIcon sx={{ color: "#2e7d32" }} />}
               label="Salary & Commissions"
               iconPosition="start"
             />
             <Tab
-              icon={<SummaryIcon />}
+              icon={<SummaryIcon sx={{ color: "#ed6c02" }} />}
               label="Summary"
               iconPosition="start"
             />
