@@ -39,6 +39,7 @@ import {
   Menu,
   ListItemIcon,
   ListItemText,
+  InputAdornment,
 } from "@mui/material";
 import {
   Add as AddIcon,
@@ -54,6 +55,7 @@ import {
   MoreVert as MoreVertIcon,
   Archive as ArchiveIcon,
   Unarchive as UnarchiveIcon,
+  Search as SearchIcon,
 } from "@mui/icons-material";
 import { useForm, Controller, useFieldArray } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
@@ -158,7 +160,7 @@ const ourNetworkSchema = yup.object({
   }),
 });
 
-const OurNetworksPage = () => {
+const OurNetworksPage = ({ setHeaderExtra }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
   const user = useSelector(selectUser);
@@ -204,6 +206,7 @@ const OurNetworksPage = () => {
   // Month filter state
   const [selectedMonth, setSelectedMonth] = useState(dayjs());
   const [useMonthFilter, setUseMonthFilter] = useState(false);
+
 
   // Menu state
   const [menuAnchorEl, setMenuAnchorEl] = useState(null);
@@ -379,6 +382,97 @@ const OurNetworksPage = () => {
       setLoading(false);
     }
   }, [page, rowsPerPage, debouncedSearchTerm, showArchived, user?.role]);
+
+  // Generate month options for compact selector
+  const getMonthOptions = useCallback(() => {
+    const options = [];
+    const now = new Date();
+    for (let i = 0; i < 12; i++) {
+      const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const value = `${date.getFullYear()}-${date.getMonth()}`;
+      const label = date.toLocaleString('default', { month: 'short', year: 'numeric' });
+      options.push({ value, label });
+    }
+    return options;
+  }, []);
+
+  const handleCompactMonthChange = useCallback((e) => {
+    const [y, m] = e.target.value.split('-').map(Number);
+    setSelectedMonth(dayjs().year(y).month(m));
+  }, []);
+
+  const compactMonthValue = `${selectedMonth.year()}-${selectedMonth.month()}`;
+
+  // Push filters to CRM header
+  useEffect(() => {
+    if (!setHeaderExtra) return;
+    const smallSelect = {
+      minWidth: 120,
+      '& .MuiOutlinedInput-root': { borderRadius: 5, fontSize: '0.75rem', height: 28 },
+    };
+    setHeaderExtra(
+      <>
+        {user?.role === "admin" && (
+          <FormControlLabel
+            control={<Switch checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} size="small" />}
+            label={<Typography sx={{ fontSize: "0.7rem" }}>Archived</Typography>}
+            sx={{ mr: 0, ml: 0 }}
+          />
+        )}
+        <FormControlLabel
+          control={<Switch checked={useMonthFilter} onChange={(e) => setUseMonthFilter(e.target.checked)} size="small" />}
+          label={<Typography sx={{ fontSize: "0.7rem" }}>Month</Typography>}
+          sx={{ mr: 0, ml: 0 }}
+        />
+        {useMonthFilter && (
+          <FormControl size="small" sx={smallSelect}>
+            <Select
+              value={compactMonthValue}
+              onChange={handleCompactMonthChange}
+              displayEmpty
+            >
+              {getMonthOptions().map((o) => (
+                <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        )}
+        <TextField
+          size="small"
+          placeholder="Search..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon sx={{ fontSize: 14, color: "text.disabled" }} />
+              </InputAdornment>
+            ),
+          }}
+          sx={{
+            width: 160,
+            "& .MuiOutlinedInput-root": { borderRadius: 5, fontSize: "0.75rem", height: 28 },
+          }}
+        />
+        <AllNetworksScraperButton variant="contained" size="small" onComplete={fetchOurNetworks} />
+        {user?.role === "admin" && (
+          <IconButton
+            size="small"
+            color="primary"
+            onClick={() => { setEditingNetwork(null); setOpenDialog(true); }}
+            sx={{ width: 28, height: 28, bgcolor: "primary.main", color: "#fff", "&:hover": { bgcolor: "primary.dark" } }}
+          >
+            <AddIcon sx={{ fontSize: 16 }} />
+          </IconButton>
+        )}
+      </>
+    );
+  }, [setHeaderExtra, searchTerm, showArchived, useMonthFilter, compactMonthValue, user?.role, fetchOurNetworks]);
+
+  // Clear header on unmount
+  useEffect(() => {
+    return () => { if (setHeaderExtra) setHeaderExtra(null); };
+  }, [setHeaderExtra]);
 
   const fetchNetworkSummary = useCallback(
     async (networkId) => {
@@ -707,102 +801,6 @@ const OurNetworksPage = () => {
         </Alert>
       </Snackbar>
 
-      {/* Add spacing to prevent top content from being hidden if notification is persistent (though it overlays now) */}
-      <Box sx={{ height: 0 }} />
-
-      <Paper sx={{ p: 2, mb: 3 }}>
-        <Grid container spacing={2} alignItems="center">
-          <Grid item xs={12} md={3}>
-            <TextField
-              label={
-                user?.role === "admin"
-                  ? "Search our networks"
-                  : "Search my networks"
-              }
-              placeholder="Type to search (e.g., 'ethereum admin' for both keywords)"
-              variant="outlined"
-              size="small"
-              fullWidth
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </Grid>
-
-          <Grid item xs={12} md={5}>
-            <Box
-              sx={{
-                display: "flex",
-                alignItems: "center",
-                gap: 1,
-                justifyContent: "flex-start",
-              }}
-            >
-              {user?.role === "admin" && (
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={showArchived}
-                      onChange={(e) => setShowArchived(e.target.checked)}
-                    />
-                  }
-                  label="Show Archived"
-                  sx={{ whiteSpace: "nowrap" }}
-                />
-              )}
-
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={useMonthFilter}
-                    onChange={(e) => setUseMonthFilter(e.target.checked)}
-                  />
-                }
-                label="Month Filter"
-                sx={{ whiteSpace: "nowrap" }}
-              />
-
-              {useMonthFilter && (
-                <MonthYearSelector
-                  selectedDate={selectedMonth}
-                  onDateChange={setSelectedMonth}
-                  showCurrentSelection={false}
-                  size="small"
-                />
-              )}
-            </Box>
-          </Grid>
-
-          <Grid item xs={12} md={4}>
-            <Box
-              sx={{
-                display: "flex",
-                gap: 2,
-                alignItems: "center",
-                justifyContent: { xs: "flex-start", md: "flex-end" },
-              }}
-            >
-              {/* Run All Scrapers Button */}
-              <AllNetworksScraperButton
-                variant="contained"
-                size="medium"
-                onComplete={fetchOurNetworks}
-              />
-
-              {/* Add Network Button (Admin only) */}
-              {user?.role === "admin" && (
-                <Button
-                  variant="contained"
-                  startIcon={<AddIcon />}
-                  onClick={() => handleOpenDialog()}
-                  sx={{ minWidth: isMobile ? "auto" : "fit-content" }}
-                >
-                  {isMobile ? "Add" : "Add Our Network"}
-                </Button>
-              )}
-            </Box>
-          </Grid>
-        </Grid>
-      </Paper>
 
       <TableContainer component={Paper}>
         <Table>

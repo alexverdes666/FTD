@@ -116,7 +116,7 @@ const compactTableSx = {
 
 // ─── Old inline CRM views ───────────────────────────────────────────────────
 
-const OldClientNetworksTab = () => {
+const OldClientNetworksTab = ({ setHeaderExtra }) => {
   const navigate = useNavigate();
   const user = useSelector(selectUser);
   const isAdmin = user?.role === "admin";
@@ -315,53 +315,51 @@ const OldClientNetworksTab = () => {
 
   const colSpan = isAdmin ? 9 : 8;
 
+  // Push filters to CRM header
+  useEffect(() => {
+    if (!setHeaderExtra) return;
+    setHeaderExtra(
+      <>
+        <FormControlLabel
+          control={<Switch checked={showActiveOnly} onChange={(e) => setShowActiveOnly(e.target.checked)} size="small" />}
+          label={<Typography sx={{ fontSize: "0.7rem" }}>Active only</Typography>}
+          sx={{ mr: 0, ml: 0 }}
+        />
+        <TextField
+          size="small"
+          placeholder="Search..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          onKeyDown={handleSearchKeyDown}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon sx={{ fontSize: 14, color: "text.disabled" }} />
+              </InputAdornment>
+            ),
+          }}
+          sx={{ width: 160, "& .MuiOutlinedInput-root": { borderRadius: 5, fontSize: "0.75rem", height: 28 } }}
+        />
+        {isAdmin && (
+          <IconButton
+            size="small"
+            color="primary"
+            onClick={() => handleOpenDialog()}
+            sx={{ width: 28, height: 28, bgcolor: "primary.main", color: "#fff", "&:hover": { bgcolor: "primary.dark" } }}
+          >
+            <AddIcon sx={{ fontSize: 16 }} />
+          </IconButton>
+        )}
+      </>
+    );
+  }, [setHeaderExtra, showActiveOnly, search, isAdmin]);
+
+  useEffect(() => {
+    return () => { if (setHeaderExtra) setHeaderExtra(null); };
+  }, [setHeaderExtra]);
+
   return (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
-      <Paper sx={{ px: 2, py: 0.5, mb: 1, flexShrink: 0 }}>
-        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 1 }}>
-          <FormControlLabel
-            control={
-              <Switch
-                checked={showActiveOnly}
-                onChange={(e) => setShowActiveOnly(e.target.checked)}
-                size="small"
-              />
-            }
-            label={<Typography sx={{ fontSize: "0.75rem" }}>Active only</Typography>}
-            sx={{ mr: 0 }}
-          />
-          <TextField
-            size="small"
-            placeholder="Search..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            onKeyDown={handleSearchKeyDown}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon sx={{ fontSize: 16 }} />
-                </InputAdornment>
-              ),
-            }}
-            sx={{ width: 220, "& .MuiInputBase-root": { height: 30, fontSize: "0.8rem", borderRadius: "20px" } }}
-          />
-          {isAdmin && (
-            <IconButton
-              size="small"
-              color="primary"
-              onClick={() => handleOpenDialog()}
-              sx={{
-                width: 30, height: 30,
-                bgcolor: "primary.main", color: "#fff",
-                "&:hover": { bgcolor: "primary.dark" },
-              }}
-            >
-              <AddIcon sx={{ fontSize: 18 }} />
-            </IconButton>
-          )}
-        </Box>
-      </Paper>
-
       <Paper sx={{ borderRadius: 2, border: 1, borderColor: "divider", boxShadow: "0 1px 3px rgba(0,0,0,0.08)", overflow: "hidden", flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
         <TableContainer sx={{ flex: 1, overflow: "auto" }}>
           <Table size="small" stickyHeader sx={compactTableSx}>
@@ -645,7 +643,7 @@ const OldClientNetworksTab = () => {
   );
 };
 
-const OldClientBrokersTab = () => {
+const OldClientBrokersTab = ({ setHeaderExtra }) => {
   const navigate = useNavigate();
   const user = useSelector(selectUser);
   const isAdmin = user?.role === "admin";
@@ -771,42 +769,46 @@ const OldClientBrokersTab = () => {
 
   const colSpan = canManageBrokers ? 8 : 7;
 
+  // Push filters to CRM header
+  useEffect(() => {
+    if (!setHeaderExtra) return;
+    setHeaderExtra(
+      <>
+        <TextField
+          size="small"
+          placeholder="Search..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          onKeyDown={handleSearchKeyDown}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon sx={{ fontSize: 14, color: "text.disabled" }} />
+              </InputAdornment>
+            ),
+          }}
+          sx={{ width: 160, "& .MuiOutlinedInput-root": { borderRadius: 5, fontSize: "0.75rem", height: 28 } }}
+        />
+        {canManageBrokers && (
+          <IconButton
+            size="small"
+            color="primary"
+            onClick={() => handleOpenDialog()}
+            sx={{ width: 28, height: 28, bgcolor: "primary.main", color: "#fff", "&:hover": { bgcolor: "primary.dark" } }}
+          >
+            <AddIcon sx={{ fontSize: 16 }} />
+          </IconButton>
+        )}
+      </>
+    );
+  }, [setHeaderExtra, search, canManageBrokers]);
+
+  useEffect(() => {
+    return () => { if (setHeaderExtra) setHeaderExtra(null); };
+  }, [setHeaderExtra]);
+
   return (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
-      <Paper sx={{ px: 2, py: 0.5, mb: 1, flexShrink: 0 }}>
-        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 1 }}>
-          <TextField
-            size="small"
-            placeholder="Search..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            onKeyDown={handleSearchKeyDown}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon sx={{ fontSize: 16 }} />
-                </InputAdornment>
-              ),
-            }}
-            sx={{ width: 220, "& .MuiInputBase-root": { height: 30, fontSize: "0.8rem", borderRadius: "20px" } }}
-          />
-          {canManageBrokers && (
-            <IconButton
-              size="small"
-              color="primary"
-              onClick={() => handleOpenDialog()}
-              sx={{
-                width: 30, height: 30,
-                bgcolor: "primary.main", color: "#fff",
-                "&:hover": { bgcolor: "primary.dark" },
-              }}
-            >
-              <AddIcon sx={{ fontSize: 18 }} />
-            </IconButton>
-          )}
-        </Box>
-      </Paper>
-
       <Paper sx={{ borderRadius: 2, border: 1, borderColor: "divider", boxShadow: "0 1px 3px rgba(0,0,0,0.08)", overflow: "hidden", flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
         <TableContainer sx={{ flex: 1, overflow: "auto" }}>
           <Table size="small" stickyHeader sx={compactTableSx}>
@@ -1025,35 +1027,54 @@ const tabs = [
 
 const CrmPage = () => {
   const location = useLocation();
+  const user = useSelector(selectUser);
+  const isAdmin = user?.role === "admin";
+  const [headerExtra, setHeaderExtra] = useState(null);
+
+  const onSetHeaderExtra = useCallback((node) => setHeaderExtra(node), []);
+
+  // Filter tabs: Campaigns is admin-only
+  const visibleTabs = isAdmin ? tabs : tabs.filter((t) => t.label !== "Campaigns");
+
+  // Map visible tab index → content key
+  const tabContentMap = visibleTabs.map((t) => tabs.indexOf(t));
+
   const [tab, setTab] = useState(location.state?.tab ?? 0);
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
       <Paper sx={{ px: 2, py: 0.5, mb: 1, flexShrink: 0 }}>
-        <Tabs
-          value={tab}
-          onChange={(e, v) => setTab(v)}
-          variant="scrollable"
-          scrollButtons="auto"
-          sx={{
-            minHeight: 36,
-            "& .MuiTab-root": { minHeight: 36, py: 0.3, fontSize: "0.8rem", minWidth: "auto", px: 1.5 },
-          }}
-        >
-          {tabs.map((t, i) => (
-            <Tab key={i} icon={t.icon} iconPosition="start" label={t.label} />
-          ))}
-        </Tabs>
+        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+          <Tabs
+            value={tab}
+            onChange={(e, v) => { setTab(v); setHeaderExtra(null); }}
+            variant="scrollable"
+            scrollButtons="auto"
+            sx={{
+              minHeight: 36,
+              "& .MuiTab-root": { minHeight: 36, py: 0.3, fontSize: "0.8rem", minWidth: "auto", px: 1.5 },
+            }}
+          >
+            {visibleTabs.map((t, i) => (
+              <Tab key={i} icon={t.icon} iconPosition="start" label={t.label} />
+            ))}
+          </Tabs>
+          {headerExtra && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0, ml: 'auto', pl: 2 }}>
+              {headerExtra}
+            </Box>
+          )}
+        </Box>
       </Paper>
 
       <Box sx={{ flex: 1, minHeight: 0, overflow: "auto" }}>
-        {tab === 0 && <OldClientNetworksTab />}
-        {tab === 1 && <OldClientBrokersTab />}
+        {tabContentMap[tab] === 0 && <OldClientNetworksTab setHeaderExtra={onSetHeaderExtra} />}
+        {tabContentMap[tab] === 1 && <OldClientBrokersTab setHeaderExtra={onSetHeaderExtra} />}
         <Suspense fallback={tabFallback}>
-          {tab === 2 && <OurNetworksPage />}
-          {tab === 3 && <CampaignsPage />}
-          {tab === 4 && <ClientPSPsPage />}
-          {tab === 5 && <CardIssuersPage />}
+          {tabContentMap[tab] === 2 && <OurNetworksPage setHeaderExtra={onSetHeaderExtra} />}
+          {tabContentMap[tab] === 3 && <CampaignsPage />}
+          {tabContentMap[tab] === 4 && <ClientPSPsPage setHeaderExtra={onSetHeaderExtra} />}
+          {tabContentMap[tab] === 5 && <CardIssuersPage setHeaderExtra={onSetHeaderExtra} />}
         </Suspense>
       </Box>
     </Box>

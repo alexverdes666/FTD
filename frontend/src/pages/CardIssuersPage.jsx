@@ -20,6 +20,7 @@ import {
   MenuItem,
   ListItemIcon,
   ListItemText,
+  InputAdornment,
 } from "@mui/material";
 import { alpha } from "@mui/material/styles";
 import {
@@ -57,7 +58,7 @@ const cardIssuerSchema = yup.object({
     .max(500, "Logo URL must be less than 500 characters"),
 });
 
-const CardIssuersPage = () => {
+const CardIssuersPage = ({ setHeaderExtra }) => {
   const user = useSelector(selectUser);
   const isAdmin = user?.role === "admin";
   const canCreate = isAdmin || user?.role === "affiliate_manager";
@@ -366,71 +367,50 @@ const CardIssuersPage = () => {
     },
   ];
 
-  return (
-    <Box sx={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
-      {/* Filters */}
-      <Box
-        sx={{
-          display: "flex",
-          alignItems: "center",
-          gap: 0.75,
-          px: 1,
-          py: 0.5,
-          mb: 0.5,
-          background: (theme) => `linear-gradient(135deg, ${alpha(theme.palette.grey[100], 0.7)} 0%, ${alpha(theme.palette.grey[50], 0.5)} 100%)`,
-          borderBottom: "1px solid",
-          borderColor: (theme) => alpha(theme.palette.divider, 0.6),
-          minHeight: 36,
-          borderRadius: 2,
-        }}
-      >
+  // Push filters to CRM header
+  useEffect(() => {
+    if (!setHeaderExtra) return;
+    setHeaderExtra(
+      <>
+        <FormControlLabel
+          control={<Switch checked={showActiveOnly} onChange={(e) => setShowActiveOnly(e.target.checked)} size="small" />}
+          label={<Typography sx={{ fontSize: "0.7rem" }}>Active only</Typography>}
+          sx={{ mr: 0, ml: 0 }}
+        />
         <TextField
-          placeholder="Search Card Issuers..."
+          placeholder="Search..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           size="small"
-          sx={{
-            width: 200,
-            "& .MuiOutlinedInput-root": {
-              height: 28,
-              borderRadius: 6,
-              fontSize: "0.78rem",
-              bgcolor: "background.paper",
-              boxShadow: (theme) => `0 1px 2px ${alpha(theme.palette.grey[400], 0.15)}`,
-              "& fieldset": { border: "1px solid", borderColor: (theme) => alpha(theme.palette.grey[300], 0.7) },
-              "&:hover fieldset": { borderColor: (theme) => alpha(theme.palette.primary.main, 0.3) },
-              "&.Mui-focused fieldset": { borderColor: "primary.main", borderWidth: 1.5 },
-            },
-            "& input::placeholder": { fontSize: "0.75rem", opacity: 0.6 },
-          }}
+          sx={{ width: 160, "& .MuiOutlinedInput-root": { borderRadius: 5, fontSize: "0.75rem", height: 28 } }}
           InputProps={{
-            startAdornment: <SearchIcon sx={{ color: "action.active", mr: 0.5, fontSize: 15 }} />,
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon sx={{ fontSize: 14, color: "text.disabled" }} />
+              </InputAdornment>
+            ),
           }}
         />
-        <FormControlLabel
-          control={
-            <Switch
-              checked={showActiveOnly}
-              onChange={(e) => setShowActiveOnly(e.target.checked)}
-              size="small"
-            />
-          }
-          label="Active only"
-          sx={{ "& .MuiFormControlLabel-label": { fontSize: "0.78rem" } }}
-        />
-        <Box sx={{ flex: 1 }} />
         {canCreate && (
-          <Button
-            variant="contained"
+          <IconButton
             size="small"
-            startIcon={<AddIcon sx={{ fontSize: 16 }} />}
+            color="primary"
             onClick={() => handleOpenDialog()}
-            sx={{ height: 28, fontSize: "0.75rem", textTransform: "none", borderRadius: 6 }}
+            sx={{ width: 28, height: 28, bgcolor: "primary.main", color: "#fff", "&:hover": { bgcolor: "primary.dark" } }}
           >
-            Add Card Issuer
-          </Button>
+            <AddIcon sx={{ fontSize: 16 }} />
+          </IconButton>
         )}
-      </Box>
+      </>
+    );
+  }, [setHeaderExtra, searchTerm, showActiveOnly, canCreate]);
+
+  useEffect(() => {
+    return () => { if (setHeaderExtra) setHeaderExtra(null); };
+  }, [setHeaderExtra]);
+
+  return (
+    <Box sx={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
 
       {/* DataGrid */}
       <Paper ref={gridWrapperRef} sx={{ flex: 1, minHeight: 0, width: "100%" }}>
