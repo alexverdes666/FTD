@@ -370,7 +370,7 @@ const PayrollPage = () => {
           thirdCall: 15,
           fourthCall: 20,
           fifthCall: 25,
-          verifiedAcc: 50,
+          verifiedAcc: 5,
         },
         callCounts: {
           firstCalls: 0,
@@ -742,7 +742,7 @@ const PayrollPage = () => {
           thirdCall: 15.0,
           fourthCall: 20.0,
           fifthCall: 25.0,
-          verifiedAcc: 50.0,
+          verifiedAcc: 5.0,
         };
 
         const totalBonus = calculateBonusFromCallCounts(callCounts, bonusRates);
@@ -861,7 +861,7 @@ const PayrollPage = () => {
     if (declarationTotals.length > 0) {
       if (user?.role === "agent") {
         const declTotal = declarationTotals.find(d => d.agentName === user.fullName);
-        if (declTotal) totalBonus = declTotal.totalBonus || 0;
+        if (declTotal) totalBonus = (declTotal.totalBonus || 0) + getVerifiedAccountBonus();
       } else {
         totalBonus = declarationTotals.reduce((sum, d) => sum + (d.totalBonus || 0), 0);
       }
@@ -900,6 +900,9 @@ const PayrollPage = () => {
     try {
       const [year, month] = selectedAgentMonth.split("-").map(Number);
 
+      // Clear historical config so bonusConfig (updated below) is used
+      setHistoricalBonusConfig(null);
+
       // Load agent calls data for the selected month
       const callsResponse = await getFormattedAgentCalls(year, month);
       if (callsResponse.success) {
@@ -920,6 +923,22 @@ const PayrollPage = () => {
         );
         setAgentBonusesData(agentBonuses);
         calculateBonusesStats(agentBonuses);
+
+        // Update bonusConfig with month-specific data so verified accounts display correctly
+        if (agentBonuses.length > 0) {
+          const monthData = agentBonuses[0];
+          setBonusConfig({
+            bonusRates: monthData.bonusRates || {
+              firstCall: 5, secondCall: 10, thirdCall: 15,
+              fourthCall: 20, fifthCall: 25, verifiedAcc: 5,
+            },
+            callCounts: monthData.callCounts || {
+              firstCalls: 0, secondCalls: 0, thirdCalls: 0,
+              fourthCalls: 0, fifthCalls: 0, verifiedAccounts: 0,
+            },
+            totalPotentialBonus: monthData.totalBonus || 0,
+          });
+        }
       }
 
       // Load declaration-based monthly totals for the agent
@@ -1146,6 +1165,13 @@ const PayrollPage = () => {
     }
   };
 
+  // Get verified account bonus from call counts data (not part of declarations)
+  const getVerifiedAccountBonus = () => {
+    const config = historicalBonusConfig || bonusConfig;
+    if (!config?.callCounts || !config?.bonusRates) return 0;
+    return (config.callCounts.verifiedAccounts || 0) * (config.bonusRates.verifiedAcc || 5);
+  };
+
   // Calculate available earnings for withdrawal (for agents)
   const calculateAvailableEarnings = () => {
     if (!user || user.role !== "agent") {
@@ -1177,8 +1203,10 @@ const PayrollPage = () => {
     const declTotal = declarationTotals.find(d => d.agentName === user.fullName);
     if (declTotal) {
       bonuses = declTotal.totalBonus || 0;
+      // Add verified account bonus (tracked via call counts, not declarations)
+      bonuses += getVerifiedAccountBonus();
     } else if (bonusesStats) {
-      // Fallback to bonusesStats if no declaration totals
+      // Fallback to bonusesStats (already includes verified accounts)
       bonuses = bonusesStats.totalBonus || 0;
     }
 
@@ -1942,10 +1970,10 @@ const PayrollPage = () => {
                             })()}{" "}
                             + 🎁 Bonuses: $
                             {(() => {
-                              // Use declaration totals (same as Monthly Bonuses card)
+                              // Use declaration totals + verified account bonus
                               const declTotal = declarationTotals.find(d => d.agentName === user.fullName);
-                              if (declTotal) return (declTotal.totalBonus || 0).toFixed(2);
-                              // Fallback to bonusesStats if no declaration totals
+                              if (declTotal) return ((declTotal.totalBonus || 0) + getVerifiedAccountBonus()).toFixed(2);
+                              // Fallback to bonusesStats (already includes verified)
                               return bonusesStats ? bonusesStats.totalBonus.toFixed(2) : "0.00";
                             })()}
                             {(() => {
@@ -2350,7 +2378,7 @@ const PayrollPage = () => {
                             >
                               {(() => {
                                 const declTotal = declarationTotals.find(d => d.agentName === user.fullName);
-                                if (declTotal) return formatCurrency(declTotal.totalBonus || 0);
+                                if (declTotal) return formatCurrency((declTotal.totalBonus || 0) + getVerifiedAccountBonus());
                                 return bonusesStats
                                   ? formatCurrency(bonusesStats.totalBonus)
                                   : "0.00";
@@ -2539,7 +2567,7 @@ const PayrollPage = () => {
                         { label: "3rd Calls", declType: "third_call", countKey: "thirdCalls", rateKey: "thirdCall", defaultRate: 15 },
                         { label: "4th Calls", declType: "fourth_call", countKey: "fourthCalls", rateKey: "fourthCall", defaultRate: 20 },
                         { label: "Deposit Calls", declType: "deposit", countKey: "fifthCalls", rateKey: "fifthCall", defaultRate: 25 },
-                        { label: "Verified Accounts", declType: null, countKey: "verifiedAccounts", rateKey: "verifiedAcc", defaultRate: 50 },
+                        { label: "Verified Accounts", declType: null, countKey: "verifiedAccounts", rateKey: "verifiedAcc", defaultRate: 5 },
                       ];
 
                       return (
@@ -2630,10 +2658,10 @@ const PayrollPage = () => {
                           >
                             $
                             {(() => {
-                              // Use approved declaration totals if available
+                              // Use approved declaration totals + verified account bonus
                               if (declarationTotals.length > 0) {
                                 const declTotal = declarationTotals.find(d => d.agentName === user.fullName);
-                                if (declTotal) return (declTotal.totalBonus || 0).toFixed(2);
+                                if (declTotal) return ((declTotal.totalBonus || 0) + getVerifiedAccountBonus()).toFixed(2);
                               }
 
                               // Fallback to manual call counts data
@@ -2665,7 +2693,7 @@ const PayrollPage = () => {
                                 (callCounts.fifthCalls || 0) *
                                   (bonusRates.fifthCall || 25) +
                                 (callCounts.verifiedAccounts || 0) *
-                                  (bonusRates.verifiedAcc || 50);
+                                  (bonusRates.verifiedAcc || 5);
 
                               return total.toFixed(2);
                             })()}

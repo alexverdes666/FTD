@@ -36,7 +36,7 @@ const systemConfigurationSchema = new mongoose.Schema(
       },
       verifiedAcc: {
         type: Number,
-        default: 50.0,
+        default: 5.0,
         min: 0,
       },
     },

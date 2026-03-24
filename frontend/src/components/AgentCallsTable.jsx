@@ -55,7 +55,7 @@ const AgentCallsTable = ({ agentCalls, loading = false, agentBonusesData = [], a
       thirdCall: 15.0,
       fourthCall: 20.0,
       fifthCall: 25.0,
-      verifiedAcc: 50.0,
+      verifiedAcc: 5.0,
     };
 
     return (callCounts.firstCalls || 0) * bonusRates.firstCall +

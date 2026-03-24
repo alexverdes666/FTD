@@ -64,11 +64,7 @@ const SummaryCard = ({ icon, title, value, subtitle, color = "primary" }) => {
   return (
     <Card
       variant="outlined"
-      sx={{
-        height: "100%",
-        borderLeft: 4,
-        borderLeftColor: `${color}.main`,
-      }}
+      sx={{ height: "100%", borderLeft: 4, borderLeftColor: `${color}.main` }}
     >
       <CardContent sx={{ py: 1.5, "&:last-child": { pb: 1.5 } }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 0.5 }}>
@@ -83,17 +79,11 @@ const SummaryCard = ({ icon, title, value, subtitle, color = "primary" }) => {
           >
             {icon}
           </Box>
-          <Typography variant="body2" color="text.secondary">
-            {title}
-          </Typography>
+          <Typography variant="body2" color="text.secondary">{title}</Typography>
         </Box>
-        <Typography variant="h5" fontWeight="bold">
-          {value}
-        </Typography>
+        <Typography variant="h5" fontWeight="bold">{value}</Typography>
         {subtitle && (
-          <Typography variant="caption" color="text.secondary">
-            {subtitle}
-          </Typography>
+          <Typography variant="caption" color="text.secondary">{subtitle}</Typography>
         )}
       </CardContent>
     </Card>
@@ -108,62 +98,64 @@ const SectionHeader = ({ icon, title }) => (
 );
 
 const EmployeeDashboardPage = () => {
-  const theme = useTheme();
   const user = useSelector(selectUser);
   const now = new Date();
 
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
-  const [salaries, setSalaries] = useState([]);
+  const [salary, setSalary] = useState(null);
   const [bonuses, setBonuses] = useState([]);
   const [fines, setFines] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const fetchData = useCallback(async () => {
+  // Salary is fixed — fetch once, no month/year
+  const fetchSalary = useCallback(async () => {
     if (!user?.id) return;
-    setLoading(true);
-    setError(null);
+    try {
+      const res = await api.get(`/employee-pay/salary/${user.id}`);
+      setSalary(res.data.data);
+    } catch {
+      setSalary(null);
+    }
+  }, [user?.id]);
 
+  // Bonuses & fines are per-month
+  const fetchMonthly = useCallback(async () => {
+    if (!user?.id) return;
     try {
       const params = { year: selectedYear, month: selectedMonth };
-      const [salaryRes, bonusRes, finesRes] = await Promise.allSettled([
-        api.get(`/employee-pay/salary/${user.id}`, { params }),
+      const [bonusRes, finesRes] = await Promise.allSettled([
         api.get(`/employee-pay/bonus/${user.id}`, { params }),
         api.get(`/agent-fines/agent/${user.id}`, {
           params: { includeResolved: true, year: selectedYear, month: selectedMonth },
         }),
       ]);
-
-      setSalaries(salaryRes.status === "fulfilled" ? salaryRes.value.data.data || [] : []);
       setBonuses(bonusRes.status === "fulfilled" ? bonusRes.value.data.data || [] : []);
       setFines(finesRes.status === "fulfilled" ? finesRes.value.data.data || [] : []);
-    } catch (err) {
-      setError("Failed to load dashboard data");
-    } finally {
-      setLoading(false);
+    } catch {
+      setError("Failed to load data");
     }
   }, [user?.id, selectedMonth, selectedYear]);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    setLoading(true);
+    Promise.all([fetchSalary(), fetchMonthly()]).finally(() => setLoading(false));
+  }, [fetchSalary, fetchMonthly]);
 
-  // Compute from records directly (reliable even if summary endpoint fails)
-  const totalSalary = salaries.reduce((sum, s) => sum + (s.amount || 0), 0);
+  const fixedSalary = salary?.amount || 0;
+  const currency = salary?.currency || "USD";
   const totalBonuses = bonuses.reduce((sum, b) => sum + (b.amount || 0), 0);
   const activeFines = fines.filter((f) => ["approved", "admin_approved"].includes(f.status));
   const totalFines = activeFines.reduce((sum, f) => sum + (f.amount || 0), 0);
-  const netPay = totalSalary + totalBonuses - totalFines;
+  const netPay = fixedSalary + totalBonuses - totalFines;
 
   const years = [];
-  for (let y = now.getFullYear(); y >= now.getFullYear() - 2; y--) {
-    years.push(y);
-  }
+  for (let y = now.getFullYear(); y >= now.getFullYear() - 2; y--) years.push(y);
 
   if (loading) {
     return (
-      <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", py: 10 }}>
+      <Box sx={{ display: "flex", justifyContent: "center", py: 10 }}>
         <CircularProgress />
       </Box>
     );
@@ -172,25 +164,17 @@ const EmployeeDashboardPage = () => {
   return (
     <Box sx={{ width: "100%" }}>
       {error && (
-        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
-          {error}
-        </Alert>
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>
       )}
 
       {/* Period Selector */}
       <Paper sx={{ px: 2, py: 1, mb: 2 }}>
         <Stack direction="row" spacing={2} alignItems="center">
-          <Typography variant="subtitle1" fontWeight="bold">
-            My Pay Overview
-          </Typography>
+          <Typography variant="subtitle1" fontWeight="bold">My Pay Overview</Typography>
           <Box sx={{ ml: "auto" }} />
           <FormControl size="small" sx={{ minWidth: 130 }}>
             <InputLabel>Month</InputLabel>
-            <Select
-              value={selectedMonth}
-              label="Month"
-              onChange={(e) => setSelectedMonth(e.target.value)}
-            >
+            <Select value={selectedMonth} label="Month" onChange={(e) => setSelectedMonth(e.target.value)}>
               {MONTHS.map((m, i) => (
                 <MenuItem key={i} value={i + 1}>{m}</MenuItem>
               ))}
@@ -198,11 +182,7 @@ const EmployeeDashboardPage = () => {
           </FormControl>
           <FormControl size="small" sx={{ minWidth: 100 }}>
             <InputLabel>Year</InputLabel>
-            <Select
-              value={selectedYear}
-              label="Year"
-              onChange={(e) => setSelectedYear(e.target.value)}
-            >
+            <Select value={selectedYear} label="Year" onChange={(e) => setSelectedYear(e.target.value)}>
               {years.map((y) => (
                 <MenuItem key={y} value={y}>{y}</MenuItem>
               ))}
@@ -216,9 +196,9 @@ const EmployeeDashboardPage = () => {
         <Grid item xs={12} sm={6} md={3}>
           <SummaryCard
             icon={<SalaryIcon />}
-            title="Salary"
-            value={`${totalSalary.toLocaleString()} USD`}
-            subtitle={`${salaries.length} record(s)`}
+            title="Fixed Salary"
+            value={`${fixedSalary.toLocaleString()} ${currency}`}
+            subtitle={salary ? "Monthly fixed" : "Not set"}
             color="primary"
           />
         </Grid>
@@ -226,8 +206,8 @@ const EmployeeDashboardPage = () => {
           <SummaryCard
             icon={<BonusIcon />}
             title="Bonuses"
-            value={`+${totalBonuses.toLocaleString()} USD`}
-            subtitle={`${bonuses.length} bonus(es)`}
+            value={`+${totalBonuses.toLocaleString()} ${currency}`}
+            subtitle={`${bonuses.length} bonus(es) this month`}
             color="success"
           />
         </Grid>
@@ -235,8 +215,8 @@ const EmployeeDashboardPage = () => {
           <SummaryCard
             icon={<FineIcon />}
             title="Fines"
-            value={`-${totalFines.toLocaleString()} USD`}
-            subtitle={`${fines.filter(f => ["approved", "admin_approved"].includes(f.status)).length} active fine(s)`}
+            value={`-${totalFines.toLocaleString()} ${currency}`}
+            subtitle={`${activeFines.length} active fine(s)`}
             color="error"
           />
         </Grid>
@@ -244,7 +224,7 @@ const EmployeeDashboardPage = () => {
           <SummaryCard
             icon={netPay >= 0 ? <TrendingUpIcon /> : <TrendingDownIcon />}
             title="Net Pay"
-            value={`${netPay.toLocaleString()} USD`}
+            value={`${netPay.toLocaleString()} ${currency}`}
             subtitle="Salary + Bonuses - Fines"
             color={netPay >= 0 ? "success" : "error"}
           />
@@ -252,47 +232,39 @@ const EmployeeDashboardPage = () => {
       </Grid>
 
       <Grid container spacing={2}>
-        {/* Salary History */}
-        <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 2 }}>
-            <SectionHeader icon={<SalaryIcon />} title={`Salary - ${MONTHS[selectedMonth - 1]} ${selectedYear}`} />
-            {salaries.length > 0 ? (
-              <TableContainer>
-                <Table size="small">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell sx={{ fontWeight: "bold", bgcolor: "grey.100" }}>Date</TableCell>
-                      <TableCell sx={{ fontWeight: "bold", bgcolor: "grey.100" }}>Amount</TableCell>
-                      <TableCell sx={{ fontWeight: "bold", bgcolor: "grey.100" }}>Notes</TableCell>
-                      <TableCell sx={{ fontWeight: "bold", bgcolor: "grey.100" }}>Added By</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {salaries.map((s) => (
-                      <TableRow key={s._id} hover>
-                        <TableCell>{new Date(s.createdAt).toLocaleDateString()}</TableCell>
-                        <TableCell>
-                          <Typography variant="body2" fontWeight="bold" color="primary.main">
-                            {s.amount?.toLocaleString()} {s.currency}
-                          </Typography>
-                        </TableCell>
-                        <TableCell>
-                          <Typography variant="body2" color="text.secondary">{s.notes || "—"}</Typography>
-                        </TableCell>
-                        <TableCell>{s.createdBy?.fullName || "—"}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
+        {/* Salary Info */}
+        <Grid item xs={12} md={4}>
+          <Paper sx={{ p: 2, height: "100%" }}>
+            <SectionHeader icon={<SalaryIcon />} title="Salary" />
+            {salary ? (
+              <Stack spacing={1.5}>
+                <Box sx={{ display: "flex", justifyContent: "space-between" }}>
+                  <Typography variant="body2" color="text.secondary">Amount</Typography>
+                  <Typography variant="body2" fontWeight="bold">
+                    {fixedSalary.toLocaleString()} {currency} / month
+                  </Typography>
+                </Box>
+                {salary.notes && (
+                  <Box>
+                    <Typography variant="body2" color="text.secondary">Notes</Typography>
+                    <Typography variant="body2">{salary.notes}</Typography>
+                  </Box>
+                )}
+                <Typography variant="caption" color="text.secondary">
+                  Last updated: {new Date(salary.updatedAt).toLocaleDateString()}
+                  {salary.lastUpdatedBy && ` by ${salary.lastUpdatedBy.fullName}`}
+                </Typography>
+              </Stack>
             ) : (
-              <Alert severity="info" variant="outlined">No salary records for this period.</Alert>
+              <Alert severity="info" variant="outlined">
+                No salary configured. Contact your administrator.
+              </Alert>
             )}
           </Paper>
         </Grid>
 
         {/* Bonus History */}
-        <Grid item xs={12} md={6}>
+        <Grid item xs={12} md={8}>
           <Paper sx={{ p: 2 }}>
             <SectionHeader icon={<BonusIcon />} title={`Bonuses - ${MONTHS[selectedMonth - 1]} ${selectedYear}`} />
             {bonuses.length > 0 ? (
@@ -361,7 +333,7 @@ const EmployeeDashboardPage = () => {
                         </TableCell>
                         <TableCell>
                           <Typography variant="body2" fontWeight="bold" color="error.main">
-                            -{fine.amount?.toLocaleString()} USD
+                            -{fine.amount?.toLocaleString()} {currency}
                           </Typography>
                         </TableCell>
                         <TableCell>

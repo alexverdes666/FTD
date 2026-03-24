@@ -1,58 +1,41 @@
 const express = require('express');
-const { body, query } = require('express-validator');
+const { body } = require('express-validator');
 const router = express.Router();
 const { protect, isAdmin } = require('../middleware/auth');
 const {
-  getEmployeeSalaries,
-  createEmployeeSalary,
-  updateEmployeeSalary,
+  getEmployeeSalary,
+  setEmployeeSalary,
   deleteEmployeeSalary,
+  getAllEmployeeSalaries,
   getEmployeeBonuses,
   createEmployeeBonus,
   updateEmployeeBonus,
   deleteEmployeeBonus,
   getEmployeePaySummary,
-  getAllEmployeesPaySummary,
 } = require('../controllers/employeePay');
 
 router.use(protect);
 
 // --- Summary ---
-// Get pay summary for a specific employee (admin or own)
 router.get('/summary/:employeeId', getEmployeePaySummary);
-// Get all employees pay summary (admin only)
-router.get('/summary', isAdmin, getAllEmployeesPaySummary);
 
-// --- Salary ---
-// Get salary records for an employee (admin or own)
-router.get('/salary/:employeeId', getEmployeeSalaries);
-
-// Create salary record (admin only)
-router.post('/salary', [
+// --- Salary (fixed per employee) ---
+// Get all employee salaries (admin)
+router.get('/salaries', isAdmin, getAllEmployeeSalaries);
+// Get salary for an employee (admin or own)
+router.get('/salary/:employeeId', getEmployeeSalary);
+// Set/update salary for an employee (admin only)
+router.put('/salary/:employeeId', [
   isAdmin,
-  body('employeeId').isMongoId().withMessage('Valid employee ID is required'),
   body('amount').isFloat({ min: 0 }).withMessage('Amount must be a positive number'),
-  body('month').isInt({ min: 1, max: 12 }).withMessage('Month must be 1-12'),
-  body('year').isInt({ min: 2020 }).withMessage('Valid year is required'),
   body('currency').optional().isString(),
   body('notes').optional().isString().isLength({ max: 500 }),
-], createEmployeeSalary);
+], setEmployeeSalary);
+// Delete salary config (admin only)
+router.delete('/salary/:employeeId', isAdmin, deleteEmployeeSalary);
 
-// Update salary record (admin only)
-router.put('/salary/:id', [
-  isAdmin,
-  body('amount').optional().isFloat({ min: 0 }),
-  body('notes').optional().isString().isLength({ max: 500 }),
-], updateEmployeeSalary);
-
-// Delete salary record (admin only)
-router.delete('/salary/:id', isAdmin, deleteEmployeeSalary);
-
-// --- Bonus ---
-// Get bonus records for an employee (admin or own)
+// --- Bonus (per month) ---
 router.get('/bonus/:employeeId', getEmployeeBonuses);
-
-// Create bonus record (admin only)
 router.post('/bonus', [
   isAdmin,
   body('employeeId').isMongoId().withMessage('Valid employee ID is required'),
@@ -63,16 +46,12 @@ router.post('/bonus', [
   body('currency').optional().isString(),
   body('notes').optional().isString().isLength({ max: 500 }),
 ], createEmployeeBonus);
-
-// Update bonus record (admin only)
 router.put('/bonus/:id', [
   isAdmin,
   body('amount').optional().isFloat({ min: 0 }),
   body('reason').optional().isString().isLength({ max: 500 }),
   body('notes').optional().isString().isLength({ max: 500 }),
 ], updateEmployeeBonus);
-
-// Delete bonus record (admin only)
 router.delete('/bonus/:id', isAdmin, deleteEmployeeBonus);
 
 module.exports = router;

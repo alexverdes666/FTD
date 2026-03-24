@@ -82,7 +82,7 @@ const agentCallCountsSchema = new mongoose.Schema(
       },
       verifiedAcc: {
         type: Number,
-        default: 50.0, // $50 monthly bonus per verified account
+        default: 5.0, // $5 monthly bonus per verified account
         min: 0,
       },
     },
@@ -184,9 +184,9 @@ agentCallCountsSchema.statics.updateCallCounts = async function (agentId, callCo
     thirdCall: 15.0,
     fourthCall: 20.0,
     fifthCall: 25.0,
-    verifiedAcc: 50.0,
+    verifiedAcc: 5.0,
   };
-  
+
   try {
     const globalConfig = await SystemConfiguration.getGlobalBonusRates();
     if (globalConfig && globalConfig.bonusRates) {

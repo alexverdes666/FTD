@@ -4,6 +4,7 @@ const Order = require("../models/Order");
 const User = require("../models/User");
 const ClientBroker = require("../models/ClientBroker");
 const AgentCallDeclaration = require("../models/AgentCallDeclaration");
+const CallChangeRequest = require("../models/CallChangeRequest");
 const mongoose = require("mongoose");
 const { ObjectId } = mongoose.Types;
 const cdrService = require("../services/cdrService");
@@ -248,7 +249,7 @@ exports.getDepositCalls = async (req, res, next) => {
       await DepositCall.populate(depositCalls, [
         {
           path: "leadId",
-          select: "firstName lastName newEmail newPhone country clientNetwork ourNetwork clientNetworkHistory ourNetworkHistory assignedClientBrokers clientBrokerHistory",
+          select: "firstName lastName newEmail newPhone country clientNetwork ourNetwork clientNetworkHistory ourNetworkHistory assignedClientBrokers clientBrokerHistory orderCallTracking",
           populate: [
             { path: "clientNetworkHistory.clientNetwork", select: "name" },
             { path: "ourNetworkHistory.ourNetwork", select: "name" },
@@ -288,7 +289,7 @@ exports.getDepositCalls = async (req, res, next) => {
       depositCalls = await DepositCall.find(query)
         .populate({
           path: "leadId",
-          select: "firstName lastName newEmail newPhone country clientNetwork ourNetwork clientNetworkHistory ourNetworkHistory assignedClientBrokers clientBrokerHistory",
+          select: "firstName lastName newEmail newPhone country clientNetwork ourNetwork clientNetworkHistory ourNetworkHistory assignedClientBrokers clientBrokerHistory orderCallTracking",
           populate: [
             { path: "clientNetworkHistory.clientNetwork", select: "name" },
             { path: "ourNetworkHistory.ourNetwork", select: "name" },
@@ -385,6 +386,52 @@ exports.getDepositCalls = async (req, res, next) => {
     // Attach to each depositCall
     for (const dc of depositCalls) {
       dc.callDeclarations = declMap[dc._id.toString()] || {};
+    }
+
+    // Compute verification status for each deposit call (no/pending/yes)
+    const leadOrderPairs = depositCalls
+      .filter(dc => dc.leadId && dc.orderId)
+      .map(dc => ({
+        leadId: (dc.leadId._id || dc.leadId).toString(),
+        orderId: (dc.orderId._id || dc.orderId).toString(),
+      }));
+
+    // Fetch pending CallChangeRequests for verified status
+    let pendingVerificationRequests = [];
+    if (leadOrderPairs.length > 0) {
+      pendingVerificationRequests = await CallChangeRequest.find({
+        status: "pending",
+        requestedVerified: true,
+        $or: leadOrderPairs.map(p => ({ leadId: p.leadId, orderId: p.orderId })),
+      }).select("leadId orderId").lean();
+    }
+
+    const pendingVerifSet = new Set(
+      pendingVerificationRequests.map(r => `${r.leadId}_${r.orderId}`)
+    );
+
+    for (const dc of depositCalls) {
+      const leadObj = dc.leadId;
+      const orderIdStr = (dc.orderId?._id || dc.orderId)?.toString();
+      const leadIdStr = (leadObj?._id || dc.leadId)?.toString();
+
+      if (!leadObj || !orderIdStr) {
+        dc.verificationStatus = "no";
+        continue;
+      }
+
+      // Check orderCallTracking for this order
+      const tracking = (leadObj.orderCallTracking || []).find(
+        t => t.orderId?.toString() === orderIdStr
+      );
+
+      if (tracking && tracking.verified) {
+        dc.verificationStatus = "yes";
+      } else if (pendingVerifSet.has(`${leadIdStr}_${orderIdStr}`)) {
+        dc.verificationStatus = "pending";
+      } else {
+        dc.verificationStatus = "no";
+      }
     }
 
     res.status(200).json({

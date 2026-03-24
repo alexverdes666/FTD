@@ -105,7 +105,7 @@ const AdminBonusManagement = () => {
     thirdCall: 15.0,
     fourthCall: 20.0,
     fifthCall: 25.0,
-    verifiedAcc: 50.0,
+    verifiedAcc: 5.0,
   });
 
   // Fines state
@@ -404,7 +404,7 @@ const AdminBonusManagement = () => {
            (callCounts.thirdCalls || 0) * (rates.thirdCall || 15) +
            (callCounts.fourthCalls || 0) * (rates.fourthCall || 20) +
            (callCounts.fifthCalls || 0) * (rates.fifthCall || 25) +
-           (callCounts.verifiedAccounts || 0) * (rates.verifiedAcc || 50);
+           (callCounts.verifiedAccounts || 0) * (rates.verifiedAcc || 5);
   };
 
   // Role-based access control

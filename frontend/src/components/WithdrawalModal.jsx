@@ -182,7 +182,7 @@ const WithdrawalModal = ({
                   (callCounts.thirdCalls || 0) * (bonusRates.thirdCall || 15) +
                   (callCounts.fourthCalls || 0) * (bonusRates.fourthCall || 20) +
                   (callCounts.fifthCalls || 0) * (bonusRates.fifthCall || 25) +
-                  (callCounts.verifiedAccounts || 0) * (bonusRates.verifiedAcc || 50);
+                  (callCounts.verifiedAccounts || 0) * (bonusRates.verifiedAcc || 5);
       }
     }
 
@@ -213,7 +213,7 @@ const WithdrawalModal = ({
            (callCounts.thirdCalls || 0) * (bonusRates.thirdCall || 15) +
            (callCounts.fourthCalls || 0) * (bonusRates.fourthCall || 20) +
            (callCounts.fifthCalls || 0) * (bonusRates.fifthCall || 25) +
-           (callCounts.verifiedAccounts || 0) * (bonusRates.verifiedAcc || 50);
+           (callCounts.verifiedAccounts || 0) * (bonusRates.verifiedAcc || 5);
   };
 
   const getTotalFines = () => {

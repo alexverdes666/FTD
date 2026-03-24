@@ -4,83 +4,82 @@ const EmployeeSalary = require('../models/EmployeeSalary');
 const EmployeeBonus = require('../models/EmployeeBonus');
 const AgentFine = require('../models/AgentFine');
 
-// Access check: admin or own data
 const canAccess = (req, employeeId) => {
   return req.user.role === 'admin' || req.user._id.toString() === employeeId;
 };
 
-// --- Salary ---
+// --- Salary (fixed per employee) ---
 
-exports.getEmployeeSalaries = async (req, res, next) => {
+exports.getEmployeeSalary = async (req, res, next) => {
   try {
     const { employeeId } = req.params;
     if (!canAccess(req, employeeId)) {
       return res.status(403).json({ success: false, message: 'Access denied' });
     }
 
-    const { year, month } = req.query;
-    const filter = { employee: employeeId };
-    if (year) filter.year = parseInt(year);
-    if (month) filter.month = parseInt(month);
-
-    const salaries = await EmployeeSalary.find(filter)
+    const salary = await EmployeeSalary.findOne({ employee: employeeId })
       .populate('employee', 'fullName email role')
       .populate('createdBy', 'fullName email')
-      .sort({ year: -1, month: -1, createdAt: -1 });
+      .populate('lastUpdatedBy', 'fullName email');
 
-    res.json({ success: true, data: salaries });
+    res.json({ success: true, data: salary });
   } catch (error) {
     next(error);
   }
 };
 
-exports.createEmployeeSalary = async (req, res, next) => {
+exports.getAllEmployeeSalaries = async (req, res, next) => {
   try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ success: false, errors: errors.array() });
-    }
+    const User = require('../models/User');
+    const employees = await User.find({ role: 'employee', isActive: true })
+      .select('fullName email')
+      .sort({ fullName: 1 });
 
-    const { employeeId, amount, currency, month, year, notes } = req.body;
+    const salaries = await EmployeeSalary.find({
+      employee: { $in: employees.map((e) => e._id) },
+    })
+      .populate('employee', 'fullName email role')
+      .populate('lastUpdatedBy', 'fullName email');
 
-    const salary = await EmployeeSalary.create({
-      employee: employeeId,
-      amount,
-      currency: currency || 'USD',
-      month,
-      year,
-      notes,
-      createdBy: req.user._id,
+    // Merge: show all employees, with or without salary
+    const result = employees.map((emp) => {
+      const sal = salaries.find((s) => s.employee._id.toString() === emp._id.toString());
+      return {
+        employee: emp,
+        salary: sal || null,
+      };
     });
 
-    const populated = await EmployeeSalary.findById(salary._id)
-      .populate('employee', 'fullName email role')
-      .populate('createdBy', 'fullName email');
-
-    res.status(201).json({ success: true, data: populated });
+    res.json({ success: true, data: result });
   } catch (error) {
     next(error);
   }
 };
 
-exports.updateEmployeeSalary = async (req, res, next) => {
+exports.setEmployeeSalary = async (req, res, next) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({ success: false, errors: errors.array() });
     }
 
-    const salary = await EmployeeSalary.findByIdAndUpdate(
-      req.params.id,
-      { $set: req.body },
-      { new: true, runValidators: true }
+    const { employeeId } = req.params;
+    const { amount, currency, notes } = req.body;
+
+    const salary = await EmployeeSalary.findOneAndUpdate(
+      { employee: employeeId },
+      {
+        employee: employeeId,
+        amount,
+        currency: currency || 'USD',
+        notes,
+        lastUpdatedBy: req.user._id,
+        $setOnInsert: { createdBy: req.user._id },
+      },
+      { new: true, upsert: true, runValidators: true }
     )
       .populate('employee', 'fullName email role')
-      .populate('createdBy', 'fullName email');
-
-    if (!salary) {
-      return res.status(404).json({ success: false, message: 'Salary record not found' });
-    }
+      .populate('lastUpdatedBy', 'fullName email');
 
     res.json({ success: true, data: salary });
   } catch (error) {
@@ -90,17 +89,18 @@ exports.updateEmployeeSalary = async (req, res, next) => {
 
 exports.deleteEmployeeSalary = async (req, res, next) => {
   try {
-    const salary = await EmployeeSalary.findByIdAndDelete(req.params.id);
+    const { employeeId } = req.params;
+    const salary = await EmployeeSalary.findOneAndDelete({ employee: employeeId });
     if (!salary) {
-      return res.status(404).json({ success: false, message: 'Salary record not found' });
+      return res.status(404).json({ success: false, message: 'Salary not found' });
     }
-    res.json({ success: true, message: 'Salary record deleted' });
+    res.json({ success: true, message: 'Salary deleted' });
   } catch (error) {
     next(error);
   }
 };
 
-// --- Bonus ---
+// --- Bonus (per month) ---
 
 exports.getEmployeeBonuses = async (req, res, next) => {
   try {
@@ -171,7 +171,7 @@ exports.updateEmployeeBonus = async (req, res, next) => {
       .populate('createdBy', 'fullName email');
 
     if (!bonus) {
-      return res.status(404).json({ success: false, message: 'Bonus record not found' });
+      return res.status(404).json({ success: false, message: 'Bonus not found' });
     }
 
     res.json({ success: true, data: bonus });
@@ -184,9 +184,9 @@ exports.deleteEmployeeBonus = async (req, res, next) => {
   try {
     const bonus = await EmployeeBonus.findByIdAndDelete(req.params.id);
     if (!bonus) {
-      return res.status(404).json({ success: false, message: 'Bonus record not found' });
+      return res.status(404).json({ success: false, message: 'Bonus not found' });
     }
-    res.json({ success: true, message: 'Bonus record deleted' });
+    res.json({ success: true, message: 'Bonus deleted' });
   } catch (error) {
     next(error);
   }
@@ -202,17 +202,17 @@ exports.getEmployeePaySummary = async (req, res, next) => {
     }
 
     const { year, month } = req.query;
-    const filter = { employee: new mongoose.Types.ObjectId(employeeId) };
-    if (year) filter.year = parseInt(year);
-    if (month) filter.month = parseInt(month);
 
-    const [salaries, bonuses, finesAgg] = await Promise.all([
-      EmployeeSalary.aggregate([
-        { $match: filter },
-        { $group: { _id: null, total: { $sum: '$amount' }, count: { $sum: 1 } } },
-      ]),
+    const [salary, bonusAgg, finesAgg] = await Promise.all([
+      EmployeeSalary.findOne({ employee: employeeId }),
       EmployeeBonus.aggregate([
-        { $match: filter },
+        {
+          $match: {
+            employee: new mongoose.Types.ObjectId(employeeId),
+            ...(year && { year: parseInt(year) }),
+            ...(month && { month: parseInt(month) }),
+          },
+        },
         { $group: { _id: null, total: { $sum: '$amount' }, count: { $sum: 1 } } },
       ]),
       AgentFine.getTotalActiveFines(
@@ -222,72 +222,20 @@ exports.getEmployeePaySummary = async (req, res, next) => {
       ),
     ]);
 
-    const totalSalary = salaries[0]?.total || 0;
-    const totalBonuses = bonuses[0]?.total || 0;
+    const fixedSalary = salary?.amount || 0;
+    const totalBonuses = bonusAgg[0]?.total || 0;
     const totalFines = finesAgg[0]?.totalFines || 0;
 
     res.json({
       success: true,
       data: {
-        totalSalary,
-        salaryCount: salaries[0]?.count || 0,
+        fixedSalary,
         totalBonuses,
-        bonusCount: bonuses[0]?.count || 0,
+        bonusCount: bonusAgg[0]?.count || 0,
         totalFines,
-        netPay: totalSalary + totalBonuses - totalFines,
+        netPay: fixedSalary + totalBonuses - totalFines,
       },
     });
-  } catch (error) {
-    next(error);
-  }
-};
-
-exports.getAllEmployeesPaySummary = async (req, res, next) => {
-  try {
-    const User = require('../models/User');
-    const { year, month } = req.query;
-
-    const employees = await User.find({ role: 'employee', isActive: true })
-      .select('fullName email')
-      .sort({ fullName: 1 });
-
-    const summaries = await Promise.all(
-      employees.map(async (emp) => {
-        const filter = { employee: emp._id };
-        if (year) filter.year = parseInt(year);
-        if (month) filter.month = parseInt(month);
-
-        const [salaries, bonuses, finesAgg] = await Promise.all([
-          EmployeeSalary.aggregate([
-            { $match: filter },
-            { $group: { _id: null, total: { $sum: '$amount' } } },
-          ]),
-          EmployeeBonus.aggregate([
-            { $match: filter },
-            { $group: { _id: null, total: { $sum: '$amount' } } },
-          ]),
-          AgentFine.getTotalActiveFines(
-            emp._id.toString(),
-            year ? parseInt(year) : null,
-            month ? parseInt(month) : null
-          ),
-        ]);
-
-        const totalSalary = salaries[0]?.total || 0;
-        const totalBonuses = bonuses[0]?.total || 0;
-        const totalFines = finesAgg[0]?.totalFines || 0;
-
-        return {
-          employee: emp,
-          totalSalary,
-          totalBonuses,
-          totalFines,
-          netPay: totalSalary + totalBonuses - totalFines,
-        };
-      })
-    );
-
-    res.json({ success: true, data: summaries });
   } catch (error) {
     next(error);
   }

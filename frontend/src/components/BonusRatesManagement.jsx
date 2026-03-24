@@ -36,7 +36,7 @@ const BonusRatesManagement = () => {
     thirdCall: 15.0,
     fourthCall: 20.0,
     fifthCall: 25.0,
-    verifiedAcc: 50.0,
+    verifiedAcc: 5.0,
   });
   const [originalRates, setOriginalRates] = useState({});
   const [isEditing, setIsEditing] = useState(false);

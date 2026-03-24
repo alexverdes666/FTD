@@ -103,6 +103,7 @@ const ALL_COLUMNS = [
   { id: 'phone', label: 'Phone', defaultVisible: true },
   { id: 'psp', label: 'PSP', defaultVisible: false },
   { id: 'cardIssuer', label: 'Card Issuer', defaultVisible: false },
+  { id: 'verified', label: 'Verified', defaultVisible: true },
   { id: 'deposit', label: 'Dep.', defaultVisible: true },
   { id: 'depositCall', label: 'Dep. Call', defaultVisible: true },
   ...Array.from({ length: 10 }, (_, i) => ({ id: `call${i + 1}`, label: `C${i + 1}`, defaultVisible: true })),
@@ -1253,6 +1254,7 @@ const DepositCallsPage = () => {
                       {isColVisible('phone') && <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', fontSize: '0.6rem' }}>Phone</TableCell>}
                       {isColVisible('psp') && <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', fontSize: '0.6rem' }}>PSP</TableCell>}
                       {isColVisible('cardIssuer') && <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', fontSize: '0.6rem' }}>Card Issuer</TableCell>}
+                      {isColVisible('verified') && <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', textAlign: 'center', fontSize: '0.6rem' }}>Verified</TableCell>}
                       {isColVisible('deposit') && <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', textAlign: 'center', fontSize: '0.6rem' }}>Dep.</TableCell>}
                       {isColVisible('depositCall') && <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', textAlign: 'center', fontSize: '0.6rem' }}>Dep. Call</TableCell>}
                       {[1,2,3,4,5,6,7,8,9,10].map(num => (
@@ -1383,6 +1385,17 @@ const DepositCallsPage = () => {
                           <Typography sx={{ fontSize: '0.55rem' }}>
                             {getLeadMetadata(dc)?.depositCardIssuer?.name || '-'}
                           </Typography>
+                        </TableCell>
+                        )}
+                        {isColVisible('verified') && (
+                        <TableCell sx={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
+                          {dc.verificationStatus === 'yes' ? (
+                            <Chip label="Yes" size="small" color="success" variant="outlined" sx={{ height: 16, fontSize: '0.55rem', '& .MuiChip-label': { px: 0.5 } }} />
+                          ) : dc.verificationStatus === 'pending' ? (
+                            <Chip label="Pending" size="small" color="warning" variant="outlined" sx={{ height: 16, fontSize: '0.55rem', '& .MuiChip-label': { px: 0.5 } }} />
+                          ) : (
+                            <Chip label="No" size="small" color="default" variant="outlined" sx={{ height: 16, fontSize: '0.55rem', '& .MuiChip-label': { px: 0.5 } }} />
+                          )}
                         </TableCell>
                         )}
                         {isColVisible('deposit') && (

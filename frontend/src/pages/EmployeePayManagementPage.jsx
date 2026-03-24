@@ -22,7 +22,6 @@ import {
   Select,
   MenuItem,
   CircularProgress,
-  Alert,
   Chip,
   Tabs,
   Tab,
@@ -36,6 +35,7 @@ import {
   Delete as DeleteIcon,
   AttachMoney as SalaryIcon,
   CardGiftcard as BonusIcon,
+  Save as SaveIcon,
 } from "@mui/icons-material";
 import api from "../services/api";
 import toast from "react-hot-toast";
@@ -52,15 +52,17 @@ const EmployeePayManagementPage = () => {
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
   const [employees, setEmployees] = useState([]);
-  const [salaries, setSalaries] = useState([]);
+  const [salaryData, setSalaryData] = useState([]); // { employee, salary }
   const [bonuses, setBonuses] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Dialog state
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [dialogType, setDialogType] = useState("salary"); // "salary" or "bonus"
-  const [editingRecord, setEditingRecord] = useState(null);
-  const [form, setForm] = useState({
+  // Salary inline edit
+  const [editingSalary, setEditingSalary] = useState({}); // { [empId]: { amount, notes } }
+
+  // Bonus dialog
+  const [bonusDialogOpen, setBonusDialogOpen] = useState(false);
+  const [editingBonus, setEditingBonus] = useState(null);
+  const [bonusForm, setBonusForm] = useState({
     employeeId: null,
     amount: "",
     reason: "",
@@ -74,60 +76,32 @@ const EmployeePayManagementPage = () => {
     try {
       const res = await api.get("/users", { params: { role: "employee", limit: 10000, isActive: true } });
       setEmployees(res.data.data || []);
-    } catch (err) {
+    } catch {
       toast.error("Failed to load employees");
     }
   }, []);
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
+  const fetchSalaries = useCallback(async () => {
     try {
-      const params = { year: selectedYear, month: selectedMonth };
-      const [salaryRes, bonusRes] = await Promise.allSettled(
-        employees.map((emp) => [
-          api.get(`/employee-pay/salary/${emp._id}`, { params }),
-          api.get(`/employee-pay/bonus/${emp._id}`, { params }),
-        ]).flat()
-      );
-
-      const allSalaries = [];
-      const allBonuses = [];
-      for (let i = 0; i < employees.length; i++) {
-        const sRes = salaryRes ? salaryRes[i * 2] : null;
-        const bRes = bonusRes ? bonusRes[i * 2 + 1] : null;
-        // Actually we need a different approach - fetch all at once
-      }
-    } catch (err) {
-      // ignore
-    } finally {
-      setLoading(false);
+      const res = await api.get("/employee-pay/salaries");
+      setSalaryData(res.data.data || []);
+    } catch {
+      toast.error("Failed to load salaries");
     }
-  }, [employees, selectedMonth, selectedYear]);
+  }, []);
 
-  // Simpler approach: fetch all employee data per employee
-  const fetchAllData = useCallback(async () => {
+  const fetchBonuses = useCallback(async () => {
     if (employees.length === 0) return;
-    setLoading(true);
     try {
       const params = { year: selectedYear, month: selectedMonth };
-      const salaryPromises = employees.map((emp) =>
-        api.get(`/employee-pay/salary/${emp._id}`, { params }).catch(() => ({ data: { data: [] } }))
+      const results = await Promise.all(
+        employees.map((emp) =>
+          api.get(`/employee-pay/bonus/${emp._id}`, { params }).catch(() => ({ data: { data: [] } }))
+        )
       );
-      const bonusPromises = employees.map((emp) =>
-        api.get(`/employee-pay/bonus/${emp._id}`, { params }).catch(() => ({ data: { data: [] } }))
-      );
-
-      const [salaryResults, bonusResults] = await Promise.all([
-        Promise.all(salaryPromises),
-        Promise.all(bonusPromises),
-      ]);
-
-      setSalaries(salaryResults.flatMap((r) => r.data.data || []));
-      setBonuses(bonusResults.flatMap((r) => r.data.data || []));
-    } catch (err) {
-      toast.error("Failed to load data");
-    } finally {
-      setLoading(false);
+      setBonuses(results.flatMap((r) => r.data.data || []));
+    } catch {
+      toast.error("Failed to load bonuses");
     }
   }, [employees, selectedMonth, selectedYear]);
 
@@ -136,14 +110,61 @@ const EmployeePayManagementPage = () => {
   }, [fetchEmployees]);
 
   useEffect(() => {
-    fetchAllData();
-  }, [fetchAllData]);
+    setLoading(true);
+    Promise.all([fetchSalaries(), fetchBonuses()]).finally(() => setLoading(false));
+  }, [fetchSalaries, fetchBonuses]);
 
-  const openDialog = (type, record = null) => {
-    setDialogType(type);
-    setEditingRecord(record);
+  // --- Salary handlers ---
+  const startEditSalary = (empId, current) => {
+    setEditingSalary((prev) => ({
+      ...prev,
+      [empId]: { amount: current?.amount?.toString() || "", notes: current?.notes || "" },
+    }));
+  };
+
+  const cancelEditSalary = (empId) => {
+    setEditingSalary((prev) => {
+      const copy = { ...prev };
+      delete copy[empId];
+      return copy;
+    });
+  };
+
+  const saveSalary = async (empId) => {
+    const edit = editingSalary[empId];
+    if (!edit?.amount || parseFloat(edit.amount) < 0) {
+      toast.error("Valid amount required");
+      return;
+    }
+    try {
+      await api.put(`/employee-pay/salary/${empId}`, {
+        amount: parseFloat(edit.amount),
+        notes: edit.notes || undefined,
+      });
+      toast.success("Salary saved");
+      cancelEditSalary(empId);
+      fetchSalaries();
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to save");
+    }
+  };
+
+  const deleteSalary = async (empId) => {
+    if (!window.confirm("Remove salary for this employee?")) return;
+    try {
+      await api.delete(`/employee-pay/salary/${empId}`);
+      toast.success("Salary removed");
+      fetchSalaries();
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to delete");
+    }
+  };
+
+  // --- Bonus handlers ---
+  const openBonusDialog = (record = null) => {
+    setEditingBonus(record);
     if (record) {
-      setForm({
+      setBonusForm({
         employeeId: record.employee?._id || record.employee,
         amount: record.amount?.toString() || "",
         reason: record.reason || "",
@@ -152,7 +173,7 @@ const EmployeePayManagementPage = () => {
         year: record.year,
       });
     } else {
-      setForm({
+      setBonusForm({
         employeeId: null,
         amount: "",
         reason: "",
@@ -161,41 +182,33 @@ const EmployeePayManagementPage = () => {
         year: selectedYear,
       });
     }
-    setDialogOpen(true);
+    setBonusDialogOpen(true);
   };
 
-  const handleSubmit = async () => {
-    if (!form.employeeId || !form.amount) {
-      toast.error("Employee and amount are required");
+  const handleBonusSubmit = async () => {
+    if (!bonusForm.employeeId || !bonusForm.amount || !bonusForm.reason) {
+      toast.error("Employee, amount, and reason are required");
       return;
     }
-    if (dialogType === "bonus" && !form.reason) {
-      toast.error("Reason is required for bonuses");
-      return;
-    }
-
     setSubmitting(true);
     try {
-      const endpoint = dialogType === "salary" ? "/employee-pay/salary" : "/employee-pay/bonus";
       const payload = {
-        employeeId: form.employeeId,
-        amount: parseFloat(form.amount),
-        month: form.month,
-        year: form.year,
-        notes: form.notes || undefined,
-        ...(dialogType === "bonus" && { reason: form.reason }),
+        employeeId: bonusForm.employeeId,
+        amount: parseFloat(bonusForm.amount),
+        reason: bonusForm.reason,
+        month: bonusForm.month,
+        year: bonusForm.year,
+        notes: bonusForm.notes || undefined,
       };
-
-      if (editingRecord) {
-        await api.put(`${endpoint}/${editingRecord._id}`, payload);
-        toast.success(`${dialogType === "salary" ? "Salary" : "Bonus"} updated`);
+      if (editingBonus) {
+        await api.put(`/employee-pay/bonus/${editingBonus._id}`, payload);
+        toast.success("Bonus updated");
       } else {
-        await api.post(endpoint, payload);
-        toast.success(`${dialogType === "salary" ? "Salary" : "Bonus"} added`);
+        await api.post("/employee-pay/bonus", payload);
+        toast.success("Bonus added");
       }
-
-      setDialogOpen(false);
-      fetchAllData();
+      setBonusDialogOpen(false);
+      fetchBonuses();
     } catch (err) {
       toast.error(err.response?.data?.message || "Failed to save");
     } finally {
@@ -203,28 +216,25 @@ const EmployeePayManagementPage = () => {
     }
   };
 
-  const handleDelete = async (type, id) => {
-    if (!window.confirm("Delete this record?")) return;
+  const deleteBonus = async (id) => {
+    if (!window.confirm("Delete this bonus?")) return;
     try {
-      const endpoint = type === "salary" ? "/employee-pay/salary" : "/employee-pay/bonus";
-      await api.delete(`${endpoint}/${id}`);
-      toast.success("Record deleted");
-      fetchAllData();
+      await api.delete(`/employee-pay/bonus/${id}`);
+      toast.success("Bonus deleted");
+      fetchBonuses();
     } catch (err) {
       toast.error(err.response?.data?.message || "Failed to delete");
     }
   };
 
   const years = [];
-  for (let y = now.getFullYear(); y >= now.getFullYear() - 2; y--) {
-    years.push(y);
-  }
+  for (let y = now.getFullYear(); y >= now.getFullYear() - 2; y--) years.push(y);
 
-  const selectedEmployee = employees.find((e) => e._id === form.employeeId) || null;
+  const selectedBonusEmployee = employees.find((e) => e._id === bonusForm.employeeId) || null;
 
   return (
     <Box sx={{ width: "100%" }}>
-      {/* Filters */}
+      {/* Header */}
       <Paper sx={{ px: 2, py: 1, mb: 2 }}>
         <Stack direction="row" spacing={2} alignItems="center">
           <Tabs
@@ -236,121 +246,209 @@ const EmployeePayManagementPage = () => {
             <Tab icon={<BonusIcon sx={{ fontSize: 16 }} />} iconPosition="start" label="Bonuses" />
           </Tabs>
           <Box sx={{ ml: "auto" }} />
-          <FormControl size="small" sx={{ minWidth: 130 }}>
-            <InputLabel>Month</InputLabel>
-            <Select value={selectedMonth} label="Month" onChange={(e) => setSelectedMonth(e.target.value)}>
-              {MONTHS.map((m, i) => (
-                <MenuItem key={i} value={i + 1}>{m}</MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-          <FormControl size="small" sx={{ minWidth: 100 }}>
-            <InputLabel>Year</InputLabel>
-            <Select value={selectedYear} label="Year" onChange={(e) => setSelectedYear(e.target.value)}>
-              {years.map((y) => (
-                <MenuItem key={y} value={y}>{y}</MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-          <Button
-            variant="contained"
-            size="small"
-            startIcon={<AddIcon />}
-            onClick={() => openDialog(tab === 0 ? "salary" : "bonus")}
-          >
-            Add {tab === 0 ? "Salary" : "Bonus"}
-          </Button>
+          {tab === 1 && (
+            <>
+              <FormControl size="small" sx={{ minWidth: 130 }}>
+                <InputLabel>Month</InputLabel>
+                <Select value={selectedMonth} label="Month" onChange={(e) => setSelectedMonth(e.target.value)}>
+                  {MONTHS.map((m, i) => (
+                    <MenuItem key={i} value={i + 1}>{m}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <FormControl size="small" sx={{ minWidth: 100 }}>
+                <InputLabel>Year</InputLabel>
+                <Select value={selectedYear} label="Year" onChange={(e) => setSelectedYear(e.target.value)}>
+                  {years.map((y) => (
+                    <MenuItem key={y} value={y}>{y}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={() => openBonusDialog()}>
+                Add Bonus
+              </Button>
+            </>
+          )}
         </Stack>
       </Paper>
 
-      {/* Data Table */}
+      {/* Content */}
       <Paper>
         {loading ? (
           <Box sx={{ display: "flex", justifyContent: "center", py: 5 }}>
             <CircularProgress />
           </Box>
+        ) : tab === 0 ? (
+          /* ---- Salary Tab ---- */
+          <TableContainer>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell sx={{ fontWeight: "bold", bgcolor: "grey.100" }}>Employee</TableCell>
+                  <TableCell sx={{ fontWeight: "bold", bgcolor: "grey.100", width: "20%" }}>Monthly Salary</TableCell>
+                  <TableCell sx={{ fontWeight: "bold", bgcolor: "grey.100" }}>Notes</TableCell>
+                  <TableCell sx={{ fontWeight: "bold", bgcolor: "grey.100" }}>Last Updated</TableCell>
+                  <TableCell sx={{ fontWeight: "bold", bgcolor: "grey.100", textAlign: "right", width: "12%" }}>Actions</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {salaryData.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} align="center" sx={{ py: 4 }}>
+                      <Typography color="text.secondary">No employees found</Typography>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  salaryData.map(({ employee, salary }) => {
+                    const isEditing = editingSalary[employee._id] !== undefined;
+                    const edit = editingSalary[employee._id];
+                    return (
+                      <TableRow key={employee._id} hover>
+                        <TableCell>
+                          <Typography variant="body2" fontWeight={500}>{employee.fullName}</Typography>
+                          <Typography variant="caption" color="text.secondary">{employee.email}</Typography>
+                        </TableCell>
+                        <TableCell>
+                          {isEditing ? (
+                            <TextField
+                              size="small"
+                              type="number"
+                              value={edit.amount}
+                              onChange={(e) =>
+                                setEditingSalary((prev) => ({
+                                  ...prev,
+                                  [employee._id]: { ...prev[employee._id], amount: e.target.value },
+                                }))
+                              }
+                              inputProps={{ min: 0, step: 0.01 }}
+                              sx={{ width: 130 }}
+                            />
+                          ) : salary ? (
+                            <Typography variant="body2" fontWeight="bold" color="primary.main">
+                              {salary.amount?.toLocaleString()} {salary.currency}
+                            </Typography>
+                          ) : (
+                            <Chip label="Not set" size="small" variant="outlined" />
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {isEditing ? (
+                            <TextField
+                              size="small"
+                              value={edit.notes}
+                              onChange={(e) =>
+                                setEditingSalary((prev) => ({
+                                  ...prev,
+                                  [employee._id]: { ...prev[employee._id], notes: e.target.value },
+                                }))
+                              }
+                              placeholder="Notes..."
+                              sx={{ width: "100%" }}
+                            />
+                          ) : (
+                            <Typography variant="body2" color="text.secondary">
+                              {salary?.notes || "—"}
+                            </Typography>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {salary ? (
+                            <Typography variant="caption">
+                              {new Date(salary.updatedAt).toLocaleDateString()}
+                              {salary.lastUpdatedBy && ` by ${salary.lastUpdatedBy.fullName}`}
+                            </Typography>
+                          ) : "—"}
+                        </TableCell>
+                        <TableCell align="right">
+                          {isEditing ? (
+                            <>
+                              <Tooltip title="Save">
+                                <IconButton size="small" color="primary" onClick={() => saveSalary(employee._id)}>
+                                  <SaveIcon fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                              <Tooltip title="Cancel">
+                                <IconButton size="small" onClick={() => cancelEditSalary(employee._id)}>
+                                  <DeleteIcon fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                            </>
+                          ) : (
+                            <>
+                              <Tooltip title={salary ? "Edit Salary" : "Set Salary"}>
+                                <IconButton size="small" onClick={() => startEditSalary(employee._id, salary)}>
+                                  <EditIcon fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                              {salary && (
+                                <Tooltip title="Remove Salary">
+                                  <IconButton size="small" color="error" onClick={() => deleteSalary(employee._id)}>
+                                    <DeleteIcon fontSize="small" />
+                                  </IconButton>
+                                </Tooltip>
+                              )}
+                            </>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
+          </TableContainer>
         ) : (
+          /* ---- Bonuses Tab ---- */
           <TableContainer>
             <Table size="small">
               <TableHead>
                 <TableRow>
                   <TableCell sx={{ fontWeight: "bold", bgcolor: "grey.100" }}>Employee</TableCell>
                   <TableCell sx={{ fontWeight: "bold", bgcolor: "grey.100" }}>Amount</TableCell>
-                  {tab === 1 && (
-                    <TableCell sx={{ fontWeight: "bold", bgcolor: "grey.100" }}>Reason</TableCell>
-                  )}
-                  <TableCell sx={{ fontWeight: "bold", bgcolor: "grey.100" }}>Period</TableCell>
+                  <TableCell sx={{ fontWeight: "bold", bgcolor: "grey.100" }}>Reason</TableCell>
                   <TableCell sx={{ fontWeight: "bold", bgcolor: "grey.100" }}>Notes</TableCell>
                   <TableCell sx={{ fontWeight: "bold", bgcolor: "grey.100" }}>Added</TableCell>
                   <TableCell sx={{ fontWeight: "bold", bgcolor: "grey.100", textAlign: "right" }}>Actions</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
-                {(tab === 0 ? salaries : bonuses).length === 0 ? (
+                {bonuses.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={tab === 1 ? 7 : 6} align="center" sx={{ py: 4 }}>
+                    <TableCell colSpan={6} align="center" sx={{ py: 4 }}>
                       <Typography color="text.secondary">
-                        No {tab === 0 ? "salary" : "bonus"} records for {MONTHS[selectedMonth - 1]} {selectedYear}
+                        No bonuses for {MONTHS[selectedMonth - 1]} {selectedYear}
                       </Typography>
                     </TableCell>
                   </TableRow>
                 ) : (
-                  (tab === 0 ? salaries : bonuses).map((record) => (
-                    <TableRow key={record._id} hover>
+                  bonuses.map((b) => (
+                    <TableRow key={b._id} hover>
                       <TableCell>
-                        <Typography variant="body2" fontWeight={500}>
-                          {record.employee?.fullName || "—"}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          {record.employee?.email}
-                        </Typography>
+                        <Typography variant="body2" fontWeight={500}>{b.employee?.fullName || "—"}</Typography>
+                        <Typography variant="caption" color="text.secondary">{b.employee?.email}</Typography>
                       </TableCell>
                       <TableCell>
-                        <Typography
-                          variant="body2"
-                          fontWeight="bold"
-                          color={tab === 0 ? "primary.main" : "success.main"}
-                        >
-                          {tab === 1 && "+"}{record.amount?.toLocaleString()} {record.currency}
+                        <Typography variant="body2" fontWeight="bold" color="success.main">
+                          +{b.amount?.toLocaleString()} {b.currency}
                         </Typography>
                       </TableCell>
-                      {tab === 1 && (
-                        <TableCell>
-                          <Typography variant="body2">{record.reason}</Typography>
-                        </TableCell>
-                      )}
+                      <TableCell><Typography variant="body2">{b.reason}</Typography></TableCell>
                       <TableCell>
-                        <Chip
-                          label={`${MONTHS[record.month - 1]?.slice(0, 3)} ${record.year}`}
-                          size="small"
-                          variant="outlined"
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Typography variant="body2" color="text.secondary">
-                          {record.notes || "—"}
-                        </Typography>
+                        <Typography variant="body2" color="text.secondary">{b.notes || "—"}</Typography>
                       </TableCell>
                       <TableCell>
                         <Typography variant="caption">
-                          {record.createdBy?.fullName} - {new Date(record.createdAt).toLocaleDateString()}
+                          {b.createdBy?.fullName} - {new Date(b.createdAt).toLocaleDateString()}
                         </Typography>
                       </TableCell>
                       <TableCell align="right">
                         <Tooltip title="Edit">
-                          <IconButton
-                            size="small"
-                            onClick={() => openDialog(tab === 0 ? "salary" : "bonus", record)}
-                          >
+                          <IconButton size="small" onClick={() => openBonusDialog(b)}>
                             <EditIcon fontSize="small" />
                           </IconButton>
                         </Tooltip>
                         <Tooltip title="Delete">
-                          <IconButton
-                            size="small"
-                            color="error"
-                            onClick={() => handleDelete(tab === 0 ? "salary" : "bonus", record._id)}
-                          >
+                          <IconButton size="small" color="error" onClick={() => deleteBonus(b._id)}>
                             <DeleteIcon fontSize="small" />
                           </IconButton>
                         </Tooltip>
@@ -364,23 +462,19 @@ const EmployeePayManagementPage = () => {
         )}
       </Paper>
 
-      {/* Add/Edit Dialog */}
-      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>
-          {editingRecord ? "Edit" : "Add"} {dialogType === "salary" ? "Salary" : "Bonus"}
-        </DialogTitle>
+      {/* Add/Edit Bonus Dialog */}
+      <Dialog open={bonusDialogOpen} onClose={() => setBonusDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>{editingBonus ? "Edit" : "Add"} Bonus</DialogTitle>
         <DialogContent>
           <Grid container spacing={2} sx={{ pt: 1 }}>
             <Grid item xs={12}>
               <Autocomplete
                 options={employees}
                 getOptionLabel={(o) => `${o.fullName} (${o.email})`}
-                value={selectedEmployee}
-                onChange={(e, v) => setForm((f) => ({ ...f, employeeId: v?._id || null }))}
-                disabled={!!editingRecord}
-                renderInput={(params) => (
-                  <TextField {...params} label="Employee" size="small" />
-                )}
+                value={selectedBonusEmployee}
+                onChange={(e, v) => setBonusForm((f) => ({ ...f, employeeId: v?._id || null }))}
+                disabled={!!editingBonus}
+                renderInput={(params) => <TextField {...params} label="Employee" size="small" />}
               />
             </Grid>
             <Grid item xs={6}>
@@ -389,8 +483,8 @@ const EmployeePayManagementPage = () => {
                 type="number"
                 size="small"
                 fullWidth
-                value={form.amount}
-                onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
+                value={bonusForm.amount}
+                onChange={(e) => setBonusForm((f) => ({ ...f, amount: e.target.value }))}
                 inputProps={{ min: 0, step: 0.01 }}
               />
             </Grid>
@@ -398,9 +492,9 @@ const EmployeePayManagementPage = () => {
               <FormControl size="small" fullWidth>
                 <InputLabel>Month</InputLabel>
                 <Select
-                  value={form.month}
+                  value={bonusForm.month}
                   label="Month"
-                  onChange={(e) => setForm((f) => ({ ...f, month: e.target.value }))}
+                  onChange={(e) => setBonusForm((f) => ({ ...f, month: e.target.value }))}
                 >
                   {MONTHS.map((m, i) => (
                     <MenuItem key={i} value={i + 1}>{m.slice(0, 3)}</MenuItem>
@@ -412,9 +506,9 @@ const EmployeePayManagementPage = () => {
               <FormControl size="small" fullWidth>
                 <InputLabel>Year</InputLabel>
                 <Select
-                  value={form.year}
+                  value={bonusForm.year}
                   label="Year"
-                  onChange={(e) => setForm((f) => ({ ...f, year: e.target.value }))}
+                  onChange={(e) => setBonusForm((f) => ({ ...f, year: e.target.value }))}
                 >
                   {years.map((y) => (
                     <MenuItem key={y} value={y}>{y}</MenuItem>
@@ -422,17 +516,15 @@ const EmployeePayManagementPage = () => {
                 </Select>
               </FormControl>
             </Grid>
-            {dialogType === "bonus" && (
-              <Grid item xs={12}>
-                <TextField
-                  label="Reason"
-                  size="small"
-                  fullWidth
-                  value={form.reason}
-                  onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))}
-                />
-              </Grid>
-            )}
+            <Grid item xs={12}>
+              <TextField
+                label="Reason"
+                size="small"
+                fullWidth
+                value={bonusForm.reason}
+                onChange={(e) => setBonusForm((f) => ({ ...f, reason: e.target.value }))}
+              />
+            </Grid>
             <Grid item xs={12}>
               <TextField
                 label="Notes (optional)"
@@ -440,21 +532,21 @@ const EmployeePayManagementPage = () => {
                 fullWidth
                 multiline
                 rows={2}
-                value={form.notes}
-                onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
+                value={bonusForm.notes}
+                onChange={(e) => setBonusForm((f) => ({ ...f, notes: e.target.value }))}
               />
             </Grid>
           </Grid>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
+          <Button onClick={() => setBonusDialogOpen(false)}>Cancel</Button>
           <Button
             variant="contained"
-            onClick={handleSubmit}
+            onClick={handleBonusSubmit}
             disabled={submitting}
             startIcon={submitting ? <CircularProgress size={16} /> : null}
           >
-            {editingRecord ? "Update" : "Add"}
+            {editingBonus ? "Update" : "Add"}
           </Button>
         </DialogActions>
       </Dialog>

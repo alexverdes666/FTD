@@ -55,7 +55,7 @@ export const getAgentBonusConfig = async (agentId) => {
           thirdCall: 15,
           fourthCall: 20,
           fifthCall: 25,
-          verifiedAcc: 50,
+          verifiedAcc: 5,
         },
         callCounts: {
           firstCalls: 0,
@@ -77,9 +77,9 @@ export const getAgentBonusConfig = async (agentId) => {
       thirdCall: 15,
       fourthCall: 20,
       fifthCall: 25,
-      verifiedAcc: 50,
+      verifiedAcc: 5,
     };
-    
+
     // Skip global bonus rates fetch for agents to avoid access denied errors
     // Admin can still configure these through the admin panel
     console.log("Using default bonus rates for agent view");
@@ -125,7 +125,7 @@ export const getAgentBonusConfig = async (agentId) => {
         thirdCall: 15,
         fourthCall: 20,
         fifthCall: 25,
-        verifiedAcc: 50,
+        verifiedAcc: 5,
       },
       callCounts: {
         firstCalls: 0,
@@ -183,9 +183,9 @@ export const calculateBonusesFromCallCounts = async (callCounts) => {
     thirdCall: 15.0,
     fourthCall: 20.0,
     fifthCall: 25.0,
-    verifiedAcc: 50.0,
+    verifiedAcc: 5.0,
   };
-  
+
   // Skip global bonus rates fetch to avoid access denied errors for agents
   // Use default rates consistently
   console.log("Using default bonus rates for bonus calculations");
