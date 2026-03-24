@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import {
   Box,
@@ -36,6 +36,7 @@ import {
   ListItemText,
   IconButton,
   Collapse,
+  InputAdornment,
   alpha,
 } from "@mui/material";
 import {
@@ -56,6 +57,8 @@ import {
   CheckCircle as CheckCircleIcon,
   Schedule as ScheduleIcon,
   LocalAtm as LocalAtmIcon,
+  ArrowBack as ArrowBackIcon,
+  Search as SearchIcon,
 } from "@mui/icons-material";
 import { DatePicker } from "@mui/x-date-pickers/DatePicker";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
@@ -98,14 +101,40 @@ import {
 import { getAllAgentFines, getFinesSummary, getAgentFines, getPendingApprovalFines, respondToFine } from "../services/agentFines";
 import FineDetailDialog from "../components/FineDetailDialog";
 import CallBonusesSection from "../components/CallBonusesSection";
+import PayrollTreeNav from "../components/PayrollTreeNav";
 import { getAllAgentsMonthlyTotals, getMonthlyTotals } from "../services/callDeclarations";
 import api from "../services/api";
 
-const PayrollPage = () => {
+const PayrollPage = ({ setHeaderExtra }) => {
   const theme = useTheme();
   const dispatch = useDispatch();
   const user = useSelector(selectUser);
   const [tabValue, setTabValue] = useState(0);
+  const [activeSection, setActiveSectionRaw] = useState(null); // null = tree view, 'agentCalls', 'allDeclarations', 'pendingApprovals', 'callBonuses'
+
+  // Wrap setActiveSection to integrate with browser history
+  const setActiveSection = useCallback((section) => {
+    if (section) {
+      // Push a history entry so browser back returns to the tree
+      window.history.pushState({ payrollSection: section }, '');
+    }
+    setActiveSectionRaw(section);
+  }, []);
+
+  // Listen for browser back button to return to tree view
+  useEffect(() => {
+    const onPopState = (e) => {
+      if (e.state?.payrollSection) {
+        setActiveSectionRaw(e.state.payrollSection);
+      } else {
+        setActiveSectionRaw(null);
+        // Clear header filters when returning to tree
+        if (setHeaderExtra) setHeaderExtra(null);
+      }
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, [setHeaderExtra]);
   const [expanded, setExpanded] = useState("performance");
   const [refreshing, setRefreshing] = useState(false);
   const [bonusConfig, setBonusConfig] = useState(null);
@@ -142,6 +171,13 @@ const PayrollPage = () => {
     show: false,
     message: "",
     severity: "info",
+  });
+
+  // Call bonuses filters (shared with header)
+  const [cbSearchFilter, setCbSearchFilter] = useState('');
+  const [cbSelectedMonth, setCbSelectedMonth] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   });
 
   // Agent bonuses and fines data state
@@ -275,6 +311,93 @@ const PayrollPage = () => {
   const handleTabChange = (event, newValue) => {
     setTabValue(newValue);
   };
+
+  // Generate month options for call bonuses
+  const getCbMonthOptions = () => {
+    const options = [];
+    const now = new Date();
+    for (let i = 0; i < 12; i++) {
+      const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const value = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      const label = date.toLocaleString('default', { month: 'short', year: 'numeric' });
+      options.push({ value, label });
+    }
+    return options;
+  };
+
+  // Push filters into FinancePage header based on active section
+  useEffect(() => {
+    if (!setHeaderExtra) return;
+    if (!activeSection || activeSection === 'callBonuses') {
+      setHeaderExtra(null);
+      return;
+    }
+
+    const smallSelectSx = {
+      minWidth: 130,
+      '& .MuiOutlinedInput-root': { borderRadius: 5, fontSize: '0.75rem', height: 28 },
+    };
+    const smallInputSx = {
+      '& .MuiOutlinedInput-root': { borderRadius: 5, fontSize: '0.75rem', height: 28 },
+    };
+
+    if (activeSection === 'agentCalls') {
+      setHeaderExtra(
+        <FormControl size="small" sx={smallSelectSx}>
+          <InputLabel sx={{ fontSize: '0.75rem' }}>Period</InputLabel>
+          <Select
+            value={selectedPeriod || ""}
+            onChange={handlePeriodChange}
+            label="Period"
+            disabled={agentCallsLoading}
+          >
+            <MenuItem value="all">All Time</MenuItem>
+            {availableMonths.map((m) => (
+              <MenuItem key={`${m.year}-${m.month}`} value={`${m.year}-${m.month}`}>
+                {formatMonthYear(m.year, m.month)}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+      );
+    } else if (activeSection === 'allDeclarations' || activeSection === 'pendingApprovals') {
+      setHeaderExtra(
+        <>
+          <TextField
+            size="small"
+            placeholder="Search..."
+            value={cbSearchFilter}
+            onChange={(e) => setCbSearchFilter(e.target.value)}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon sx={{ fontSize: 14, color: 'text.disabled' }} />
+                </InputAdornment>
+              ),
+            }}
+            sx={{ width: 170, ...smallInputSx }}
+          />
+          <FormControl size="small" sx={smallSelectSx}>
+            <InputLabel sx={{ fontSize: '0.75rem' }}>Month</InputLabel>
+            <Select
+              value={cbSelectedMonth}
+              onChange={(e) => setCbSelectedMonth(e.target.value)}
+              label="Month"
+            >
+              {getCbMonthOptions().map((o) => (
+                <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </>
+      );
+    }
+  }, [activeSection, selectedPeriod, agentCallsLoading, availableMonths, cbSearchFilter, cbSelectedMonth]);
+
+  // Clear header when component unmounts
+  useEffect(() => {
+    return () => { if (setHeaderExtra) setHeaderExtra(null); };
+  }, [setHeaderExtra]);
 
   const handleAccordionChange = (panel) => (event, isExpanded) => {
     setExpanded(isExpanded ? panel : false);
@@ -544,12 +667,59 @@ const PayrollPage = () => {
     setAgentCallsLoading(true);
 
     try {
-      const [year, month] = selectedPeriod.split("-").map(Number);
-      const response = await getFormattedAgentCalls(year, month);
+      if (selectedPeriod === 'all') {
+        // Aggregate data from all available months
+        const allData = [];
+        for (const monthData of availableMonths) {
+          try {
+            const response = await getFormattedAgentCalls(monthData.year, monthData.month);
+            if (response.success && response.data) {
+              response.data.forEach((agent) => {
+                const existing = allData.find((a) => a.agentName === agent.agentName);
+                if (existing) {
+                  existing.totalCalls += agent.totalCalls || 0;
+                  existing.incomingCalls += agent.incomingCalls || 0;
+                  existing.outgoingCalls += agent.outgoingCalls || 0;
+                  // Aggregate talk time (parse and add seconds)
+                  const parseTime = (t) => {
+                    if (!t || t === '00:00:00') return 0;
+                    const [h, m, s] = t.split(':').map(Number);
+                    return h * 3600 + m * 60 + s;
+                  };
+                  const totalSec = parseTime(existing.totalTalkTime) + parseTime(agent.totalTalkTime);
+                  const h = Math.floor(totalSec / 3600);
+                  const mins = Math.floor((totalSec % 3600) / 60);
+                  const secs = totalSec % 60;
+                  existing.totalTalkTime = `${String(h).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+                  // Recalculate success rate
+                  const totalSuccessful = (existing._successfulCalls || 0) + (agent.totalCalls * parseFloat(agent.successRate || 0) / 100);
+                  existing._successfulCalls = totalSuccessful;
+                  existing.successRate = existing.totalCalls > 0
+                    ? ((totalSuccessful / existing.totalCalls) * 100).toFixed(1)
+                    : '0.0';
+                } else {
+                  allData.push({
+                    ...agent,
+                    _successfulCalls: (agent.totalCalls || 0) * parseFloat(agent.successRate || 0) / 100,
+                  });
+                }
+              });
+            }
+          } catch (e) {
+            console.warn(`Failed to load month ${monthData.year}-${monthData.month}:`, e);
+          }
+        }
+        allData.sort((a, b) => a.agentName.localeCompare(b.agentName));
+        setAgentCallsData(allData);
+        calculateAgentCallsStats(allData);
+      } else {
+        const [year, month] = selectedPeriod.split("-").map(Number);
+        const response = await getFormattedAgentCalls(year, month);
 
-      if (response.success) {
-        setAgentCallsData(response.data);
-        calculateAgentCallsStats(response.data);
+        if (response.success) {
+          setAgentCallsData(response.data);
+          calculateAgentCallsStats(response.data);
+        }
       }
     } catch (err) {
       console.error("Error loading agent calls:", err);
@@ -1602,35 +1772,26 @@ const PayrollPage = () => {
           </motion.div>
         )}
 
-        {/* Tabs Section - For Admins and Affiliate Managers only */}
-        {user?.role && user.role !== "agent" && (
-          <Box sx={{ borderBottom: 1, borderColor: "divider", mb: 1.5 }}>
-            <Tabs
-              value={tabValue}
-              onChange={handleTabChange}
-              aria-label="payroll tabs"
-              variant="scrollable"
-              scrollButtons="auto"
-              allowScrollButtonsMobile
-              sx={{
-                minHeight: 36,
-                '& .MuiTab-root': {
-                  minWidth: { xs: 80, sm: 120 },
-                  minHeight: 36,
-                  py: 0.5,
-                  fontSize: '0.8rem',
-                  textTransform: 'none',
-                }
-              }}
-            >
-              {user.role === "admin" && (
-                <Tab label="Agent Calls" />
-              )}
-              {(user.role === "admin" || user.role === "affiliate_manager") && (
-                <Tab label="Call Bonuses" />
-              )}
-            </Tabs>
-          </Box>
+        {/* Tree Navigation - For Admins and Affiliate Managers only */}
+        {user?.role && user.role !== "agent" && !activeSection && (
+          <PayrollTreeNav
+            sections={[
+              ...(user.role === "admin"
+                ? [{ id: 'agentCalls', label: 'Agent Calls', description: 'Call stats & payroll' }]
+                : []),
+              {
+                id: 'callBonuses',
+                label: 'Call Bonuses',
+                description: 'Declarations & approvals',
+                children: [
+                  { id: 'allDeclarations', label: 'All Declarations', description: 'View all' },
+                  { id: 'pendingApprovals', label: 'Pending Approvals', description: 'Awaiting review' },
+                ],
+              },
+            ]}
+            onSelect={(sectionId) => setActiveSection(sectionId)}
+            pendingCount={0}
+          />
         )}
 
         {/* Header Section - Only for Agents */}
@@ -2928,46 +3089,14 @@ const PayrollPage = () => {
           </motion.div>
         )}
 
-        {/* Agent Calls Tab (Admin Only) */}
-        {user?.role === "admin" && tabValue === 0 && (
+        {/* Agent Calls Section (Admin Only) */}
+        {user?.role === "admin" && activeSection === 'agentCalls' && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.3 }}
           >
             <Grid container spacing={1.5}>
-              {/* Period Selection - compact inline */}
-              <Grid item xs={12}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 0.5 }}>
-                  <FormControl size="small" sx={{
-                    minWidth: 160,
-                    '& .MuiOutlinedInput-root': {
-                      borderRadius: 5,
-                      fontSize: '0.8rem',
-                      height: 32,
-                    },
-                  }}>
-                    <InputLabel sx={{ fontSize: '0.8rem' }}>Period</InputLabel>
-                    <Select
-                      value={selectedPeriod || ""}
-                      onChange={handlePeriodChange}
-                      label="Period"
-                      disabled={agentCallsLoading}
-                    >
-                      {availableMonths.map((monthData) => (
-                        <MenuItem
-                          key={`${monthData.year}-${monthData.month}`}
-                          value={`${monthData.year}-${monthData.month}`}
-                        >
-                          {formatMonthYear(monthData.year, monthData.month)}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                  {agentCallsLoading && <CircularProgress size={16} />}
-                </Box>
-              </Grid>
-
               {/* Compact Statistics Overview */}
               {agentCallsStats && (
                 <Grid item xs={12}>
@@ -3057,14 +3186,20 @@ const PayrollPage = () => {
           </motion.div>
         )}
 
-        {/* Call Bonuses Tab (Admin and Affiliate Manager) - For approving call declarations */}
-        {((tabValue === 1 && user?.role === "admin") || (tabValue === 0 && user?.role === "affiliate_manager")) && (
+        {/* Call Bonuses / Declarations Section (Admin and Affiliate Manager) */}
+        {(activeSection === 'callBonuses' || activeSection === 'allDeclarations' || activeSection === 'pendingApprovals') &&
+          (user?.role === "admin" || user?.role === "affiliate_manager") && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.3 }}
           >
-            <CallBonusesSection />
+            <CallBonusesSection
+              initialTab={activeSection === 'pendingApprovals' ? 1 : 0}
+              externalSearch={cbSearchFilter}
+              externalMonth={cbSelectedMonth}
+              hideFilters={activeSection === 'allDeclarations' || activeSection === 'pendingApprovals'}
+            />
           </motion.div>
         )}
 

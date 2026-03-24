@@ -1,4 +1,4 @@
-import React, { lazy, Suspense, useState } from "react";
+import React, { lazy, Suspense, useState, useCallback } from "react";
 import { useLocation } from "react-router-dom";
 import {
   Box,
@@ -44,24 +44,36 @@ const tabs = [
 const FinancePage = () => {
   const location = useLocation();
   const [tab, setTab] = useState(location.state?.tab ?? 0);
+  const [headerExtra, setHeaderExtra] = useState(null);
+
+  const onSetHeaderExtra = useCallback((node) => {
+    setHeaderExtra(node);
+  }, []);
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
       <Paper sx={{ px: 2, py: 0.5, mb: 1, flexShrink: 0 }}>
-        <Tabs
-          value={tab}
-          onChange={(e, v) => setTab(v)}
-          variant="scrollable"
-          scrollButtons="auto"
-          sx={{
-            minHeight: 36,
-            "& .MuiTab-root": { minHeight: 36, py: 0.3, fontSize: "0.8rem", minWidth: "auto", px: 1.5 },
-          }}
-        >
-          {tabs.map((t, i) => (
-            <Tab key={i} icon={t.icon} iconPosition="start" label={t.label} />
-          ))}
-        </Tabs>
+        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+          <Tabs
+            value={tab}
+            onChange={(e, v) => { setTab(v); setHeaderExtra(null); }}
+            variant="scrollable"
+            scrollButtons="auto"
+            sx={{
+              minHeight: 36,
+              "& .MuiTab-root": { minHeight: 36, py: 0.3, fontSize: "0.8rem", minWidth: "auto", px: 1.5 },
+            }}
+          >
+            {tabs.map((t, i) => (
+              <Tab key={i} icon={t.icon} iconPosition="start" label={t.label} />
+            ))}
+          </Tabs>
+          {headerExtra && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0, ml: 'auto', pl: 2 }}>
+              {headerExtra}
+            </Box>
+          )}
+        </Box>
       </Paper>
 
       <Box sx={{ flex: 1, minHeight: 0, overflow: "auto" }}>
@@ -72,7 +84,7 @@ const FinancePage = () => {
           {tab === 3 && <FinesPage />}
           {tab === 4 && <WithdrawalsPage />}
           {tab === 5 && <EmployeePayManagementPage />}
-          {tab === 6 && <PayrollPage />}
+          {tab === 6 && <PayrollPage setHeaderExtra={onSetHeaderExtra} />}
         </Suspense>
       </Box>
     </Box>

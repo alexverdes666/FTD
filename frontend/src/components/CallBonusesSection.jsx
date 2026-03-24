@@ -40,16 +40,25 @@ import {
   getMonthlyTotals,
 } from '../services/callDeclarations';
 
-const CallBonusesSection = ({ leads: passedLeads = [] }) => {
+const CallBonusesSection = ({
+  leads: passedLeads = [],
+  initialTab = 0,
+  externalSearch = '',
+  externalMonth = '',
+  hideFilters = false,
+}) => {
   const user = useSelector(selectUser);
   const isAgent = user?.role === 'agent';
   const isManager = ['admin', 'affiliate_manager'].includes(user?.role);
 
-  const [tabValue, setTabValue] = useState(0);
+  const [tabValue, setTabValue] = useState(initialTab);
   const [agentTab, setAgentTab] = useState(0);
   const [error, setError] = useState(null);
   const [successMessage, setSuccessMessage] = useState(null);
   const [searchFilter, setSearchFilter] = useState('');
+
+  // Use external values when provided (from parent header), fallback to internal
+  const effectiveSearch = hideFilters ? externalSearch : searchFilter;
 
   // CDR calls data (all calls with declaration status)
   const [cdrCalls, setCdrCalls] = useState([]);
@@ -65,9 +74,20 @@ const CallBonusesSection = ({ leads: passedLeads = [] }) => {
 
   // Selected month filter
   const [selectedMonth, setSelectedMonth] = useState(() => {
+    if (externalMonth) return externalMonth;
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   });
+
+  // Sync with external month when provided
+  useEffect(() => {
+    if (externalMonth && hideFilters) setSelectedMonth(externalMonth);
+  }, [externalMonth, hideFilters]);
+
+  // Sync tab with initialTab changes
+  useEffect(() => {
+    setTabValue(initialTab);
+  }, [initialTab]);
 
   // Dialog states
   const [selectedCallForDeclaration, setSelectedCallForDeclaration] = useState(null);
@@ -313,8 +333,8 @@ const CallBonusesSection = ({ leads: passedLeads = [] }) => {
         );
       })()}
 
-      {/* Tabs + Filters inline - Only for managers */}
-      {isManager && (
+      {/* Tabs + Filters inline - Only for managers, hidden when controlled from parent */}
+      {isManager && !hideFilters && (
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1, mb: 1.5 }}>
           <Tabs
             value={tabValue}
@@ -348,20 +368,12 @@ const CallBonusesSection = ({ leads: passedLeads = [] }) => {
               }}
               sx={{
                 width: 160,
-                '& .MuiOutlinedInput-root': {
-                  borderRadius: 5,
-                  fontSize: '0.75rem',
-                  height: 28,
-                },
+                '& .MuiOutlinedInput-root': { borderRadius: 5, fontSize: '0.75rem', height: 28 },
               }}
             />
             <FormControl size="small" sx={{
               minWidth: 140,
-              '& .MuiOutlinedInput-root': {
-                borderRadius: 5,
-                fontSize: '0.75rem',
-                height: 28,
-              },
+              '& .MuiOutlinedInput-root': { borderRadius: 5, fontSize: '0.75rem', height: 28 },
             }}>
               <InputLabel sx={{ fontSize: '0.75rem' }}>Month</InputLabel>
               <Select
@@ -370,9 +382,7 @@ const CallBonusesSection = ({ leads: passedLeads = [] }) => {
                 label="Month"
               >
                 {getMonthOptions().map((option) => (
-                  <MenuItem key={option.value} value={option.value}>
-                    {option.label}
-                  </MenuItem>
+                  <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>
                 ))}
               </Select>
             </FormControl>
@@ -384,12 +394,20 @@ const CallBonusesSection = ({ leads: passedLeads = [] }) => {
       {isManager && tabValue === 0 && (
         <Box>
           <CallDeclarationsTable
-            declarations={searchFilter
-              ? myDeclarations.filter(d =>
-                  (d.agentName || d.agent?.fullName || '').toLowerCase().includes(searchFilter.toLowerCase()) ||
-                  (d.status || '').toLowerCase().includes(searchFilter.toLowerCase()) ||
-                  (d.leadName || '').toLowerCase().includes(searchFilter.toLowerCase())
-                )
+            declarations={effectiveSearch
+              ? myDeclarations.filter(d => {
+                  const q = effectiveSearch.toLowerCase();
+                  return (
+                    (d.agent?.fullName || '').toLowerCase().includes(q) ||
+                    (d.affiliateManager?.fullName || '').toLowerCase().includes(q) ||
+                    (d.orderId?._id || d.orderId || '').toString().toLowerCase().includes(q) ||
+                    (`${d.lead?.firstName || ''} ${d.lead?.lastName || ''}`.toLowerCase()).includes(q) ||
+                    (d.lineNumber || d.lead?.newPhone || '').toLowerCase().includes(q) ||
+                    (d.callType || '').toLowerCase().includes(q) ||
+                    (d.callCategory || '').toLowerCase().includes(q) ||
+                    (d.status || '').toLowerCase().includes(q)
+                  );
+                })
               : myDeclarations}
             loading={declarationsLoading}
             error={declarationsError}
@@ -404,12 +422,20 @@ const CallBonusesSection = ({ leads: passedLeads = [] }) => {
       {isManager && tabValue === 1 && (
         <Box>
           <CallDeclarationsTable
-            declarations={searchFilter
-              ? pendingDeclarations.filter(d =>
-                  (d.agentName || d.agent?.fullName || '').toLowerCase().includes(searchFilter.toLowerCase()) ||
-                  (d.status || '').toLowerCase().includes(searchFilter.toLowerCase()) ||
-                  (d.leadName || '').toLowerCase().includes(searchFilter.toLowerCase())
-                )
+            declarations={effectiveSearch
+              ? pendingDeclarations.filter(d => {
+                  const q = effectiveSearch.toLowerCase();
+                  return (
+                    (d.agent?.fullName || '').toLowerCase().includes(q) ||
+                    (d.affiliateManager?.fullName || '').toLowerCase().includes(q) ||
+                    (d.orderId?._id || d.orderId || '').toString().toLowerCase().includes(q) ||
+                    (`${d.lead?.firstName || ''} ${d.lead?.lastName || ''}`.toLowerCase()).includes(q) ||
+                    (d.lineNumber || d.lead?.newPhone || '').toLowerCase().includes(q) ||
+                    (d.callType || '').toLowerCase().includes(q) ||
+                    (d.callCategory || '').toLowerCase().includes(q) ||
+                    (d.status || '').toLowerCase().includes(q)
+                  );
+                })
               : pendingDeclarations}
             loading={pendingLoading}
             onViewDetails={setSelectedDeclarationForApproval}
