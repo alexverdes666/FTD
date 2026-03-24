@@ -38,7 +38,6 @@ import {
   Undo as RefundsIcon,
   Comment as CommentIcon,
   SupportAgent as TicketIcon,
-  SimCard as SimCardIcon,
   AdminPanelSettings as AdminIcon,
   CalendarMonth as CalendarIcon,
   CheckCircle as ApproveIcon,
@@ -48,7 +47,6 @@ import {
   Security as SecurityIcon,
   Note as NoteIcon,
   Speed as PerformanceIcon,
-  GridOn as SheetsIcon,
   Sms as SmsIcon,
   Workspaces as WorkspaceIcon,
   Payment as PSPIcon,
@@ -294,7 +292,6 @@ const MainLayout = () => {
         { text: "CRM", icon: <CrmIcon />, path: "/crm" },
         // { text: "Workspace", icon: <WorkspaceIcon />, path: "/workspace" }, // Temporarily hidden
         { text: "Admin", icon: <AdminIcon />, path: "/admin" },
-        { text: "Payroll", icon: <PaymentIcon />, path: "/payroll" },
         { text: "Finance", icon: <FinanceIcon />, path: "/finance" },
         { text: "Refunds", icon: <RefundsIcon />, path: "/refunds" },
         {
@@ -303,11 +300,6 @@ const MainLayout = () => {
           isExpandable: true,
           key: "erp",
           children: [
-            {
-              text: "Numbers",
-              icon: <SimCardIcon />,
-              path: "/numbers",
-            },
             {
               text: "SMS Gateway",
               icon: <SmsIcon />,
@@ -326,16 +318,6 @@ const MainLayout = () => {
           isExpandable: true,
           key: "schedules",
           children: [
-            {
-              text: "Schedules",
-              icon: <CalendarIcon />,
-              path: "/agent-schedule",
-            },
-            {
-              text: "AM Calendar",
-              icon: <CalendarIcon />,
-              path: "/agent-call-calendar",
-            },
             {
               text: "Approve Calls",
               icon: <ApproveIcon />,
@@ -358,7 +340,6 @@ const MainLayout = () => {
             },
           ],
         },
-        { text: "Sheets", icon: <SheetsIcon />, path: "/sheets" },
       ];
     } else if (user?.role === "affiliate_manager") {
       const affiliateManagerItems = [
@@ -369,44 +350,11 @@ const MainLayout = () => {
         { text: "My Table", icon: <TableIcon />, path: "/my-table" },
         { text: "Targets", icon: <TargetIcon />, path: "/am-targets" },
         {
-          text: "Payroll",
-          icon: <PaymentIcon />,
-          isExpandable: true,
-          key: "payroll",
-          children: [
-            {
-              text: "Agents",
-              icon: <PaymentIcon />,
-              path: "/payroll",
-            },
-            {
-              text: "Pay History",
-              icon: <HistoryIcon />,
-              path: "/payment-history",
-            },
-            {
-              text: "Fines",
-              icon: <GavelIcon />,
-              path: "/fines",
-            },
-          ],
-        },
-        {
           text: "Agents",
           icon: <CalendarIcon />,
           isExpandable: true,
           key: "schedules",
           children: [
-            {
-              text: "Schedules",
-              icon: <CalendarIcon />,
-              path: "/agent-schedule",
-            },
-            {
-              text: "AM Calendar",
-              icon: <CalendarIcon />,
-              path: "/agent-call-calendar",
-            },
             {
               text: "Approve Calls",
               icon: <ApproveIcon />,
@@ -436,7 +384,6 @@ const MainLayout = () => {
           path: "/announcements",
         },
         { text: "Tickets", icon: <TicketIcon />, path: "/tickets" },
-        { text: "Sheets", icon: <SheetsIcon />, path: "/sheets" },
       ];
 
       // Add refunds management if user has permission
@@ -462,42 +409,9 @@ const MainLayout = () => {
           key: "schedules",
           children: [
             {
-              text: "Schedule",
-              icon: <CalendarIcon />,
-              path: "/agent-schedule",
-            },
-            {
-              text: "AM Calendar",
-              icon: <CalendarIcon />,
-              path: "/agent-call-calendar",
-            },
-            {
               text: "Dep. Calls",
               icon: <DepositCallIcon />,
               path: "/deposit-calls",
-            },
-          ],
-        },
-        {
-          text: "Payroll",
-          icon: <PaymentIcon />,
-          isExpandable: true,
-          key: "payroll",
-          children: [
-            {
-              text: "Agents",
-              icon: <PaymentIcon />,
-              path: "/payroll",
-            },
-            {
-              text: "Pay History",
-              icon: <HistoryIcon />,
-              path: "/payment-history",
-            },
-            {
-              text: "Fines",
-              icon: <GavelIcon />,
-              path: "/fines",
             },
           ],
         },
@@ -507,7 +421,6 @@ const MainLayout = () => {
           path: "/announcements",
         },
         { text: "Tickets", icon: <TicketIcon />, path: "/tickets" },
-        { text: "Sheets", icon: <SheetsIcon />, path: "/sheets" },
       ];
     } else if (user?.role === "lead_manager") {
       return [
@@ -526,11 +439,6 @@ const MainLayout = () => {
           isExpandable: true,
           key: "erp",
           children: [
-            {
-              text: "Numbers",
-              icon: <SimCardIcon />,
-              path: "/numbers",
-            },
             {
               text: "SMS Gateway",
               icon: <SmsIcon />,
@@ -598,23 +506,18 @@ const MainLayout = () => {
     "/client-psps": "#5c6bc0",
     "/card-issuers": "#ffa726",
     "/campaigns": "#ef5350",
-    "/payroll": "#4caf50",
     "/finance": "#2e7d32",
     "/affiliate-managers": "#42a5f5",
     "/am-expenses": "#e91e63",
     "/withdrawals": "#ef5350",
     "/refunds": "#e53935",
-    "/numbers": "#26c6da",
     "/sms": "#42a5f5",
     "/am-targets": "#ffa726",
     "/announcements": "#ffb300",
-    "/agent-schedule": "#26a69a",
-    "/agent-call-calendar": "#26a69a",
     "/approve-am-calls": "#66bb6a",
     "/deposit-calls": "#42a5f5",
     "/agent-comments": "#78909c",
     "/tickets": "#ff7043",
-    "/sheets": "#66bb6a",
     "/my-table": "#42a5f5",
     "/notes": "#ffca28",
     "/payment-history": "#78909c",

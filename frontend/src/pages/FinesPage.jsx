@@ -83,6 +83,7 @@ const getRoleLabel = (role) => {
 const FinesPage = () => {
   const user = useSelector(selectUser);
   const isAdmin = user?.role === 'admin';
+  const isManagerOrAdmin = user?.role === 'admin' || user?.role === 'affiliate_manager';
 
   const [fines, setFines] = useState([]);
   const [disputedFines, setDisputedFines] = useState([]);
@@ -93,6 +94,8 @@ const FinesPage = () => {
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(25);
   const [statusFilter, setStatusFilter] = useState('all');
+  const [userFilter, setUserFilter] = useState(null);
+  const [imposedByFilter, setImposedByFilter] = useState(null);
 
   // Admin: apply fine dialog
   const [applyFineOpen, setApplyFineOpen] = useState(false);
@@ -110,7 +113,7 @@ const FinesPage = () => {
       const month = selectedDate.month() + 1;
       const year = selectedDate.year();
 
-      if (isAdmin) {
+      if (isManagerOrAdmin) {
         const data = await getAllAgentFines(year, month);
         setFines(data || []);
       } else {
@@ -123,32 +126,31 @@ const FinesPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [selectedDate, isAdmin, user?._id]);
+  }, [selectedDate, isManagerOrAdmin, user?._id]);
 
   const fetchDisputedFines = useCallback(async () => {
-    if (!isAdmin) return;
+    if (!isManagerOrAdmin) return;
     try {
       const data = await getDisputedFines();
       setDisputedFines(data || []);
     } catch (err) {
       console.error('Error fetching disputed fines:', err);
     }
-  }, [isAdmin]);
+  }, [isManagerOrAdmin]);
 
   const fetchUsers = useCallback(async () => {
-    if (!isAdmin) return;
+    if (!isManagerOrAdmin) return;
     try {
       const response = await api.get('/users?isActive=true&limit=1000');
       if (response.data.success) {
         const users = (response.data.data || [])
-          .filter(u => u._id !== user._id)
           .sort((a, b) => (a.fullName || '').localeCompare(b.fullName || ''));
         setAllUsers(users);
       }
     } catch (err) {
       console.error('Error fetching users:', err);
     }
-  }, [isAdmin, user?._id]);
+  }, [isManagerOrAdmin]);
 
   useEffect(() => {
     fetchFines();
@@ -181,9 +183,17 @@ const FinesPage = () => {
     fetchFines();
   };
 
+  // Derive unique "imposed by" users from current fines for the filter dropdown
+  const imposedByUsers = isManagerOrAdmin
+    ? [...new Map(fines.filter(f => f.imposedBy?._id).map(f => [f.imposedBy._id, f.imposedBy])).values()]
+        .sort((a, b) => (a.fullName || '').localeCompare(b.fullName || ''))
+    : [];
+
   const filteredFines = fines.filter(fine => {
-    if (statusFilter === 'all') return true;
-    return fine.status === statusFilter;
+    if (statusFilter !== 'all' && fine.status !== statusFilter) return false;
+    if (userFilter && fine.agent?._id !== userFilter._id) return false;
+    if (imposedByFilter && fine.imposedBy?._id !== imposedByFilter._id) return false;
+    return true;
   });
 
   const displayFines = tabValue === 1 ? disputedFines : filteredFines;
@@ -191,7 +201,7 @@ const FinesPage = () => {
   return (
     <Box sx={{ p: 3 }}>
       {/* Admin controls */}
-      {isAdmin && (
+      {isManagerOrAdmin && (
         <Paper sx={{ p: 2, mb: 2 }}>
           <Typography variant="subtitle2" gutterBottom>Apply Fine to User</Typography>
           <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
@@ -230,7 +240,7 @@ const FinesPage = () => {
       )}
 
       {/* Tabs for admin */}
-      {isAdmin && (
+      {isManagerOrAdmin && (
         <Paper sx={{ mb: 2 }}>
           <Tabs value={tabValue} onChange={(e, v) => setTabValue(v)}>
             <Tab label="All Fines" />
@@ -253,7 +263,7 @@ const FinesPage = () => {
         <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
           <MonthYearSelector
             selectedDate={selectedDate}
-            onDateChange={setSelectedDate}
+            onDateChange={(d) => { setSelectedDate(d); setPage(0); }}
             showCurrentSelection={false}
             size="small"
           />
@@ -262,7 +272,7 @@ const FinesPage = () => {
               <InputLabel>Status</InputLabel>
               <Select
                 value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
+                onChange={(e) => { setStatusFilter(e.target.value); setPage(0); }}
                 label="Status"
               >
                 <MenuItem value="all">All</MenuItem>
@@ -273,6 +283,32 @@ const FinesPage = () => {
                 <MenuItem value="admin_rejected">Dropped</MenuItem>
               </Select>
             </FormControl>
+          )}
+          {isManagerOrAdmin && tabValue === 0 && (
+            <>
+              <Autocomplete
+                options={allUsers}
+                getOptionLabel={(option) => `${option.fullName} (${getRoleLabel(option.role)})`}
+                value={userFilter}
+                onChange={(_, v) => { setUserFilter(v); setPage(0); }}
+                renderInput={(params) => (
+                  <TextField {...params} label="Fined User" size="small" />
+                )}
+                sx={{ minWidth: 220 }}
+                size="small"
+              />
+              <Autocomplete
+                options={imposedByUsers}
+                getOptionLabel={(option) => option.fullName || ''}
+                value={imposedByFilter}
+                onChange={(_, v) => { setImposedByFilter(v); setPage(0); }}
+                renderInput={(params) => (
+                  <TextField {...params} label="Imposed By" size="small" />
+                )}
+                sx={{ minWidth: 200 }}
+                size="small"
+              />
+            </>
           )}
         </Box>
       </Paper>
@@ -292,8 +328,8 @@ const FinesPage = () => {
           <Table size="small">
             <TableHead>
               <TableRow>
-                {isAdmin && <TableCell>User</TableCell>}
-                {isAdmin && <TableCell>Role</TableCell>}
+                {isManagerOrAdmin && <TableCell>User</TableCell>}
+                {isManagerOrAdmin && <TableCell>Role</TableCell>}
                 <TableCell align="right">Amount</TableCell>
                 <TableCell>Reason</TableCell>
                 <TableCell>Period</TableCell>
@@ -306,7 +342,7 @@ const FinesPage = () => {
             <TableBody>
               {displayFines.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={isAdmin ? 9 : 7} align="center" sx={{ py: 4 }}>
+                  <TableCell colSpan={isManagerOrAdmin ? 9 : 7} align="center" sx={{ py: 4 }}>
                     <Typography color="text.secondary">No fines found</Typography>
                   </TableCell>
                 </TableRow>
@@ -320,10 +356,10 @@ const FinesPage = () => {
                       sx={{ cursor: 'pointer' }}
                       onClick={() => { setDetailFine(fine); setDetailOpen(true); }}
                     >
-                      {isAdmin && (
+                      {isManagerOrAdmin && (
                         <TableCell>{fine.agent?.fullName || 'N/A'}</TableCell>
                       )}
-                      {isAdmin && (
+                      {isManagerOrAdmin && (
                         <TableCell>
                           <Chip
                             label={getRoleLabel(fine.agent?.role)}

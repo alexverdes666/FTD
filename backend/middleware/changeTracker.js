@@ -32,7 +32,6 @@ const ROUTE_MODEL_MAP = {
   "/api/notifications": "Notification",
   "/api/simcards": "SimCard",
   "/api/gateway-devices": "GatewayDevice",
-  "/api/agent-schedule": "AgentSchedule",
   "/api/announcements": "Announcement",
   "/api/am-targets": "AMTarget",
   "/api/deposit-calls": "DepositCall",
@@ -40,7 +39,6 @@ const ROUTE_MODEL_MAP = {
   "/api/affiliate-manager-table": "AffiliateManagerTable",
   "/api/agent-comments": "AgentComment",
   "/api/call-change-requests": "CallChangeRequest",
-  "/api/agent-call-appointments": "AgentCallAppointment",
 };
 
 // Fields to exclude from the previous state (to reduce noise)

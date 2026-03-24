@@ -35,8 +35,8 @@ router.get("/unacknowledged", getUnacknowledgedFines);
 // Get fines pending agent approval (agent gets own, manager/admin get all)
 router.get("/pending-approval", getPendingApprovalFines);
 
-// Get disputed fines for admin review (admin only)
-router.get("/disputed", isAdmin, getDisputedFines);
+// Get disputed fines for admin/manager review
+router.get("/disputed", isManager, getDisputedFines);
 
 // Get fines by lead ID
 router.get("/lead/:leadId", getFinesByLeadId);

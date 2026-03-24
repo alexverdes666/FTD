@@ -21,6 +21,11 @@ const getAllAgentFines = async (req, res) => {
         .populate("agent", "fullName email role")
         .populate("imposedBy", "fullName email")
         .populate("resolvedBy", "fullName email")
+        .populate("images", "_id originalName mimetype processedSize width height")
+        .populate("agentResponse.images", "_id originalName mimetype processedSize width height")
+        .populate("adminDecision.decidedBy", "fullName email")
+        .populate("lead", "firstName lastName email phone")
+        .populate("orderId", "_id createdAt")
         .sort({ imposedDate: -1 });
     } else {
       // Get all active fines (original behavior)
@@ -208,7 +213,7 @@ const createAgentFine = async (req, res) => {
     // Populate the response
     await fine.populate("agent", "fullName email role");
     await fine.populate("imposedBy", "fullName email");
-    await fine.populate("images");
+    await fine.populate("images", "_id originalName mimetype processedSize width height");
     if (fine.lead) {
       await fine.populate("lead", "firstName lastName email phone");
     }
@@ -323,7 +328,7 @@ const updateAgentFine = async (req, res) => {
     // Populate the response
     await fine.populate("agent", "fullName email role");
     await fine.populate("imposedBy", "fullName email");
-    await fine.populate("images");
+    await fine.populate("images", "_id originalName mimetype processedSize width height");
 
     res.json({
       success: true,
@@ -379,7 +384,7 @@ const resolveAgentFine = async (req, res) => {
     await fine.populate("agent", "fullName email role");
     await fine.populate("imposedBy", "fullName email");
     await fine.populate("resolvedBy", "fullName email");
-    await fine.populate("images");
+    await fine.populate("images", "_id originalName mimetype processedSize width height");
 
     res.json({
       success: true,
@@ -496,8 +501,8 @@ const agentRespondToFine = async (req, res) => {
     // Populate the response
     await fine.populate("agent", "fullName email role");
     await fine.populate("imposedBy", "fullName email");
-    await fine.populate("images");
-    await fine.populate("agentResponse.images");
+    await fine.populate("images", "_id originalName mimetype processedSize width height");
+    await fine.populate("agentResponse.images", "_id originalName mimetype processedSize width height");
 
     res.json({
       success: true,
@@ -578,7 +583,7 @@ const adminDecideFine = async (req, res) => {
     await fine.populate("agent", "fullName email role");
     await fine.populate("imposedBy", "fullName email");
     await fine.populate("adminDecision.decidedBy", "fullName email");
-    await fine.populate("images");
+    await fine.populate("images", "_id originalName mimetype processedSize width height");
 
     res.json({
       success: true,

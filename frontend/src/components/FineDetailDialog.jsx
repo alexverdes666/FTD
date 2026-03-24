@@ -348,8 +348,8 @@ const FineDetailDialog = ({ open, onClose, fine, onFineUpdated }) => {
                   </Box>
                 </Typography>
                 <ImageList cols={3} gap={8} sx={{ mt: 1 }}>
-                  {fine.images.map((image) => (
-                    <ImageListItem key={image._id}>
+                  {fine.images.map((image, idx) => (
+                    <ImageListItem key={image._id || image || idx}>
                       <Card
                         sx={{
                           cursor: 'pointer',
@@ -431,8 +431,8 @@ const FineDetailDialog = ({ open, onClose, fine, onFineUpdated }) => {
                       </Box>
                     </Typography>
                     <ImageList cols={3} gap={8} sx={{ mt: 1 }}>
-                      {fine.agentResponse.images.map((image) => (
-                        <ImageListItem key={image._id}>
+                      {fine.agentResponse.images.map((image, idx) => (
+                        <ImageListItem key={image._id || image || idx}>
                           <Card
                             sx={{
                               cursor: 'pointer',

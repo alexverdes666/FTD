@@ -55,7 +55,6 @@ const DisclaimerPage = lazy(() => import("./pages/DisclaimerPage.jsx"));
 const VerificationsPage = lazy(() => import("./pages/VerificationsPage.jsx"));
 const TicketsPage = lazy(() => import("./pages/TicketsPage.jsx"));
 const NotificationsPage = lazy(() => import("./pages/NotificationsPage.jsx"));
-const NumberPage = lazy(() => import("./pages/NumberPage.jsx"));
 const SMSGatewayPage = lazy(() => import("./pages/SMSGatewayPage.jsx"));
 const AccountManagementPage = lazy(() => import("./pages/AccountManagementPage.jsx"));
 const ClientNetworkProfilePage = lazy(() => import("./pages/ClientNetworkProfilePage.jsx"));
@@ -64,8 +63,6 @@ const PSPProfilePage = lazy(() => import("./pages/PSPProfilePage.jsx"));
 const ClientPSPsPage = lazy(() => import("./pages/ClientPSPsPage.jsx"));
 const CardIssuersPage = lazy(() => import("./pages/CardIssuersPage.jsx"));
 // GatewayManagementPage removed - merged into SMSGatewayPage
-const AgentSchedulePage = lazy(() => import("./pages/AgentSchedulePage.jsx"));
-const AgentCallsCalendarPage = lazy(() => import("./pages/AgentCallsCalendarPage.jsx"));
 const ApproveAMCallsPage = lazy(() => import("./pages/ApproveAMCallsPage.jsx"));
 const AnnouncementsPage = lazy(() => import("./pages/AnnouncementsPage.jsx"));
 const AMTargetsPage = lazy(() => import("./pages/AMTargetsPage.jsx"));
@@ -75,7 +72,6 @@ const MobileApprovalPage = lazy(() => import("./pages/MobileApprovalPage.jsx"));
 const MobileActionApprovalPage = lazy(() => import("./pages/MobileActionApprovalPage.jsx"));
 const QRSetupPage = lazy(() => import("./pages/QRSetupPage.jsx"));
 const SearchResultsPage = lazy(() => import("./pages/SearchResultsPage.jsx"));
-const SheetsPage = lazy(() => import("./pages/SheetsPage.jsx"));
 const WorkspacePage = lazy(() => import("./pages/WorkspacePage.jsx"));
 const CrmPage = lazy(() => import("./pages/CrmPage.jsx"));
 const AMExpensesPage = lazy(() => import("./pages/AMExpensesPage.jsx"));
@@ -372,14 +368,6 @@ function AppContent() {
             <Route path="notifications" element={<LazyPage><NotificationsPage /></LazyPage>} />
             <Route path="simcards" element={<Navigate to="/sms" replace />} />
             <Route
-              path="numbers"
-              element={
-                <ProtectedRoute allowedRoles={["admin", "lead_manager"]}>
-                  <LazyPage><NumberPage /></LazyPage>
-                </ProtectedRoute>
-              }
-            />
-            <Route
               path="sms"
               element={
                 <ProtectedRoute allowedRoles={["admin", "inventory_manager", "affiliate_manager", "lead_manager", "refunds_manager"]}>
@@ -422,26 +410,6 @@ function AppContent() {
             <Route
               path="gateway-devices"
               element={<Navigate to="/sms" replace />}
-            />
-            <Route
-              path="agent-schedule"
-              element={
-                <ProtectedRoute
-                  allowedRoles={["agent", "affiliate_manager", "admin"]}
-                >
-                  <LazyPage><AgentSchedulePage /></LazyPage>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="agent-call-calendar"
-              element={
-                <ProtectedRoute
-                  allowedRoles={["agent", "affiliate_manager", "admin"]}
-                >
-                  <LazyPage><AgentCallsCalendarPage /></LazyPage>
-                </ProtectedRoute>
-              }
             />
             <Route
               path="approve-am-calls"
@@ -493,7 +461,6 @@ function AppContent() {
             />
             <Route path="notes" element={<LazyPage><NotesPage /></LazyPage>} />
             <Route path="search" element={<LazyPage><SearchResultsPage /></LazyPage>} />
-            <Route path="sheets" element={<LazyPage><SheetsPage /></LazyPage>} />
             <Route
               path="fines"
               element={
