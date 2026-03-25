@@ -120,4 +120,58 @@ function normalizePhone(phone, countryOrPrefix) {
   return cleaned;
 }
 
-module.exports = { normalizePhone };
+/**
+ * Check if the input is a valid full country name (not an ISO code or abbreviation).
+ */
+function isValidCountryName(name) {
+  if (!name) return false;
+  const trimmed = name.trim();
+  // Reject ISO codes (2-3 letter codes like "UK", "US", "CA", "GBR")
+  if (/^[A-Za-z]{2,3}$/.test(trimmed)) return false;
+  return !!NAME_TO_ISO[trimmed.toLowerCase()];
+}
+
+/**
+ * Get ISO code from a full country name.
+ */
+function getISOFromCountryName(name) {
+  if (!name) return null;
+  return NAME_TO_ISO[name.toLowerCase().trim()] || null;
+}
+
+/**
+ * Validate a phone number (expected national format) for a given country name.
+ * Returns { valid: boolean, nationalNumber: string }
+ */
+function validatePhoneForCountry(phone, countryName) {
+  if (!phone || !countryName) return { valid: false, nationalNumber: "" };
+
+  const isoCode = NAME_TO_ISO[countryName.toLowerCase().trim()];
+  if (!isoCode) return { valid: false, nationalNumber: "" };
+
+  const cleaned = phone.replace(/\D/g, "");
+  if (!cleaned) return { valid: false, nationalNumber: "" };
+
+  try {
+    // Try parsing as national number for the country
+    const parsed = parsePhoneNumber(cleaned, isoCode);
+    if (parsed && parsed.isValid()) {
+      return { valid: true, nationalNumber: parsed.nationalNumber };
+    }
+
+    // If it starts with country code, try as international (user may have included it)
+    const prefixDigits = getCountryCallingCode(isoCode);
+    if (prefixDigits && cleaned.startsWith(prefixDigits)) {
+      const intlParsed = parsePhoneNumber("+" + cleaned);
+      if (intlParsed && intlParsed.isValid() && intlParsed.countryCallingCode === prefixDigits) {
+        return { valid: true, nationalNumber: intlParsed.nationalNumber };
+      }
+    }
+  } catch (e) {
+    // ignore parse errors
+  }
+
+  return { valid: false, nationalNumber: cleaned };
+}
+
+module.exports = { normalizePhone, isValidCountryName, getISOFromCountryName, validatePhoneForCountry };

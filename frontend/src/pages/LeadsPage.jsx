@@ -2704,7 +2704,7 @@ const LeadsPage = () => {
                   </IconButton>
                 </Tooltip>
               )}
-              {isAdminOrManager && (
+              {(isAdminOrManager || isLeadManager) && (
                 <Tooltip title="Import Leads">
                   <IconButton size="small" onClick={() => setImportDialogOpen(true)} sx={{ padding: "3px", color: "info.main" }}>
                     <ImportIcon sx={{ fontSize: 16 }} />

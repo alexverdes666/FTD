@@ -16,7 +16,7 @@ const sessionSecurity = require("../utils/sessionSecurity");
 const LeadAuditLog = require("../models/LeadAuditLog");
 const leadSearchCache = require("../services/leadSearchCache");
 const referenceCache = require("../services/referenceCache");
-const { normalizePhone } = require("../utils/phoneNormalizer");
+const { normalizePhone, isValidCountryName, validatePhoneForCountry } = require("../utils/phoneNormalizer");
 
 // S3 client for resolving verification photo URLs
 const s3Client = new S3Client({
@@ -2235,37 +2235,36 @@ exports.importLeads = async (req, res, next) => {
     }
     const file = req.files.file;
     const fileExtension = file.name.split(".").pop().toLowerCase();
-    if (!["csv", "json"].includes(fileExtension)) {
+    if (fileExtension !== "csv") {
       return res.status(400).json({
         success: false,
-        message: "Please upload a CSV or JSON file",
+        message: "Please upload a CSV file",
       });
     }
-    let leads = [];
-    if (fileExtension === "csv") {
-      const results = [];
-      const stream = Readable.from(file.data.toString());
-      await new Promise((resolve, reject) => {
-        stream
-          .pipe(csvParser())
-          .on("data", (data) => results.push(data))
-          .on("error", (error) => reject(error))
-          .on("end", () => resolve());
+
+    // Parse CSV
+    const results = [];
+    const stream = Readable.from(file.data.toString());
+    await new Promise((resolve, reject) => {
+      stream
+        .pipe(csvParser())
+        .on("data", (data) => results.push(data))
+        .on("error", (error) => reject(error))
+        .on("end", () => resolve());
+    });
+
+    if (results.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "The CSV file is empty",
       });
-      leads = results;
-    } else {
-      try {
-        leads = JSON.parse(file.data.toString());
-        if (!Array.isArray(leads)) {
-          leads = [leads];
-        }
-      } catch (error) {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid JSON format",
-        });
-      }
     }
+
+    const leadType = req.body.leadType || "cold";
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const validStatuses = ["active", "inactive", "contacted", "converted"];
+    const validGenders = ["male", "female", "other"];
+
     const parseDate = (dateString) => {
       if (!dateString) return null;
       const parts = dateString.split("/");
@@ -2273,7 +2272,7 @@ exports.importLeads = async (req, res, next) => {
         const day = parseInt(parts[0]);
         const month = parseInt(parts[1]);
         const year = parseInt(parts[2]);
-        if (!isNaN(day) && !isNaN(month) && !isNaN(year)) {
+        if (!isNaN(day) && !isNaN(month) && !isNaN(year) && day >= 1 && day <= 31 && month >= 1 && month <= 12 && year >= 1900) {
           return new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
         }
       }
@@ -2281,306 +2280,309 @@ exports.importLeads = async (req, res, next) => {
       if (isNaN(parsed.getTime())) return null;
       return new Date(Date.UTC(parsed.getUTCFullYear(), parsed.getUTCMonth(), parsed.getUTCDate(), 12, 0, 0));
     };
-    const normalizeGender = (gender) => {
-      if (!gender) return "not_defined";
-      const genderLower = gender.toLowerCase();
-      if (genderLower === "male" || genderLower === "m") return "male";
-      if (genderLower === "female" || genderLower === "f") return "female";
-      return "not_defined";
-    };
-    const processedLeads = leads.map((lead) => {
-      const leadData = {
-        firstName:
-          lead.firstName ||
-          lead.first_name ||
-          lead["First name"] ||
-          lead["first name"] ||
-          "",
-        lastName:
-          lead.lastName ||
-          lead.last_name ||
-          lead["Last name"] ||
-          lead["last name"] ||
-          "",
-        newEmail:
-          lead.email ||
-          lead.newEmail ||
-          lead.Email ||
-          lead["Email"] ||
-          lead["new email"] ||
-          "",
-        oldEmail: lead.oldEmail || lead["old email"] || "",
-        newPhone:
-          lead.phone ||
-          lead.newPhone ||
-          lead["Phone number"] ||
-          lead["phone number"] ||
-          lead.Phone ||
-          lead["new phone"] ||
-          "",
-        oldPhone: lead.oldPhone || lead["old phone"] || "",
-        country: lead.country || lead.Country || lead.GEO || lead.geo || "",
-        gender: normalizeGender(lead.gender || lead.Gender || ""),
-        prefix: lead.prefix || lead.Prefix || "",
-        dob: parseDate(lead.dob || lead.DOB || lead["Date of birth"] || ""),
-        address: lead.address || lead.Address || "",
-        leadType:
-          req.body.leadType || lead.leadType || lead.lead_type || "cold",
-        createdBy: req.user.id,
-      };
-      const socialMedia = {};
-      if (lead.Facebook || lead.facebook)
-        socialMedia.facebook = lead.Facebook || lead.facebook;
-      if (lead.Twitter || lead.twitter)
-        socialMedia.twitter = lead.Twitter || lead.twitter;
-      if (lead.Linkedin || lead.linkedin)
-        socialMedia.linkedin = lead.Linkedin || lead.linkedin;
-      if (lead.Instagram || lead.instagram)
-        socialMedia.instagram = lead.Instagram || lead.instagram;
-      if (lead.Telegram || lead.telegram)
-        socialMedia.telegram = lead.Telegram || lead.telegram;
-      if (lead.WhatsApp || lead.whatsapp)
-        socialMedia.whatsapp = lead.WhatsApp || lead.whatsapp;
-      if (Object.keys(socialMedia).length > 0) {
-        leadData.socialMedia = socialMedia;
+
+    // ── Phase 1: Validate each lead individually ──
+    const validationErrors = [];
+    const processedLeads = [];
+
+    results.forEach((lead, index) => {
+      const row = index + 2; // 1-indexed + header row
+      const issues = [];
+
+      // Extract fields with flexible header matching
+      const firstName = (lead["First Name"] || lead["First name"] || lead.firstName || lead.first_name || lead["first name"] || "").trim();
+      const lastName = (lead["Last Name"] || lead["Last name"] || lead.lastName || lead.last_name || lead["last name"] || "").trim();
+      const email = (lead.Email || lead.email || lead.newEmail || lead["new email"] || "").trim();
+      const phone = (lead.Phone || lead.phone || lead["Phone number"] || lead["phone number"] || lead.newPhone || "").trim();
+      const country = (lead.Country || lead.country || lead.GEO || lead.geo || "").trim();
+      const gender = (lead.Gender || lead.gender || "").trim().toLowerCase();
+      const dob = (lead["Date of Birth"] || lead["Date of birth"] || lead.dob || lead.DOB || "").trim();
+      const address = (lead.Address || lead.address || "").trim();
+      const status = (lead.Status || lead.status || "").trim().toLowerCase();
+
+      // Required field checks
+      if (!firstName) issues.push("First Name is required");
+      if (!lastName) issues.push("Last Name is required");
+
+      // Email
+      if (!email) {
+        issues.push("Email is required");
+      } else if (!emailRegex.test(email)) {
+        issues.push(`Invalid email format: '${email}'`);
       }
-      const documents = [];
-      const idFront = lead["ID front"] || lead["id front"] || lead.id_front;
-      const idBack = lead["ID back"] || lead["id back"] || lead.id_back;
-      const selfieFront =
-        lead["Selfie front"] || lead["selfie front"] || lead.selfie_front;
-      const selfieBack =
-        lead["Selfie back"] || lead["selfie back"] || lead.selfie_back;
-      if (idFront && idFront.trim()) {
-        documents.push({
-          url: idFront.trim(),
-          description: "ID Front",
-        });
-      }
-      if (idBack && idBack.trim()) {
-        documents.push({
-          url: idBack.trim(),
-          description: "ID Back",
-        });
-      }
-      if (selfieFront && selfieFront.trim()) {
-        documents.push({
-          url: selfieFront.trim(),
-          description: "Selfie with ID Front",
-        });
-      }
-      if (selfieBack && selfieBack.trim()) {
-        documents.push({
-          url: selfieBack.trim(),
-          description: "Selfie with ID Back",
-        });
-      }
-      if (documents.length > 0) {
-        leadData.documents = documents;
-      }
-      if (leadData.leadType === "ftd") {
-        const sinValue =
-          lead.sin || lead.SIN || lead["Social Insurance Number"] || "";
-        if (sinValue && sinValue.trim().length > 0) {
-          leadData.sin = sinValue.trim();
+
+      // Country - must be full country name
+      if (!country) {
+        issues.push("Country is required");
+      } else if (!isValidCountryName(country)) {
+        if (/^[A-Za-z]{2,3}$/.test(country)) {
+          issues.push(`Invalid country '${country}'. Use full country name (e.g., 'United Kingdom', not 'UK')`);
+        } else {
+          issues.push(`Unrecognized country '${country}'. Use full country name (e.g., 'Canada', 'United Kingdom', 'Spain')`);
         }
       }
-      // Normalize phone to strip duplicated country code prefix
-      if (leadData.newPhone && (leadData.prefix || leadData.country)) {
-        leadData.newPhone = normalizePhone(leadData.newPhone, leadData.prefix || leadData.country);
-      }
-      return leadData;
-    });
-    const validLeads = processedLeads.filter(
-      (lead) =>
-        lead.firstName && lead.newEmail && (lead.newPhone || lead.country)
-    );
-    console.log(`Total leads parsed: ${processedLeads.length}`);
-    console.log(`Valid leads after filtering: ${validLeads.length}`);
-    if (processedLeads.length > 0) {
-      console.log("Sample parsed lead:", processedLeads[0]);
-      console.log("Raw lead data sample:", leads[0]);
-    }
-    if (validLeads.length > 0) {
-      console.log("Sample valid lead:", validLeads[0]);
-    } else {
-      console.log("Invalid leads sample (first 5):");
-      processedLeads.slice(0, 5).forEach((lead, index) => {
-        console.log(`Lead ${index + 1}:`, {
-          firstName: lead.firstName,
-          newEmail: lead.newEmail,
-          newPhone: lead.newPhone,
-          country: lead.country,
-          isValid: !!(
-            lead.firstName &&
-            lead.newEmail &&
-            (lead.newPhone || lead.country)
-          ),
-          validationDetails: {
-            hasFirstName: !!lead.firstName,
-            hasEmail: !!lead.newEmail,
-            hasPhoneOrCountry: !!(lead.newPhone || lead.country),
-          },
-        });
-      });
-    }
-    if (validLeads.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: "No valid leads found in the file",
-      });
-    }
-    const BATCH_SIZE = 100;
-    const savedLeads = await batchProcess(
-      validLeads,
-      BATCH_SIZE,
-      async (batch) => {
-        const emails = batch.map((lead) => lead.newEmail);
-        const existingEmails = await Lead.distinct("newEmail", {
-          newEmail: { $in: emails },
-        });
 
-        // Check for existing leads with matching first name and last name
-        const nameChecks = batch.map((lead) => ({
+      // Phone - must be national number without country code
+      if (!phone) {
+        issues.push("Phone is required (without country code)");
+      } else if (country && isValidCountryName(country)) {
+        const phoneResult = validatePhoneForCountry(phone, country);
+        if (!phoneResult.valid) {
+          issues.push(`Invalid phone number '${phone}' for ${country}`);
+        }
+      }
+
+      // Gender
+      if (!gender) {
+        issues.push("Gender is required (male/female/other)");
+      } else if (!validGenders.includes(gender)) {
+        issues.push(`Invalid gender '${gender}'. Must be male, female, or other`);
+      }
+
+      // DOB
+      if (!dob) {
+        issues.push("Date of Birth is required (DD/MM/YYYY)");
+      } else if (!parseDate(dob)) {
+        issues.push(`Invalid Date of Birth '${dob}'. Use DD/MM/YYYY format`);
+      }
+
+      // Address
+      if (!address) issues.push("Address is required");
+
+      // Status
+      if (!status) {
+        issues.push("Status is required (active/inactive/contacted/converted)");
+      } else if (!validStatuses.includes(status)) {
+        issues.push(`Invalid status '${status}'. Must be one of: active, inactive, contacted, converted`);
+      }
+
+      // Documents - at least one required
+      const idFront = (lead["ID Front"] || lead["ID front"] || lead["id front"] || lead.id_front || "").trim();
+      const idBack = (lead["ID Back"] || lead["ID back"] || lead["id back"] || lead.id_back || "").trim();
+      const selfie = (lead["Selfie"] || lead["selfie"] || lead["Selfie front"] || lead["selfie front"] || "").trim();
+      const idFrontWithSelfie = (lead["ID Front with Selfie"] || lead["ID front with Selfie"] || lead["id front with selfie"] || lead["Selfie back"] || lead["selfie back"] || "").trim();
+
+      const documents = [];
+      if (idFront) documents.push({ url: idFront, description: "ID Front" });
+      if (idBack) documents.push({ url: idBack, description: "ID Back" });
+      if (selfie) documents.push({ url: selfie, description: "Selfie" });
+      if (idFrontWithSelfie) documents.push({ url: idFrontWithSelfie, description: "ID Front with Selfie" });
+
+      if (documents.length === 0) {
+        issues.push("At least one document is required (ID Front, ID Back, Selfie, or ID Front with Selfie)");
+      }
+
+      if (issues.length > 0) {
+        validationErrors.push({ row, firstName: firstName || "(empty)", lastName: lastName || "(empty)", issues });
+      } else {
+        // Build valid lead object
+        const normalizedGender = gender === "other" ? "not_defined" : gender;
+        const phoneResult = validatePhoneForCountry(phone, country);
+        const normalizedPhone = phoneResult.valid ? phoneResult.nationalNumber : normalizePhone(phone, country);
+
+        const leadData = {
+          firstName,
+          lastName,
+          newEmail: email.toLowerCase(),
+          newPhone: normalizedPhone,
+          country,
+          gender: normalizedGender,
+          dob: parseDate(dob),
+          address,
+          status,
+          leadType,
+          documents,
+          createdBy: req.user.id,
+        };
+
+        // SIN is optional
+        const sinValue = (lead.SIN || lead.sin || lead["Social Insurance Number"] || "").trim();
+        if (sinValue) leadData.sin = sinValue;
+
+        // Social media (optional)
+        const socialMedia = {};
+        if (lead.Facebook || lead.facebook) socialMedia.facebook = lead.Facebook || lead.facebook;
+        if (lead.Twitter || lead.twitter) socialMedia.twitter = lead.Twitter || lead.twitter;
+        if (lead.Linkedin || lead.linkedin) socialMedia.linkedin = lead.Linkedin || lead.linkedin;
+        if (lead.Instagram || lead.instagram) socialMedia.instagram = lead.Instagram || lead.instagram;
+        if (lead.Telegram || lead.telegram) socialMedia.telegram = lead.Telegram || lead.telegram;
+        if (lead.WhatsApp || lead.whatsapp) socialMedia.whatsapp = lead.WhatsApp || lead.whatsapp;
+        if (Object.keys(socialMedia).length > 0) leadData.socialMedia = socialMedia;
+
+        // Prefix (optional)
+        const prefix = (lead.Prefix || lead.prefix || "").trim();
+        if (prefix) leadData.prefix = prefix;
+
+        processedLeads.push({ _row: row, ...leadData });
+      }
+    });
+
+    // ── Phase 2: Check for within-CSV duplicates ──
+    const seenEmails = new Map();
+    const seenNames = new Map();
+    const seenPhones = new Map();
+
+    processedLeads.forEach((lead) => {
+      const emailKey = lead.newEmail.toLowerCase();
+      const nameKey = `${lead.firstName.toLowerCase()}|${lead.lastName.toLowerCase()}`;
+      const phoneKey = lead.newPhone;
+
+      if (seenEmails.has(emailKey)) {
+        validationErrors.push({
+          row: lead._row,
           firstName: lead.firstName,
           lastName: lead.lastName,
-        }));
-
-        const existingNameCombinations = await Lead.find({
-          $or: nameChecks,
-        }).select("firstName lastName newEmail");
-
-        const existingNamePairs = new Set(
-          existingNameCombinations.map(
-            (lead) =>
-              `${lead.firstName.toLowerCase()}|${lead.lastName.toLowerCase()}`
-          )
-        );
-
-        console.log(`Batch processing: ${batch.length} leads in batch`);
-        console.log(
-          `Found ${existingEmails.length} existing emails:`,
-          existingEmails.slice(0, 5)
-        );
-        console.log(
-          `Found ${existingNamePairs.size} existing name combinations:`,
-          Array.from(existingNamePairs).slice(0, 5)
-        );
-
-        const newLeads = batch.filter((lead) => {
-          const emailExists = existingEmails.includes(lead.newEmail);
-          const nameExists = existingNamePairs.has(
-            `${lead.firstName.toLowerCase()}|${lead.lastName.toLowerCase()}`
-          );
-
-          if (emailExists) {
-            console.log(`Skipping lead with duplicate email: ${lead.newEmail}`);
-          }
-          if (nameExists) {
-            console.log(
-              `Skipping lead with duplicate name: ${lead.firstName} ${lead.lastName}`
-            );
-          }
-
-          return !emailExists && !nameExists;
+          issues: [`Duplicate email '${lead.newEmail}' — same as row ${seenEmails.get(emailKey)}`],
         });
-        console.log(
-          `After duplicate filtering: ${newLeads.length} new leads to insert`
-        );
-        if (newLeads.length === 0) {
-          console.log("No new leads to insert - all were duplicates");
-          return [];
-        }
-        console.log(`Inserting ${newLeads.length} new leads...`);
-        try {
-          const result = await Lead.insertMany(newLeads, {
-            ordered: false, // Continue inserting even if some fail
-            rawResult: true,
-          });
-          console.log("Insert result:", result);
-
-          // Handle validation errors
-          if (
-            result.mongoose &&
-            result.mongoose.validationErrors &&
-            result.mongoose.validationErrors.length > 0
-          ) {
-            console.log("Validation errors found:");
-            result.mongoose.validationErrors
-              .slice(0, 3)
-              .forEach((error, index) => {
-                console.log(`Validation error ${index + 1}:`, error.message);
-                console.log("Error details:", error);
-              });
-          }
-
-          return result;
-        } catch (error) {
-          // Handle bulk write errors (including duplicates)
-          if (error.name === "BulkWriteError" || error.code === 11000) {
-            console.log(
-              `Bulk write completed with ${
-                error.result?.nInserted || 0
-              } successful insertions`
-            );
-            console.log(
-              `${error.writeErrors?.length || 0} duplicates were skipped`
-            );
-
-            return {
-              insertedCount: error.result?.nInserted || 0,
-              writeErrors: error.writeErrors || [],
-            };
-          }
-          throw error; // Re-throw other errors
-        }
+      } else {
+        seenEmails.set(emailKey, lead._row);
       }
-    );
-    let importCount = 0;
-    let duplicateCount = 0;
 
-    savedLeads.forEach((result) => {
-      if (result.insertedCount) {
-        importCount += result.insertedCount;
-      }
-      // Handle any duplicates that were caught at the database level
-      if (result.writeErrors) {
-        result.writeErrors.forEach((error) => {
-          if (error.code === 11000) {
-            duplicateCount++;
-          }
+      if (seenNames.has(nameKey) && !validationErrors.find((e) => e.row === lead._row)) {
+        validationErrors.push({
+          row: lead._row,
+          firstName: lead.firstName,
+          lastName: lead.lastName,
+          issues: [`Duplicate name '${lead.firstName} ${lead.lastName}' — same as row ${seenNames.get(nameKey)}`],
         });
+      } else if (!seenNames.has(nameKey)) {
+        seenNames.set(nameKey, lead._row);
+      }
+
+      if (phoneKey && seenPhones.has(phoneKey) && !validationErrors.find((e) => e.row === lead._row)) {
+        validationErrors.push({
+          row: lead._row,
+          firstName: lead.firstName,
+          lastName: lead.lastName,
+          issues: [`Duplicate phone '${lead.newPhone}' — same as row ${seenPhones.get(phoneKey)}`],
+        });
+      } else if (phoneKey && !seenPhones.has(phoneKey)) {
+        seenPhones.set(phoneKey, lead._row);
       }
     });
 
-    const totalProcessed = validLeads.length;
-    const skippedCount = totalProcessed - importCount - duplicateCount;
+    // Return validation errors if any
+    if (validationErrors.length > 0) {
+      validationErrors.sort((a, b) => a.row - b.row);
+      return res.status(400).json({
+        success: false,
+        message: `${validationErrors.length} out of ${results.length} leads have validation errors. Please fix the issues and re-upload.`,
+        validationErrors,
+      });
+    }
+
+    // ── Phase 3: Database duplicate detection ──
+    // Remove internal _row field and collect data for duplicate checks
+    const leadsToImport = processedLeads.map(({ _row, ...lead }) => lead);
+    const rowMap = processedLeads.map((l) => l._row);
+
+    const emails = leadsToImport.map((l) => l.newEmail);
+    const phones = leadsToImport.map((l) => l.newPhone).filter(Boolean);
+    const addresses = leadsToImport.map((l) => l.address).filter(Boolean);
+    const allDocUrls = leadsToImport.flatMap((l) => (l.documents || []).map((d) => d.url));
+    const nameChecks = leadsToImport.map((l) => ({
+      firstName: { $regex: new RegExp(`^${l.firstName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") },
+      lastName: { $regex: new RegExp(`^${l.lastName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") },
+    }));
+
+    // Run all duplicate checks in parallel
+    const [existingByEmail, existingByName, existingByPhone, existingByDocUrl, existingByAddress] = await Promise.all([
+      emails.length > 0
+        ? Lead.find({ newEmail: { $in: emails } }).select("newEmail").lean()
+        : [],
+      nameChecks.length > 0
+        ? Lead.find({ $or: nameChecks }).select("firstName lastName").lean()
+        : [],
+      phones.length > 0
+        ? Lead.find({ newPhone: { $in: phones } }).select("newPhone").lean()
+        : [],
+      allDocUrls.length > 0
+        ? Lead.find({ "documents.url": { $in: allDocUrls } }).select("documents").lean()
+        : [],
+      addresses.length > 0
+        ? Lead.find({
+            $or: addresses.map((a) => ({
+              address: { $regex: new RegExp(`^${a.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") },
+            })),
+          }).select("address").lean()
+        : [],
+    ]);
+
+    const existingEmailSet = new Set(existingByEmail.map((l) => l.newEmail.toLowerCase()));
+    const existingNameSet = new Set(existingByName.map((l) => `${l.firstName.toLowerCase()}|${l.lastName.toLowerCase()}`));
+    const existingPhoneSet = new Set(existingByPhone.map((l) => l.newPhone));
+    const existingDocUrlSet = new Set(existingByDocUrl.flatMap((l) => (l.documents || []).map((d) => d.url)));
+    const existingAddressSet = new Set(existingByAddress.map((l) => l.address.toLowerCase().trim()));
+
+    const duplicateDetails = [];
+    const newLeads = [];
+
+    leadsToImport.forEach((lead, idx) => {
+      const reasons = [];
+      if (existingEmailSet.has(lead.newEmail.toLowerCase())) reasons.push(`Email '${lead.newEmail}' already exists`);
+      if (existingNameSet.has(`${lead.firstName.toLowerCase()}|${lead.lastName.toLowerCase()}`)) reasons.push(`Name '${lead.firstName} ${lead.lastName}' already exists`);
+      if (lead.newPhone && existingPhoneSet.has(lead.newPhone)) reasons.push(`Phone '${lead.newPhone}' already exists`);
+      if (lead.address && existingAddressSet.has(lead.address.toLowerCase().trim())) reasons.push(`Address already exists`);
+      const matchedDoc = (lead.documents || []).find((d) => existingDocUrlSet.has(d.url));
+      if (matchedDoc) reasons.push(`Document URL already exists (${matchedDoc.description})`);
+
+      if (reasons.length > 0) {
+        duplicateDetails.push({ row: rowMap[idx], firstName: lead.firstName, lastName: lead.lastName, reasons });
+      } else {
+        newLeads.push(lead);
+      }
+    });
+
+    if (newLeads.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: `All ${leadsToImport.length} leads are duplicates of existing records.`,
+        duplicateDetails,
+      });
+    }
+
+    // ── Phase 4: Batch insert ──
+    const BATCH_SIZE = 100;
+    let importCount = 0;
+    let dbDuplicateCount = 0;
+
+    for (let i = 0; i < newLeads.length; i += BATCH_SIZE) {
+      const batch = newLeads.slice(i, i + BATCH_SIZE);
+      try {
+        const result = await Lead.insertMany(batch, { ordered: false, rawResult: true });
+        importCount += result.insertedCount || 0;
+      } catch (error) {
+        if (error.name === "BulkWriteError" || error.code === 11000) {
+          importCount += error.result?.nInserted || 0;
+          dbDuplicateCount += error.writeErrors?.length || 0;
+        } else {
+          throw error;
+        }
+      }
+      if (i + BATCH_SIZE < newLeads.length) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+    }
 
     leadSearchCache.clearCache();
 
+    const totalDuplicates = duplicateDetails.length + dbDuplicateCount;
     res.status(200).json({
       success: true,
-      message: `${importCount} leads imported successfully. ${
-        skippedCount + duplicateCount
-      } duplicates were skipped.`,
+      message: `${importCount} leads imported successfully.${totalDuplicates > 0 ? ` ${totalDuplicates} duplicates were skipped.` : ""}`,
       stats: {
         imported: importCount,
-        duplicatesSkipped: skippedCount + duplicateCount,
-        totalProcessed: totalProcessed,
+        duplicatesSkipped: totalDuplicates,
+        totalProcessed: results.length,
       },
+      duplicateDetails: duplicateDetails.length > 0 ? duplicateDetails : undefined,
     });
   } catch (error) {
-    // Only return error for actual system errors, not duplicates
     if (error.code === 11000) {
-      // This shouldn't happen now since we pre-filter, but just in case
       return res.status(200).json({
         success: true,
         message: "Import completed. Some leads were skipped due to duplicates.",
-        stats: {
-          imported: 0,
-          duplicatesSkipped: validLeads.length,
-          totalProcessed: validLeads.length,
-        },
+        stats: { imported: 0, duplicatesSkipped: 0, totalProcessed: 0 },
       });
     }
     next(error);
