@@ -127,16 +127,22 @@ async function runImport(csvString, leadType = "ftd") {
     if (!status) issues.push("Status is required");
     else if (!validStatuses.includes(status)) issues.push(`Invalid status '${status}'`);
 
-    const idFront = (lead["ID Front"] || "").trim();
-    const idBack = (lead["ID Back"] || "").trim();
-    const selfie = (lead["Selfie"] || "").trim();
-    const idFrontSelfie = (lead["ID Front with Selfie"] || "").trim();
+    // Documents - flexible Doc 1..10 URL/Description pairs
     const documents = [];
-    if (idFront) documents.push({ url: idFront, description: "ID Front" });
-    if (idBack) documents.push({ url: idBack, description: "ID Back" });
-    if (selfie) documents.push({ url: selfie, description: "Selfie" });
-    if (idFrontSelfie) documents.push({ url: idFrontSelfie, description: "ID Front with Selfie" });
-    if (documents.length === 0) issues.push("At least one document is required");
+    for (let d = 1; d <= 10; d++) {
+      const url = (lead[`Doc ${d} URL`] || lead[`doc ${d} url`] || "").trim();
+      const description = (lead[`Doc ${d} Description`] || lead[`doc ${d} description`] || "").trim();
+      if (url && description) {
+        documents.push({ url, description });
+      } else if (url && !description) {
+        issues.push(`Doc ${d} has a URL but no Description`);
+      } else if (!url && description) {
+        issues.push(`Doc ${d} has a Description but no URL`);
+      }
+    }
+    if (documents.length === 0 && !issues.some(i => i.startsWith("Doc "))) {
+      issues.push("At least one document is required");
+    }
 
     if (issues.length > 0) {
       validationErrors.push({ row, firstName: firstName || "(empty)", lastName: lastName || "(empty)", issues });
@@ -247,10 +253,10 @@ async function runImport(csvString, leadType = "ftd") {
 // TEST SUITES
 // ═══════════════════════════════════════════════════════════
 
-const VALID_CSV = `First Name,Last Name,Email,Phone,Country,Gender,Date of Birth,Address,Status,ID Front,ID Back,Selfie,ID Front with Selfie,SIN
-John,Doe,john.doe@example.com,6045551234,Canada,male,15/01/1990,"123 Main Street, Toronto, ON",active,https://example.com/id-front1.jpg,https://example.com/id-back1.jpg,,,
-Jane,Smith,jane.smith@example.com,7911123456,United Kingdom,female,20/02/1985,"456 High Street, London",contacted,https://example.com/id-front2.jpg,https://example.com/id-back2.jpg,https://example.com/selfie2.jpg,,
-Carlos,Garcia,carlos.garcia@example.com,612345678,Spain,other,10/06/1992,"Calle Gran Via 1, Madrid",active,https://example.com/id-front3.jpg,,,,`;
+const VALID_CSV = `First Name,Last Name,Email,Phone,Country,Gender,Date of Birth,Address,Status,Doc 1 URL,Doc 1 Description,Doc 2 URL,Doc 2 Description,Doc 3 URL,Doc 3 Description
+John,Doe,john.doe@example.com,6045551234,Canada,male,15/01/1990,"123 Main Street, Toronto, ON",active,https://example.com/id-front1.jpg,ID Front,https://example.com/id-back1.jpg,ID Back,,
+Jane,Smith,jane.smith@example.com,7911123456,United Kingdom,female,20/02/1985,"456 High Street, London",contacted,https://example.com/id-front2.jpg,ID Front,https://example.com/id-back2.jpg,ID Back,https://example.com/selfie2.jpg,Selfie
+Carlos,Garcia,carlos.garcia@example.com,612345678,Spain,other,10/06/1992,"Calle Gran Via 1, Madrid",active,https://example.com/id-front3.jpg,ID Front,,,,`;
 
 describe("Import Leads - Valid Data", () => {
   test("should import 3 valid leads successfully", async () => {
@@ -292,10 +298,10 @@ describe("Import Leads - Valid Data", () => {
 
 describe("Import Leads - Invalid/Partial Data", () => {
   test("should reject leads with missing required fields", async () => {
-    const csv = `First Name,Last Name,Email,Phone,Country,Gender,Date of Birth,Address,Status,ID Front
-,Doe,john@example.com,6045551234,Canada,male,15/01/1990,"123 Main St",active,https://example.com/id.jpg
-John,,john2@example.com,6045551235,Canada,male,15/01/1990,"124 Main St",active,https://example.com/id2.jpg
-John,Valid,valid@example.com,6045551236,Canada,male,15/01/1990,"125 Main St",active,https://example.com/id3.jpg`;
+    const csv = `First Name,Last Name,Email,Phone,Country,Gender,Date of Birth,Address,Status,Doc 1 URL,Doc 1 Description
+,Doe,john@example.com,6045551234,Canada,male,15/01/1990,"123 Main St",active,https://example.com/id.jpg,ID Front
+John,,john2@example.com,6045551235,Canada,male,15/01/1990,"124 Main St",active,https://example.com/id2.jpg,ID Front
+John,Valid,valid@example.com,6045551236,Canada,male,15/01/1990,"125 Main St",active,https://example.com/id3.jpg,ID Front`;
 
     const result = await runImport(csv, "ftd");
     expect(result.success).toBe(false);
@@ -305,8 +311,8 @@ John,Valid,valid@example.com,6045551236,Canada,male,15/01/1990,"125 Main St",act
   });
 
   test("should reject 'UK' as country — must use 'United Kingdom'", async () => {
-    const csv = `First Name,Last Name,Email,Phone,Country,Gender,Date of Birth,Address,Status,ID Front
-John,Doe,john@example.com,7911123456,UK,male,15/01/1990,"123 Main St",active,https://example.com/id.jpg`;
+    const csv = `First Name,Last Name,Email,Phone,Country,Gender,Date of Birth,Address,Status,Doc 1 URL,Doc 1 Description
+John,Doe,john@example.com,7911123456,UK,male,15/01/1990,"123 Main St",active,https://example.com/id.jpg,ID Front`;
 
     const result = await runImport(csv, "ftd");
     expect(result.success).toBe(false);
@@ -316,10 +322,10 @@ John,Doe,john@example.com,7911123456,UK,male,15/01/1990,"123 Main St",active,htt
   });
 
   test("should reject 'US', 'CA', 'ES' as country codes", async () => {
-    const csv = `First Name,Last Name,Email,Phone,Country,Gender,Date of Birth,Address,Status,ID Front
-John,Doe,john1@example.com,6045551234,CA,male,15/01/1990,"123 Main St",active,https://example.com/id1.jpg
-Jane,Smith,jane1@example.com,2025551234,US,female,15/01/1990,"124 Main St",active,https://example.com/id2.jpg
-Carlos,Garcia,carlos1@example.com,612345678,ES,male,15/01/1990,"125 Main St",active,https://example.com/id3.jpg`;
+    const csv = `First Name,Last Name,Email,Phone,Country,Gender,Date of Birth,Address,Status,Doc 1 URL,Doc 1 Description
+John,Doe,john1@example.com,6045551234,CA,male,15/01/1990,"123 Main St",active,https://example.com/id1.jpg,ID Front
+Jane,Smith,jane1@example.com,2025551234,US,female,15/01/1990,"124 Main St",active,https://example.com/id2.jpg,ID Front
+Carlos,Garcia,carlos1@example.com,612345678,ES,male,15/01/1990,"125 Main St",active,https://example.com/id3.jpg,ID Front`;
 
     const result = await runImport(csv, "ftd");
     expect(result.success).toBe(false);
@@ -330,10 +336,10 @@ Carlos,Garcia,carlos1@example.com,612345678,ES,male,15/01/1990,"125 Main St",act
   });
 
   test("should reject made-up country names like 'United Spain', 'Canadia'", async () => {
-    const csv = `First Name,Last Name,Email,Phone,Country,Gender,Date of Birth,Address,Status,ID Front
-John,Doe,john1@example.com,6045551234,United Spain,male,15/01/1990,"123 Main St",active,https://example.com/id1.jpg
-Jane,Smith,jane1@example.com,7911123456,Canadia,female,15/01/1990,"124 Main St",active,https://example.com/id2.jpg
-Carlos,Garcia,carlos1@example.com,612345678,Españia,male,15/01/1990,"125 Main St",active,https://example.com/id3.jpg`;
+    const csv = `First Name,Last Name,Email,Phone,Country,Gender,Date of Birth,Address,Status,Doc 1 URL,Doc 1 Description
+John,Doe,john1@example.com,6045551234,United Spain,male,15/01/1990,"123 Main St",active,https://example.com/id1.jpg,ID Front
+Jane,Smith,jane1@example.com,7911123456,Canadia,female,15/01/1990,"124 Main St",active,https://example.com/id2.jpg,ID Front
+Carlos,Garcia,carlos1@example.com,612345678,Españia,male,15/01/1990,"125 Main St",active,https://example.com/id3.jpg,ID Front`;
 
     const result = await runImport(csv, "ftd");
     expect(result.success).toBe(false);
@@ -344,8 +350,8 @@ Carlos,Garcia,carlos1@example.com,612345678,Españia,male,15/01/1990,"125 Main S
   });
 
   test("should reject invalid email format", async () => {
-    const csv = `First Name,Last Name,Email,Phone,Country,Gender,Date of Birth,Address,Status,ID Front
-John,Doe,notanemail,6045551234,Canada,male,15/01/1990,"123 Main St",active,https://example.com/id.jpg`;
+    const csv = `First Name,Last Name,Email,Phone,Country,Gender,Date of Birth,Address,Status,Doc 1 URL,Doc 1 Description
+John,Doe,notanemail,6045551234,Canada,male,15/01/1990,"123 Main St",active,https://example.com/id.jpg,ID Front`;
 
     const result = await runImport(csv, "ftd");
     expect(result.success).toBe(false);
@@ -353,8 +359,8 @@ John,Doe,notanemail,6045551234,Canada,male,15/01/1990,"123 Main St",active,https
   });
 
   test("should reject invalid phone number", async () => {
-    const csv = `First Name,Last Name,Email,Phone,Country,Gender,Date of Birth,Address,Status,ID Front
-John,Doe,john@example.com,123,Canada,male,15/01/1990,"123 Main St",active,https://example.com/id.jpg`;
+    const csv = `First Name,Last Name,Email,Phone,Country,Gender,Date of Birth,Address,Status,Doc 1 URL,Doc 1 Description
+John,Doe,john@example.com,123,Canada,male,15/01/1990,"123 Main St",active,https://example.com/id.jpg,ID Front`;
 
     const result = await runImport(csv, "ftd");
     expect(result.success).toBe(false);
@@ -362,8 +368,8 @@ John,Doe,john@example.com,123,Canada,male,15/01/1990,"123 Main St",active,https:
   });
 
   test("should reject invalid gender — only male/female/other allowed", async () => {
-    const csv = `First Name,Last Name,Email,Phone,Country,Gender,Date of Birth,Address,Status,ID Front
-John,Doe,john@example.com,6045551234,Canada,unknown,15/01/1990,"123 Main St",active,https://example.com/id.jpg`;
+    const csv = `First Name,Last Name,Email,Phone,Country,Gender,Date of Birth,Address,Status,Doc 1 URL,Doc 1 Description
+John,Doe,john@example.com,6045551234,Canada,unknown,15/01/1990,"123 Main St",active,https://example.com/id.jpg,ID Front`;
 
     const result = await runImport(csv, "ftd");
     expect(result.success).toBe(false);
@@ -371,8 +377,8 @@ John,Doe,john@example.com,6045551234,Canada,unknown,15/01/1990,"123 Main St",act
   });
 
   test("should reject invalid status", async () => {
-    const csv = `First Name,Last Name,Email,Phone,Country,Gender,Date of Birth,Address,Status,ID Front
-John,Doe,john@example.com,6045551234,Canada,male,15/01/1990,"123 Main St",pending,https://example.com/id.jpg`;
+    const csv = `First Name,Last Name,Email,Phone,Country,Gender,Date of Birth,Address,Status,Doc 1 URL,Doc 1 Description
+John,Doe,john@example.com,6045551234,Canada,male,15/01/1990,"123 Main St",pending,https://example.com/id.jpg,ID Front`;
 
     const result = await runImport(csv, "ftd");
     expect(result.success).toBe(false);
@@ -380,8 +386,8 @@ John,Doe,john@example.com,6045551234,Canada,male,15/01/1990,"123 Main St",pendin
   });
 
   test("should reject invalid date of birth", async () => {
-    const csv = `First Name,Last Name,Email,Phone,Country,Gender,Date of Birth,Address,Status,ID Front
-John,Doe,john@example.com,6045551234,Canada,male,not-a-date,"123 Main St",active,https://example.com/id.jpg`;
+    const csv = `First Name,Last Name,Email,Phone,Country,Gender,Date of Birth,Address,Status,Doc 1 URL,Doc 1 Description
+John,Doe,john@example.com,6045551234,Canada,male,not-a-date,"123 Main St",active,https://example.com/id.jpg,ID Front`;
 
     const result = await runImport(csv, "ftd");
     expect(result.success).toBe(false);
@@ -389,7 +395,7 @@ John,Doe,john@example.com,6045551234,Canada,male,not-a-date,"123 Main St",active
   });
 
   test("should reject lead with no documents", async () => {
-    const csv = `First Name,Last Name,Email,Phone,Country,Gender,Date of Birth,Address,Status,ID Front
+    const csv = `First Name,Last Name,Email,Phone,Country,Gender,Date of Birth,Address,Status,Doc 1 URL,Doc 1 Description
 John,Doe,john@example.com,6045551234,Canada,male,15/01/1990,"123 Main St",active,`;
 
     const result = await runImport(csv, "ftd");
@@ -398,7 +404,7 @@ John,Doe,john@example.com,6045551234,Canada,male,15/01/1990,"123 Main St",active
   });
 
   test("should collect ALL errors for a single lead with multiple issues", async () => {
-    const csv = `First Name,Last Name,Email,Phone,Country,Gender,Date of Birth,Address,Status,ID Front
+    const csv = `First Name,Last Name,Email,Phone,Country,Gender,Date of Birth,Address,Status,Doc 1 URL,Doc 1 Description
 ,,badmail,123,UK,unknown,not-a-date,,pending,`;
 
     const result = await runImport(csv, "ftd");
@@ -408,10 +414,33 @@ John,Doe,john@example.com,6045551234,Canada,male,15/01/1990,"123 Main St",active
     // Should have: First Name, Last Name, email, country, phone (skipped since country invalid), gender, DOB, address, status, document
   });
 
+  test("should reject doc URL without description", async () => {
+    const csv = `First Name,Last Name,Email,Phone,Country,Gender,Date of Birth,Address,Status,Doc 1 URL,Doc 1 Description
+John,Doe,john@example.com,6045551234,Canada,male,15/01/1990,"123 Main St",active,https://example.com/id.jpg,`;
+
+    const result = await runImport(csv, "ftd");
+    expect(result.success).toBe(false);
+    expect(result.validationErrors[0].issues[0]).toMatch(/Doc 1 has a URL but no Description/);
+  });
+
+  test("should support multiple documents (up to 10)", async () => {
+    const csv = `First Name,Last Name,Email,Phone,Country,Gender,Date of Birth,Address,Status,Doc 1 URL,Doc 1 Description,Doc 2 URL,Doc 2 Description,Doc 3 URL,Doc 3 Description,Doc 4 URL,Doc 4 Description,Doc 5 URL,Doc 5 Description
+John,Doe,john@example.com,6045551234,Canada,male,15/01/1990,"123 Main St",active,https://example.com/front.jpg,ID Front,https://example.com/back.jpg,ID Back,https://example.com/selfie.jpg,Selfie,https://example.com/frontselfie.jpg,ID Front with Selfie,https://example.com/backselfie.jpg,ID Back with Selfie`;
+
+    const result = await runImport(csv, "ftd");
+    expect(result.success).toBe(true);
+    expect(result.stats.imported).toBe(1);
+
+    const lead = await Lead.findOne({ firstName: "John" });
+    expect(lead.documents).toHaveLength(5);
+    expect(lead.documents[0].description).toBe("ID Front");
+    expect(lead.documents[4].description).toBe("ID Back with Selfie");
+  });
+
   test("should reject within-CSV duplicate emails", async () => {
-    const csv = `First Name,Last Name,Email,Phone,Country,Gender,Date of Birth,Address,Status,ID Front
-John,Doe,same@example.com,6045551234,Canada,male,15/01/1990,"123 Main St",active,https://example.com/id1.jpg
-Jane,Smith,same@example.com,7911123456,United Kingdom,female,20/02/1985,"456 High St",contacted,https://example.com/id2.jpg`;
+    const csv = `First Name,Last Name,Email,Phone,Country,Gender,Date of Birth,Address,Status,Doc 1 URL,Doc 1 Description
+John,Doe,same@example.com,6045551234,Canada,male,15/01/1990,"123 Main St",active,https://example.com/id1.jpg,ID Front
+Jane,Smith,same@example.com,7911123456,United Kingdom,female,20/02/1985,"456 High St",contacted,https://example.com/id2.jpg,ID Front`;
 
     const result = await runImport(csv, "ftd");
     expect(result.success).toBe(false);
@@ -456,8 +485,8 @@ describe("Import Leads - Duplicate Detection (DB)", () => {
       address: "Totally Different Address",
     });
 
-    const csv = `First Name,Last Name,Email,Phone,Country,Gender,Date of Birth,Address,Status,ID Front
-John,Doe,john.doe@example.com,6045551234,Canada,male,15/01/1990,"123 Main St",active,https://example.com/id.jpg`;
+    const csv = `First Name,Last Name,Email,Phone,Country,Gender,Date of Birth,Address,Status,Doc 1 URL,Doc 1 Description
+John,Doe,john.doe@example.com,6045551234,Canada,male,15/01/1990,"123 Main St",active,https://example.com/id.jpg,ID Front`;
 
     const result = await runImport(csv, "ftd");
     expect(result.success).toBe(false);
@@ -472,8 +501,8 @@ John,Doe,john.doe@example.com,6045551234,Canada,male,15/01/1990,"123 Main St",ac
       status: "active", createdBy: adminUser._id,
     });
 
-    const csv = `First Name,Last Name,Email,Phone,Country,Gender,Date of Birth,Address,Status,ID Front
-John,Doe,john.new@example.com,6045551234,Canada,male,15/01/1990,"123 Main St",active,https://example.com/id.jpg`;
+    const csv = `First Name,Last Name,Email,Phone,Country,Gender,Date of Birth,Address,Status,Doc 1 URL,Doc 1 Description
+John,Doe,john.new@example.com,6045551234,Canada,male,15/01/1990,"123 Main St",active,https://example.com/id.jpg,ID Front`;
 
     const result = await runImport(csv, "ftd");
     expect(result.success).toBe(false);
@@ -489,8 +518,8 @@ John,Doe,john.new@example.com,6045551234,Canada,male,15/01/1990,"123 Main St",ac
       address: "123 Main Street, Toronto, ON",
     });
 
-    const csv = `First Name,Last Name,Email,Phone,Country,Gender,Date of Birth,Address,Status,ID Front
-John,Doe,john.new@example.com,6045551234,Canada,male,15/01/1990,"123 Main Street, Toronto, ON",active,https://example.com/id.jpg`;
+    const csv = `First Name,Last Name,Email,Phone,Country,Gender,Date of Birth,Address,Status,Doc 1 URL,Doc 1 Description
+John,Doe,john.new@example.com,6045551234,Canada,male,15/01/1990,"123 Main Street, Toronto, ON",active,https://example.com/id.jpg,ID Front`;
 
     const result = await runImport(csv, "ftd");
     expect(result.success).toBe(false);
@@ -506,8 +535,8 @@ John,Doe,john.new@example.com,6045551234,Canada,male,15/01/1990,"123 Main Street
       documents: [{ url: "https://example.com/id-front1.jpg", description: "ID Front" }],
     });
 
-    const csv = `First Name,Last Name,Email,Phone,Country,Gender,Date of Birth,Address,Status,ID Front
-John,Doe,john.new@example.com,6045551234,Canada,male,15/01/1990,"999 Different St",active,https://example.com/id-front1.jpg`;
+    const csv = `First Name,Last Name,Email,Phone,Country,Gender,Date of Birth,Address,Status,Doc 1 URL,Doc 1 Description
+John,Doe,john.new@example.com,6045551234,Canada,male,15/01/1990,"999 Different St",active,https://example.com/id-front1.jpg,ID Front`;
 
     const result = await runImport(csv, "ftd");
     expect(result.success).toBe(false);
@@ -522,8 +551,8 @@ John,Doe,john.new@example.com,6045551234,Canada,male,15/01/1990,"999 Different S
       status: "active", createdBy: adminUser._id,
     });
 
-    const csv = `First Name,Last Name,Email,Phone,Country,Gender,Date of Birth,Address,Status,ID Front
-john,doe,different@example.com,6045559999,Canada,male,15/01/1990,"999 Different St",active,https://example.com/id-new.jpg`;
+    const csv = `First Name,Last Name,Email,Phone,Country,Gender,Date of Birth,Address,Status,Doc 1 URL,Doc 1 Description
+john,doe,different@example.com,6045559999,Canada,male,15/01/1990,"999 Different St",active,https://example.com/id-new.jpg,ID Front`;
 
     const result = await runImport(csv, "ftd");
     expect(result.success).toBe(false);

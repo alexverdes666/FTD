@@ -2356,20 +2356,22 @@ exports.importLeads = async (req, res, next) => {
         issues.push(`Invalid status '${status}'. Must be one of: active, inactive, contacted, converted`);
       }
 
-      // Documents - at least one required
-      const idFront = (lead["ID Front"] || lead["ID front"] || lead["id front"] || lead.id_front || "").trim();
-      const idBack = (lead["ID Back"] || lead["ID back"] || lead["id back"] || lead.id_back || "").trim();
-      const selfie = (lead["Selfie"] || lead["selfie"] || lead["Selfie front"] || lead["selfie front"] || "").trim();
-      const idFrontWithSelfie = (lead["ID Front with Selfie"] || lead["ID front with Selfie"] || lead["id front with selfie"] || lead["Selfie back"] || lead["selfie back"] || "").trim();
-
+      // Documents - flexible Doc 1..10 URL/Description pairs, at least one required
       const documents = [];
-      if (idFront) documents.push({ url: idFront, description: "ID Front" });
-      if (idBack) documents.push({ url: idBack, description: "ID Back" });
-      if (selfie) documents.push({ url: selfie, description: "Selfie" });
-      if (idFrontWithSelfie) documents.push({ url: idFrontWithSelfie, description: "ID Front with Selfie" });
+      for (let d = 1; d <= 10; d++) {
+        const url = (lead[`Doc ${d} URL`] || lead[`doc ${d} url`] || lead[`Doc ${d} url`] || "").trim();
+        const description = (lead[`Doc ${d} Description`] || lead[`doc ${d} description`] || lead[`Doc ${d} description`] || "").trim();
+        if (url && description) {
+          documents.push({ url, description });
+        } else if (url && !description) {
+          issues.push(`Doc ${d} has a URL but no Description`);
+        } else if (!url && description) {
+          issues.push(`Doc ${d} has a Description but no URL`);
+        }
+      }
 
-      if (documents.length === 0) {
-        issues.push("At least one document is required (ID Front, ID Back, Selfie, or ID Front with Selfie)");
+      if (documents.length === 0 && !issues.some(i => i.startsWith("Doc "))) {
+        issues.push("At least one document is required (use Doc 1 URL + Doc 1 Description columns)");
       }
 
       if (issues.length > 0) {
@@ -2394,10 +2396,6 @@ exports.importLeads = async (req, res, next) => {
           documents,
           createdBy: req.user.id,
         };
-
-        // SIN is optional
-        const sinValue = (lead.SIN || lead.sin || lead["Social Insurance Number"] || "").trim();
-        if (sinValue) leadData.sin = sinValue;
 
         // Social media (optional)
         const socialMedia = {};

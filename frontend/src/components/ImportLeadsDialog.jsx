@@ -54,10 +54,9 @@ const REQUIRED_COLUMNS = [
 ];
 
 const DOCUMENT_COLUMNS = [
-  { name: "ID Front", description: "URL - at least one document required" },
-  { name: "ID Back", description: "URL" },
-  { name: "Selfie", description: "URL" },
-  { name: "ID Front with Selfie", description: "URL" },
+  { name: "Doc 1 URL + Doc 1 Description", description: "At least one document required" },
+  { name: "Doc 2 URL + Doc 2 Description", description: "Up to 10 document pairs supported" },
+  { name: "...", description: "e.g. ID Front, ID Back, Selfie, ID Front with Selfie, ID Back with Selfie" },
 ];
 
 const ImportLeadsDialog = ({ open, onClose, onImportComplete }) => {
@@ -271,10 +270,6 @@ const ImportLeadsDialog = ({ open, onClose, onImportComplete }) => {
                   ))}
                 </TableBody>
               </Table>
-              <Divider sx={{ my: 1.5 }} />
-              <Typography variant="body2" color="text.secondary" sx={{ fontSize: "0.75rem" }}>
-                Optional: SIN (Social Insurance Number)
-              </Typography>
               <Box sx={{ mt: 1.5 }}>
                 <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 700, color: "warning.main" }}>
                   Important Rules:
