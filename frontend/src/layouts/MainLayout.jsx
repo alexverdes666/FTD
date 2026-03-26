@@ -416,6 +416,29 @@ const MainLayout = () => {
           ],
         },
         {
+          text: "Payroll",
+          icon: <PaymentIcon />,
+          isExpandable: true,
+          key: "payroll",
+          children: [
+            {
+              text: "Agents",
+              icon: <PaymentIcon />,
+              path: "/payroll",
+            },
+            {
+              text: "Pay History",
+              icon: <HistoryIcon />,
+              path: "/payment-history",
+            },
+            {
+              text: "Fines",
+              icon: <GavelIcon />,
+              path: "/fines",
+            },
+          ],
+        },
+        {
           text: "Announce",
           icon: <AnnouncementIcon />,
           path: "/announcements",
@@ -528,6 +551,7 @@ const MainLayout = () => {
     "/injections": "#9c27b0",
     "/call-declarations": "#e91e63",
     "/employee-dashboard": "#4caf50",
+    "/payroll": "#4caf50",
   };
 
   // Flatten navigation items: expand all children into a single flat list
