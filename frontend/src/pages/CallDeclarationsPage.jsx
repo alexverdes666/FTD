@@ -409,6 +409,7 @@ const CallDeclarationsPage = () => {
         onClose={() => setSelectedDeclarationForApproval(null)}
         declaration={selectedDeclarationForApproval}
         onDeclarationUpdated={handleDeclarationUpdated}
+        canApprove={isManager}
       />
     </Box>
   );

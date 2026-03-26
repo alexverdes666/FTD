@@ -27,7 +27,7 @@ import {
 import { approveDeclaration, rejectDeclaration, fetchRecordingBlob } from '../services/callDeclarations';
 import { formatFullDateTimeBG } from '../utils/dateUtils';
 
-const CallDeclarationApprovalDialog = ({ open, onClose, declaration, onDeclarationUpdated, onReset, isAdmin }) => {
+const CallDeclarationApprovalDialog = ({ open, onClose, declaration, onDeclarationUpdated, onReset, isAdmin, canApprove = true }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [rejectionNotes, setRejectionNotes] = useState('');
@@ -341,7 +341,7 @@ const CallDeclarationApprovalDialog = ({ open, onClose, declaration, onDeclarati
         )}
 
         {/* Approval Notes (optional) */}
-        {isPending && !showRejectionInput && (
+        {isPending && canApprove && !showRejectionInput && (
           <Box sx={{ mt: 1 }}>
             <TextField
               fullWidth
@@ -375,7 +375,11 @@ const CallDeclarationApprovalDialog = ({ open, onClose, declaration, onDeclarati
             </Button>
           </>
         ) : isPending ? (
-          showRejectionInput ? (
+          !canApprove ? (
+            <Button onClick={handleClose}>
+              Close
+            </Button>
+          ) : showRejectionInput ? (
             <>
               <Button
                 onClick={() => setShowRejectionInput(false)}
