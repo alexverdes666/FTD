@@ -54,6 +54,7 @@ exports.getDepositCalls = async (req, res, next) => {
       clientNetwork,
       ourNetwork,
       status = "active",
+      depositStatus,
       startDate,
       endDate,
       search,
@@ -98,6 +99,11 @@ exports.getDepositCalls = async (req, res, next) => {
     // Status filter
     if (status) {
       query.status = status;
+    }
+
+    // Deposit status filter (pending/confirmed)
+    if (depositStatus) {
+      query.depositStatus = depositStatus;
     }
 
     // Client broker filter

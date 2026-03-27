@@ -69,6 +69,7 @@ const CallDeclarationsTable = ({
   onViewDetails,
   onDelete,
   showAgent = false,
+  hidePagination = false,
   emptyMessage = "No declarations found"
 }) => {
   const [expandedRows, setExpandedRows] = useState(new Set());
@@ -174,7 +175,7 @@ const CallDeclarationsTable = ({
     );
   }
 
-  const paginatedDeclarations = declarations.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
+  const paginatedDeclarations = hidePagination ? declarations : declarations.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, height: "100%" }}>
@@ -397,25 +398,27 @@ const CallDeclarationsTable = ({
           </TableBody>
         </Table>
       </TableContainer>
-      <TablePagination
-        rowsPerPageOptions={[25, 50, 100]}
-        component="div"
-        count={declarations.length}
-        rowsPerPage={rowsPerPage}
-        page={page}
-        onPageChange={(_, newPage) => setPage(newPage)}
-        onRowsPerPageChange={(e) => { setRowsPerPage(parseInt(e.target.value, 10)); setPage(0); }}
-        sx={{
-          mt: "auto",
-          flexShrink: 0,
-          borderTop: "1px solid",
-          borderColor: "divider",
-          "& .MuiTablePagination-toolbar": { minHeight: 32, pl: 0 },
-          "& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows": { fontSize: "0.72rem" },
-          "& .MuiTablePagination-select": { fontSize: "0.72rem" },
-          "& .MuiTablePagination-actions button": { p: 0.25 },
-        }}
-      />
+      {!hidePagination && (
+        <TablePagination
+          rowsPerPageOptions={[25, 50, 100]}
+          component="div"
+          count={declarations.length}
+          rowsPerPage={rowsPerPage}
+          page={page}
+          onPageChange={(_, newPage) => setPage(newPage)}
+          onRowsPerPageChange={(e) => { setRowsPerPage(parseInt(e.target.value, 10)); setPage(0); }}
+          sx={{
+            mt: "auto",
+            flexShrink: 0,
+            borderTop: "1px solid",
+            borderColor: "divider",
+            "& .MuiTablePagination-toolbar": { minHeight: 32, pl: 0 },
+            "& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows": { fontSize: "0.72rem" },
+            "& .MuiTablePagination-select": { fontSize: "0.72rem" },
+            "& .MuiTablePagination-actions button": { p: 0.25 },
+          }}
+        />
+      )}
 
       {/* Recording Playback Dialog (for action button) */}
       <Dialog open={!!recordingDeclaration} onClose={() => setRecordingDeclaration(null)} maxWidth="sm" fullWidth>

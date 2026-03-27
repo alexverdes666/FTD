@@ -79,6 +79,7 @@ const AmiAgentsPage = lazy(() => import("./pages/AmiAgentsPage.jsx"));
 const FinesPage = lazy(() => import("./pages/FinesPage.jsx"));
 const InjectionPage = lazy(() => import("./pages/InjectionPage.jsx"));
 const CallDeclarationsPage = lazy(() => import("./pages/CallDeclarationsPage.jsx"));
+const PendingPage = lazy(() => import("./pages/PendingPage.jsx"));
 const FinancePage = lazy(() => import("./pages/FinancePage.jsx"));
 const AdminPage = lazy(() => import("./pages/AdminPage.jsx"));
 const EmployeeDashboardPage = lazy(() => import("./pages/EmployeeDashboardPage.jsx"));
@@ -410,6 +411,14 @@ function AppContent() {
             <Route
               path="gateway-devices"
               element={<Navigate to="/sms" replace />}
+            />
+            <Route
+              path="pending"
+              element={
+                <ProtectedRoute allowedRoles={["affiliate_manager", "admin"]}>
+                  <LazyPage><PendingPage /></LazyPage>
+                </ProtectedRoute>
+              }
             />
             <Route
               path="approve-am-calls"

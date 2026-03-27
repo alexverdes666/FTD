@@ -57,6 +57,7 @@ import {
   Gavel as GavelIcon,
   Vaccines as InjectionIcon,
   AccountBalance as FinanceIcon,
+  PendingActions as PendingIcon,
 } from "@mui/icons-material";
 import {
   logout,
@@ -319,6 +320,11 @@ const MainLayout = () => {
           key: "schedules",
           children: [
             {
+              text: "Pending",
+              icon: <PendingIcon />,
+              path: "/pending",
+            },
+            {
               text: "Approve Calls",
               icon: <ApproveIcon />,
               path: "/approve-am-calls",
@@ -355,6 +361,11 @@ const MainLayout = () => {
           isExpandable: true,
           key: "schedules",
           children: [
+            {
+              text: "Pending",
+              icon: <PendingIcon />,
+              path: "/pending",
+            },
             {
               text: "Approve Calls",
               icon: <ApproveIcon />,
@@ -537,6 +548,7 @@ const MainLayout = () => {
     "/sms": "#42a5f5",
     "/am-targets": "#ffa726",
     "/announcements": "#ffb300",
+    "/pending": "#f57c00",
     "/approve-am-calls": "#66bb6a",
     "/deposit-calls": "#42a5f5",
     "/agent-comments": "#78909c",
@@ -845,8 +857,8 @@ const MainLayout = () => {
           display: "flex",
           flexDirection: "column",
           minHeight: "100vh",
-          overflow: (location.pathname === "/notes" || location.pathname === "/orders" || location.pathname === "/crm" || location.pathname === "/leads" || location.pathname === "/client-psps" || location.pathname === "/card-issuers" || location.pathname === "/sms" || location.pathname === "/deposit-calls" || location.pathname === "/call-declarations") ? "hidden" : "auto",
-          height: (location.pathname === "/notes" || location.pathname === "/orders" || location.pathname === "/crm" || location.pathname === "/leads" || location.pathname === "/client-psps" || location.pathname === "/card-issuers" || location.pathname === "/sms" || location.pathname === "/deposit-calls" || location.pathname === "/call-declarations") ? "100vh" : "auto",
+          overflow: (location.pathname === "/notes" || location.pathname === "/orders" || location.pathname === "/crm" || location.pathname === "/leads" || location.pathname === "/client-psps" || location.pathname === "/card-issuers" || location.pathname === "/sms" || location.pathname === "/deposit-calls" || location.pathname === "/call-declarations" || location.pathname === "/pending") ? "hidden" : "auto",
+          height: (location.pathname === "/notes" || location.pathname === "/orders" || location.pathname === "/crm" || location.pathname === "/leads" || location.pathname === "/client-psps" || location.pathname === "/card-issuers" || location.pathname === "/sms" || location.pathname === "/deposit-calls" || location.pathname === "/call-declarations" || location.pathname === "/pending") ? "100vh" : "auto",
         }}
       >
         <Box sx={{ minHeight: 42 }} />
@@ -854,7 +866,7 @@ const MainLayout = () => {
           component="div"
           sx={{
             flexGrow: 1,
-            overflow: (location.pathname === "/notes" || location.pathname === "/orders" || location.pathname === "/crm" || location.pathname === "/leads" || location.pathname === "/client-psps" || location.pathname === "/card-issuers" || location.pathname === "/sms" || location.pathname === "/deposit-calls" || location.pathname === "/call-declarations") ? "hidden" : "auto",
+            overflow: (location.pathname === "/notes" || location.pathname === "/orders" || location.pathname === "/crm" || location.pathname === "/leads" || location.pathname === "/client-psps" || location.pathname === "/card-issuers" || location.pathname === "/sms" || location.pathname === "/deposit-calls" || location.pathname === "/call-declarations" || location.pathname === "/pending") ? "hidden" : "auto",
             display: "flex",
             flexDirection: "column",
           }}
@@ -863,7 +875,7 @@ const MainLayout = () => {
             <Outlet />
           </Force2FASetup>
         </Box>
-        {location.pathname !== "/notes" && location.pathname !== "/orders" && location.pathname !== "/crm" && location.pathname !== "/leads" && location.pathname !== "/client-psps" && location.pathname !== "/card-issuers" && location.pathname !== "/admin" && location.pathname !== "/finance" && location.pathname !== "/am-expenses" && location.pathname !== "/sms" && location.pathname !== "/fines" && location.pathname !== "/numbers" && location.pathname !== "/approve-am-calls" && location.pathname !== "/deposit-calls" && location.pathname !== "/call-declarations" && !location.pathname.startsWith("/client-network/") && !location.pathname.startsWith("/client-broker/") && <Footer />}
+        {location.pathname !== "/notes" && location.pathname !== "/orders" && location.pathname !== "/crm" && location.pathname !== "/leads" && location.pathname !== "/client-psps" && location.pathname !== "/card-issuers" && location.pathname !== "/admin" && location.pathname !== "/finance" && location.pathname !== "/am-expenses" && location.pathname !== "/sms" && location.pathname !== "/fines" && location.pathname !== "/numbers" && location.pathname !== "/approve-am-calls" && location.pathname !== "/deposit-calls" && location.pathname !== "/call-declarations" && location.pathname !== "/pending" && !location.pathname.startsWith("/client-network/") && !location.pathname.startsWith("/client-broker/") && <Footer />}
       </Box>
 
       {/* Floating Chat Button */}
