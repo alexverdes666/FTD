@@ -1188,7 +1188,21 @@ const UsersPage = () => {
                           <TableCell align="center">
                             {user.linkedAccounts?.length > 0 ? (
                               <Tooltip
-                                title={`Linked to ${user.linkedAccounts.length} account(s). Click to unlink.`}
+                                title={
+                                  <Box>
+                                    <Typography variant="caption" sx={{ fontWeight: 600, display: 'block', mb: 0.5 }}>
+                                      Linked Accounts ({user.linkedAccounts.length})
+                                    </Typography>
+                                    {user.linkedAccounts.map((linked) => (
+                                      <Typography key={linked._id || linked} variant="caption" sx={{ display: 'block' }}>
+                                        {linked.fullName ? `${linked.fullName} (${linked.role})` : linked}
+                                      </Typography>
+                                    ))}
+                                    <Typography variant="caption" sx={{ display: 'block', mt: 0.5, opacity: 0.7 }}>
+                                      Click to unlink
+                                    </Typography>
+                                  </Box>
+                                }
                                 arrow
                               >
                                 <IconButton

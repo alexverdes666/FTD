@@ -41,6 +41,8 @@ const ReferenceSelector = ({
   const [networks, setNetworks] = useState([]);
   const [fetchLoading, setFetchLoading] = useState(false);
   const [selectedNetwork, setSelectedNetwork] = useState(null);
+  const [existingEmployees, setExistingEmployees] = useState([]);
+  const [loadingEmployees, setLoadingEmployees] = useState(false);
   const [notes, setNotes] = useState("");
   const [createMode, setCreateMode] = useState(false);
   const [newNetworkName, setNewNetworkName] = useState("");
@@ -55,6 +57,7 @@ const ReferenceSelector = ({
     if (open) {
       fetchNetworks();
       setSelectedNetwork(null);
+      setExistingEmployees([]);
       setNotes("");
       setCreateMode(false);
       setNewNetworkName("");
@@ -81,6 +84,35 @@ const ReferenceSelector = ({
       toast.error("Failed to fetch networks");
     } finally {
       setFetchLoading(false);
+    }
+  };
+
+  const fetchNetworkEmployees = async (networkId) => {
+    try {
+      setLoadingEmployees(true);
+      const response = await api.get(`/client-networks/${networkId}`);
+      const activeEmployees = (response.data.data.employees || []).filter(
+        (emp) => emp.isActive !== false
+      );
+      setExistingEmployees(activeEmployees);
+    } catch (error) {
+      toast.error("Failed to fetch network employees");
+      setExistingEmployees([]);
+    } finally {
+      setLoadingEmployees(false);
+    }
+  };
+
+  const handleNetworkSelect = (_, newValue) => {
+    setSelectedNetwork(newValue);
+    setEmployees([]);
+    setEmpName("");
+    setEmpTelegram("");
+    setEmpPosition("");
+    if (newValue) {
+      fetchNetworkEmployees(newValue._id);
+    } else {
+      setExistingEmployees([]);
     }
   };
 
@@ -147,10 +179,31 @@ const ReferenceSelector = ({
         toast.error("Please select a network");
         return;
       }
-      onSelect({
-        clientNetworkId: selectedNetwork._id,
-        notes,
-      });
+      try {
+        setCreating(true);
+        // Add new employees to the existing network
+        if (employees.length > 0) {
+          const results = await Promise.allSettled(
+            employees.map((emp) =>
+              api.post(`/client-networks/${selectedNetwork._id}/employees`, emp)
+            )
+          );
+          const failed = results.filter((r) => r.status === "rejected").length;
+          if (failed > 0) {
+            toast.error(`Failed to add ${failed} employee(s)`);
+          } else {
+            toast.success(`Added ${employees.length} employee(s) to "${selectedNetwork.name}"`);
+          }
+        }
+        onSelect({
+          clientNetworkId: selectedNetwork._id,
+          notes,
+        });
+      } catch (error) {
+        toast.error("Failed to add employees");
+      } finally {
+        setCreating(false);
+      }
     }
   };
 
@@ -171,7 +224,7 @@ const ReferenceSelector = ({
                 options={networks}
                 getOptionLabel={(option) => option.name}
                 value={selectedNetwork}
-                onChange={(_, newValue) => setSelectedNetwork(newValue)}
+                onChange={handleNetworkSelect}
                 loading={fetchLoading}
                 renderInput={(params) => (
                   <TextField
@@ -197,10 +250,120 @@ const ReferenceSelector = ({
                 onClick={() => {
                   setCreateMode(true);
                   setSelectedNetwork(null);
+                  setExistingEmployees([]);
                 }}
               >
                 or Create New Network
               </Typography>
+
+              {/* Employees Section for selected network */}
+              {selectedNetwork && (
+                <>
+                  <Divider sx={{ my: 0.5 }} />
+                  <Typography variant="subtitle2" color="text.secondary">
+                    Employees
+                  </Typography>
+
+                  {loadingEmployees ? (
+                    <Box sx={{ display: "flex", justifyContent: "center", py: 1 }}>
+                      <CircularProgress size={20} />
+                    </Box>
+                  ) : (
+                    <>
+                      {existingEmployees.length > 0 && (
+                        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+                          {existingEmployees.map((emp) => (
+                            <Chip
+                              key={emp._id}
+                              label={`${emp.name} - ${positionOptions.find((p) => p.value === emp.position)?.label || emp.position}${emp.telegramUsername ? ` (@${emp.telegramUsername})` : ""}`}
+                              size="small"
+                              variant="outlined"
+                              color="default"
+                            />
+                          ))}
+                        </Box>
+                      )}
+
+                      {existingEmployees.length === 0 && (
+                        <Typography variant="body2" color="text.disabled">
+                          No employees yet
+                        </Typography>
+                      )}
+
+                      {/* New employees to add */}
+                      {employees.length > 0 && (
+                        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+                          {employees.map((emp, idx) => (
+                            <Chip
+                              key={idx}
+                              label={`${emp.name} - ${positionOptions.find((p) => p.value === emp.position)?.label || emp.position}${emp.telegramUsername ? ` (@${emp.telegramUsername})` : ""}`}
+                              onDelete={() => handleRemoveEmployee(idx)}
+                              size="small"
+                              variant="outlined"
+                              color="primary"
+                            />
+                          ))}
+                        </Box>
+                      )}
+
+                      <Box sx={{ display: "flex", gap: 1, alignItems: "flex-start" }}>
+                        <TextField
+                          label="Name"
+                          value={empName}
+                          onChange={(e) => setEmpName(e.target.value)}
+                          size="small"
+                          sx={{ flex: 1 }}
+                          inputProps={{ maxLength: 100 }}
+                        />
+                        <TextField
+                          label="Telegram"
+                          value={empTelegram}
+                          onChange={(e) => setEmpTelegram(e.target.value.replace(/^@+/, ""))}
+                          size="small"
+                          sx={{ flex: 1 }}
+                          placeholder="username"
+                          InputProps={{
+                            startAdornment: (
+                              <InputAdornment position="start" sx={{ mr: 0 }}>
+                                <span style={{ fontWeight: 700, color: "#1976d2" }}>@</span>
+                              </InputAdornment>
+                            ),
+                          }}
+                          inputProps={{ maxLength: 100 }}
+                        />
+                      </Box>
+                      <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+                        <FormControl size="small" sx={{ flex: 1 }}>
+                          <InputLabel>Position</InputLabel>
+                          <Select
+                            value={empPosition}
+                            onChange={(e) => setEmpPosition(e.target.value)}
+                            label="Position"
+                          >
+                            {positionOptions.map((option) => (
+                              <MenuItem key={option.value} value={option.value}>
+                                {option.label}
+                              </MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+                        <IconButton
+                          color="primary"
+                          onClick={handleAddEmployee}
+                          disabled={!empName.trim() || !empPosition}
+                          sx={{
+                            border: "1px solid",
+                            borderColor: !empName.trim() || !empPosition ? "action.disabled" : "primary.main",
+                            borderRadius: 1,
+                          }}
+                        >
+                          <AddIcon />
+                        </IconButton>
+                      </Box>
+                    </>
+                  )}
+                </>
+              )}
             </>
           ) : (
             <>

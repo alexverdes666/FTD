@@ -16,6 +16,8 @@ import {
   MenuItem,
   Avatar,
   Divider,
+  Chip,
+  CircularProgress,
   useTheme,
   useMediaQuery,
 } from "@mui/material";
@@ -58,6 +60,7 @@ import {
   Vaccines as InjectionIcon,
   AccountBalance as FinanceIcon,
   PendingActions as PendingIcon,
+  SwapHoriz as SwapHorizIcon,
 } from "@mui/icons-material";
 import {
   logout,
@@ -66,8 +69,12 @@ import {
   verify2FAAndLogin,
   verify2FAAndSwitch,
   completeQRLogin,
-  clear2FAState
+  clear2FAState,
+  fetchRelatedAccounts,
+  switchUserAccount,
 } from "../store/slices/authSlice";
+import { addRecentAccount } from "../utils/accountHistory";
+import toast from 'react-hot-toast';
 import Footer from "./Footer";
 import ChatButton from "../components/ChatButton";
 import UserSwitcher from "../components/UserSwitcher";
@@ -232,12 +239,60 @@ const MainLayout = () => {
       setDesktopOpen(!desktopOpen);
     }
   };
+  const [profileRelatedAccounts, setProfileRelatedAccounts] = useState([]);
+  const [profileAccountsLoading, setProfileAccountsLoading] = useState(false);
+  const [switchingAccountId, setSwitchingAccountId] = useState(null);
+
   const handleProfileMenuOpen = (event) => {
     setAnchorEl(event.currentTarget);
+    // Load related accounts for non-agent users
+    if (user?.role !== 'agent') {
+      loadProfileRelatedAccounts();
+    }
   };
   const handleProfileMenuClose = () => {
     setAnchorEl(null);
   };
+
+  const loadProfileRelatedAccounts = async () => {
+    if (profileAccountsLoading) return;
+    setProfileAccountsLoading(true);
+    try {
+      const result = await dispatch(fetchRelatedAccounts()).unwrap();
+      setProfileRelatedAccounts(result.filter(a => !a.isCurrentAccount));
+    } catch {
+      setProfileRelatedAccounts([]);
+    } finally {
+      setProfileAccountsLoading(false);
+    }
+  };
+
+  const handleProfileAccountSwitch = async (accountId) => {
+    setSwitchingAccountId(accountId);
+    handleProfileMenuClose();
+    try {
+      const result = await dispatch(switchUserAccount(accountId)).unwrap();
+      if (result.requires2FA) return;
+      if (result.user) addRecentAccount(result.user);
+      toast.success('Account switched successfully', { duration: 2000, icon: '🔄' });
+      navigate('/');
+    } catch (error) {
+      toast.error(error?.message || 'Failed to switch account');
+    } finally {
+      setSwitchingAccountId(null);
+    }
+  };
+
+  const getRoleColor = (role) => {
+    const map = { admin: 'error', affiliate_manager: 'primary', agent: 'success', lead_manager: 'info', refunds_manager: 'warning', inventory_manager: 'secondary' };
+    return map[role] || 'default';
+  };
+
+  const getRoleDisplayName = (role) => {
+    const map = { admin: 'Admin', affiliate_manager: 'Affiliate Manager', agent: 'Agent', lead_manager: 'Lead Manager', refunds_manager: 'Refunds Manager', inventory_manager: 'Inventory Manager' };
+    return map[role] || role;
+  };
+
   const handleLogout = () => {
     clearNavOrderCache();
     dispatch(logout());
@@ -789,6 +844,59 @@ const MainLayout = () => {
           </ListItemIcon>
           Profile
         </MenuItem>
+        {user?.role !== 'agent' && (
+          <>
+            <Divider />
+            <Box sx={{ px: 2, py: 0.75 }}>
+              <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                Switch Account
+              </Typography>
+            </Box>
+            {profileAccountsLoading ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', py: 1.5 }}>
+                <CircularProgress size={20} />
+              </Box>
+            ) : profileRelatedAccounts.length === 0 ? (
+              <MenuItem disabled sx={{ py: 0.75 }}>
+                <Typography variant="caption" color="text.secondary">
+                  No linked accounts
+                </Typography>
+              </MenuItem>
+            ) : (
+              profileRelatedAccounts.map((account) => (
+                <MenuItem
+                  key={account.id}
+                  onClick={() => handleProfileAccountSwitch(account.id)}
+                  disabled={!!switchingAccountId}
+                  sx={{ py: 1, px: 2 }}
+                >
+                  <ListItemIcon sx={{ minWidth: 36 }}>
+                    {switchingAccountId === account.id ? (
+                      <CircularProgress size={18} />
+                    ) : (
+                      <Avatar sx={{ width: 24, height: 24, fontSize: '0.7rem' }}>
+                        {account.fullName?.charAt(0)?.toUpperCase()}
+                      </Avatar>
+                    )}
+                  </ListItemIcon>
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography variant="body2" noWrap sx={{ fontWeight: 500 }}>
+                      {account.fullName}
+                    </Typography>
+                    <Chip
+                      label={getRoleDisplayName(account.role)}
+                      size="small"
+                      color={getRoleColor(account.role)}
+                      variant="outlined"
+                      sx={{ height: 18, fontSize: '0.65rem', mt: 0.25 }}
+                    />
+                  </Box>
+                  <SwapHorizIcon fontSize="small" sx={{ ml: 1, opacity: 0.4 }} />
+                </MenuItem>
+              ))
+            )}
+          </>
+        )}
         <Divider />
         <MenuItem onClick={handleLogout}>
           <ListItemIcon>

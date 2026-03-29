@@ -27,6 +27,7 @@ exports.getUsers = async (req, res, next) => {
     const skip = (page - 1) * limit;
     const users = await User.find(filter)
       .select("-password")
+      .populate('linkedAccounts', 'fullName email role')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));
