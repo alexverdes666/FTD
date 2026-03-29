@@ -27,7 +27,7 @@ import {
 import { approveDeclaration, rejectDeclaration, fetchRecordingBlob } from '../services/callDeclarations';
 import { formatFullDateTimeBG } from '../utils/dateUtils';
 
-const CallDeclarationApprovalDialog = ({ open, onClose, declaration, onDeclarationUpdated, onReset, isAdmin, canApprove = true }) => {
+const CallDeclarationApprovalDialog = ({ open, onClose, declaration, onDeclarationUpdated, onReset, isAdmin, isAgent, canApprove = true }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [rejectionNotes, setRejectionNotes] = useState('');
@@ -273,7 +273,7 @@ const CallDeclarationApprovalDialog = ({ open, onClose, declaration, onDeclarati
         </Paper>
 
         {/* Recording */}
-        {declaration.recordFile && (
+        {declaration.recordFile && !isAgent && (
           <Paper variant="outlined" sx={{ p: 1, mb: 1 }}>
             <Typography sx={{ fontSize: "0.6rem", color: "text.secondary", textTransform: "uppercase", mb: 0.5 }}>Recording</Typography>
             {audioLoading ? (

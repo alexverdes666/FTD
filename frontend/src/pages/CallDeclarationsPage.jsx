@@ -367,6 +367,7 @@ const CallDeclarationsPage = () => {
                 error={declError?.response?.data?.message || declError?.message || null}
                 onViewDetails={setSelectedDeclarationForApproval}
                 onDelete={handleDeleteDeclaration}
+                hideRecordings
                 emptyMessage="No declarations for the selected month."
               />
             )}
@@ -410,6 +411,7 @@ const CallDeclarationsPage = () => {
         declaration={selectedDeclarationForApproval}
         onDeclarationUpdated={handleDeclarationUpdated}
         canApprove={isManager}
+        isAgent={isAgent}
       />
     </Box>
   );

@@ -29,9 +29,8 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  Tabs,
-  Tab,
   Divider,
+  Autocomplete,
   Checkbox,
   List,
   ListItem,
@@ -44,10 +43,8 @@ import {
   Search as SearchIcon,
   Refresh as RefreshIcon,
   Verified as VerifiedIcon,
-  TableChart as TableIcon,
   Cancel as RejectIcon,
   Schedule as ScheduleIcon,
-  Phone as PhoneIcon,
   Email as EmailIcon,
   Person as PersonIcon,
   FilterList as FilterListIcon,
@@ -359,7 +356,7 @@ const DepositCallsPage = () => {
   const isAgent = user?.role === 'agent';
 
   // State
-  const [tabValue, setTabValue] = useState(0); // 0 = Table, 1 = Calendar
+  const [activeSection, setActiveSection] = useState(0); // 0 = Table View, 1 = Filler Calls
   const [depositCalls, setDepositCalls] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -387,7 +384,7 @@ const DepositCallsPage = () => {
   const [selectedClientNetwork, setSelectedClientNetwork] = useState('');
   const [selectedOurNetwork, setSelectedOurNetwork] = useState('');
   const [selectedMonth, setSelectedMonth] = useState('');
-  const [status, setStatus] = useState('active');
+  const [status] = useState('active');
   
   // Pagination
   const [page, setPage] = useState(0);
@@ -609,10 +606,8 @@ const DepositCallsPage = () => {
   }, [fillerPage, fillerRowsPerPage, search, selectedAM, selectedAgent, selectedMonth]);
 
   useEffect(() => {
-    if (tabValue === 1) {
-      fetchFillerDeclarations();
-    }
-  }, [tabValue, fetchFillerDeclarations]);
+    fetchFillerDeclarations();
+  }, [fetchFillerDeclarations]);
 
   // Recording playback effect
   useEffect(() => {
@@ -931,28 +926,50 @@ const DepositCallsPage = () => {
         </Alert>
       )}
 
-      {/* Tabs */}
-      <Paper sx={{ mb: 2, flexShrink: 0 }}>
-        <Tabs value={tabValue} onChange={(e, v) => setTabValue(v)}>
-          <Tab icon={<TableIcon />} label="Table View" iconPosition="start" />
-          <Tab icon={<PhoneIcon />} label="Filler Calls" iconPosition="start" />
-        </Tabs>
+      {/* Section Toggle */}
+      <Paper sx={{ mb: 1, flexShrink: 0 }}>
+        <Box sx={{ display: 'flex' }}>
+          <Box
+            onClick={() => setActiveSection(0)}
+            sx={{
+              width: '50%', py: 0.5, textAlign: 'center', cursor: 'pointer',
+              bgcolor: activeSection === 0 ? 'primary.main' : 'grey.100',
+              color: activeSection === 0 ? 'white' : 'text.secondary',
+              fontWeight: 600, fontSize: '0.8rem', transition: '0.2s',
+              '&:hover': { bgcolor: activeSection === 0 ? 'primary.dark' : 'grey.200' },
+              borderRight: '1px solid', borderColor: 'divider',
+            }}
+          >
+            Table View
+          </Box>
+          <Box
+            onClick={() => setActiveSection(1)}
+            sx={{
+              width: '50%', py: 0.5, textAlign: 'center', cursor: 'pointer',
+              bgcolor: activeSection === 1 ? 'primary.main' : 'grey.100',
+              color: activeSection === 1 ? 'white' : 'text.secondary',
+              fontWeight: 600, fontSize: '0.8rem', transition: '0.2s',
+              '&:hover': { bgcolor: activeSection === 1 ? 'primary.dark' : 'grey.200' },
+            }}
+          >
+            Filler Calls
+          </Box>
+        </Box>
       </Paper>
 
       {/* Toolbar & Collapsible Filters */}
-      <Paper sx={{ mb: 2, flexShrink: 0 }}>
-        <Box sx={{ px: 2, py: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
-          {tabValue !== 1 && (
-            <Button
-              size="small"
-              startIcon={<FilterListIcon />}
-              endIcon={<ExpandMoreIcon sx={{ transform: filtersOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: '0.2s' }} />}
-              onClick={() => setFiltersOpen(!filtersOpen)}
-              variant={filtersOpen ? 'contained' : 'outlined'}
-            >
-              Filters
-            </Button>
-          )}
+      <Paper sx={{ mb: 1, flexShrink: 0 }}>
+        <Box sx={{ px: 1.5, py: 0.5, display: 'flex', alignItems: 'center', gap: 0.75 }}>
+          <Button
+            size="small"
+            startIcon={<FilterListIcon />}
+            endIcon={<ExpandMoreIcon sx={{ transform: filtersOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: '0.2s' }} />}
+            onClick={() => setFiltersOpen(!filtersOpen)}
+            variant={filtersOpen ? 'contained' : 'outlined'}
+            sx={{ borderRadius: 5, textTransform: 'none', px: 1.5, py: 0.25, fontSize: '0.75rem' }}
+          >
+            Filters
+          </Button>
           <TextField
             size="small"
             placeholder="Search..."
@@ -965,50 +982,9 @@ const DepositCallsPage = () => {
                 </InputAdornment>
               ),
             }}
-            sx={{ width: 220 }}
+            sx={{ width: 200, '& .MuiOutlinedInput-root': { borderRadius: 5, height: 32 } }}
           />
-          {tabValue === 1 && (isAdmin || isAM) && (
-            <>
-              {isAdmin && (
-                <FormControl size="small" sx={{ minWidth: 160 }}>
-                  <InputLabel>Account Manager</InputLabel>
-                  <Select
-                    value={selectedAM}
-                    onChange={(e) => setSelectedAM(e.target.value)}
-                    label="Account Manager"
-                  >
-                    <MenuItem value="">All AMs</MenuItem>
-                    {accountManagers.map(am => (
-                      <MenuItem key={am._id} value={am._id}>{am.fullName}</MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              )}
-              <FormControl size="small" sx={{ minWidth: 140 }}>
-                <InputLabel>Agent</InputLabel>
-                <Select
-                  value={selectedAgent}
-                  onChange={(e) => setSelectedAgent(e.target.value)}
-                  label="Agent"
-                >
-                  <MenuItem value="">All Agents</MenuItem>
-                  {agents.map(agent => (
-                    <MenuItem key={agent._id} value={agent._id}>{agent.fullName}</MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-              <TextField
-                size="small"
-                type="month"
-                label="Month"
-                value={selectedMonth}
-                onChange={(e) => setSelectedMonth(e.target.value)}
-                InputLabelProps={{ shrink: true }}
-                sx={{ minWidth: 140 }}
-              />
-            </>
-          )}
-          <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 0.5 }}>
             {(isAdmin || isAM) && pendingCount > 0 && (
               <Chip
                 icon={<ScheduleIcon />}
@@ -1026,16 +1002,14 @@ const DepositCallsPage = () => {
               </Tooltip>
             )}
 
-            {tabValue === 0 && (
-              <Tooltip title="Select columns">
-                <IconButton onClick={(e) => setColAnchorEl(e.currentTarget)} color="primary" size="small">
-                  <ViewColumnIcon />
-                </IconButton>
-              </Tooltip>
-            )}
+            <Tooltip title="Select columns">
+              <IconButton onClick={(e) => setColAnchorEl(e.currentTarget)} color="primary" size="small">
+                <ViewColumnIcon />
+              </IconButton>
+            </Tooltip>
 
             <Tooltip title="Refresh">
-              <IconButton onClick={() => { fetchDepositCalls(); if (tabValue === 1) fetchFillerDeclarations(); }} color="primary" size="small">
+              <IconButton onClick={() => { fetchDepositCalls(); fetchFillerDeclarations(); }} color="primary" size="small">
                 <RefreshIcon />
               </IconButton>
             </Tooltip>
@@ -1052,7 +1026,7 @@ const DepositCallsPage = () => {
             <Box sx={{ p: 1.5, minWidth: 200 }}>
               <Typography variant="subtitle2" sx={{ mb: 1, px: 1 }}>Visible Columns</Typography>
               <List dense disablePadding>
-                {ALL_COLUMNS.map(col => (
+                {ALL_COLUMNS.filter(col => !isAgent || !['clientNet', 'ourNet', 'psp', 'cardIssuer'].includes(col.id)).map(col => (
                   <ListItem key={col.id} disablePadding sx={{ px: 0.5 }}>
                     <FormControlLabel
                       control={
@@ -1082,97 +1056,75 @@ const DepositCallsPage = () => {
             </Box>
           </Popover>
         </Box>
-        <Collapse in={filtersOpen && tabValue !== 1}>
+        <Collapse in={filtersOpen}>
           <Divider />
-          <Box sx={{ px: 2, py: 1.5 }}>
-            <Grid container spacing={1.5} alignItems="center">
+          <Box sx={{ px: 1.5, py: 1 }}>
+            <Grid container spacing={1} alignItems="center">
               {(isAdmin || isAM) && (
                 <>
                   {isAdmin && (
                     <Grid item xs={6} sm={4} md={2}>
-                      <FormControl fullWidth size="small">
-                        <InputLabel>Account Manager</InputLabel>
-                        <Select
-                          value={selectedAM}
-                          onChange={(e) => setSelectedAM(e.target.value)}
-                          label="Account Manager"
-                        >
-                          <MenuItem value="">All AMs</MenuItem>
-                          {accountManagers.map(am => (
-                            <MenuItem key={am._id} value={am._id}>{am.fullName}</MenuItem>
-                          ))}
-                        </Select>
-                      </FormControl>
+                      <Autocomplete
+                        size="small"
+                        options={accountManagers}
+                        getOptionLabel={(o) => o.fullName || ''}
+                        value={accountManagers.find(am => am._id === selectedAM) || null}
+                        onChange={(e, v) => setSelectedAM(v?._id || '')}
+                        renderInput={(params) => <TextField {...params} label="Account Manager" />}
+                        sx={{ '& .MuiOutlinedInput-root': { borderRadius: 5, height: 32, py: '0px !important' }, '& .MuiInputLabel-root': { top: -4 }, '& .MuiInputLabel-shrink': { top: 0 } }}
+                      />
                     </Grid>
                   )}
 
                   <Grid item xs={6} sm={4} md={2}>
-                    <FormControl fullWidth size="small">
-                      <InputLabel>Agent</InputLabel>
-                      <Select
-                        value={selectedAgent}
-                        onChange={(e) => setSelectedAgent(e.target.value)}
-                        label="Agent"
-                      >
-                        <MenuItem value="">All Agents</MenuItem>
-                        {agents.map(agent => (
-                          <MenuItem key={agent._id} value={agent._id}>{agent.fullName}</MenuItem>
-                        ))}
-                      </Select>
-                    </FormControl>
+                    <Autocomplete
+                      size="small"
+                      options={agents}
+                      getOptionLabel={(o) => o.fullName || ''}
+                      value={agents.find(a => a._id === selectedAgent) || null}
+                      onChange={(e, v) => setSelectedAgent(v?._id || '')}
+                      renderInput={(params) => <TextField {...params} label="Agent" />}
+                      sx={{ '& .MuiOutlinedInput-root': { borderRadius: 5, height: 32, py: '0px !important' }, '& .MuiInputLabel-root': { top: -4 }, '& .MuiInputLabel-shrink': { top: 0 } }}
+                    />
                   </Grid>
 
-                  {tabValue !== 1 && (
+                  <Grid item xs={6} sm={4} md={2}>
+                    <Autocomplete
+                      size="small"
+                      options={brokers}
+                      getOptionLabel={(o) => o.name || ''}
+                      value={brokers.find(b => b._id === selectedBroker) || null}
+                      onChange={(e, v) => setSelectedBroker(v?._id || '')}
+                      renderInput={(params) => <TextField {...params} label="Client Broker" />}
+                      sx={{ '& .MuiOutlinedInput-root': { borderRadius: 5, height: 32, py: '0px !important' }, '& .MuiInputLabel-root': { top: -4 }, '& .MuiInputLabel-shrink': { top: 0 } }}
+                    />
+                  </Grid>
+
+                  {!isAgent && (
                     <Grid item xs={6} sm={4} md={2}>
-                      <FormControl fullWidth size="small">
-                        <InputLabel>Client Broker</InputLabel>
-                        <Select
-                          value={selectedBroker}
-                          onChange={(e) => setSelectedBroker(e.target.value)}
-                          label="Client Broker"
-                        >
-                          <MenuItem value="">All Brokers</MenuItem>
-                          {brokers.map(broker => (
-                            <MenuItem key={broker._id} value={broker._id}>{broker.name}</MenuItem>
-                          ))}
-                        </Select>
-                      </FormControl>
+                      <Autocomplete
+                        size="small"
+                        options={clientNetworks}
+                        getOptionLabel={(o) => o.name || ''}
+                        value={clientNetworks.find(n => n._id === selectedClientNetwork) || null}
+                        onChange={(e, v) => setSelectedClientNetwork(v?._id || '')}
+                        renderInput={(params) => <TextField {...params} label="Client Network" />}
+                        sx={{ '& .MuiOutlinedInput-root': { borderRadius: 5, height: 32, py: '0px !important' }, '& .MuiInputLabel-root': { top: -4 }, '& .MuiInputLabel-shrink': { top: 0 } }}
+                      />
                     </Grid>
                   )}
 
-                  {tabValue !== 1 && (
+                  {!isAgent && (
                     <Grid item xs={6} sm={4} md={2}>
-                      <FormControl fullWidth size="small">
-                        <InputLabel>Client Network</InputLabel>
-                        <Select
-                          value={selectedClientNetwork}
-                          onChange={(e) => setSelectedClientNetwork(e.target.value)}
-                          label="Client Network"
-                        >
-                          <MenuItem value="">All Client Networks</MenuItem>
-                          {clientNetworks.map(network => (
-                            <MenuItem key={network._id} value={network._id}>{network.name}</MenuItem>
-                          ))}
-                        </Select>
-                      </FormControl>
-                    </Grid>
-                  )}
-
-                  {tabValue !== 1 && (
-                    <Grid item xs={6} sm={4} md={2}>
-                      <FormControl fullWidth size="small">
-                        <InputLabel>Our Network</InputLabel>
-                        <Select
-                          value={selectedOurNetwork}
-                          onChange={(e) => setSelectedOurNetwork(e.target.value)}
-                          label="Our Network"
-                        >
-                          <MenuItem value="">All Our Networks</MenuItem>
-                          {ourNetworks.map(network => (
-                            <MenuItem key={network._id} value={network._id}>{network.name}</MenuItem>
-                          ))}
-                        </Select>
-                      </FormControl>
+                      <Autocomplete
+                        size="small"
+                        options={ourNetworks}
+                        getOptionLabel={(o) => o.name || ''}
+                        value={ourNetworks.find(n => n._id === selectedOurNetwork) || null}
+                        onChange={(e, v) => setSelectedOurNetwork(v?._id || '')}
+                        renderInput={(params) => <TextField {...params} label="Our Network" />}
+                        sx={{ '& .MuiOutlinedInput-root': { borderRadius: 5, height: 32, py: '0px !important' }, '& .MuiInputLabel-root': { top: -4 }, '& .MuiInputLabel-shrink': { top: 0 } }}
+                      />
                     </Grid>
                   )}
                 </>
@@ -1187,33 +1139,17 @@ const DepositCallsPage = () => {
                   value={selectedMonth}
                   onChange={(e) => setSelectedMonth(e.target.value)}
                   InputLabelProps={{ shrink: true }}
+                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: 5, height: 32 }, '& .MuiInputLabel-root': { top: -4 }, '& .MuiInputLabel-shrink': { top: 0 } }}
                 />
               </Grid>
-
-              {tabValue !== 1 && (
-                <Grid item xs={6} sm={4} md={2}>
-                  <FormControl fullWidth size="small">
-                    <InputLabel>Status</InputLabel>
-                    <Select
-                      value={status}
-                      onChange={(e) => setStatus(e.target.value)}
-                      label="Status"
-                    >
-                      <MenuItem value="active">Active</MenuItem>
-                      <MenuItem value="completed">Completed</MenuItem>
-                      <MenuItem value="">All</MenuItem>
-                    </Select>
-                  </FormControl>
-                </Grid>
-              )}
             </Grid>
           </Box>
         </Collapse>
       </Paper>
 
       {/* Table View */}
-      {tabValue === 0 && (
-        <Paper sx={{ width: '100%', overflow: 'auto', flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+      {activeSection === 0 && (
+      <Paper sx={{ width: '100%', overflow: 'auto', flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           {loading ? (
             <Box display="flex" justifyContent="center" alignItems="center" minHeight={400}>
               <CircularProgress />
@@ -1246,14 +1182,14 @@ const DepositCallsPage = () => {
                       {isColVisible('order') && <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', fontSize: '0.6rem' }}>Order</TableCell>}
                       {isColVisible('orderCreated') && <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', fontSize: '0.6rem' }}>Order Created</TableCell>}
                       {isColVisible('broker') && <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', fontSize: '0.6rem' }}>Broker</TableCell>}
-                      {isColVisible('clientNet') && <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', fontSize: '0.6rem' }}>Client Net</TableCell>}
-                      {isColVisible('ourNet') && <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', fontSize: '0.6rem' }}>Our Net</TableCell>}
+                      {!isAgent && isColVisible('clientNet') && <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', fontSize: '0.6rem' }}>Client Net</TableCell>}
+                      {!isAgent && isColVisible('ourNet') && <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', fontSize: '0.6rem' }}>Our Net</TableCell>}
                       {isColVisible('am') && <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', fontSize: '0.6rem' }}>AM</TableCell>}
                       {isColVisible('ftdName') && <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', fontSize: '0.6rem' }}>FTD Name</TableCell>}
                       {isColVisible('email') && <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', fontSize: '0.6rem' }}>Email</TableCell>}
                       {isColVisible('phone') && <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', fontSize: '0.6rem' }}>Phone</TableCell>}
-                      {isColVisible('psp') && <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', fontSize: '0.6rem' }}>PSP</TableCell>}
-                      {isColVisible('cardIssuer') && <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', fontSize: '0.6rem' }}>Card Issuer</TableCell>}
+                      {!isAgent && isColVisible('psp') && <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', fontSize: '0.6rem' }}>PSP</TableCell>}
+                      {!isAgent && isColVisible('cardIssuer') && <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', fontSize: '0.6rem' }}>Card Issuer</TableCell>}
                       {isColVisible('verified') && <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', textAlign: 'center', fontSize: '0.6rem' }}>Verified</TableCell>}
                       {isColVisible('deposit') && <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', textAlign: 'center', fontSize: '0.6rem' }}>Dep.</TableCell>}
                       {isColVisible('depositCall') && <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', textAlign: 'center', fontSize: '0.6rem' }}>Dep. Call</TableCell>}
@@ -1310,14 +1246,14 @@ const DepositCallsPage = () => {
                           })()}</Typography>
                         </TableCell>
                         )}
-                        {isColVisible('clientNet') && (
+                        {!isAgent && isColVisible('clientNet') && (
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>
                           <Typography sx={{ fontSize: '0.55rem' }}>
                             {dc.orderId?.selectedClientNetwork?.name || '-'}
                           </Typography>
                         </TableCell>
                         )}
-                        {isColVisible('ourNet') && (
+                        {!isAgent && isColVisible('ourNet') && (
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>
                           <Typography sx={{ fontSize: '0.55rem' }}>
                             {dc.orderId?.selectedOurNetwork?.name || '-'}
@@ -1373,14 +1309,14 @@ const DepositCallsPage = () => {
                           </Typography>
                         </TableCell>
                         )}
-                        {isColVisible('psp') && (
+                        {!isAgent && isColVisible('psp') && (
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>
                           <Typography sx={{ fontSize: '0.55rem' }}>
                             {getLeadMetadata(dc)?.depositPSP?.name || '-'}
                           </Typography>
                         </TableCell>
                         )}
-                        {isColVisible('cardIssuer') && (
+                        {!isAgent && isColVisible('cardIssuer') && (
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>
                           <Typography sx={{ fontSize: '0.55rem' }}>
                             {getLeadMetadata(dc)?.depositCardIssuer?.name || '-'}
@@ -1510,9 +1446,9 @@ const DepositCallsPage = () => {
         </Paper>
       )}
 
-      {/* Filler Calls Tab */}
-      {tabValue === 1 && (
-        <Paper sx={{ width: '100%', overflow: 'auto', flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+      {/* Filler Calls */}
+      {activeSection === 1 && (
+      <Paper sx={{ width: '100%', overflow: 'auto', flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           {fillerLoading ? (
             <Box display="flex" justifyContent="center" alignItems="center" minHeight={400}>
               <CircularProgress />
@@ -1593,7 +1529,7 @@ const DepositCallsPage = () => {
                           <Typography variant="body2" fontFamily="monospace" sx={{ fontSize: '0.75rem' }}>{decl.destinationNumber}</Typography>
                         </TableCell>
                         <TableCell sx={{ textAlign: 'center' }}>
-                          {decl.recordFile ? (
+                          {decl.recordFile && !isAgent ? (
                             <Tooltip title="Play Recording">
                               <IconButton size="small" color="primary" onClick={() => setRecordingDeclaration(decl)}>
                                 <PlayIcon fontSize="small" />
@@ -2152,15 +2088,16 @@ const DepositCallsPage = () => {
         onDeclarationUpdated={() => {
           setSelectedDeclaration(null);
           fetchDepositCalls();
-          if (tabValue === 1) fetchFillerDeclarations();
+          fetchFillerDeclarations();
         }}
         isAdmin={isAdmin}
+        isAgent={isAgent}
         onReset={selectedDeclaration?.callCategory === 'filler' ? null : async (declarationId) => {
           await api.put(`/call-declarations/${declarationId}/reset`);
           toast.success('Declaration reset successfully');
           setSelectedDeclaration(null);
           fetchDepositCalls();
-          if (tabValue === 1) fetchFillerDeclarations();
+          fetchFillerDeclarations();
         }}
       />
     </Box>

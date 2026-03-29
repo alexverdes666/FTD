@@ -70,6 +70,7 @@ const CallDeclarationsTable = ({
   onDelete,
   showAgent = false,
   hidePagination = false,
+  hideRecordings = false,
   emptyMessage = "No declarations found"
 }) => {
   const [expandedRows, setExpandedRows] = useState(new Set());
@@ -279,7 +280,7 @@ const CallDeclarationsTable = ({
                     </TableCell>
                     <TableCell align="right" onClick={(e) => e.stopPropagation()}>
                       <Box display="flex" justifyContent="flex-end" gap={0}>
-                        {declaration.recordFile && (
+                        {declaration.recordFile && !hideRecordings && (
                           <Tooltip title="Play Recording">
                             <IconButton size="small" color="primary" onClick={() => setRecordingDeclaration(declaration)} sx={{ p: 0.25 }}>
                               <PlayIcon sx={{ fontSize: 16 }} />
@@ -382,7 +383,7 @@ const CallDeclarationsTable = ({
                           )}
 
                           {/* Inline Recording Player */}
-                          {declaration.recordFile && (
+                          {declaration.recordFile && !hideRecordings && (
                             <Box sx={{ mt: 1, pt: 1, borderTop: "1px solid", borderColor: "divider" }}>
                               <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.65rem", textTransform: "uppercase", mb: 0.5, display: "block" }}>Recording</Typography>
                               <InlineRecordingPlayer recordFile={declaration.recordFile} />

@@ -40,8 +40,10 @@ import { selectUser } from "../store/slices/authSlice";
 import api from "../services/api";
 import depositCallsService from "../services/depositCallsService";
 import { getPendingDeclarations } from "../services/callDeclarations";
+import { getPendingApprovalFines } from "../services/agentFines";
 import CallDeclarationsTable from "../components/CallDeclarationsTable";
 import CallDeclarationApprovalDialog from "../components/CallDeclarationApprovalDialog";
+import FineDetailDialog from "../components/FineDetailDialog";
 import { formatDateBG } from "../utils/dateUtils";
 
 const COMPACT_TABLE_SX = {
@@ -425,6 +427,11 @@ const PendingPage = () => {
   const [pendingVerifications, setPendingVerifications] = useState([]);
   const [verificationsLoading, setVerificationsLoading] = useState(true);
 
+  // Fines state
+  const [pendingFines, setPendingFines] = useState([]);
+  const [finesLoading, setFinesLoading] = useState(true);
+  const [selectedFine, setSelectedFine] = useState(null);
+
   // Filter state
   const [search, setSearch] = useState("");
   const [selectedAM, setSelectedAM] = useState(null);
@@ -501,12 +508,26 @@ const PendingPage = () => {
     }
   }, []);
 
+  // Fetch pending fines (pending_approval status)
+  const fetchFines = useCallback(async () => {
+    try {
+      setFinesLoading(true);
+      const data = await getPendingApprovalFines();
+      setPendingFines(data || []);
+    } catch (err) {
+      console.error("Failed to load pending fines:", err);
+    } finally {
+      setFinesLoading(false);
+    }
+  }, []);
+
   // Load all on mount
   useEffect(() => {
     fetchDeposits();
     fetchDeclarations();
     fetchVerifications();
-  }, [fetchDeposits, fetchDeclarations, fetchVerifications]);
+    fetchFines();
+  }, [fetchDeposits, fetchDeclarations, fetchVerifications, fetchFines]);
 
   // Auto-dismiss alerts
   useEffect(() => {
@@ -539,15 +560,17 @@ const PendingPage = () => {
   const depositDates = useMemo(() => buildDateSet(pendingDeposits, (i) => i.orderId?.createdAt), [pendingDeposits, buildDateSet]);
   const declarationDates = useMemo(() => buildDateSet(pendingDeclarations, (i) => i.callDate || i.createdAt), [pendingDeclarations, buildDateSet]);
   const verificationDates = useMemo(() => buildDateSet(pendingVerifications, (i) => i.createdAt), [pendingVerifications, buildDateSet]);
-  const allDates = useMemo(() => new Set([...depositDates, ...declarationDates, ...verificationDates]), [depositDates, declarationDates, verificationDates]);
+  const fineDates = useMemo(() => buildDateSet(pendingFines, (i) => i.imposedDate || i.createdAt), [pendingFines, buildDateSet]);
+  const allDates = useMemo(() => new Set([...depositDates, ...declarationDates, ...verificationDates, ...fineDates]), [depositDates, declarationDates, verificationDates, fineDates]);
 
-  // Pick record dates based on active tab: 0=All, 1=Deposits, 2=Declarations, 3=Verifications
+  // Pick record dates based on active tab: 0=All, 1=Deposits, 2=Declarations, 3=Verifications, 4=Fines
   const recordDates = useMemo(() => {
     if (activeTab === 0) return allDates;
     if (activeTab === 1) return depositDates;
     if (activeTab === 2) return declarationDates;
-    return verificationDates;
-  }, [activeTab, allDates, depositDates, declarationDates, verificationDates]);
+    if (activeTab === 3) return verificationDates;
+    return fineDates;
+  }, [activeTab, allDates, depositDates, declarationDates, verificationDates, fineDates]);
 
   // Filtering logic
   const matchesFilters = useCallback(
@@ -571,6 +594,11 @@ const PendingPage = () => {
           const leadName = `${item.leadId?.firstName || ""} ${item.leadId?.lastName || ""}`.toLowerCase();
           const agentName = (item.requestedBy?.fullName || "").toLowerCase();
           match = leadName.includes(term) || agentName.includes(term);
+        } else if (type === "fine") {
+          const agentName = (item.agent?.fullName || "").toLowerCase();
+          const imposedByName = (item.imposedBy?.fullName || "").toLowerCase();
+          const reason = (item.reason || "").toLowerCase();
+          match = agentName.includes(term) || imposedByName.includes(term) || reason.includes(term);
         }
         if (!match) return false;
       }
@@ -580,6 +608,7 @@ const PendingPage = () => {
         if (type === "deposit") amId = item.accountManager?._id;
         else if (type === "declaration") amId = item.affiliateManager?._id;
         else if (type === "verification") amId = item.affiliateManagerId?._id || item.orderId?.requester?._id;
+        else if (type === "fine") amId = item.imposedBy?._id;
         if (amId !== selectedAM._id) return false;
       }
 
@@ -588,6 +617,7 @@ const PendingPage = () => {
         if (type === "deposit") agentId = item.assignedAgent?._id;
         else if (type === "declaration") agentId = item.agent?._id;
         else if (type === "verification") agentId = item.requestedBy?._id;
+        else if (type === "fine") agentId = item.agent?._id;
         if (agentId !== selectedAgent._id) return false;
       }
 
@@ -596,6 +626,7 @@ const PendingPage = () => {
         if (type === "deposit") itemDate = item.orderId?.createdAt;
         else if (type === "declaration") itemDate = item.callDate || item.createdAt;
         else if (type === "verification") itemDate = item.createdAt;
+        else if (type === "fine") itemDate = item.imposedDate || item.createdAt;
         if (itemDate) {
           const d = new Date(itemDate);
           if (dateFrom && d < new Date(dateFrom)) return false;
@@ -632,6 +663,13 @@ const PendingPage = () => {
     [pendingVerifications, matchesFilters]
   );
 
+  const filteredFines = useMemo(
+    () => pendingFines
+      .filter((d) => matchesFilters(d, "fine"))
+      .sort((a, b) => new Date(b.imposedDate || b.createdAt || 0) - new Date(a.imposedDate || a.createdAt || 0)),
+    [pendingFines, matchesFilters]
+  );
+
   const handleGoToOrder = (item) => {
     navigate("/orders", {
       state: {
@@ -647,6 +685,12 @@ const PendingPage = () => {
     );
     setSelectedDeclaration(null);
     fetchDeclarations();
+  };
+
+  const handleFineUpdated = () => {
+    setSuccess("Fine updated successfully!");
+    setSelectedFine(null);
+    fetchFines();
   };
 
   const handleApproveVerification = async (requestId) => {
@@ -791,7 +835,7 @@ const PendingPage = () => {
           >
             <Tab
               label={
-                <Badge badgeContent={filteredDeposits.length + filteredDeclarations.length + filteredVerifications.length} color="error" max={999} sx={{ "& .MuiBadge-badge": { fontSize: "0.6rem", height: 16, minWidth: 16, p: "0 4px" } }}>
+                <Badge badgeContent={filteredDeposits.length + filteredDeclarations.length + filteredVerifications.length + filteredFines.length} color="error" max={999} sx={{ "& .MuiBadge-badge": { fontSize: "0.6rem", height: 16, minWidth: 16, p: "0 4px" } }}>
                   <Box sx={{ px: 1 }}>All</Box>
                 </Badge>
               }
@@ -817,6 +861,13 @@ const PendingPage = () => {
                 </Badge>
               }
             />
+            <Tab
+              label={
+                <Badge badgeContent={filteredFines.length} color="error" max={999} sx={{ "& .MuiBadge-badge": { fontSize: "0.6rem", height: 16, minWidth: 16, p: "0 4px" } }}>
+                  <Box sx={{ px: 1 }}>Fines</Box>
+                </Badge>
+              }
+            />
           </Tabs>
         </Paper>
       </Box>
@@ -834,7 +885,7 @@ const PendingPage = () => {
         {/* Tab 0: All combined */}
         {activeTab === 0 && (
           <Paper sx={{ borderRadius: "0 0 12px 12px", display: "flex", flexDirection: "column", minHeight: "100%" }}>
-            {depositsLoading && declarationsLoading && verificationsLoading ? (
+            {depositsLoading && declarationsLoading && verificationsLoading && finesLoading ? (
               <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
                 <CircularProgress />
               </Box>
@@ -937,7 +988,28 @@ const PendingPage = () => {
                         </TableCell>
                       </TableRow>
                     ))}
-                    {filteredDeposits.length === 0 && filteredDeclarations.length === 0 && filteredVerifications.length === 0 && (
+                    {filteredFines.map((fine) => (
+                      <TableRow key={`fine-${fine._id}`} sx={{ cursor: "pointer" }} onClick={() => setSelectedFine(fine)}>
+                        <TableCell><Chip label="Fine" size="small" color="error" variant="outlined" sx={{ fontSize: "0.6rem", height: 18 }} /></TableCell>
+                        <TableCell>{formatDateBG(fine.imposedDate || fine.createdAt)}</TableCell>
+                        <TableCell sx={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {fine.agent?.fullName || "N/A"}
+                        </TableCell>
+                        <TableCell sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          ${fine.amount} - {fine.reason || "N/A"}
+                        </TableCell>
+                        <TableCell sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {fine.agent?.fullName || "N/A"}
+                        </TableCell>
+                        <TableCell sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {fine.imposedBy?.fullName || "N/A"}
+                        </TableCell>
+                        <TableCell sx={{ textAlign: "center" }}>
+                          <Chip label="Review" size="small" variant="outlined" color="primary" sx={{ fontSize: "0.6rem", height: 18, cursor: "pointer" }} />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {filteredDeposits.length === 0 && filteredDeclarations.length === 0 && filteredVerifications.length === 0 && filteredFines.length === 0 && (
                       <TableRow>
                         <TableCell colSpan={7} sx={{ textAlign: "center", py: 3 }}>
                           <Alert severity="info" sx={{ justifyContent: "center" }}>No pending items to review.</Alert>
@@ -1132,6 +1204,62 @@ const PendingPage = () => {
             )}
           </Paper>
         )}
+
+        {/* Tab 4: Pending Fines */}
+        {activeTab === 4 && (
+          <Paper sx={{ borderRadius: "0 0 12px 12px", display: "flex", flexDirection: "column", minHeight: "100%" }}>
+            {finesLoading ? (
+              <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
+                <CircularProgress />
+              </Box>
+            ) : filteredFines.length === 0 ? (
+              <Box sx={{ p: 2 }}>
+                <Alert severity="info">No pending fines to review.</Alert>
+              </Box>
+            ) : (
+              <TableContainer sx={{ flex: 1 }}>
+                <Table size="small" sx={COMPACT_TABLE_SX}>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell sx={{ width: 90 }}>Date</TableCell>
+                      <TableCell sx={{ width: 140 }}>Agent</TableCell>
+                      <TableCell sx={{ width: 80 }}>Amount</TableCell>
+                      <TableCell sx={{ width: 140 }}>Reason</TableCell>
+                      <TableCell sx={{ width: 120 }}>Imposed By</TableCell>
+                      <TableCell sx={{ width: 80, textAlign: "center" }}>Status</TableCell>
+                      <TableCell sx={{ width: 80, textAlign: "center" }}>Actions</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {filteredFines.map((fine) => (
+                      <TableRow key={fine._id} sx={{ cursor: "pointer" }} onClick={() => setSelectedFine(fine)}>
+                        <TableCell>{formatDateBG(fine.imposedDate || fine.createdAt)}</TableCell>
+                        <TableCell sx={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {fine.agent?.fullName || "N/A"}
+                        </TableCell>
+                        <TableCell sx={{ fontWeight: 600, color: "error.main" }}>
+                          ${fine.amount}
+                        </TableCell>
+                        <TableCell sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {fine.reason || "N/A"}
+                        </TableCell>
+                        <TableCell sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {fine.imposedBy?.fullName || "N/A"}
+                        </TableCell>
+                        <TableCell sx={{ textAlign: "center" }}>
+                          <Chip label="Pending" size="small" color="warning" sx={{ fontSize: "0.6rem", height: 18 }} />
+                        </TableCell>
+                        <TableCell sx={{ textAlign: "center" }}>
+                          <Chip label="Review" size="small" variant="outlined" color="primary" sx={{ fontSize: "0.6rem", height: 18, cursor: "pointer" }} />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            )}
+          </Paper>
+        )}
       </Box>
 
       {/* Call Declaration Approval Dialog */}
@@ -1141,6 +1269,14 @@ const PendingPage = () => {
         declaration={selectedDeclaration}
         onDeclarationUpdated={handleDeclarationUpdated}
         isAdmin={isAdmin}
+      />
+
+      {/* Fine Detail Dialog */}
+      <FineDetailDialog
+        open={!!selectedFine}
+        onClose={() => setSelectedFine(null)}
+        fine={selectedFine}
+        onFineUpdated={handleFineUpdated}
       />
     </Box>
   );

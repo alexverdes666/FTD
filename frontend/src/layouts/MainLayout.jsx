@@ -375,7 +375,7 @@ const MainLayout = () => {
           key: "schedules",
           children: [
             {
-              text: "Pending",
+              text: "Requests",
               icon: <PendingIcon />,
               path: "/pending",
             },
@@ -417,7 +417,7 @@ const MainLayout = () => {
           key: "schedules",
           children: [
             {
-              text: "Pending",
+              text: "Requests",
               icon: <PendingIcon />,
               path: "/pending",
             },
