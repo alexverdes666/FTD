@@ -5915,10 +5915,19 @@ exports.batchValidateIPQS = async (req, res, next) => {
     // Process leads sequentially to avoid rate limiting
     let successCount = 0;
     let failedCount = 0;
+    let insufficientCredits = false;
 
     for (const lead of leadsToValidate) {
       try {
         const result = await ipqsService.validateLead(lead);
+
+        // Check for insufficient credits - stop immediately and don't save bad data
+        if (result.insufficientCredits) {
+          insufficientCredits = true;
+          console.warn(`[IPQS] Insufficient credits detected. Stopping batch validation.`);
+          break;
+        }
+
         const summary = ipqsService.getValidationSummary(result.email, result.phone);
 
         // Update lead in database
@@ -5959,6 +5968,26 @@ exports.batchValidateIPQS = async (req, res, next) => {
         });
         failedCount++;
       }
+    }
+
+    // If insufficient credits, return error without saving bad data
+    if (insufficientCredits) {
+      console.error(`[IPQS] Batch validation aborted: insufficient credits (${successCount} validated before failure)`);
+      return res.status(402).json({
+        success: false,
+        insufficientCredits: true,
+        message: `IPQS validation failed: Insufficient credits in your IPQualityScore account. ${successCount > 0 ? `${successCount} lead(s) were validated before credits ran out.` : "No leads were validated."} Please top up your IPQS credits to continue.`,
+        data: {
+          results,
+          stats: {
+            total: leads.length,
+            validated: successCount + alreadyValidated.length,
+            newlyValidated: successCount,
+            alreadyValidated: force !== "true" ? alreadyValidated.length : 0,
+            failed: failedCount,
+          },
+        },
+      });
     }
 
     console.log(

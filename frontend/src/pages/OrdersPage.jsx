@@ -2032,6 +2032,17 @@ const OrdersPage = () => {
       }
     } catch (error) {
       console.error("Error rechecking lead IPQS:", error);
+      if (error.response?.data?.insufficientCredits) {
+        setNotification({
+          message: "IPQS Insufficient Credits: Your IPQualityScore account has run out of credits. Please top up at ipqualityscore.com.",
+          severity: "error",
+        });
+      } else {
+        setNotification({
+          message: error.response?.data?.message || "Failed to recheck lead with IPQS",
+          severity: "error",
+        });
+      }
     }
   }, [leadsPreviewModal.orderId]);
 
@@ -2127,10 +2138,17 @@ const OrdersPage = () => {
       }
     } catch (error) {
       console.error("Error validating leads with IPQS:", error);
-      setNotification({
-        message: error.response?.data?.message || "Failed to validate leads",
-        severity: "error",
-      });
+      if (error.response?.data?.insufficientCredits) {
+        setNotification({
+          message: "IPQS Insufficient Credits: Your IPQualityScore account has run out of credits. Please top up at ipqualityscore.com.",
+          severity: "error",
+        });
+      } else {
+        setNotification({
+          message: error.response?.data?.message || "Failed to validate leads",
+          severity: "error",
+        });
+      }
     } finally {
       setIpqsValidatingOrders((prev) => prev.filter((id) => id !== orderId));
     }

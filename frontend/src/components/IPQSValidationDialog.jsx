@@ -477,7 +477,11 @@ const IPQSValidationDialog = ({ open, onClose, orderId, orderDetails, onValidati
       }
     } catch (err) {
       console.error("Error validating leads:", err);
-      setError(err.response?.data?.message || "Failed to validate leads");
+      if (err.response?.data?.insufficientCredits) {
+        setError("IPQS Insufficient Credits: Your IPQualityScore account has run out of credits. Please top up at ipqualityscore.com to continue.");
+      } else {
+        setError(err.response?.data?.message || "Failed to validate leads");
+      }
     } finally {
       setValidating(false);
     }

@@ -553,7 +553,14 @@ const useLeadActions = ({
           }
         } catch (err) {
           console.error("Auto IPQS validation failed for replaced lead:", err);
-          // Don't show error notification - auto-validation is optional
+          // Show notification only for insufficient credits - important for user to know
+          if (err.response?.data?.insufficientCredits) {
+            setNotification({
+              message: "IPQS Insufficient Credits: Your IPQualityScore account has run out of credits. Please top up at ipqualityscore.com.",
+              severity: "error",
+            });
+          }
+          // Don't show error notification for other failures - auto-validation is optional
         }
       }
     },

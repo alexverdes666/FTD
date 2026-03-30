@@ -1854,7 +1854,11 @@ const LeadsPage = () => {
       }
     } catch (err) {
       console.error("Error batch validating IPQS:", err);
-      setError(err.response?.data?.message || "Failed to validate leads with IPQS");
+      if (err.response?.data?.insufficientCredits) {
+        setError("⚠ IPQS Insufficient Credits: Your IPQualityScore account has run out of credits. Please top up your credits at ipqualityscore.com to continue validating leads.");
+      } else {
+        setError(err.response?.data?.message || "Failed to validate leads with IPQS");
+      }
     } finally {
       setIpqsValidating(false);
     }
@@ -1918,9 +1922,13 @@ const LeadsPage = () => {
       }
     } catch (err) {
       console.error("Error rechecking IPQS:", err);
-      setError(
-        err.response?.data?.message || "Failed to recheck leads with IPQS"
-      );
+      if (err.response?.data?.insufficientCredits) {
+        setError("⚠ IPQS Insufficient Credits: Your IPQualityScore account has run out of credits. Please top up your credits at ipqualityscore.com to continue validating leads.");
+      } else {
+        setError(
+          err.response?.data?.message || "Failed to recheck leads with IPQS"
+        );
+      }
     } finally {
       setIpqsValidating(false);
     }

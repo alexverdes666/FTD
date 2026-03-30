@@ -7986,8 +7986,12 @@ exports.validateOrderLeadsIPQS = async (req, res, next) => {
     // Validate only the unvalidated leads
     const validationResults = await ipqsService.validateOrderLeads(leadsToValidate);
 
+    // Check for insufficient credits - filter out failed results
+    const hasInsufficientCredits = validationResults.some((r) => r.insufficientCredits);
+    const validResults = validationResults.filter((r) => !r.insufficientCredits);
+
     // Process results and add summaries
-    const newResultsWithSummary = validationResults.map((result) => {
+    const newResultsWithSummary = validResults.map((result) => {
       const summary = ipqsService.getValidationSummary(result.email, result.phone);
       return {
         ...result,
@@ -7995,7 +7999,7 @@ exports.validateOrderLeadsIPQS = async (req, res, next) => {
       };
     });
 
-    // Update newly validated leads in database
+    // Update newly validated leads in database (only valid results)
     const bulkOps = newResultsWithSummary.map((result) => ({
       updateOne: {
         filter: { _id: result.leadId },
@@ -8014,6 +8018,24 @@ exports.validateOrderLeadsIPQS = async (req, res, next) => {
 
     if (bulkOps.length > 0) {
       await Lead.bulkWrite(bulkOps);
+    }
+
+    // If insufficient credits, return error
+    if (hasInsufficientCredits) {
+      console.error(`[IPQS] Order ${orderId} validation aborted: insufficient credits (${newResultsWithSummary.length} validated before failure)`);
+      return res.status(402).json({
+        success: false,
+        insufficientCredits: true,
+        message: `IPQS validation failed: Insufficient credits in your IPQualityScore account. ${newResultsWithSummary.length > 0 ? `${newResultsWithSummary.length} lead(s) were validated before credits ran out.` : "No leads were validated."} Please top up your IPQS credits to continue.`,
+        data: {
+          orderId: orderId,
+          results: newResultsWithSummary,
+          stats: calculateIPQSStats(newResultsWithSummary),
+          validatedAt: new Date(),
+          newlyValidated: newResultsWithSummary.length,
+          alreadyValidated: alreadyValidatedLeads.length,
+        },
+      });
     }
 
     // Combine new results with already validated leads for complete response
@@ -8126,6 +8148,17 @@ exports.validateSingleLeadIPQS = async (req, res, next) => {
 
     // Validate the lead
     const result = await ipqsService.validateLead(lead);
+
+    // Check for insufficient credits - don't save bad data
+    if (result.insufficientCredits) {
+      console.error(`[IPQS] Single lead validation failed for ${leadId}: insufficient credits`);
+      return res.status(402).json({
+        success: false,
+        insufficientCredits: true,
+        message: "IPQS validation failed: Insufficient credits in your IPQualityScore account. Please top up your IPQS credits to continue.",
+      });
+    }
+
     const summary = ipqsService.getValidationSummary(result.email, result.phone);
 
     // Update lead in database

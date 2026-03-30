@@ -14,11 +14,23 @@ const COUNTRY_CODES = {
     'United Kingdom': '+44',
 };
 
+// Message pattern indicating insufficient IPQS credits
+const INSUFFICIENT_CREDITS_PATTERN = 'insufficient credits';
+
 class IPQSService {
     constructor() {
         this.apiKey = process.env.IPQS_API;
         this.baseUrl = 'https://www.ipqualityscore.com/api/json';
         this.timeout = 30000; // 30 seconds timeout
+    }
+
+    /**
+     * Check if an IPQS response indicates insufficient credits
+     * @param {Object} data - IPQS response data
+     * @returns {boolean}
+     */
+    isInsufficientCredits(data) {
+        return data?.message?.toLowerCase().includes(INSUFFICIENT_CREDITS_PATTERN);
     }
 
     /**
@@ -50,6 +62,17 @@ class IPQSService {
             });
 
             if (response.data) {
+                // Check for insufficient credits
+                if (this.isInsufficientCredits(response.data)) {
+                    return {
+                        success: false,
+                        email: email,
+                        insufficientCredits: true,
+                        message: response.data.message,
+                        request_id: response.data.request_id
+                    };
+                }
+
                 return {
                     success: true,
                     email: email,
@@ -129,6 +152,17 @@ class IPQSService {
             });
 
             if (response.data) {
+                // Check for insufficient credits
+                if (this.isInsufficientCredits(response.data)) {
+                    return {
+                        success: false,
+                        phone: phone,
+                        insufficientCredits: true,
+                        message: response.data.message,
+                        request_id: response.data.request_id
+                    };
+                }
+
                 return {
                     success: true,
                     phone: phone,
@@ -210,6 +244,11 @@ class IPQSService {
         // Validate email
         if (lead.newEmail) {
             results.email = await this.validateEmail(lead.newEmail);
+            // If insufficient credits on email, skip phone validation
+            if (results.email.insufficientCredits) {
+                results.insufficientCredits = true;
+                return results;
+            }
         }
 
         // Validate phone
@@ -217,6 +256,9 @@ class IPQSService {
             // Format phone with country code prefix for accurate validation
             const formattedPhone = this.formatPhoneWithCountryCode(lead.newPhone, lead.country);
             results.phone = await this.validatePhone(formattedPhone, lead.country);
+            if (results.phone.insufficientCredits) {
+                results.insufficientCredits = true;
+            }
         }
 
         return results;
@@ -241,6 +283,12 @@ class IPQSService {
             try {
                 const result = await this.validateLead(lead);
                 results.push(result);
+
+                // Stop processing if insufficient credits detected
+                if (result.insufficientCredits) {
+                    console.warn('[IPQS] Insufficient credits detected. Stopping batch validation.');
+                    break;
+                }
 
                 // Small delay between requests to avoid rate limiting
                 await new Promise(resolve => setTimeout(resolve, 200));
