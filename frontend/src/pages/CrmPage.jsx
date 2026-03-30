@@ -1,4 +1,4 @@
-import React, { lazy, Suspense, useState, useEffect, useCallback } from "react";
+import React, { lazy, Suspense, useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
   Box,
@@ -125,11 +125,11 @@ const OldClientNetworksTab = ({ setHeaderExtra }) => {
     useSensitiveAction();
   const [search, setSearch] = useState("");
   const [showActiveOnly, setShowActiveOnly] = useState(false);
+  const searchHandlersRef = useRef({});
   const [openDialog, setOpenDialog] = useState(false);
   const [editingNetwork, setEditingNetwork] = useState(null);
   const [creating, setCreating] = useState(false);
   const [newNetworkName, setNewNetworkName] = useState("");
-  const [newNetworkDescription, setNewNetworkDescription] = useState("");
   const [employees, setEmployees] = useState([]);
   const [empName, setEmpName] = useState("");
   const [empTelegram, setEmpTelegram] = useState("");
@@ -151,11 +151,9 @@ const OldClientNetworksTab = ({ setHeaderExtra }) => {
     setEditingNetwork(network);
     if (network) {
       setNewNetworkName(network.name || "");
-      setNewNetworkDescription(network.description || "");
       setEmployees([]);
     } else {
       setNewNetworkName("");
-      setNewNetworkDescription("");
       setEmployees([]);
     }
     setEmpName("");
@@ -198,13 +196,11 @@ const OldClientNetworksTab = ({ setHeaderExtra }) => {
       if (editingNetwork) {
         await api.put(`/client-networks/${editingNetwork._id}`, {
           name: newNetworkName.trim(),
-          description: newNetworkDescription.trim() || undefined,
         });
         toast.success(`Network "${newNetworkName.trim()}" updated`);
       } else {
         const response = await api.post("/client-networks", {
           name: newNetworkName.trim(),
-          description: newNetworkDescription.trim() || undefined,
         });
         const newNetwork = response.data.data;
 
@@ -296,17 +292,25 @@ const OldClientNetworksTab = ({ setHeaderExtra }) => {
     }
   }, []);
 
+  // Fetch networks on search/filter change
   useEffect(() => {
     fetchNetworks();
+  }, [fetchNetworks]);
+
+  // Fetch stats only on mount (heavy aggregation, doesn't depend on search)
+  useEffect(() => {
     fetchNetworkStats();
-  }, [fetchNetworks, fetchNetworkStats]);
+  }, [fetchNetworkStats]);
 
   const handleSearchKeyDown = (e) => {
     if (e.key === "Enter") {
       fetchNetworks(1);
-      fetchNetworkStats();
     }
   };
+
+  // Keep refs current so header handlers always use latest values
+  searchHandlersRef.current.onChange = (e) => setSearch(e.target.value);
+  searchHandlersRef.current.onKeyDown = handleSearchKeyDown;
 
   const getNetworkDealsCount = (networkId) =>
     networkStats.networkStats?.[networkId]?.ordersCount || 0;
@@ -316,7 +320,7 @@ const OldClientNetworksTab = ({ setHeaderExtra }) => {
 
   const colSpan = canManageNetworks ? 10 : 9;
 
-  // Push filters to CRM header
+  // Push filters to CRM header — uses refs for handlers so deps don't include `search`
   useEffect(() => {
     if (!setHeaderExtra) return;
     setHeaderExtra(
@@ -329,9 +333,9 @@ const OldClientNetworksTab = ({ setHeaderExtra }) => {
         <TextField
           size="small"
           placeholder="Search..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          onKeyDown={handleSearchKeyDown}
+          defaultValue=""
+          onChange={(e) => searchHandlersRef.current.onChange(e)}
+          onKeyDown={(e) => searchHandlersRef.current.onKeyDown(e)}
           InputProps={{
             startAdornment: (
               <InputAdornment position="start">
@@ -353,7 +357,7 @@ const OldClientNetworksTab = ({ setHeaderExtra }) => {
         )}
       </>
     );
-  }, [setHeaderExtra, showActiveOnly, search, canManageNetworks]);
+  }, [setHeaderExtra, showActiveOnly, canManageNetworks]);
 
   useEffect(() => {
     return () => { if (setHeaderExtra) setHeaderExtra(null); };
@@ -534,17 +538,6 @@ const OldClientNetworksTab = ({ setHeaderExtra }) => {
               placeholder="Enter network name..."
               inputProps={{ maxLength: 100 }}
             />
-            <TextField
-              label="Description (optional)"
-              value={newNetworkDescription}
-              onChange={(e) => setNewNetworkDescription(e.target.value)}
-              fullWidth
-              multiline
-              rows={2}
-              placeholder="Add a description..."
-              inputProps={{ maxLength: 500 }}
-            />
-
             {!editingNetwork && (
               <>
                 <Divider sx={{ my: 0.5 }} />
@@ -660,6 +653,7 @@ const OldClientBrokersTab = ({ setHeaderExtra }) => {
   const isAdmin = user?.role === "admin";
   const canManageBrokers = user?.role === "admin" || user?.role === "affiliate_manager";
   const [search, setSearch] = useState("");
+  const brokerSearchHandlersRef = useRef({});
   const [openDialog, setOpenDialog] = useState(false);
   const [editingBroker, setEditingBroker] = useState(null);
   const [deleteConfirmBroker, setDeleteConfirmBroker] = useState(null);
@@ -767,10 +761,15 @@ const OldClientBrokersTab = ({ setHeaderExtra }) => {
     }
   }, []);
 
+  // Fetch brokers on search change
   useEffect(() => {
     fetchBrokers();
+  }, [fetchBrokers]);
+
+  // Fetch stats only on mount
+  useEffect(() => {
     fetchNetworkStats();
-  }, [fetchBrokers, fetchNetworkStats]);
+  }, [fetchNetworkStats]);
 
   const handleSearchKeyDown = (e) => {
     if (e.key === "Enter") {
@@ -778,9 +777,13 @@ const OldClientBrokersTab = ({ setHeaderExtra }) => {
     }
   };
 
+  // Keep refs current so header handlers always use latest values
+  brokerSearchHandlersRef.current.onChange = (e) => setSearch(e.target.value);
+  brokerSearchHandlersRef.current.onKeyDown = handleSearchKeyDown;
+
   const colSpan = canManageBrokers ? 8 : 7;
 
-  // Push filters to CRM header
+  // Push filters to CRM header — uses refs for handlers so deps don't include `search`
   useEffect(() => {
     if (!setHeaderExtra) return;
     setHeaderExtra(
@@ -788,9 +791,9 @@ const OldClientBrokersTab = ({ setHeaderExtra }) => {
         <TextField
           size="small"
           placeholder="Search..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          onKeyDown={handleSearchKeyDown}
+          defaultValue=""
+          onChange={(e) => brokerSearchHandlersRef.current.onChange(e)}
+          onKeyDown={(e) => brokerSearchHandlersRef.current.onKeyDown(e)}
           InputProps={{
             startAdornment: (
               <InputAdornment position="start">
@@ -812,7 +815,7 @@ const OldClientBrokersTab = ({ setHeaderExtra }) => {
         )}
       </>
     );
-  }, [setHeaderExtra, search, canManageBrokers]);
+  }, [setHeaderExtra, canManageBrokers]);
 
   useEffect(() => {
     return () => { if (setHeaderExtra) setHeaderExtra(null); };

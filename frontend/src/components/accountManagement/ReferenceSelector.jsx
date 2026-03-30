@@ -46,12 +46,13 @@ const ReferenceSelector = ({
   const [notes, setNotes] = useState("");
   const [createMode, setCreateMode] = useState(false);
   const [newNetworkName, setNewNetworkName] = useState("");
-  const [newNetworkDescription, setNewNetworkDescription] = useState("");
   const [creating, setCreating] = useState(false);
   const [employees, setEmployees] = useState([]);
   const [empName, setEmpName] = useState("");
   const [empTelegram, setEmpTelegram] = useState("");
   const [empPosition, setEmpPosition] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const searchTimerRef = React.useRef(null);
 
   useEffect(() => {
     if (open) {
@@ -61,19 +62,22 @@ const ReferenceSelector = ({
       setNotes("");
       setCreateMode(false);
       setNewNetworkName("");
-      setNewNetworkDescription("");
       setEmployees([]);
       setEmpName("");
       setEmpTelegram("");
       setEmpPosition("");
+      setSearchInput("");
     }
+    return () => {
+      if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    };
   }, [open]);
 
-  const fetchNetworks = async () => {
+  const fetchNetworks = async (search = "") => {
     try {
       setFetchLoading(true);
       const response = await api.get("/client-networks", {
-        params: { limit: 100, isActive: true },
+        params: { limit: 100, isActive: true, ...(search && { search }) },
       });
       // Filter out excluded networks
       const filtered = response.data.data.filter(
@@ -84,6 +88,17 @@ const ReferenceSelector = ({
       toast.error("Failed to fetch networks");
     } finally {
       setFetchLoading(false);
+    }
+  };
+
+  const handleSearchInputChange = (_, value, reason) => {
+    if (reason === "reset") return; // Don't clear input when options update
+    setSearchInput(value);
+    if (reason === "input") {
+      if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+      searchTimerRef.current = setTimeout(() => {
+        fetchNetworks(value);
+      }, 300);
     }
   };
 
@@ -145,7 +160,6 @@ const ReferenceSelector = ({
         setCreating(true);
         const response = await api.post("/client-networks", {
           name: newNetworkName.trim(),
-          description: newNetworkDescription.trim() || undefined,
         });
         const newNetwork = response.data.data;
 
@@ -225,7 +239,10 @@ const ReferenceSelector = ({
                 getOptionLabel={(option) => option.name}
                 value={selectedNetwork}
                 onChange={handleNetworkSelect}
+                inputValue={searchInput}
+                onInputChange={handleSearchInputChange}
                 loading={fetchLoading}
+                filterOptions={(x) => x}
                 renderInput={(params) => (
                   <TextField
                     {...params}
@@ -375,16 +392,6 @@ const ReferenceSelector = ({
                 required
                 placeholder="Enter new network name..."
                 inputProps={{ maxLength: 100 }}
-              />
-              <TextField
-                label="Description (optional)"
-                value={newNetworkDescription}
-                onChange={(e) => setNewNetworkDescription(e.target.value)}
-                fullWidth
-                multiline
-                rows={2}
-                placeholder="Add a description..."
-                inputProps={{ maxLength: 500 }}
               />
               <Typography
                 variant="body2"
