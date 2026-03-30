@@ -120,6 +120,7 @@ const OldClientNetworksTab = ({ setHeaderExtra }) => {
   const navigate = useNavigate();
   const user = useSelector(selectUser);
   const isAdmin = user?.role === "admin";
+  const canManageNetworks = user?.role === "admin" || user?.role === "affiliate_manager";
   const { executeSensitiveAction, sensitiveActionState, resetSensitiveAction } =
     useSensitiveAction();
   const [search, setSearch] = useState("");
@@ -313,7 +314,7 @@ const OldClientNetworksTab = ({ setHeaderExtra }) => {
   const getNetworkUnresolvedComments = (networkId) =>
     networkStats.commentStats?.[networkId] || 0;
 
-  const colSpan = isAdmin ? 9 : 8;
+  const colSpan = canManageNetworks ? 10 : 9;
 
   // Push filters to CRM header
   useEffect(() => {
@@ -340,7 +341,7 @@ const OldClientNetworksTab = ({ setHeaderExtra }) => {
           }}
           sx={{ width: 160, "& .MuiOutlinedInput-root": { borderRadius: 5, fontSize: "0.75rem", height: 28 } }}
         />
-        {isAdmin && (
+        {canManageNetworks && (
           <IconButton
             size="small"
             color="primary"
@@ -352,7 +353,7 @@ const OldClientNetworksTab = ({ setHeaderExtra }) => {
         )}
       </>
     );
-  }, [setHeaderExtra, showActiveOnly, search, isAdmin]);
+  }, [setHeaderExtra, showActiveOnly, search, canManageNetworks]);
 
   useEffect(() => {
     return () => { if (setHeaderExtra) setHeaderExtra(null); };
@@ -373,8 +374,9 @@ const OldClientNetworksTab = ({ setHeaderExtra }) => {
                 <TableCell sx={{ textAlign: "center", width: "9%" }}>CRM Deals</TableCell>
                 <TableCell sx={{ textAlign: "center", width: "9%" }}>Open Comments</TableCell>
                 <TableCell sx={{ textAlign: "center", width: "5%" }}>Notes</TableCell>
-                {isAdmin && (
-                  <TableCell sx={{ textAlign: "right", width: "18%" }}>Actions</TableCell>
+                <TableCell sx={{ textAlign: "center", width: "10%" }}>Created By</TableCell>
+                {canManageNetworks && (
+                  <TableCell sx={{ textAlign: "right", width: "14%" }}>Actions</TableCell>
                 )}
               </TableRow>
             </TableHead>
@@ -457,7 +459,12 @@ const OldClientNetworksTab = ({ setHeaderExtra }) => {
                         targetName={network.name}
                       />
                     </TableCell>
-                    {isAdmin && (
+                    <TableCell sx={{ textAlign: "center" }}>
+                      <Typography noWrap sx={{ fontSize: "0.72rem", color: "text.secondary" }}>
+                        {network.createdBy?.fullName || "-"}
+                      </Typography>
+                    </TableCell>
+                    {canManageNetworks && (
                       <TableCell sx={{ textAlign: "right" }}>
                         <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 0.25 }}>
                           <Tooltip title="Edit">
@@ -469,24 +476,28 @@ const OldClientNetworksTab = ({ setHeaderExtra }) => {
                               <EditIcon sx={{ fontSize: 16 }} />
                             </IconButton>
                           </Tooltip>
-                          <Tooltip title={network.isActive ? "Deactivate" : "Activate"}>
-                            <Switch
-                              checked={network.isActive}
-                              size="small"
-                              onClick={(e) => handleToggleActive(network, e)}
-                              sx={{ mx: 0 }}
-                            />
-                          </Tooltip>
-                          <Tooltip title="Delete">
-                            <IconButton
-                              size="small"
-                              color="error"
-                              onClick={(e) => handleDelete(network, e)}
-                              sx={{ p: 0.25 }}
-                            >
-                              <DeleteIcon sx={{ fontSize: 16 }} />
-                            </IconButton>
-                          </Tooltip>
+                          {isAdmin && (
+                            <Tooltip title={network.isActive ? "Deactivate" : "Activate"}>
+                              <Switch
+                                checked={network.isActive}
+                                size="small"
+                                onClick={(e) => handleToggleActive(network, e)}
+                                sx={{ mx: 0 }}
+                              />
+                            </Tooltip>
+                          )}
+                          {isAdmin && (
+                            <Tooltip title="Delete">
+                              <IconButton
+                                size="small"
+                                color="error"
+                                onClick={(e) => handleDelete(network, e)}
+                                sx={{ p: 0.25 }}
+                              >
+                                <DeleteIcon sx={{ fontSize: 16 }} />
+                              </IconButton>
+                            </Tooltip>
+                          )}
                         </Box>
                       </TableCell>
                     )}

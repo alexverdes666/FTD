@@ -240,11 +240,14 @@ const ClientNetworksPage = () => {
     }
   };
 
-  if (user?.role !== "admin") {
+  const isAdmin = user?.role === "admin";
+  const canManageNetworks = user?.role === "admin" || user?.role === "affiliate_manager";
+
+  if (!canManageNetworks) {
     return (
       <Box sx={{ p: 3 }}>
         <Alert severity="error">
-          Access denied. Only admins can manage client networks.
+          Access denied. Only admins and affiliate managers can manage client networks.
         </Alert>
       </Box>
     );
@@ -346,6 +349,16 @@ const ClientNetworksPage = () => {
                 sx={{
                   fontWeight: "bold",
                   backgroundColor: "grey.200",
+                  textAlign: "center",
+                  minWidth: 140,
+                }}
+              >
+                Created By
+              </TableCell>
+              <TableCell
+                sx={{
+                  fontWeight: "bold",
+                  backgroundColor: "grey.200",
                   textAlign: "right",
                   minWidth: 180,
                 }}
@@ -357,13 +370,13 @@ const ClientNetworksPage = () => {
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={5} align="center">
+                <TableCell colSpan={6} align="center">
                   Loading...
                 </TableCell>
               </TableRow>
             ) : clientNetworks.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} align="center">
+                <TableCell colSpan={6} align="center">
                   No client networks found
                 </TableCell>
               </TableRow>
@@ -390,6 +403,11 @@ const ClientNetworksPage = () => {
                       {new Date(network.createdAt).toLocaleDateString()}
                     </Typography>
                   </TableCell>
+                  <TableCell align="center">
+                    <Typography variant="body2" color="text.secondary">
+                      {network.createdBy?.fullName || "-"}
+                    </Typography>
+                  </TableCell>
                   <TableCell align="right">
                     <Box display="flex" gap={2} justifyContent="flex-end">
                       <Tooltip title="View">
@@ -408,29 +426,33 @@ const ClientNetworksPage = () => {
                           <EditIcon />
                         </IconButton>
                       </Tooltip>
-                      <Tooltip
-                        title={network.isActive ? "Deactivate" : "Activate"}
-                      >
-                        <IconButton
-                          size="small"
-                          onClick={() => handleToggleActive(network)}
+                      {isAdmin && (
+                        <Tooltip
+                          title={network.isActive ? "Deactivate" : "Activate"}
                         >
-                          <Switch
-                            checked={network.isActive}
+                          <IconButton
                             size="small"
-                            onChange={() => handleToggleActive(network)}
-                          />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip title="Delete">
-                        <IconButton
-                          size="small"
-                          onClick={() => handleDelete(network._id)}
-                          color="error"
-                        >
-                          <DeleteIcon />
-                        </IconButton>
-                      </Tooltip>
+                            onClick={() => handleToggleActive(network)}
+                          >
+                            <Switch
+                              checked={network.isActive}
+                              size="small"
+                              onChange={() => handleToggleActive(network)}
+                            />
+                          </IconButton>
+                        </Tooltip>
+                      )}
+                      {isAdmin && (
+                        <Tooltip title="Delete">
+                          <IconButton
+                            size="small"
+                            onClick={() => handleDelete(network._id)}
+                            color="error"
+                          >
+                            <DeleteIcon />
+                          </IconButton>
+                        </Tooltip>
+                      )}
                       <CommentButton
                         targetType="client_network"
                         targetId={network._id}
