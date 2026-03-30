@@ -605,11 +605,24 @@ const adminDecideFine = async (req, res) => {
 // Get fines pending approval (for own fines if not admin/manager)
 const getPendingApprovalFines = async (req, res) => {
   try {
-    // Admins and managers see all pending fines, other users only see their own
-    const isManagerOrAdmin = req.user.role === "admin" || req.user.role === "affiliate_manager";
-    const agentId = isManagerOrAdmin ? null : req.user.id;
+    // Auto-approve any fines that have been pending for more than 3 days
+    await AgentFine.autoApproveStalePendingFines();
 
-    const fines = await AgentFine.getPendingApprovalFines(agentId);
+    // Admins see all pending fines
+    // Affiliate managers see fines applied to them OR fines they imposed on agents
+    // Other users (agents) only see their own fines
+    let agentId = null;
+    let managerId = null;
+
+    if (req.user.role === "admin") {
+      // Admin sees all — both params stay null
+    } else if (req.user.role === "affiliate_manager") {
+      managerId = req.user.id;
+    } else {
+      agentId = req.user.id;
+    }
+
+    const fines = await AgentFine.getPendingApprovalFines(agentId, managerId);
 
     res.json({
       success: true,

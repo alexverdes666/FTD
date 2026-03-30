@@ -76,6 +76,25 @@ const FineDetailDialog = ({ open, onClose, fine, onFineUpdated }) => {
     }
   };
 
+  // Calculate auto-approval deadline (3 days from creation)
+  const getAutoApprovalInfo = () => {
+    if (fine.status !== 'pending_approval') return null;
+    const createdAt = new Date(fine.createdAt);
+    const deadline = new Date(createdAt.getTime() + 3 * 24 * 60 * 60 * 1000);
+    const now = new Date();
+    const remaining = deadline - now;
+    if (remaining <= 0) return { expired: true };
+    const hours = Math.floor(remaining / (1000 * 60 * 60));
+    const days = Math.floor(hours / 24);
+    const remainingHours = hours % 24;
+    let text = '';
+    if (days > 0) text += `${days}d `;
+    text += `${remainingHours}h`;
+    return { expired: false, text, deadline };
+  };
+
+  const autoApprovalInfo = getAutoApprovalInfo();
+
   const getStatusLabel = (status) => {
     switch (status) {
       case 'pending_approval': return 'Pending Approval';
@@ -250,6 +269,18 @@ const FineDetailDialog = ({ open, onClose, fine, onFineUpdated }) => {
           {error && (
             <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
               {error}
+            </Alert>
+          )}
+
+          {autoApprovalInfo && (
+            <Alert
+              severity={autoApprovalInfo.expired ? 'error' : 'warning'}
+              icon={<GavelIcon fontSize="inherit" />}
+              sx={{ mb: 2 }}
+            >
+              {autoApprovalInfo.expired
+                ? 'The review period has expired. This fine will be automatically approved shortly.'
+                : `This fine will be automatically approved in ${autoApprovalInfo.text} if not approved or disputed.`}
             </Alert>
           )}
 

@@ -17,6 +17,7 @@ import {
   Gavel as FineIcon,
   ArrowForward as GoIcon,
   Close as CloseIcon,
+  AccessTime as TimeIcon,
 } from '@mui/icons-material';
 import { selectUser, selectIsAuthenticated } from '../store/slices/authSlice';
 import { getUnacknowledgedFines, acknowledgeFine } from '../services/agentFines';
@@ -180,6 +181,27 @@ const FineNotificationPopup = () => {
             Imposed by: {currentFine.imposedBy.fullName}
           </Typography>
         )}
+        <Box
+          sx={{
+            mt: 2.5,
+            mx: 'auto',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 0.5,
+            bgcolor: 'warning.50',
+            border: '1px solid',
+            borderColor: 'warning.200',
+            borderRadius: 1,
+            px: 2,
+            py: 1,
+          }}
+        >
+          <TimeIcon sx={{ fontSize: 16, color: 'warning.main' }} />
+          <Typography variant="caption" color="warning.dark" fontWeight={600}>
+            This fine will take effect automatically after 3 days if not approved or disputed.
+          </Typography>
+        </Box>
       </DialogContent>
 
       <DialogActions sx={{ px: 3, py: 2.5, gap: 1, justifyContent: 'center' }}>

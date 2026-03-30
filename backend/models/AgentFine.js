@@ -296,12 +296,18 @@ agentFineSchema.statics.getTotalMonthlyFines = function (agentId, year, month) {
 };
 
 // Static method to get fines pending agent approval
-agentFineSchema.statics.getPendingApprovalFines = function (agentId = null) {
+agentFineSchema.statics.getPendingApprovalFines = function (agentId = null, managerId = null) {
   const query = {
     status: "pending_approval",
     isActive: true,
   };
-  if (agentId) {
+  if (managerId) {
+    // Affiliate manager: see fines applied TO them OR fines they imposed
+    query.$or = [
+      { agent: managerId },
+      { imposedBy: managerId },
+    ];
+  } else if (agentId) {
     query.agent = agentId;
   }
   return this.find(query)
@@ -343,6 +349,30 @@ agentFineSchema.statics.getFinesByLeadId = function (leadId) {
     .populate("lead", "firstName lastName email phone")
     .populate("orderId", "_id createdAt")
     .sort({ imposedDate: -1 });
+};
+
+// Static method to auto-approve fines that have been pending for more than 3 days
+agentFineSchema.statics.autoApproveStalePendingFines = async function () {
+  const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+
+  const result = await this.updateMany(
+    {
+      status: "pending_approval",
+      isActive: true,
+      createdAt: { $lte: threeDaysAgo },
+    },
+    {
+      $set: {
+        status: "approved",
+        agentResponse: {
+          action: "approved",
+          respondedAt: new Date(),
+        },
+      },
+    }
+  );
+
+  return result.modifiedCount;
 };
 
 // Instance method to resolve a fine

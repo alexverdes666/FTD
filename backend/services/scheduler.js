@@ -1,6 +1,7 @@
 const cron = require('node-cron');
 const { checkSimCardCooldownAndNotify } = require('../controllers/simCards');
 const User = require('../models/User');
+const AgentFine = require('../models/AgentFine');
 const sipSyncService = require('./sipSyncService');
 
 class SchedulerService {
@@ -25,6 +26,7 @@ class SchedulerService {
     this.startSimCardCooldownCheck();
     this.startDailyMidnightLogout();
     this.startSipAgentSync();
+    this.startFineAutoApproval();
     console.log('[Scheduler Service] All jobs started');
   }
 
@@ -126,6 +128,37 @@ class SchedulerService {
     });
 
     console.log(`[Scheduler Service] SIP agent sync scheduled: ${schedule} (${process.env.TIMEZONE || 'UTC'})`);
+  }
+
+  /**
+   * Schedule fine auto-approval check
+   * Runs every hour to auto-approve fines that have been pending for more than 3 days
+   */
+  startFineAutoApproval() {
+    const schedule = process.env.FINE_AUTO_APPROVE_SCHEDULE || '0 * * * *';
+
+    const job = cron.schedule(schedule, async () => {
+      console.log('[Scheduler] Running fine auto-approval check...');
+      try {
+        const count = await AgentFine.autoApproveStalePendingFines();
+        if (count > 0) {
+          console.log(`[Scheduler] Auto-approved ${count} fines (pending > 3 days)`);
+        }
+      } catch (error) {
+        console.error('[Scheduler] Error in fine auto-approval:', error);
+      }
+    }, {
+      scheduled: true,
+      timezone: process.env.TIMEZONE || 'UTC'
+    });
+
+    this.jobs.push({
+      name: 'fineAutoApproval',
+      job,
+      schedule
+    });
+
+    console.log(`[Scheduler Service] Fine auto-approval scheduled: ${schedule} (${process.env.TIMEZONE || 'UTC'})`);
   }
 
   /**
