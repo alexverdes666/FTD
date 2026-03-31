@@ -8,9 +8,8 @@ import {
   Tab,
   Chip,
   Alert,
-  FormControl,
-  Select,
-  MenuItem,
+  TextField,
+  InputAdornment,
   Badge,
   LinearProgress,
   Divider,
@@ -22,6 +21,7 @@ import {
   HourglassEmpty as HourglassIcon,
   CheckCircle as CheckCircleIcon,
   AttachMoney as MoneyIcon,
+  Search as SearchIcon,
 } from '@mui/icons-material';
 import { useSelector } from 'react-redux';
 import { selectUser } from '../store/slices/authSlice';
@@ -48,28 +48,24 @@ const CallDeclarationsPage = () => {
   const [successMessage, setSuccessMessage] = useState(null);
   const [errorMessage, setErrorMessage] = useState(null);
 
-  const [selectedMonth, setSelectedMonth] = useState(() => {
+  const [dateFrom, setDateFrom] = useState(() => {
     const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
   });
+  const [dateTo, setDateTo] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  });
+  const [searchTerm, setSearchTerm] = useState('');
 
   const [selectedCallForDeclaration, setSelectedCallForDeclaration] = useState(null);
   const [selectedDeclarationForApproval, setSelectedDeclarationForApproval] = useState(null);
 
-  const [year, month] = useMemo(() => selectedMonth.split('-'), [selectedMonth]);
-
-  // Generate month options (last 12 months)
-  const monthOptions = useMemo(() => {
-    const options = [];
-    const now = new Date();
-    for (let i = 0; i < 12; i++) {
-      const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const value = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-      const label = date.toLocaleString('default', { month: 'short', year: 'numeric' });
-      options.push({ value, label });
-    }
-    return options;
-  }, []);
+  // Derive year/month from dateFrom for monthly totals
+  const [year, month] = useMemo(() => {
+    const d = new Date(dateFrom);
+    return [String(d.getFullYear()), String(d.getMonth() + 1)];
+  }, [dateFrom]);
 
   // Fetch agent's leads for declaration dialog
   const { data: leadsData } = useQuery({
@@ -103,8 +99,8 @@ const CallDeclarationsPage = () => {
 
   // Declarations
   const { data: declarationsData, isLoading: declarationsLoading, error: declError } = useQuery({
-    queryKey: ['callBonuses', 'declarations', year, month],
-    queryFn: () => getDeclarations({ year, month }),
+    queryKey: ['callBonuses', 'declarations', dateFrom, dateTo],
+    queryFn: () => getDeclarations({ dateFrom, dateTo }),
     refetchInterval: 30000,
   });
   const declarations = declarationsData || [];
@@ -126,10 +122,63 @@ const CallDeclarationsPage = () => {
     refetchInterval: 30000,
   });
 
-  // Split CDR calls by status
-  const newCalls = useMemo(() => cdrCalls.filter(c => !c.declarationStatus || c.declarationStatus === 'rejected'), [cdrCalls]);
-  const pendingCalls = useMemo(() => cdrCalls.filter(c => c.declarationStatus === 'pending'), [cdrCalls]);
-  const completedCalls = useMemo(() => cdrCalls.filter(c => c.declarationStatus === 'approved'), [cdrCalls]);
+  // Filter CDR calls by search term and date range
+  const filteredCdrCalls = useMemo(() => {
+    return cdrCalls.filter(call => {
+      if (dateFrom) {
+        const callDate = new Date(call.callDate);
+        if (callDate < new Date(dateFrom)) return false;
+      }
+      if (dateTo) {
+        const callDate = new Date(call.callDate);
+        const end = new Date(dateTo + 'T23:59:59');
+        if (callDate > end) return false;
+      }
+      if (searchTerm) {
+        const term = searchTerm.toLowerCase();
+        const alias = (call.email || '').toLowerCase();
+        const phone = (call.lineNumber || '').toLowerCase();
+        if (!alias.includes(term) && !phone.includes(term)) return false;
+      }
+      return true;
+    });
+  }, [cdrCalls, dateFrom, dateTo, searchTerm]);
+
+  const newCalls = useMemo(() => filteredCdrCalls.filter(c => !c.declarationStatus || c.declarationStatus === 'rejected'), [filteredCdrCalls]);
+  const pendingCalls = useMemo(() => filteredCdrCalls.filter(c => c.declarationStatus === 'pending'), [filteredCdrCalls]);
+  const completedCalls = useMemo(() => filteredCdrCalls.filter(c => c.declarationStatus === 'approved'), [filteredCdrCalls]);
+
+  // Filter declarations by search term
+  const filteredDeclarations = useMemo(() => {
+    if (!searchTerm) return declarations;
+    const term = searchTerm.toLowerCase();
+    return declarations.filter(d => {
+      const leadPhone = (d.lead?.newPhone || '').toLowerCase();
+      const leadEmail = (d.lead?.newEmail || '').toLowerCase();
+      const source = (d.sourceNumber || '').toLowerCase();
+      const dest = (d.destinationNumber || '').toLowerCase();
+      const line = (d.lineNumber || '').toLowerCase();
+      return leadPhone.includes(term) || leadEmail.includes(term) ||
+             source.includes(term) || dest.includes(term) || line.includes(term);
+    });
+  }, [declarations, searchTerm]);
+
+  // Filter pending declarations by search term
+  const filteredPendingDeclarations = useMemo(() => {
+    if (!searchTerm) return pendingDeclarations;
+    const term = searchTerm.toLowerCase();
+    return pendingDeclarations.filter(d => {
+      const leadPhone = (d.lead?.newPhone || '').toLowerCase();
+      const leadEmail = (d.lead?.newEmail || '').toLowerCase();
+      const source = (d.sourceNumber || '').toLowerCase();
+      const dest = (d.destinationNumber || '').toLowerCase();
+      const line = (d.lineNumber || '').toLowerCase();
+      const agentName = (d.agent?.fullName || '').toLowerCase();
+      return leadPhone.includes(term) || leadEmail.includes(term) ||
+             source.includes(term) || dest.includes(term) || line.includes(term) ||
+             agentName.includes(term);
+    });
+  }, [pendingDeclarations, searchTerm]);
 
   const refreshAll = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ['callBonuses'] });
@@ -221,24 +270,63 @@ const CallDeclarationsPage = () => {
 
             <Divider orientation="vertical" flexItem sx={{ my: 0.5 }} />
 
-            {/* Month Selector */}
-            <FormControl size="small" sx={{
-              minWidth: 120,
-              "& .MuiOutlinedInput-root": {
-                height: 28, borderRadius: 6, fontSize: "0.75rem", bgcolor: "background.paper",
-                "& fieldset": { borderColor: (theme) => alpha(theme.palette.grey[300], 0.7) },
-              },
-            }}>
-              <Select
-                value={selectedMonth}
-                onChange={(e) => setSelectedMonth(e.target.value)}
-                sx={{ "& .MuiSelect-select": { py: 0, pl: 1, pr: "24px !important" } }}
-              >
-                {monthOptions.map((opt) => (
-                  <MenuItem key={opt.value} value={opt.value} sx={{ fontSize: "0.78rem" }}>{opt.label}</MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+            {/* Search Bar */}
+            <TextField
+              size="small"
+              placeholder="Search alias or phone..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon sx={{ fontSize: 16, color: "text.secondary" }} />
+                  </InputAdornment>
+                ),
+              }}
+              sx={{
+                minWidth: 180,
+                "& .MuiOutlinedInput-root": {
+                  height: 28, borderRadius: 6, fontSize: "0.75rem", bgcolor: "background.paper",
+                  "& fieldset": { borderColor: (theme) => alpha(theme.palette.grey[300], 0.7) },
+                },
+                "& .MuiOutlinedInput-input": { py: 0, pl: 0 },
+              }}
+            />
+
+            <Divider orientation="vertical" flexItem sx={{ my: 0.5 }} />
+
+            {/* Date Range */}
+            <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+              <TextField
+                size="small"
+                type="date"
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+                sx={{
+                  width: 130,
+                  "& .MuiInputBase-root": {
+                    height: 28, borderRadius: 6, fontSize: "0.75rem", bgcolor: "background.paper",
+                    "& fieldset": { borderColor: (theme) => alpha(theme.palette.grey[300], 0.7) },
+                  },
+                  "& .MuiInputBase-input": { py: 0, px: 1 },
+                }}
+              />
+              <Typography sx={{ fontSize: "0.72rem", color: "text.secondary", mx: 0.25 }}>—</Typography>
+              <TextField
+                size="small"
+                type="date"
+                value={dateTo}
+                onChange={(e) => setDateTo(e.target.value)}
+                sx={{
+                  width: 130,
+                  "& .MuiInputBase-root": {
+                    height: 28, borderRadius: 6, fontSize: "0.75rem", bgcolor: "background.paper",
+                    "& fieldset": { borderColor: (theme) => alpha(theme.palette.grey[300], 0.7) },
+                  },
+                  "& .MuiInputBase-input": { py: 0, px: 1 },
+                }}
+              />
+            </Box>
 
             {/* Agent Monthly Summary - Compact Inline */}
             {isAgent && monthlyTotals?.totals && (
@@ -308,7 +396,7 @@ const CallDeclarationsPage = () => {
                 } />
                 <Tab label={
                   <Box display="flex" alignItems="center" gap={0.5}>
-                    All Declarations <Chip label={declarations.length} size="small" sx={{ height: 18, fontSize: "0.62rem" }} />
+                    All Declarations <Chip label={filteredDeclarations.length} size="small" sx={{ height: 18, fontSize: "0.62rem" }} />
                   </Box>
                 } />
               </Tabs>
@@ -323,7 +411,7 @@ const CallDeclarationsPage = () => {
               >
                 <Tab label="All Declarations" />
                 <Tab label={
-                  <Badge badgeContent={pendingDeclarations.length} color="error" sx={{ "& .MuiBadge-badge": { fontSize: "0.6rem", height: 16, minWidth: 16 } }}>
+                  <Badge badgeContent={filteredPendingDeclarations.length} color="error" sx={{ "& .MuiBadge-badge": { fontSize: "0.6rem", height: 16, minWidth: 16 } }}>
                     Pending Approvals
                   </Badge>
                 } />
@@ -362,29 +450,29 @@ const CallDeclarationsPage = () => {
             )}
             {isAgent && tabValue === 3 && (
               <CallDeclarationsTable
-                declarations={declarations}
+                declarations={filteredDeclarations}
                 loading={declarationsLoading}
                 error={declError?.response?.data?.message || declError?.message || null}
                 onViewDetails={setSelectedDeclarationForApproval}
                 onDelete={handleDeleteDeclaration}
                 hideRecordings
-                emptyMessage="No declarations for the selected month."
+                emptyMessage="No declarations for the selected period."
               />
             )}
 
             {isManager && tabValue === 0 && (
               <CallDeclarationsTable
-                declarations={declarations}
+                declarations={filteredDeclarations}
                 loading={declarationsLoading}
                 error={declError?.response?.data?.message || declError?.message || null}
                 onViewDetails={setSelectedDeclarationForApproval}
                 showAgent
-                emptyMessage="No declarations for the selected month."
+                emptyMessage="No declarations for the selected period."
               />
             )}
             {isManager && tabValue === 1 && (
               <CallDeclarationsTable
-                declarations={pendingDeclarations}
+                declarations={filteredPendingDeclarations}
                 loading={pendingLoading}
                 onViewDetails={setSelectedDeclarationForApproval}
                 showAgent

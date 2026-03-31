@@ -2,6 +2,7 @@ const CallChangeRequest = require("../models/CallChangeRequest");
 const Lead = require("../models/Lead");
 const Order = require("../models/Order");
 const AgentCallCounts = require("../models/AgentCallCounts");
+const AffiliateManagerTable = require("../models/AffiliateManagerTable");
 const { validationResult } = require("express-validator");
 
 // Helper function to update agent call bonuses and verification counts
@@ -231,6 +232,44 @@ const updateAgentCallBonus = async (agentId, orderDate, oldCallNumber, newCallNu
   }
 };
 
+// Helper function to add/remove verification expense to affiliate manager table
+const updateVerificationExpenseForAM = async (affiliateManagerId, oldVerified, newVerified, orderDate) => {
+  if (!affiliateManagerId || oldVerified === newVerified) return;
+
+  const orderDateObj = new Date(orderDate);
+  const month = orderDateObj.getMonth() + 1;
+  const year = orderDateObj.getFullYear();
+  const tableDate = new Date(year, month - 1, 1);
+
+  // Get the agent's verified bonus rate (default $5)
+  const VERIFIED_BONUS = 5.0;
+
+  const table = await AffiliateManagerTable.getOrCreateTable(
+    affiliateManagerId,
+    "monthly",
+    tableDate,
+    { month, year }
+  );
+
+  const rowIndex = table.tableData.findIndex((row) => row.id === "verified_ids");
+  if (rowIndex === -1) {
+    console.warn("Row verified_ids not found in affiliate manager table");
+    return;
+  }
+
+  if (!oldVerified && newVerified) {
+    // No → Yes: add expense
+    table.tableData[rowIndex].value = (table.tableData[rowIndex].value || 0) + VERIFIED_BONUS;
+    console.log(`Added $${VERIFIED_BONUS} verified expense to AM ${affiliateManagerId} for ${month}/${year}`);
+  } else if (oldVerified && !newVerified) {
+    // Yes → No: remove expense
+    table.tableData[rowIndex].value = Math.max(0, (table.tableData[rowIndex].value || 0) - VERIFIED_BONUS);
+    console.log(`Removed $${VERIFIED_BONUS} verified expense from AM ${affiliateManagerId} for ${month}/${year}`);
+  }
+
+  await table.save();
+};
+
 // Get all pending call change requests
 exports.getPendingRequests = async (req, res, next) => {
   try {
@@ -354,7 +393,7 @@ exports.approveRequest = async (req, res, next) => {
     try {
       // Get the order to retrieve its creation date
       const order = await Order.findById(request.orderId);
-      
+
       if (order && order.createdAt) {
         // Update the agent's monthly call bonuses and verification counts
         await updateAgentCallBonus(
@@ -366,6 +405,16 @@ exports.approveRequest = async (req, res, next) => {
           request.requestedVerified,   // newVerified
           req.user.id           // reviewerId
         );
+
+        // Update affiliate manager expense table for verification changes
+        const amId = request.affiliateManagerId || (order.requester ? order.requester : null);
+        if (amId && request.currentVerified !== request.requestedVerified) {
+          try {
+            await updateVerificationExpenseForAM(amId, request.currentVerified, request.requestedVerified, order.createdAt);
+          } catch (expenseError) {
+            console.error("Error updating AM verification expense:", expenseError);
+          }
+        }
       } else {
         console.warn(`⚠️ Could not update call bonus: Order ${request.orderId} not found or missing createdAt`);
       }

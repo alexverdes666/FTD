@@ -65,6 +65,7 @@ import toast from 'react-hot-toast';
 import { formatPhoneWithCountryCode } from '../utils/phoneUtils';
 import { formatDateTimeBG, formatFullDateTimeBG, formatDateBG, formatShortDateBG } from '../utils/dateUtils';
 import CallDeclarationApprovalDialog from '../components/CallDeclarationApprovalDialog';
+import AgentCallScheduleDialog from '../components/AgentCallScheduleDialog';
 import { getFillerDeclarations, fetchRecordingBlob, fetchAgentShortCalls } from '../services/callDeclarations';
 import { loadColumns, loadColumnsFromCache, saveColumns } from '../utils/depositCallsColumns';
 
@@ -122,7 +123,7 @@ const formatDurationShort = (seconds) => {
 };
 
 // Call Cell Component
-const CallCell = ({ call, callNumber, depositCall, declaration, onSchedule, onMarkDone, onApprove, onReject, onMarkAnswered, onMarkRejected, onViewDeclaration, onAdminFill, onAdminRemove, onAdminCallsDetail, isAdmin, isAM, isAgent }) => {
+const CallCell = ({ call, callNumber, depositCall, declaration, onSchedule, onMarkDone, onApprove, onReject, onMarkAnswered, onMarkRejected, onViewDeclaration, onAdminFill, onAdminRemove, onAdminCallsDetail, onAgentSchedule, isAdmin, isAM, isAgent }) => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [expectedDate, setExpectedDate] = useState(call?.expectedDate ? new Date(call.expectedDate) : null);
   const [notes, setNotes] = useState('');
@@ -141,6 +142,16 @@ const CallCell = ({ call, callNumber, depositCall, declaration, onSchedule, onMa
     await onMarkDone(depositCall._id, callNumber, notes);
     setDialogOpen(false);
     setNotes('');
+  };
+
+  const handleScheduleClick = () => {
+    if (isAgent && onAgentSchedule) {
+      // Agent: open the CDR call selection dialog
+      onAgentSchedule(depositCall, callNumber);
+    } else {
+      // AM/Admin: open the regular date picker dialog
+      setDialogOpen(true);
+    }
   };
 
   const canSchedule = isAgent || isAM || isAdmin;
@@ -176,13 +187,13 @@ const CallCell = ({ call, callNumber, depositCall, declaration, onSchedule, onMa
           />
         )}
         {call?.status === 'pending' && declaration?.status === 'pending' ? (
-          <Tooltip title="Agent declared this call — click to review">
+          <Tooltip title={isAgent ? "Pending AM approval" : "Agent declared this call — click to review"}>
             <Chip
               label="Declared"
               size="small"
               color="warning"
-              onClick={() => onViewDeclaration(declaration)}
-              sx={{ fontSize: '0.5rem', height: 15, cursor: 'pointer', '& .MuiChip-label': { px: 0.5 } }}
+              onClick={(isAM || isAdmin) ? () => onViewDeclaration(declaration) : undefined}
+              sx={{ fontSize: '0.5rem', height: 15, cursor: (isAM || isAdmin) ? 'pointer' : 'default', '& .MuiChip-label': { px: 0.5 } }}
             />
           </Tooltip>
         ) : call?.status === 'pending' && !hasAdminCalls ? (
@@ -191,11 +202,11 @@ const CallCell = ({ call, callNumber, depositCall, declaration, onSchedule, onMa
               size="small"
               variant="outlined"
               color="primary"
-              onClick={() => setDialogOpen(true)}
+              onClick={handleScheduleClick}
               disabled={!canSchedule}
               sx={{ fontSize: '0.55rem', py: 0, px: 0.5, minWidth: 'auto', lineHeight: 1.4 }}
             >
-              Schedule
+              {isAgent ? 'Declare' : 'Schedule'}
             </Button>
             {isAdmin && depositCall.assignedAgent && (
               <Button
@@ -440,6 +451,20 @@ const DepositCallsPage = () => {
     open: false,
     networks: [],
     leadName: "",
+  });
+
+  // Agent Call Schedule Dialog State
+  const [agentScheduleDialog, setAgentScheduleDialog] = useState({
+    open: false,
+    depositCall: null,
+    callNumber: null,
+  });
+
+  // Agent Verification Confirm Dialog State
+  const [verifyConfirmDialog, setVerifyConfirmDialog] = useState({
+    open: false,
+    depositCall: null,
+    loading: false,
   });
 
   // Column visibility
@@ -819,6 +844,56 @@ const DepositCallsPage = () => {
         : [...prev, index]
     );
   };
+
+  // Agent call schedule handlers
+  const handleAgentSchedule = useCallback((depositCall, callNumber) => {
+    setAgentScheduleDialog({ open: true, depositCall, callNumber });
+  }, []);
+
+  const handleAgentScheduleClose = useCallback(() => {
+    setAgentScheduleDialog({ open: false, depositCall: null, callNumber: null });
+  }, []);
+
+  const handleAgentScheduleSuccess = useCallback(() => {
+    fetchDepositCalls();
+  }, [fetchDepositCalls]);
+
+  // Agent verification handlers
+  const handleAgentVerifyClick = useCallback((dc) => {
+    const amId = dc.accountManager?._id || dc.accountManager;
+    if (!amId) {
+      toast.error('No affiliate manager assigned to this deposit call');
+      return;
+    }
+    setVerifyConfirmDialog({ open: true, depositCall: dc, loading: false });
+  }, []);
+
+  const handleAgentVerifyConfirm = useCallback(async () => {
+    const dc = verifyConfirmDialog.depositCall;
+    if (!dc) return;
+    const leadId = dc.leadId?._id || dc.leadId;
+    const orderId = dc.orderId?._id || dc.orderId;
+    const amId = dc.accountManager?._id || dc.accountManager;
+
+    setVerifyConfirmDialog(prev => ({ ...prev, loading: true }));
+    try {
+      const response = await api.put(`/leads/${leadId}/call-number`, {
+        verified: true,
+        orderId,
+        affiliateManagerId: amId,
+      });
+      if (response.data.isPending) {
+        toast.success('Verification request submitted - pending AM approval');
+      } else {
+        toast.success('Verification updated');
+      }
+      fetchDepositCalls();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to request verification');
+    } finally {
+      setVerifyConfirmDialog({ open: false, depositCall: null, loading: false });
+    }
+  }, [verifyConfirmDialog.depositCall, fetchDepositCalls]);
 
   // Network dialog handlers
   const handleOpenClientNetworksDialog = useCallback((networks, leadName) => {
@@ -1328,7 +1403,20 @@ const DepositCallsPage = () => {
                           {dc.verificationStatus === 'yes' ? (
                             <Chip label="Yes" size="small" color="success" variant="outlined" sx={{ height: 16, fontSize: '0.55rem', '& .MuiChip-label': { px: 0.5 } }} />
                           ) : dc.verificationStatus === 'pending' ? (
-                            <Chip label="Pending" size="small" color="warning" variant="outlined" sx={{ height: 16, fontSize: '0.55rem', '& .MuiChip-label': { px: 0.5 } }} />
+                            <Tooltip title="Pending AM approval">
+                              <Chip label="Pending" size="small" color="warning" variant="outlined" sx={{ height: 16, fontSize: '0.55rem', '& .MuiChip-label': { px: 0.5 } }} />
+                            </Tooltip>
+                          ) : isAgent ? (
+                            <Tooltip title="Click to request verification">
+                              <Chip
+                                label="Verify"
+                                size="small"
+                                color="primary"
+                                variant="outlined"
+                                onClick={() => handleAgentVerifyClick(dc)}
+                                sx={{ height: 16, fontSize: '0.55rem', cursor: 'pointer', '& .MuiChip-label': { px: 0.5 } }}
+                              />
+                            </Tooltip>
                           ) : (
                             <Chip label="No" size="small" color="default" variant="outlined" sx={{ height: 16, fontSize: '0.55rem', '& .MuiChip-label': { px: 0.5 } }} />
                           )}
@@ -1418,6 +1506,7 @@ const DepositCallsPage = () => {
                             onAdminFill={handleAdminFill}
                             onAdminRemove={handleAdminRemoveCalls}
                             onAdminCallsDetail={handleOpenAdminCallsDetail}
+                            onAgentSchedule={handleAgentSchedule}
                             isAdmin={isAdmin}
                             isAM={isAM}
                             isAgent={isAgent}
@@ -2100,6 +2189,50 @@ const DepositCallsPage = () => {
           fetchFillerDeclarations();
         }}
       />
+
+      {/* Agent Call Schedule Dialog */}
+      <AgentCallScheduleDialog
+        open={agentScheduleDialog.open}
+        onClose={handleAgentScheduleClose}
+        depositCall={agentScheduleDialog.depositCall}
+        callNumber={agentScheduleDialog.callNumber}
+        onSuccess={handleAgentScheduleSuccess}
+      />
+
+      {/* Agent Verification Confirm Dialog */}
+      <Dialog
+        open={verifyConfirmDialog.open}
+        onClose={() => !verifyConfirmDialog.loading && setVerifyConfirmDialog({ open: false, depositCall: null, loading: false })}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>Confirm Verification Request</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" sx={{ mt: 1 }}>
+            Are you sure you want to request verification for <strong>{verifyConfirmDialog.depositCall?.ftdName}</strong>?
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            This will be sent to <strong>{verifyConfirmDialog.depositCall?.accountManager?.fullName || 'the affiliate manager'}</strong> for approval.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => setVerifyConfirmDialog({ open: false, depositCall: null, loading: false })}
+            disabled={verifyConfirmDialog.loading}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            color="primary"
+            onClick={handleAgentVerifyConfirm}
+            disabled={verifyConfirmDialog.loading}
+            startIcon={verifyConfirmDialog.loading ? <CircularProgress size={16} /> : <VerifiedIcon />}
+          >
+            {verifyConfirmDialog.loading ? 'Submitting...' : 'Confirm'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

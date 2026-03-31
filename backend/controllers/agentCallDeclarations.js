@@ -157,11 +157,14 @@ const getAffiliateManagers = async (req, res) => {
 /**
  * Fetch CDR calls for the current agent that haven't been declared yet
  * GET /call-declarations/cdr
+ * Supports optional leadPhone, leadEmail, includeDeclared query params for lead-filtered views
  */
 const fetchCDRCalls = async (req, res) => {
   try {
     const userId = req.user.id;
     const months = parseInt(req.query.months) || 3;
+    const { leadPhone, leadEmail, includeDeclared } = req.query;
+    const showDeclared = includeDeclared === "true";
 
     // Get user's fourDigitCode
     const user = await User.findById(userId).select("fourDigitCode fullName");
@@ -188,23 +191,68 @@ const fetchCDRCalls = async (req, res) => {
     const declaredCalls = await AgentCallDeclaration.find({
       agent: userId,
       isActive: true,
-    }).select("cdrCallId status");
+    }).select("cdrCallId status callType");
 
     const declarationMap = new Map();
     for (const d of declaredCalls) {
-      declarationMap.set(d.cdrCallId, { status: d.status, id: d._id });
+      declarationMap.set(d.cdrCallId, { status: d.status, id: d._id, callType: d.callType });
     }
 
-    // Enrich all calls with declaration status and formatted duration
-    const enrichedCalls = parsedCalls.map((call) => {
-      const decl = declarationMap.get(call.cdrCallId) || null;
-      return {
-        ...call,
-        formattedDuration: cdrService.formatDuration(call.callDuration),
-        declarationStatus: decl?.status || null, // null = undeclared, 'pending', 'approved', 'rejected'
-        declarationId: decl?.id || null,
+    // Enrich calls with declaration status and formatted duration
+    let enrichedCalls = parsedCalls
+      .filter((call) => showDeclared || !declarationMap.has(call.cdrCallId))
+      .map((call) => {
+        const decl = declarationMap.get(call.cdrCallId) || null;
+        return {
+          ...call,
+          email: call.email && call.email.startsWith(agentCode)
+            ? call.email.slice(agentCode.length)
+            : call.email,
+          destinationNumber: call.destinationNumber && call.destinationNumber.startsWith(agentCode)
+            ? call.destinationNumber.slice(agentCode.length)
+            : call.destinationNumber,
+          formattedDuration: cdrService.formatDuration(call.callDuration),
+          declarationStatus: decl?.status || null,
+          declarationId: decl?.id || null,
+          ...(showDeclared && decl ? { declaredCallType: decl.callType } : {}),
+        };
+      });
+
+    // Filter/sort by lead phone/email when provided
+    if (leadPhone || leadEmail) {
+      const cleanLeadPhone = leadPhone ? leadPhone.replace(/[^\d]/g, "") : "";
+      const normalizedLeadEmail = leadEmail ? leadEmail.trim().toLowerCase() : "";
+
+      const phonesMatch = (phoneA, phoneB) => {
+        if (!phoneA || !phoneB) return false;
+        const a = phoneA.replace(/[^\d]/g, "");
+        const b = phoneB.replace(/[^\d]/g, "");
+        if (a.length < 7 || b.length < 7) return false;
+        return a.endsWith(b.slice(-Math.min(b.length, 10))) ||
+               b.endsWith(a.slice(-Math.min(a.length, 10)));
       };
-    });
+
+      const matchesLead = (call) => {
+        if (cleanLeadPhone) {
+          if (phonesMatch(cleanLeadPhone, call.lineNumber)) return true;
+          if (phonesMatch(cleanLeadPhone, call.email)) return true;
+          if (phonesMatch(cleanLeadPhone, call.destinationNumber)) return true;
+        }
+        if (normalizedLeadEmail && call.email) {
+          if (call.email.trim().toLowerCase() === normalizedLeadEmail) return true;
+        }
+        return false;
+      };
+
+      if (showDeclared) {
+        enrichedCalls.forEach((call) => {
+          call.matchesLead = matchesLead(call);
+        });
+        enrichedCalls.sort((a, b) => (b.matchesLead ? 1 : 0) - (a.matchesLead ? 1 : 0));
+      } else {
+        enrichedCalls = enrichedCalls.filter(matchesLead);
+      }
+    }
 
     res.json({
       success: true,
@@ -653,7 +701,7 @@ const createDeclaration = async (req, res) => {
  */
 const getDeclarations = async (req, res) => {
   try {
-    const { agentId, status, month, year } = req.query;
+    const { agentId, status, month, year, dateFrom, dateTo } = req.query;
     const userId = req.user.id;
     const userRole = req.user.role;
 
@@ -677,12 +725,21 @@ const getDeclarations = async (req, res) => {
       query.status = status;
     }
 
-    if (year) {
-      query.declarationYear = parseInt(year);
-    }
-
-    if (month) {
-      query.declarationMonth = parseInt(month);
+    if (dateFrom || dateTo) {
+      query.callDate = {};
+      if (dateFrom) query.callDate.$gte = new Date(dateFrom);
+      if (dateTo) {
+        const endDate = new Date(dateTo);
+        endDate.setHours(23, 59, 59, 999);
+        query.callDate.$lte = endDate;
+      }
+    } else {
+      if (year) {
+        query.declarationYear = parseInt(year);
+      }
+      if (month) {
+        query.declarationMonth = parseInt(month);
+      }
     }
 
     const declarations = await AgentCallDeclaration.find(query)

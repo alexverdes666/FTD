@@ -2387,7 +2387,7 @@ const LeadsPage = () => {
               {ipqsValidating ? "..." : `Recheck (${numIPQSValidatedSelected})`}
             </Button>
           )}
-          {isAdminOrManager && numSelected > 0 && (
+          {(isAdminOrManager || isLeadManager) && numSelected > 0 && (
             <Button
               variant="contained"
               color="warning"
@@ -2726,7 +2726,7 @@ const LeadsPage = () => {
                   </IconButton>
                 </Tooltip>
               )}
-              {user?.role === ROLES.ADMIN && (
+              {(user?.role === ROLES.ADMIN || isLeadManager) && (
                 <Tooltip title="Archived Leads">
                   <IconButton size="small" onClick={handleOpenArchivedLeadsDialog} sx={{ padding: "3px", color: "warning.main" }}>
                     <ArchiveIcon sx={{ fontSize: 16 }} />
@@ -4782,7 +4782,7 @@ const LeadRow = React.memo(
                   </MenuItem>
                 </Box>
               )}
-              {user?.role === ROLES.ADMIN && (
+              {(user?.role === ROLES.ADMIN || user?.role === ROLES.LEAD_MANAGER) && (
                 <Box>
                   {isOwner && <Divider />}
                   <MenuItem

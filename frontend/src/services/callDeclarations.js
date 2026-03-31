@@ -3,11 +3,18 @@ import api from "./api";
 /**
  * Fetch undeclared CDR calls for the current agent
  * @param {number} months - Number of months to fetch (default 3)
+ * @param {string} leadPhone - Optional lead phone to filter by
+ * @param {string} leadEmail - Optional lead email to filter by
+ * @param {boolean} includeDeclared - Whether to include already declared calls
  */
-export const fetchCDRCalls = async (months = 3) => {
+export const fetchCDRCalls = async (months = 3, leadPhone = null, leadEmail = null, includeDeclared = false) => {
   try {
+    const params = { months };
+    if (leadPhone) params.leadPhone = leadPhone;
+    if (leadEmail) params.leadEmail = leadEmail;
+    if (includeDeclared) params.includeDeclared = "true";
     const response = await api.get("/call-declarations/cdr", {
-      params: { months },
+      params,
     });
     return response.data.data;
   } catch (error) {

@@ -170,7 +170,7 @@ router.get(
   "/archived",
   [
     protect,
-    authorize("admin"),
+    authorize("admin", "lead_manager"),
     query("page")
       .optional()
       .isInt({ min: 1 })
@@ -264,14 +264,14 @@ router.put(
 // Archive a lead
 router.put(
   "/:id/archive",
-  [protect, authorize("admin")],
+  [protect, authorize("admin", "lead_manager")],
   archiveLead
 );
 
 // Unarchive a lead
 router.put(
   "/:id/unarchive",
-  [protect, authorize("admin")],
+  [protect, authorize("admin", "lead_manager")],
   unarchiveLead
 );
 

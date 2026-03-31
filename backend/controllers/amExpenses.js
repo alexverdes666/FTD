@@ -53,8 +53,6 @@ exports.getCalculatedExpenses = async (req, res) => {
     const globalFixedExpenses = await GlobalFixedExpense.find({ isActive: true }).lean();
     const globalFixedTotal = globalFixedExpenses.reduce((sum, fe) => sum + fe.amount, 0);
 
-    const results = [];
-
     // Check if we need to compute Global Net Agent (cumulative from Feb 2026)
     const computeGlobalNet = targetYear > GLOBAL_NET_START.year ||
       (targetYear === GLOBAL_NET_START.year && targetMonth >= GLOBAL_NET_START.month);
@@ -73,16 +71,16 @@ exports.getCalculatedExpenses = async (req, res) => {
       }
     }
 
-    for (const manager of managers) {
-      const expenses = await calculateAMExpenses(manager._id, targetMonth, targetYear);
-
-      // Get fixed expenses sum
-      const fixedExpenses = await AMFixedExpense.find({
-        affiliateManager: manager._id,
-        month: targetMonth,
-        year: targetYear,
-        isActive: true,
-      }).lean();
+    const results = await Promise.all(managers.map(async (manager) => {
+      const [expenses, fixedExpenses] = await Promise.all([
+        calculateAMExpenses(manager._id, targetMonth, targetYear),
+        AMFixedExpense.find({
+          affiliateManager: manager._id,
+          month: targetMonth,
+          year: targetYear,
+          isActive: true,
+        }).lean(),
+      ]);
 
       const fixedTotal = fixedExpenses.reduce((sum, fe) => sum + fe.amount, 0);
 
@@ -101,9 +99,8 @@ exports.getCalculatedExpenses = async (req, res) => {
 
       // Compute Global Net Agent (cumulative net from Feb 2026)
       let globalNetAgent = null;
-      if (computeGlobalNet) {
-        let cumulativeNet = currentNet;
-        for (const { month: m, year: y } of priorMonths) {
+      if (computeGlobalNet && priorMonths.length > 0) {
+        const priorResults = await Promise.all(priorMonths.map(async ({ month: m, year: y }) => {
           const [priorExpenses, priorFixed] = await Promise.all([
             calculateAMExpenses(manager._id, m, y),
             AMFixedExpense.find({ affiliateManager: manager._id, month: m, year: y, isActive: true }).lean(),
@@ -118,12 +115,14 @@ exports.getCalculatedExpenses = async (req, res) => {
               // silently skip failed crypto lookups for prior months
             }
           }
-          cumulativeNet += priorMoneyIn - (priorExpenses.grandTotal + priorFixedTotal + globalFixedTotal);
-        }
-        globalNetAgent = cumulativeNet;
+          return priorMoneyIn - (priorExpenses.grandTotal + priorFixedTotal + globalFixedTotal);
+        }));
+        globalNetAgent = currentNet + priorResults.reduce((sum, net) => sum + net, 0);
+      } else if (computeGlobalNet) {
+        globalNetAgent = currentNet;
       }
 
-      results.push({
+      return {
         managerId: manager._id,
         managerName: manager.fullName,
         managerEmail: manager.email,
@@ -132,8 +131,8 @@ exports.getCalculatedExpenses = async (req, res) => {
         fixedExpenses: fixedTotal + globalFixedTotal,
         totalExpenses: expenses.grandTotal + fixedTotal + globalFixedTotal,
         globalNetAgent,
-      });
-    }
+      };
+    }));
 
     res.json({ success: true, data: results });
   } catch (error) {
