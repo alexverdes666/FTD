@@ -200,7 +200,9 @@ exports.getDepositCalls = async (req, res, next) => {
       pipeline.push(
         { $sort: { createdAt: -1 } },
         { $skip: (parseInt(page) - 1) * parseInt(limit) },
-        { $limit: parseInt(limit) }
+        { $limit: parseInt(limit) },
+        { $addFields: { commentsCount: { $size: { $ifNull: ["$comments", []] } } } },
+        { $project: { comments: 0 } }
       );
 
       depositCalls = await DepositCall.aggregate(pipeline);
@@ -331,6 +333,12 @@ exports.getDepositCalls = async (req, res, next) => {
         .skip((parseInt(page) - 1) * parseInt(limit))
         .limit(parseInt(limit))
         .lean();
+
+      // Add commentsCount and strip full comments array for list view
+      for (const dc of depositCalls) {
+        dc.commentsCount = dc.comments ? dc.comments.length : 0;
+        delete dc.comments;
+      }
     }
 
     // Attach pending/approved AgentCallDeclarations to each deposit call.
@@ -1990,6 +1998,68 @@ exports.adminRemoveCalls = async (req, res, next) => {
     res.json({
       success: true,
       message: "Admin calls removed successfully",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Add a comment to a deposit call
+exports.addComment = async (req, res, next) => {
+  try {
+    const { text } = req.body;
+
+    if (!text || !text.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Comment text is required",
+      });
+    }
+
+    const depositCall = await DepositCall.findById(req.params.id);
+    if (!depositCall) {
+      return res.status(404).json({
+        success: false,
+        message: "Deposit call not found",
+      });
+    }
+
+    depositCall.comments.push({
+      text: text.trim(),
+      author: req.user.id,
+    });
+
+    await depositCall.save();
+
+    // Populate the newly added comment's author
+    await depositCall.populate("comments.author", "fullName email fourDigitCode");
+
+    res.status(201).json({
+      success: true,
+      data: depositCall.comments,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Get comments for a deposit call
+exports.getComments = async (req, res, next) => {
+  try {
+    const depositCall = await DepositCall.findById(req.params.id)
+      .select("comments")
+      .populate("comments.author", "fullName email fourDigitCode");
+
+    if (!depositCall) {
+      return res.status(404).json({
+        success: false,
+        message: "Deposit call not found",
+      });
+    }
+
+    res.json({
+      success: true,
+      data: depositCall.comments,
     });
   } catch (error) {
     next(error);

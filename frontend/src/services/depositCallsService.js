@@ -265,6 +265,33 @@ const depositCallsService = {
       throw error;
     }
   },
+
+  // Get comments for a deposit call
+  getComments: async (depositCallId) => {
+    try {
+      const response = await api.get(
+        `/deposit-calls/${depositCallId}/comments`
+      );
+      return response.data;
+    } catch (error) {
+      console.error("Error fetching comments:", error);
+      throw error;
+    }
+  },
+
+  // Add a comment to a deposit call
+  addComment: async (depositCallId, text) => {
+    try {
+      const response = await api.post(
+        `/deposit-calls/${depositCallId}/comment`,
+        { text }
+      );
+      return response.data;
+    } catch (error) {
+      console.error("Error adding comment:", error);
+      throw error;
+    }
+  },
 };
 
 export default depositCallsService;

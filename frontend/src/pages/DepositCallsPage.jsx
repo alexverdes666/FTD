@@ -37,7 +37,8 @@ import {
   ListItemIcon,
   ListItemText,
   Popover,
-  FormControlLabel
+  FormControlLabel,
+  Badge
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -53,7 +54,8 @@ import {
   PlayCircleOutline as PlayIcon,
   Delete as DeleteIcon,
   AdminPanelSettings as AdminIcon,
-  ViewColumn as ViewColumnIcon
+  ViewColumn as ViewColumnIcon,
+  Comment as CommentIcon
 } from '@mui/icons-material';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -68,6 +70,7 @@ import CallDeclarationApprovalDialog from '../components/CallDeclarationApproval
 import AgentCallScheduleDialog from '../components/AgentCallScheduleDialog';
 import { getFillerDeclarations, fetchRecordingBlob, fetchAgentShortCalls } from '../services/callDeclarations';
 import { loadColumns, loadColumnsFromCache, saveColumns } from '../utils/depositCallsColumns';
+import DepositCallCommentsDialog from '../components/DepositCallCommentsDialog';
 
 // Call status colors
 const getStatusColor = (status) => {
@@ -470,6 +473,9 @@ const DepositCallsPage = () => {
   // Column visibility
   const [visibleColumns, setVisibleColumns] = useState(getInitialColumns);
   const [colAnchorEl, setColAnchorEl] = useState(null);
+
+  // Comments dialog state
+  const [commentsDialog, setCommentsDialog] = useState({ open: false, depositCall: null });
 
   // Load column preferences from DB on mount
   useEffect(() => {
@@ -1268,6 +1274,7 @@ const DepositCallsPage = () => {
                       {isColVisible('verified') && <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', textAlign: 'center', fontSize: '0.6rem' }}>Verified</TableCell>}
                       {isColVisible('deposit') && <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', textAlign: 'center', fontSize: '0.6rem' }}>Dep.</TableCell>}
                       {isColVisible('depositCall') && <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', textAlign: 'center', fontSize: '0.6rem' }}>Dep. Call</TableCell>}
+                      <TableCell sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', textAlign: 'center', fontSize: '0.6rem' }}>Notes</TableCell>
                       {[1,2,3,4,5,6,7,8,9,10].map(num => (
                         isColVisible(`call${num}`) && <TableCell key={num} sx={{ fontWeight: 'bold', bgcolor: 'grey.100', whiteSpace: 'nowrap', textAlign: 'center', fontSize: '0.6rem' }}>
                           C{num}
@@ -1489,6 +1496,30 @@ const DepositCallsPage = () => {
                           )}
                         </TableCell>
                         )}
+                        <TableCell sx={{ textAlign: 'center', p: '2px 4px' }}>
+                          <Tooltip title={dc.commentsCount ? `${dc.commentsCount} comment${dc.commentsCount !== 1 ? 's' : ''}` : 'Add comment'}>
+                            <IconButton
+                              size="small"
+                              onClick={() => setCommentsDialog({ open: true, depositCall: dc })}
+                              sx={{ p: 0.25 }}
+                            >
+                              <Badge
+                                badgeContent={dc.commentsCount || 0}
+                                color="primary"
+                                sx={{
+                                  '& .MuiBadge-badge': {
+                                    fontSize: '0.5rem',
+                                    height: 14,
+                                    minWidth: 14,
+                                    ...(dc.commentsCount ? {} : { display: 'none' }),
+                                  }
+                                }}
+                              >
+                                <CommentIcon sx={{ fontSize: 16, color: dc.commentsCount ? 'primary.main' : 'grey.400' }} />
+                              </Badge>
+                            </IconButton>
+                          </Tooltip>
+                        </TableCell>
                         {[1,2,3,4,5,6,7,8,9,10].map(num => (
                           isColVisible(`call${num}`) && <CallCell
                             key={num}
@@ -2197,6 +2228,14 @@ const DepositCallsPage = () => {
         depositCall={agentScheduleDialog.depositCall}
         callNumber={agentScheduleDialog.callNumber}
         onSuccess={handleAgentScheduleSuccess}
+      />
+
+      {/* Deposit Call Comments Dialog */}
+      <DepositCallCommentsDialog
+        open={commentsDialog.open}
+        onClose={() => setCommentsDialog({ open: false, depositCall: null })}
+        depositCall={commentsDialog.depositCall}
+        onCommentAdded={fetchDepositCalls}
       />
 
       {/* Agent Verification Confirm Dialog */}

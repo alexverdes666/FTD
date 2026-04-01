@@ -69,4 +69,8 @@ router.post("/:id/admin-declare", depositCallsController.adminDeclareCalls);
 // Admin-only: Remove admin-added calls from a slot
 router.post("/:id/admin-remove-calls", depositCallsController.adminRemoveCalls);
 
+// Comments
+router.get("/:id/comments", depositCallsController.getComments);
+router.post("/:id/comment", depositCallsController.addComment);
+
 module.exports = router;

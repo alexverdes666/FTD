@@ -231,6 +231,24 @@ const depositCallSchema = new Schema({
     reason: { type: String, trim: true, default: '' },
     _id: false
   }],
+  // Comments
+  comments: [{
+    text: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 2000
+    },
+    author: {
+      type: Schema.Types.ObjectId,
+      ref: 'User',
+      required: true
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now
+    }
+  }],
   // Overall status
   status: {
     type: String,
@@ -266,6 +284,11 @@ depositCallSchema.index({ 'call7.expectedDate': 1 });
 depositCallSchema.index({ 'call8.expectedDate': 1 });
 depositCallSchema.index({ 'call9.expectedDate': 1 });
 depositCallSchema.index({ 'call10.expectedDate': 1 });
+
+// Virtual to get comments count
+depositCallSchema.virtual('commentsCount').get(function() {
+  return this.comments ? this.comments.length : 0;
+});
 
 // Virtual to get all scheduled calls
 depositCallSchema.virtual('scheduledCalls').get(function() {
