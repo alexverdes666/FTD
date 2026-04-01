@@ -3217,6 +3217,7 @@ const PayrollPage = ({ setHeaderExtra }) => {
             agentCallsData={agentCallsData}
             agentBonusesData={agentBonusesData}
             agentFinesData={agentFinesData}
+            declarationTotals={declarationTotals}
           />
         )}
 

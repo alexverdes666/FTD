@@ -45,6 +45,7 @@ const WithdrawalModal = ({
   agentCallsData, // Add agent calls data
   agentBonusesData, // Add agent bonuses data
   agentFinesData, // Add agent fines data
+  declarationTotals, // Declaration-based bonus totals
 }) => {
   const theme = useTheme();
   const [usdtErc20Wallet, setUsdtErc20Wallet] = useState("");
@@ -141,9 +142,14 @@ const WithdrawalModal = ({
     }
   };
 
+  const getVerifiedAccountBonus = () => {
+    if (!bonusConfig?.callCounts || !bonusConfig?.bonusRates) return 0;
+    return (bonusConfig.callCounts.verifiedAccounts || 0) * (bonusConfig.bonusRates.verifiedAcc || 5);
+  };
+
   // Calculate total earnings - updated to use correct data and subtract completed withdrawals
   const calculateTotalEarnings = () => {
-    if (!agentCallsData || !agentBonusesData || !agentFinesData) {
+    if (!agentCallsData || !agentFinesData) {
       return 0;
     }
 
@@ -169,14 +175,20 @@ const WithdrawalModal = ({
       }
     }
 
-    // Calculate bonuses from agent bonuses data
+    // Calculate bonuses from declaration totals (same as PayrollPage)
     let bonuses = 0;
-    if (agentBonusesData.length > 0) {
+    if (declarationTotals && declarationTotals.length > 0) {
+      const declTotal = declarationTotals.find(d => d.agentName === user?.fullName);
+      if (declTotal) {
+        bonuses = (declTotal.totalBonus || 0) + getVerifiedAccountBonus();
+      }
+    } else if (agentBonusesData && agentBonusesData.length > 0) {
+      // Fallback to call counts calculation
       const agentBonus = agentBonusesData[0];
       if (agentBonus?.callCounts && agentBonus?.bonusRates) {
         const callCounts = agentBonus.callCounts;
         const bonusRates = agentBonus.bonusRates;
-        
+
         bonuses = (callCounts.firstCalls || 0) * (bonusRates.firstCall || 5) +
                   (callCounts.secondCalls || 0) * (bonusRates.secondCall || 10) +
                   (callCounts.thirdCalls || 0) * (bonusRates.thirdCall || 15) +
@@ -201,13 +213,22 @@ const WithdrawalModal = ({
   };
 
   const getBonusAmount = () => {
+    // Use declaration totals (same as PayrollPage) for accurate bonus calculation
+    if (declarationTotals && declarationTotals.length > 0) {
+      const declTotal = declarationTotals.find(d => d.agentName === user?.fullName);
+      if (declTotal) {
+        return (declTotal.totalBonus || 0) + getVerifiedAccountBonus();
+      }
+    }
+
+    // Fallback to call counts calculation
     if (!agentBonusesData || agentBonusesData.length === 0) return 0;
     const agentBonus = agentBonusesData[0];
     if (!agentBonus?.callCounts || !agentBonus?.bonusRates) return 0;
-    
+
     const callCounts = agentBonus.callCounts;
     const bonusRates = agentBonus.bonusRates;
-    
+
     return (callCounts.firstCalls || 0) * (bonusRates.firstCall || 5) +
            (callCounts.secondCalls || 0) * (bonusRates.secondCall || 10) +
            (callCounts.thirdCalls || 0) * (bonusRates.thirdCall || 15) +
