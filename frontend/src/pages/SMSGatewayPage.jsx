@@ -58,10 +58,11 @@ import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 
 // ─── Gateway Sidebar Item ────────────────────────────────────
-const GatewayItem = ({ gateway, onTest, onEdit, onDelete, onSetupForwarding, onSelect, onInfo, selected, testing }) => {
+const GatewayItem = ({ gateway, onTest, onEdit, onDelete, onSetupForwarding, onSelect, onInfo, onFetch, selected, testing, fetchingId }) => {
   const theme = useTheme();
   const isConnected = gateway.lastConnectionStatus === 'success';
   const isTesting = testing === gateway._id;
+  const isFetching = fetchingId === gateway._id;
 
   return (
     <Box
@@ -96,6 +97,11 @@ const GatewayItem = ({ gateway, onTest, onEdit, onDelete, onSetupForwarding, onS
       </Box>
 
       <Box display="flex" gap={0.25} mt={0.5} ml={1.25} onClick={(e) => e.stopPropagation()}>
+        <Tooltip title="Fetch SMS">
+          <IconButton size="small" color="primary" onClick={() => onFetch(gateway)} disabled={isFetching || !gateway.isActive} sx={{ p: 0.25 }}>
+            {isFetching ? <CircularProgress size={12} /> : <FetchIcon sx={{ fontSize: 14 }} />}
+          </IconButton>
+        </Tooltip>
         <Tooltip title="Port usage">
           <IconButton size="small" onClick={() => onInfo(gateway)} sx={{ p: 0.25 }}>
             <InfoIcon sx={{ fontSize: 14 }} />
@@ -826,6 +832,7 @@ const SMSGatewayPage = () => {
   const [selectedSms, setSelectedSms] = useState(null);
 
   const [fetching, setFetching] = useState(false);
+  const [fetchingGatewayId, setFetchingGatewayId] = useState(null);
 
   // ── Filter state ──
   const [filters, setFilters] = useState({
@@ -972,6 +979,23 @@ const SMSGatewayPage = () => {
     } finally { setFetching(false); }
   };
 
+  // ── Fetch from a single gateway ──
+  const handleFetchFromGateway = async (gateway) => {
+    if (!gateway.isActive) return toast.error('Gateway is not active');
+    setFetchingGatewayId(gateway._id);
+    try {
+      const res = await smsService.fetchFromGateway(gateway._id);
+      if (res.success) {
+        toast.success(`${gateway.name}: ${res.data?.saved || 0} new messages`);
+        fetchSMS();
+      }
+    } catch {
+      toast.error(`Failed to fetch from ${gateway.name}`);
+    } finally {
+      setFetchingGatewayId(null);
+    }
+  };
+
   // ── Filter handlers ──
   const handleFilterChange = (field, value) => {
     setFilters((prev) => ({ ...prev, [field]: value }));
@@ -1066,6 +1090,7 @@ const SMSGatewayPage = () => {
                   <GatewayItem
                     gateway={gw}
                     testing={testingGateway}
+                    fetchingId={fetchingGatewayId}
                     selected={selectedGatewayId === gw._id}
                     onSelect={handleSelectGateway}
                     onTest={handleTestConnection}
@@ -1073,6 +1098,7 @@ const SMSGatewayPage = () => {
                     onDelete={handleDeleteGateway}
                     onSetupForwarding={handleSetupForwarding}
                     onInfo={(g) => setPortUsageGateway(g)}
+                    onFetch={handleFetchFromGateway}
                   />
                 </React.Fragment>
               ))

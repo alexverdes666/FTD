@@ -398,6 +398,7 @@ const DepositCallsPage = () => {
   const [selectedClientNetwork, setSelectedClientNetwork] = useState('');
   const [selectedOurNetwork, setSelectedOurNetwork] = useState('');
   const [selectedMonth, setSelectedMonth] = useState('');
+  const [selectedDeclMonth, setSelectedDeclMonth] = useState('');
   const [status] = useState('active');
   
   // Pagination
@@ -570,6 +571,7 @@ const DepositCallsPage = () => {
         params.startDate = new Date(year, month - 1, 1).toISOString();
         params.endDate = new Date(year, month, 0, 23, 59, 59, 999).toISOString();
       }
+      if (selectedDeclMonth) params.declarationMonth = selectedDeclMonth;
 
       const response = await depositCallsService.getDepositCalls(params);
 
@@ -582,7 +584,7 @@ const DepositCallsPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [page, rowsPerPage, search, selectedAM, selectedAgent, selectedBroker, selectedClientNetwork, selectedOurNetwork, selectedMonth, status]);
+  }, [page, rowsPerPage, search, selectedAM, selectedAgent, selectedBroker, selectedClientNetwork, selectedOurNetwork, selectedMonth, selectedDeclMonth, status]);
 
   // Fetch pending approvals count
   const fetchPendingCount = useCallback(async () => {
@@ -1139,91 +1141,85 @@ const DepositCallsPage = () => {
         </Box>
         <Collapse in={filtersOpen}>
           <Divider />
-          <Box sx={{ px: 1.5, py: 1 }}>
-            <Grid container spacing={1} alignItems="center">
+          <Box sx={{ px: 1.5, py: 1, display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center' }}>
               {(isAdmin || isAM) && (
                 <>
                   {isAdmin && (
-                    <Grid item xs={6} sm={4} md={2}>
-                      <Autocomplete
-                        size="small"
-                        options={accountManagers}
-                        getOptionLabel={(o) => o.fullName || ''}
-                        value={accountManagers.find(am => am._id === selectedAM) || null}
-                        onChange={(e, v) => setSelectedAM(v?._id || '')}
-                        renderInput={(params) => <TextField {...params} label="Account Manager" />}
-                        sx={{ '& .MuiOutlinedInput-root': { borderRadius: 5, height: 32, py: '0px !important' }, '& .MuiInputLabel-root': { top: -4 }, '& .MuiInputLabel-shrink': { top: 0 } }}
-                      />
-                    </Grid>
-                  )}
-
-                  <Grid item xs={6} sm={4} md={2}>
                     <Autocomplete
                       size="small"
-                      options={agents}
+                      options={accountManagers}
                       getOptionLabel={(o) => o.fullName || ''}
-                      value={agents.find(a => a._id === selectedAgent) || null}
-                      onChange={(e, v) => setSelectedAgent(v?._id || '')}
-                      renderInput={(params) => <TextField {...params} label="Agent" />}
-                      sx={{ '& .MuiOutlinedInput-root': { borderRadius: 5, height: 32, py: '0px !important' }, '& .MuiInputLabel-root': { top: -4 }, '& .MuiInputLabel-shrink': { top: 0 } }}
+                      value={accountManagers.find(am => am._id === selectedAM) || null}
+                      onChange={(e, v) => setSelectedAM(v?._id || '')}
+                      renderInput={(params) => <TextField {...params} label="Account Manager" />}
+                      sx={{ minWidth: 140, flex: 1, '& .MuiOutlinedInput-root': { borderRadius: 5, height: 32, py: '0px !important' }, '& .MuiInputLabel-root': { top: -4 }, '& .MuiInputLabel-shrink': { top: 0 } }}
                     />
-                  </Grid>
+                  )}
 
-                  <Grid item xs={6} sm={4} md={2}>
-                    <Autocomplete
-                      size="small"
-                      options={brokers}
-                      getOptionLabel={(o) => o.name || ''}
-                      value={brokers.find(b => b._id === selectedBroker) || null}
-                      onChange={(e, v) => setSelectedBroker(v?._id || '')}
-                      renderInput={(params) => <TextField {...params} label="Client Broker" />}
-                      sx={{ '& .MuiOutlinedInput-root': { borderRadius: 5, height: 32, py: '0px !important' }, '& .MuiInputLabel-root': { top: -4 }, '& .MuiInputLabel-shrink': { top: 0 } }}
-                    />
-                  </Grid>
+                  <Autocomplete
+                    size="small"
+                    options={agents}
+                    getOptionLabel={(o) => o.fullName || ''}
+                    value={agents.find(a => a._id === selectedAgent) || null}
+                    onChange={(e, v) => setSelectedAgent(v?._id || '')}
+                    renderInput={(params) => <TextField {...params} label="Agent" />}
+                    sx={{ minWidth: 120, flex: 1, '& .MuiOutlinedInput-root': { borderRadius: 5, height: 32, py: '0px !important' }, '& .MuiInputLabel-root': { top: -4 }, '& .MuiInputLabel-shrink': { top: 0 } }}
+                  />
+
+                  <Autocomplete
+                    size="small"
+                    options={brokers}
+                    getOptionLabel={(o) => o.name || ''}
+                    value={brokers.find(b => b._id === selectedBroker) || null}
+                    onChange={(e, v) => setSelectedBroker(v?._id || '')}
+                    renderInput={(params) => <TextField {...params} label="Client Broker" />}
+                    sx={{ minWidth: 120, flex: 1, '& .MuiOutlinedInput-root': { borderRadius: 5, height: 32, py: '0px !important' }, '& .MuiInputLabel-root': { top: -4 }, '& .MuiInputLabel-shrink': { top: 0 } }}
+                  />
 
                   {!isAgent && (
-                    <Grid item xs={6} sm={4} md={2}>
-                      <Autocomplete
-                        size="small"
-                        options={clientNetworks}
-                        getOptionLabel={(o) => o.name || ''}
-                        value={clientNetworks.find(n => n._id === selectedClientNetwork) || null}
-                        onChange={(e, v) => setSelectedClientNetwork(v?._id || '')}
-                        renderInput={(params) => <TextField {...params} label="Client Network" />}
-                        sx={{ '& .MuiOutlinedInput-root': { borderRadius: 5, height: 32, py: '0px !important' }, '& .MuiInputLabel-root': { top: -4 }, '& .MuiInputLabel-shrink': { top: 0 } }}
-                      />
-                    </Grid>
+                    <Autocomplete
+                      size="small"
+                      options={clientNetworks}
+                      getOptionLabel={(o) => o.name || ''}
+                      value={clientNetworks.find(n => n._id === selectedClientNetwork) || null}
+                      onChange={(e, v) => setSelectedClientNetwork(v?._id || '')}
+                      renderInput={(params) => <TextField {...params} label="Client Network" />}
+                      sx={{ minWidth: 120, flex: 1, '& .MuiOutlinedInput-root': { borderRadius: 5, height: 32, py: '0px !important' }, '& .MuiInputLabel-root': { top: -4 }, '& .MuiInputLabel-shrink': { top: 0 } }}
+                    />
                   )}
 
                   {!isAgent && (
-                    <Grid item xs={6} sm={4} md={2}>
-                      <Autocomplete
-                        size="small"
-                        options={ourNetworks}
-                        getOptionLabel={(o) => o.name || ''}
-                        value={ourNetworks.find(n => n._id === selectedOurNetwork) || null}
-                        onChange={(e, v) => setSelectedOurNetwork(v?._id || '')}
-                        renderInput={(params) => <TextField {...params} label="Our Network" />}
-                        sx={{ '& .MuiOutlinedInput-root': { borderRadius: 5, height: 32, py: '0px !important' }, '& .MuiInputLabel-root': { top: -4 }, '& .MuiInputLabel-shrink': { top: 0 } }}
-                      />
-                    </Grid>
+                    <Autocomplete
+                      size="small"
+                      options={ourNetworks}
+                      getOptionLabel={(o) => o.name || ''}
+                      value={ourNetworks.find(n => n._id === selectedOurNetwork) || null}
+                      onChange={(e, v) => setSelectedOurNetwork(v?._id || '')}
+                      renderInput={(params) => <TextField {...params} label="Our Network" />}
+                      sx={{ minWidth: 120, flex: 1, '& .MuiOutlinedInput-root': { borderRadius: 5, height: 32, py: '0px !important' }, '& .MuiInputLabel-root': { top: -4 }, '& .MuiInputLabel-shrink': { top: 0 } }}
+                    />
                   )}
                 </>
               )}
 
-              <Grid item xs={6} sm={4} md={2}>
-                <TextField
-                  fullWidth
-                  size="small"
-                  type="month"
-                  label="Month"
-                  value={selectedMonth}
-                  onChange={(e) => setSelectedMonth(e.target.value)}
-                  InputLabelProps={{ shrink: true }}
-                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: 5, height: 32 }, '& .MuiInputLabel-root': { top: -4 }, '& .MuiInputLabel-shrink': { top: 0 } }}
-                />
-              </Grid>
-            </Grid>
+              <TextField
+                size="small"
+                type="month"
+                label="Order Month"
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(e.target.value)}
+                InputLabelProps={{ shrink: true }}
+                sx={{ minWidth: 130, flex: 1, '& .MuiOutlinedInput-root': { borderRadius: 5, height: 32 }, '& .MuiInputLabel-root': { top: -4 }, '& .MuiInputLabel-shrink': { top: 0 } }}
+              />
+              <TextField
+                size="small"
+                type="month"
+                label="Declaration Month"
+                value={selectedDeclMonth}
+                onChange={(e) => setSelectedDeclMonth(e.target.value)}
+                InputLabelProps={{ shrink: true }}
+                sx={{ minWidth: 130, flex: 1, '& .MuiOutlinedInput-root': { borderRadius: 5, height: 32 }, '& .MuiInputLabel-root': { top: -4 }, '& .MuiInputLabel-shrink': { top: 0 } }}
+              />
           </Box>
         </Collapse>
       </Paper>

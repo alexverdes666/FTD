@@ -58,6 +58,7 @@ exports.getDepositCalls = async (req, res, next) => {
       startDate,
       endDate,
       search,
+      declarationMonth,
     } = req.query;
 
     const query = { isDeleted: { $ne: true } };
@@ -109,6 +110,63 @@ exports.getDepositCalls = async (req, res, next) => {
     // Client broker filter
     if (clientBrokerId) {
       query.clientBrokerId = toObjectId(clientBrokerId);
+    }
+
+    // Declaration month filter: find deposit calls that have declarations in the given month
+    if (declarationMonth) {
+      const [declYear, declMonth] = declarationMonth.split('-').map(Number);
+      if (declYear && declMonth) {
+        // Find all declarations for this month
+        const declQuery = {
+          declarationYear: declYear,
+          declarationMonth: declMonth,
+          isActive: true,
+          callCategory: "ftd",
+        };
+        // If filtering by agent, scope declarations too
+        if (query.assignedAgent) {
+          declQuery.agent = query.assignedAgent;
+        }
+        const monthDeclarations = await AgentCallDeclaration.find(declQuery)
+          .select("depositCallId lead orderId")
+          .lean();
+
+        // Collect matching deposit call IDs and lead+order pairs
+        const matchingDcIds = new Set();
+        const leadOrderPairs = [];
+        for (const d of monthDeclarations) {
+          if (d.depositCallId) matchingDcIds.add(d.depositCallId.toString());
+          if (d.lead && d.orderId) {
+            leadOrderPairs.push({
+              leadId: new ObjectId(d.lead.toString()),
+              orderId: new ObjectId(d.orderId.toString()),
+            });
+          }
+        }
+
+        const orConditions = [];
+        if (matchingDcIds.size > 0) {
+          orConditions.push({ _id: { $in: [...matchingDcIds].map(id => new ObjectId(id)) } });
+        }
+        if (leadOrderPairs.length > 0) {
+          orConditions.push(...leadOrderPairs.map(p => ({
+            leadId: p.leadId,
+            orderId: p.orderId,
+          })));
+        }
+
+        if (orConditions.length > 0) {
+          query.$and = query.$and || [];
+          query.$and.push({ $or: orConditions });
+        } else {
+          // No declarations found for this month — return empty
+          return res.status(200).json({
+            success: true,
+            data: [],
+            pagination: { current: 1, pages: 0, total: 0, limit: parseInt(limit) },
+          });
+        }
+      }
     }
 
     // Date range filter is applied on order.createdAt via aggregation
