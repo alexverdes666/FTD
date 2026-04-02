@@ -79,7 +79,7 @@ const telegramAuthSessionSchema = new mongoose.Schema({
 
 // Generate a secure session token
 telegramAuthSessionSchema.statics.generateSessionToken = function() {
-  return crypto.randomBytes(32).toString('hex');
+  return crypto.randomBytes(12).toString('hex');
 };
 
 // Generate a verification token (for after approval of sensitive actions)
