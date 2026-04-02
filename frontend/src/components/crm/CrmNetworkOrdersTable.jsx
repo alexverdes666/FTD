@@ -13,10 +13,14 @@ import {
   CircularProgress,
   Tooltip,
   Chip,
+  IconButton,
 } from "@mui/material";
+import { ChevronRight as ChevronRightIcon } from "@mui/icons-material";
+import { useNavigate } from "react-router-dom";
 import api from "../../services/api";
 
 const CrmNetworkOrdersTable = ({ networkId }) => {
+  const navigate = useNavigate();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [pagination, setPagination] = useState({
@@ -147,12 +151,13 @@ const CrmNetworkOrdersTable = ({ networkId }) => {
                   >
                     Shaved FTDs
                   </TableCell>
+                  <TableCell sx={{ backgroundColor: "#f5f5f5", width: 40, px: 0 }} />
                 </TableRow>
               </TableHead>
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={9} align="center" sx={{ py: 3 }}>
+                    <TableCell colSpan={10} align="center" sx={{ py: 3 }}>
                       <CircularProgress size={24} />
                     </TableCell>
                   </TableRow>
@@ -201,6 +206,15 @@ const CrmNetworkOrdersTable = ({ networkId }) => {
                         >
                           {order.shavedFtds || 0}
                         </Typography>
+                      </TableCell>
+                      <TableCell sx={{ textAlign: "center", px: 0 }}>
+                        <IconButton
+                          size="small"
+                          onClick={() => navigate("/orders", { state: { highlightOrderId: order._id } })}
+                          sx={{ p: 0.25 }}
+                        >
+                          <ChevronRightIcon sx={{ fontSize: 18, color: "text.secondary" }} />
+                        </IconButton>
                       </TableCell>
                     </TableRow>
                   ))
