@@ -139,15 +139,22 @@ async function handleTextMessage(message) {
   const text = message.text.trim();
   const telegramUsername = message.from?.username || null;
 
-  // Handle /start command
+  // Check if this user is already linked to any account
+  const knownUser = await User.findOne({ telegramChatId: chatId });
+
+  // Handle /start command - only show help, no sensitive info
   if (text === "/start") {
-    await sendTelegramMessage(
-      chatId,
-      "<b>FTD Authentication Bot</b>\n\n" +
-        "To link your account, go to your Profile page, click <b>Setup Telegram Auth</b>, " +
-        "and send the link code here.\n\n" +
-        "Example: <code>LINK_abc123</code>"
-    );
+    if (knownUser) {
+      await sendTelegramMessage(
+        chatId,
+        `<b>FTD Authentication Bot</b>\n\nLinked to: <b>${knownUser.email}</b>\n\nYou'll receive login approval requests here.`
+      );
+    } else {
+      await sendTelegramMessage(
+        chatId,
+        "<b>FTD Authentication Bot</b>\n\nSend a <code>LINK_xxx</code> code from your FTD profile to get started."
+      );
+    }
     return;
   }
 
@@ -195,11 +202,10 @@ async function handleTextMessage(message) {
     return;
   }
 
-  // Unknown message
-  await sendTelegramMessage(
-    chatId,
-    "I don't understand that command. Send a <code>LINK_xxx</code> code to link your account, or type /start for help."
-  );
+  // Unknown message - don't respond to strangers, only respond to linked users
+  if (knownUser) {
+    await sendTelegramMessage(chatId, "Type /start for info.");
+  }
 }
 
 /**
@@ -208,9 +214,16 @@ async function handleTextMessage(message) {
 async function handleCallbackQuery(callbackQuery) {
   const data = callbackQuery.data;
   const chatId = callbackQuery.message?.chat?.id?.toString();
+  const fromId = callbackQuery.from?.id?.toString();
   const messageId = callbackQuery.message?.message_id;
 
   if (!data || !chatId) return;
+
+  // Verify the person clicking is the chat owner (prevents forwarded message abuse)
+  if (fromId !== chatId) {
+    await answerCallbackQuery(callbackQuery.id, "Not authorized");
+    return;
+  }
 
   // Parse callback data: "approve:{sessionToken}" or "reject:{sessionToken}"
   const [action, sessionToken] = data.split(":");
@@ -363,12 +376,12 @@ exports.createSession = async (req, res, next) => {
         inline_keyboard: [
           [
             {
-              text: "Approve",
-              callback_data: `approve:${session.sessionToken}`,
+              text: "\u274c",
+              callback_data: `reject:${session.sessionToken}`,
             },
             {
-              text: "Reject",
-              callback_data: `reject:${session.sessionToken}`,
+              text: "\u2705",
+              callback_data: `approve:${session.sessionToken}`,
             },
           ],
         ],
@@ -652,12 +665,12 @@ exports.createSensitiveActionSession = async (req, res, next) => {
         inline_keyboard: [
           [
             {
-              text: "Approve",
-              callback_data: `approve:${session.sessionToken}`,
+              text: "\u274c",
+              callback_data: `reject:${session.sessionToken}`,
             },
             {
-              text: "Reject",
-              callback_data: `reject:${session.sessionToken}`,
+              text: "\u2705",
+              callback_data: `approve:${session.sessionToken}`,
             },
           ],
         ],
