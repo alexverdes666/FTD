@@ -28,7 +28,7 @@ const agentCallDeclarationSchema = new mongoose.Schema(
     },
     destinationNumber: {
       type: String,
-      required: true,
+      default: "",
     },
     lineNumber: {
       type: String,

@@ -461,7 +461,7 @@ const createDeclaration = async (req, res) => {
     const { cdrCallId, callDate, callDuration, sourceNumber, destinationNumber, lineNumber, callType, callCategory, description, affiliateManagerId, leadId, depositCallId, recordFile } = req.body;
 
     // Validate required fields
-    if (!cdrCallId || !callDate || !callDuration || !sourceNumber || !destinationNumber) {
+    if (!cdrCallId || !callDate || !callDuration || !sourceNumber) {
       return res.status(400).json({
         success: false,
         message: "Missing required fields",
