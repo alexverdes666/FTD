@@ -18,6 +18,7 @@ import * as yup from 'yup';
 import { login, verify2FAAndLogin, completeQRLogin, clearError, clear2FAState, selectAuth } from '../store/slices/authSlice';
 import TwoFactorVerification from '../components/TwoFactorVerification';
 import QRCodeLogin from '../components/QRCodeLogin';
+import TelegramAuthLogin from '../components/TelegramAuthLogin';
 import './LoginPage.css';
 const schema = yup.object({
   email: yup
@@ -33,10 +34,11 @@ const LoginPage = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const location = useLocation();
-  const { isLoading, error, isAuthenticated, requires2FA, twoFactorUserId, useQRAuth } = useSelector(selectAuth);
+  const { isLoading, error, isAuthenticated, requires2FA, twoFactorUserId, useQRAuth, useTelegramAuth } = useSelector(selectAuth);
   const [showPassword, setShowPassword] = useState(false);
   const [show2FADialog, setShow2FADialog] = useState(false);
   const [showQRDialog, setShowQRDialog] = useState(false);
+  const [showTelegramDialog, setShowTelegramDialog] = useState(false);
   const [twoFactorError, setTwoFactorError] = useState('');
   const {
     register,
@@ -63,18 +65,25 @@ const LoginPage = () => {
       if (document.activeElement instanceof HTMLElement) {
         document.activeElement.blur();
       }
-      
-      if (useQRAuth) {
+
+      if (useTelegramAuth) {
+        // User has Telegram auth enabled - show Telegram dialog
+        setShowTelegramDialog(true);
+        setShowQRDialog(false);
+        setShow2FADialog(false);
+      } else if (useQRAuth) {
         // User has QR auth enabled - show QR code dialog
         setShowQRDialog(true);
         setShow2FADialog(false);
+        setShowTelegramDialog(false);
       } else {
         // User has regular 2FA enabled - show code dialog
         setShow2FADialog(true);
         setShowQRDialog(false);
+        setShowTelegramDialog(false);
       }
     }
-  }, [requires2FA, twoFactorUserId, useQRAuth]);
+  }, [requires2FA, twoFactorUserId, useQRAuth, useTelegramAuth]);
   const onSubmit = async (data) => {
     try {
       const result = await dispatch(login(data)).unwrap();
@@ -143,6 +152,23 @@ const LoginPage = () => {
     setShowQRDialog(false);
     const from = location.state?.from?.pathname || '/dashboard';
     navigate(from, { replace: true });
+  };
+
+  const handleTelegramClose = () => {
+    setShowTelegramDialog(false);
+    dispatch(clear2FAState());
+  };
+
+  const handleTelegramLoginSuccess = async (token, user) => {
+    await dispatch(completeQRLogin({ token, user }));
+    setShowTelegramDialog(false);
+    const from = location.state?.from?.pathname || '/dashboard';
+    navigate(from, { replace: true });
+  };
+
+  const handleTelegramFallbackTo2FA = () => {
+    setShowTelegramDialog(false);
+    setShow2FADialog(true);
   };
 
   const handleFallbackTo2FA = () => {
@@ -235,6 +261,15 @@ const LoginPage = () => {
         userId={twoFactorUserId}
         onLoginSuccess={handleQRLoginSuccess}
         onFallbackTo2FA={handleFallbackTo2FA}
+      />
+
+      {/* Telegram Auth Login Dialog */}
+      <TelegramAuthLogin
+        open={showTelegramDialog}
+        onClose={handleTelegramClose}
+        userId={twoFactorUserId}
+        onLoginSuccess={handleTelegramLoginSuccess}
+        onFallbackTo2FA={handleTelegramFallbackTo2FA}
       />
     </>
   );

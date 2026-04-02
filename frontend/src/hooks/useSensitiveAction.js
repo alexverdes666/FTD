@@ -34,6 +34,7 @@ import { toast } from "react-hot-toast";
  *   onClose={resetSensitiveAction}
  *   onVerify={(code, useBackup) => sensitiveActionState.handleVerify(code, useBackup)}
  *   onQRVerify={(token) => sensitiveActionState.handleQRVerify(token)}
+ *   onTelegramVerify={(token) => sensitiveActionState.handleTelegramVerify(token)}
  *   actionName={sensitiveActionState.actionName}
  *   actionDescription={sensitiveActionState.actionDescription}
  *   loading={sensitiveActionState.verifying}
@@ -41,6 +42,7 @@ import { toast } from "react-hot-toast";
  *   requires2FASetup={sensitiveActionState.requires2FASetup}
  *   userId={sensitiveActionState.userId}
  *   qrAuthEnabled={sensitiveActionState.qrAuthEnabled}
+ *   telegramAuthEnabled={sensitiveActionState.telegramAuthEnabled}
  * />
  * ```
  */
@@ -60,6 +62,8 @@ const useSensitiveAction = () => {
     // QR Auth states
     userId: null,
     qrAuthEnabled: false,
+    // Telegram Auth states
+    telegramAuthEnabled: false,
   });
 
   /**
@@ -83,6 +87,7 @@ const useSensitiveAction = () => {
       pendingReject: null,
       userId: null,
       qrAuthEnabled: false,
+      telegramAuthEnabled: false,
     });
   }, [state.pendingReject]);
 
@@ -123,6 +128,7 @@ const useSensitiveAction = () => {
           pendingReject: null,
           userId: null,
           qrAuthEnabled: false,
+          telegramAuthEnabled: false,
         });
 
         if (state.pendingResolve) {
@@ -182,6 +188,7 @@ const useSensitiveAction = () => {
           pendingReject: null,
           userId: null,
           qrAuthEnabled: false,
+          telegramAuthEnabled: false,
         });
 
         if (state.pendingResolve) {
@@ -194,6 +201,64 @@ const useSensitiveAction = () => {
           error.response?.data?.message ||
           error.message ||
           "QR Verification failed. Please try again.";
+
+        setState((prev) => ({
+          ...prev,
+          verifying: false,
+          error: errorMessage,
+        }));
+      }
+    },
+    [state.pendingApiCall, state.pendingResolve]
+  );
+
+  /**
+   * Handle Telegram verification (when Telegram session is approved)
+   */
+  const handleTelegramVerify = useCallback(
+    async (verificationToken) => {
+      if (!state.pendingApiCall) {
+        console.error("No pending API call to verify");
+        return;
+      }
+
+      setState((prev) => ({ ...prev, verifying: true, error: "" }));
+
+      try {
+        // Build headers with Telegram verification token
+        const headers = {
+          "X-Telegram-Verification-Token": verificationToken,
+        };
+
+        // Execute the API call with Telegram verification header
+        const result = await state.pendingApiCall(headers);
+
+        // Success - close modal and resolve promise
+        setState({
+          showModal: false,
+          actionName: "",
+          actionDescription: "",
+          verifying: false,
+          error: "",
+          requires2FASetup: false,
+          pendingApiCall: null,
+          pendingResolve: null,
+          pendingReject: null,
+          userId: null,
+          qrAuthEnabled: false,
+          telegramAuthEnabled: false,
+        });
+
+        if (state.pendingResolve) {
+          state.pendingResolve(result);
+        }
+
+        toast.success("Action verified and completed successfully");
+      } catch (error) {
+        const errorMessage =
+          error.response?.data?.message ||
+          error.message ||
+          "Telegram verification failed. Please try again.";
 
         setState((prev) => ({
           ...prev,
@@ -248,6 +313,7 @@ const useSensitiveAction = () => {
               pendingReject: reject,
               userId: user?._id || user?.id || null,
               qrAuthEnabled: user?.qrAuthEnabled || false,
+              telegramAuthEnabled: user?.telegramAuthEnabled || false,
             });
           });
         }
@@ -266,6 +332,7 @@ const useSensitiveAction = () => {
             pendingReject: reject,
             userId: user?._id || user?.id || null,
             qrAuthEnabled: user?.qrAuthEnabled || false,
+            telegramAuthEnabled: user?.telegramAuthEnabled || false,
           });
         });
       }
@@ -281,6 +348,7 @@ const useSensitiveAction = () => {
       ...state,
       handleVerify,
       handleQRVerify,
+      handleTelegramVerify,
     },
     resetSensitiveAction,
   };

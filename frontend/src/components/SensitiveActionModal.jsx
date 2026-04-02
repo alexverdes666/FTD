@@ -21,6 +21,7 @@ import SecurityIcon from "@mui/icons-material/Security";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import LockIcon from "@mui/icons-material/Lock";
 import QrCodeScannerIcon from "@mui/icons-material/QrCodeScanner";
+import TelegramIcon from "@mui/icons-material/Telegram";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import CancelIcon from "@mui/icons-material/Cancel";
 import TimerIcon from "@mui/icons-material/Timer";
@@ -46,14 +47,17 @@ import api from "../services/api";
  * - loading: boolean - Whether verification is in progress
  * - error: string - Error message to display
  * - requires2FASetup: boolean - If true, show message that 2FA must be enabled first
- * - userId: string - Current user's ID (for QR auth)
+ * - userId: string - Current user's ID (for QR auth / Telegram auth)
  * - qrAuthEnabled: boolean - Whether user has QR auth enabled
+ * - telegramAuthEnabled: boolean - Whether user has Telegram auth enabled
+ * - onTelegramVerify: function(verificationToken) - Called when Telegram auth is approved
  */
 const SensitiveActionModal = ({
   open,
   onClose,
   onVerify,
   onQRVerify,
+  onTelegramVerify,
   actionName = "Sensitive Action",
   actionDescription = "",
   loading = false,
@@ -61,6 +65,7 @@ const SensitiveActionModal = ({
   requires2FASetup = false,
   userId = null,
   qrAuthEnabled = false,
+  telegramAuthEnabled = false,
 }) => {
   const [verificationCode, setVerificationCode] = useState("");
   const [useBackupCode, setUseBackupCode] = useState(false);
@@ -74,6 +79,13 @@ const SensitiveActionModal = ({
   const [qrStatus, setQrStatus] = useState("idle"); // idle, loading, pending, approved, rejected, expired, error
   const [qrError, setQrError] = useState("");
   const [timeRemaining, setTimeRemaining] = useState(300);
+
+  // Telegram Auth states
+  const [useTelegramMode, setUseTelegramMode] = useState(false);
+  const [telegramSessionToken, setTelegramSessionToken] = useState(null);
+  const [telegramStatus, setTelegramStatus] = useState("idle"); // idle, loading, pending, approved, rejected, expired, error
+  const [telegramError, setTelegramError] = useState("");
+  const [telegramTimeRemaining, setTelegramTimeRemaining] = useState(300);
 
   // Create QR session for sensitive action
   const createQRSession = useCallback(async () => {
@@ -108,6 +120,38 @@ const SensitiveActionModal = ({
     }
   }, [userId, actionName]);
 
+  // Create Telegram session for sensitive action
+  const createTelegramSession = useCallback(async () => {
+    if (!userId) return;
+
+    try {
+      setTelegramStatus("loading");
+      setTelegramError("");
+
+      const response = await api.post("/telegram-auth/create-sensitive-action-session", {
+        userId,
+        actionType: actionName,
+      });
+
+      if (response.data.success) {
+        setTelegramSessionToken(response.data.data.sessionToken);
+        setTelegramStatus("pending");
+
+        const remaining = Math.floor(
+          (new Date(response.data.data.expiresAt) - new Date()) / 1000
+        );
+        setTelegramTimeRemaining(remaining > 0 ? remaining : 0);
+      } else {
+        setTelegramStatus("error");
+        setTelegramError(response.data.message || "Failed to create Telegram session");
+      }
+    } catch (err) {
+      console.error("Error creating Telegram session:", err);
+      setTelegramStatus("error");
+      setTelegramError(err.response?.data?.message || "Failed to create Telegram session");
+    }
+  }, [userId, actionName]);
+
   // Reset state when modal opens
   useEffect(() => {
     if (open) {
@@ -122,8 +166,14 @@ const SensitiveActionModal = ({
       setQrStatus("idle");
       setQrError("");
       setTimeRemaining(300);
+      // Reset Telegram states
+      setUseTelegramMode(telegramAuthEnabled); // Default to Telegram mode if enabled
+      setTelegramSessionToken(null);
+      setTelegramStatus("idle");
+      setTelegramError("");
+      setTelegramTimeRemaining(300);
     }
-  }, [open, qrAuthEnabled]);
+  }, [open, qrAuthEnabled, telegramAuthEnabled]);
 
   // Reset and clear code when error is received (wrong code)
   useEffect(() => {
@@ -139,6 +189,80 @@ const SensitiveActionModal = ({
       createQRSession();
     }
   }, [open, useQRMode, qrStatus, userId, createQRSession]);
+
+  // Create Telegram session when switching to Telegram mode
+  useEffect(() => {
+    if (open && useTelegramMode && telegramStatus === "idle" && userId) {
+      createTelegramSession();
+    }
+  }, [open, useTelegramMode, telegramStatus, userId, createTelegramSession]);
+
+  // Poll for Telegram session status
+  useEffect(() => {
+    let pollInterval;
+
+    if (open && telegramSessionToken && telegramStatus === "pending") {
+      pollInterval = setInterval(async () => {
+        try {
+          const response = await api.get(
+            `/telegram-auth/session-status/${telegramSessionToken}`
+          );
+
+          if (response.data.success) {
+            const { status: sessionStatus, verificationToken } = response.data.data;
+
+            if (sessionStatus === "approved") {
+              setTelegramStatus("approved");
+              clearInterval(pollInterval);
+
+              setTimeout(() => {
+                if (onTelegramVerify) {
+                  onTelegramVerify(verificationToken);
+                }
+              }, 1000);
+            } else if (sessionStatus === "rejected") {
+              setTelegramStatus("rejected");
+              clearInterval(pollInterval);
+            } else if (sessionStatus === "expired") {
+              setTelegramStatus("expired");
+              clearInterval(pollInterval);
+            }
+          }
+        } catch (err) {
+          console.error("Error polling Telegram session status:", err);
+        }
+      }, 1000);
+    }
+
+    return () => {
+      if (pollInterval) {
+        clearInterval(pollInterval);
+      }
+    };
+  }, [open, telegramSessionToken, telegramStatus, onTelegramVerify]);
+
+  // Telegram timer countdown
+  useEffect(() => {
+    let timerInterval;
+
+    if (telegramStatus === "pending" && telegramTimeRemaining > 0) {
+      timerInterval = setInterval(() => {
+        setTelegramTimeRemaining((prev) => {
+          if (prev <= 1) {
+            setTelegramStatus("expired");
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+
+    return () => {
+      if (timerInterval) {
+        clearInterval(timerInterval);
+      }
+    };
+  }, [telegramStatus, telegramTimeRemaining]);
 
   // Poll for QR session status
   useEffect(() => {
@@ -231,9 +355,30 @@ const SensitiveActionModal = ({
 
   const switchTo2FAMode = () => {
     setUseQRMode(false);
+    setUseTelegramMode(false);
     setQrStatus("idle");
     setQrSessionToken(null);
     setQrUrl(null);
+    setTelegramStatus("idle");
+    setTelegramSessionToken(null);
+  };
+
+  const switchToTelegramMode = () => {
+    setUseTelegramMode(true);
+    setUseQRMode(false);
+    setTelegramStatus("idle");
+    setQrStatus("idle");
+    setQrSessionToken(null);
+    setQrUrl(null);
+    setVerificationCode("");
+    setLocalError("");
+  };
+
+  const handleRetryTelegram = () => {
+    setTelegramStatus("idle");
+    setTelegramSessionToken(null);
+    setTelegramError("");
+    setTelegramTimeRemaining(300);
   };
 
   const handleSubmit = (e) => {
@@ -456,6 +601,145 @@ const SensitiveActionModal = ({
     }
   };
 
+  // Render Telegram content
+  const renderTelegramContent = () => {
+    switch (telegramStatus) {
+      case "loading":
+        return (
+          <Box display="flex" flexDirection="column" alignItems="center" py={4}>
+            <CircularProgress size={48} />
+            <Typography variant="body1" color="text.secondary" sx={{ mt: 2 }}>
+              Sending approval request to Telegram...
+            </Typography>
+          </Box>
+        );
+
+      case "pending":
+        return (
+          <Fade in>
+            <Box display="flex" flexDirection="column" alignItems="center">
+              <Box
+                sx={{
+                  p: 3,
+                  bgcolor: "rgba(0, 136, 204, 0.08)",
+                  borderRadius: 2,
+                  mb: 3,
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                }}
+              >
+                <TelegramIcon sx={{ fontSize: 80, color: "#0088cc", mb: 2 }} />
+                <Typography variant="h6" color="text.primary" textAlign="center">
+                  Check your Telegram
+                </Typography>
+                <Typography variant="body2" color="text.secondary" textAlign="center" sx={{ mt: 1 }}>
+                  An approval request has been sent to your linked Telegram account.
+                  Tap <b>Approve</b> to verify this action.
+                </Typography>
+              </Box>
+
+              <Box display="flex" alignItems="center" gap={1} mb={2}>
+                <TimerIcon color={telegramTimeRemaining < 60 ? "error" : "action"} />
+                <Typography
+                  variant="h5"
+                  color={telegramTimeRemaining < 60 ? "error.main" : "text.primary"}
+                  fontFamily="monospace"
+                >
+                  {formatTime(telegramTimeRemaining)}
+                </Typography>
+              </Box>
+
+              <LinearProgress
+                variant="determinate"
+                value={(telegramTimeRemaining / 300) * 100}
+                sx={{ width: "100%", height: 6, borderRadius: 3, mb: 2 }}
+              />
+
+              <Alert severity="info" sx={{ width: "100%" }}>
+                <Typography variant="body2">
+                  Open the Telegram app and tap Approve in the message from FTD Auth Bot.
+                </Typography>
+              </Alert>
+            </Box>
+          </Fade>
+        );
+
+      case "approved":
+        return (
+          <Fade in>
+            <Box display="flex" flexDirection="column" alignItems="center" py={4}>
+              <CheckCircleIcon sx={{ fontSize: 80, color: "success.main", mb: 2 }} />
+              <Typography variant="h5" color="success.main" fontWeight="bold">
+                Action Approved!
+              </Typography>
+              <Typography variant="body1" color="text.secondary" sx={{ mt: 1 }}>
+                Processing your request...
+              </Typography>
+              <CircularProgress size={24} sx={{ mt: 2 }} />
+            </Box>
+          </Fade>
+        );
+
+      case "rejected":
+        return (
+          <Fade in>
+            <Box display="flex" flexDirection="column" alignItems="center" py={4}>
+              <CancelIcon sx={{ fontSize: 80, color: "error.main", mb: 2 }} />
+              <Typography variant="h5" color="error.main" fontWeight="bold">
+                Action Rejected
+              </Typography>
+              <Typography variant="body1" color="text.secondary" sx={{ mt: 1, mb: 3 }}>
+                The action was rejected from Telegram.
+              </Typography>
+              <Button variant="contained" onClick={handleRetryTelegram}>
+                Try Again
+              </Button>
+            </Box>
+          </Fade>
+        );
+
+      case "expired":
+        return (
+          <Fade in>
+            <Box display="flex" flexDirection="column" alignItems="center" py={4}>
+              <TimerIcon sx={{ fontSize: 80, color: "warning.main", mb: 2 }} />
+              <Typography variant="h5" color="warning.main" fontWeight="bold">
+                Session Expired
+              </Typography>
+              <Typography variant="body1" color="text.secondary" sx={{ mt: 1, mb: 3 }}>
+                The approval request has expired. Please try again.
+              </Typography>
+              <Button variant="contained" onClick={handleRetryTelegram}>
+                Send New Request
+              </Button>
+            </Box>
+          </Fade>
+        );
+
+      case "error":
+        return (
+          <Fade in>
+            <Box display="flex" flexDirection="column" alignItems="center" py={4}>
+              <Alert severity="error" sx={{ width: "100%", mb: 3 }}>
+                {telegramError}
+              </Alert>
+              <Button variant="contained" onClick={handleRetryTelegram}>
+                Try Again
+              </Button>
+            </Box>
+          </Fade>
+        );
+
+      default:
+        return (
+          <Box display="flex" flexDirection="column" alignItems="center" py={4}>
+            <CircularProgress size={48} />
+          </Box>
+        );
+    }
+  };
+
   // If 2FA is not set up, show a different message
   if (requires2FASetup) {
     return (
@@ -495,6 +779,54 @@ const SensitiveActionModal = ({
             }}
           >
             Go to Security Settings
+          </Button>
+        </DialogActions>
+      </Dialog>
+    );
+  }
+
+  // Telegram Mode Dialog
+  if (useTelegramMode && telegramAuthEnabled) {
+    return (
+      <Dialog
+        open={open}
+        onClose={handleClose}
+        maxWidth="sm"
+        fullWidth
+        disableEscapeKeyDown={telegramStatus === "pending" || telegramStatus === "approved"}
+      >
+        <DialogTitle>
+          <Box display="flex" alignItems="center" gap={1}>
+            <TelegramIcon sx={{ color: "#0088cc" }} />
+            <Typography variant="h6">Telegram Approval</Typography>
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          {/* Action description */}
+          <Alert severity="warning" icon={<SecurityIcon />} sx={{ mb: 3 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+              {actionName}
+            </Typography>
+            {actionDescription && (
+              <Typography variant="body2" sx={{ mt: 0.5 }}>
+                {actionDescription}
+              </Typography>
+            )}
+          </Alert>
+
+          {renderTelegramContent()}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2, justifyContent: "space-between" }}>
+          <Button
+            onClick={switchTo2FAMode}
+            color="inherit"
+            disabled={telegramStatus === "approved"}
+            size="small"
+          >
+            Use 2FA Code Instead
+          </Button>
+          <Button onClick={handleClose} disabled={telegramStatus === "approved"}>
+            Cancel
           </Button>
         </DialogActions>
       </Dialog>
@@ -632,8 +964,19 @@ const SensitiveActionModal = ({
             </Link>
           </Box>
         </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2, justifyContent: qrAuthEnabled ? "space-between" : "flex-end" }}>
-          {qrAuthEnabled && (
+        <DialogActions sx={{ px: 3, pb: 2, justifyContent: (qrAuthEnabled || telegramAuthEnabled) ? "space-between" : "flex-end" }}>
+          {telegramAuthEnabled && (
+            <Button
+              onClick={switchToTelegramMode}
+              color="inherit"
+              disabled={loading}
+              size="small"
+              startIcon={<TelegramIcon />}
+            >
+              Use Telegram Instead
+            </Button>
+          )}
+          {qrAuthEnabled && !telegramAuthEnabled && (
             <Button
               onClick={switchToQRMode}
               color="inherit"

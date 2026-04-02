@@ -3,6 +3,7 @@ const User = require("../models/User");
 const { decrypt } = require("../utils/encryption");
 const SensitiveActionAuditLog = require("../models/SensitiveActionAuditLog");
 const { validateQRVerificationToken } = require("../controllers/qrAuth");
+const { validateTelegramVerificationToken } = require("../controllers/telegramAuth");
 
 /**
  * Sensitive Action Verification Middleware
@@ -123,6 +124,7 @@ const requireSensitiveActionVerification = (actionType, options = {}) => {
       const totpCode = req.headers["x-2fa-code"];
       const backupCode = req.headers["x-2fa-backup-code"];
       const qrVerificationToken = req.headers["x-qr-verification-token"];
+      const telegramVerificationToken = req.headers["x-telegram-verification-token"];
 
       // Fetch user with 2FA secrets
       const user = await User.findById(userId).select(
@@ -149,8 +151,8 @@ const requireSensitiveActionVerification = (actionType, options = {}) => {
         });
       }
 
-      // Check if user has 2FA enabled
-      if (!user.twoFactorEnabled) {
+      // Check if user has 2FA enabled (includes QR auth and Telegram auth)
+      if (!user.twoFactorEnabled && !user.qrAuthEnabled && !user.telegramAuthEnabled) {
         if (require2FAEnabled && user.role === "admin") {
           // Block admin actions without 2FA
           await logSensitiveAction({
@@ -182,8 +184,8 @@ const requireSensitiveActionVerification = (actionType, options = {}) => {
         return next();
       }
 
-      // 2FA is enabled - verify the code (TOTP, backup code, or QR verification token)
-      if (!totpCode && !backupCode && !qrVerificationToken) {
+      // 2FA is enabled - verify the code (TOTP, backup code, QR verification token, or Telegram verification token)
+      if (!totpCode && !backupCode && !qrVerificationToken && !telegramVerificationToken) {
         await logSensitiveAction({
           userId,
           userEmail,
@@ -209,16 +211,27 @@ const requireSensitiveActionVerification = (actionType, options = {}) => {
       let verified = false;
       let verificationMethod = "totp";
 
-      // Check QR verification token first (if provided)
-      if (qrVerificationToken) {
+      // Check Telegram verification token first (if provided)
+      if (telegramVerificationToken) {
+        verificationMethod = "telegram";
+        const telegramValidation = await validateTelegramVerificationToken(telegramVerificationToken, userId);
+
+        if (telegramValidation.valid) {
+          verified = true;
+          console.log(`Telegram Auth: Sensitive action verified via Telegram token for ${userEmail}`);
+        } else {
+          console.warn(`Telegram Auth: Invalid verification token for ${userEmail}: ${telegramValidation.reason}`);
+        }
+      } else if (qrVerificationToken) {
+        // Check QR verification token (if provided)
         verificationMethod = "qr";
         const qrValidation = await validateQRVerificationToken(qrVerificationToken, userId);
-        
+
         if (qrValidation.valid) {
           verified = true;
-          console.log(`✅ QR Auth: Sensitive action verified via QR token for ${userEmail}`);
+          console.log(`QR Auth: Sensitive action verified via QR token for ${userEmail}`);
         } else {
-          console.warn(`⚠️ QR Auth: Invalid verification token for ${userEmail}: ${qrValidation.reason}`);
+          console.warn(`QR Auth: Invalid verification token for ${userEmail}: ${qrValidation.reason}`);
         }
       } else if (backupCode) {
         // Verify backup code

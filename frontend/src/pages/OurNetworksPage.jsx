@@ -1977,6 +1977,7 @@ const OurNetworksPage = ({ setHeaderExtra }) => {
         onClose={resetSensitiveAction}
         onVerify={sensitiveActionState.handleVerify}
         onQRVerify={sensitiveActionState.handleQRVerify}
+        onTelegramVerify={sensitiveActionState.handleTelegramVerify}
         actionName={sensitiveActionState.actionName}
         actionDescription={sensitiveActionState.actionDescription}
         loading={sensitiveActionState.verifying}
@@ -1984,6 +1985,7 @@ const OurNetworksPage = ({ setHeaderExtra }) => {
         requires2FASetup={sensitiveActionState.requires2FASetup}
         userId={sensitiveActionState.userId}
         qrAuthEnabled={sensitiveActionState.qrAuthEnabled}
+        telegramAuthEnabled={sensitiveActionState.telegramAuthEnabled}
       />
     </Box>
   );

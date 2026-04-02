@@ -25,6 +25,7 @@ import WarningIcon from '@mui/icons-material/Warning';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import QrCodeScannerIcon from '@mui/icons-material/QrCodeScanner';
 import PhoneIphoneIcon from '@mui/icons-material/PhoneIphone';
+import TelegramIcon from '@mui/icons-material/Telegram';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import { QRCodeSVG } from 'qrcode.react';
@@ -54,25 +55,40 @@ const TwoFactorManagement = () => {
   const [disableQrDialogOpen, setDisableQrDialogOpen] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
+  // Telegram Auth state
+  const [telegramAuthStatus, setTelegramAuthStatus] = useState(null);
+  const [telegramLinkDialogOpen, setTelegramLinkDialogOpen] = useState(false);
+  const [telegramLinkCode, setTelegramLinkCode] = useState(null);
+  const [telegramBotUrl, setTelegramBotUrl] = useState(null);
+  const [telegramLinkLoading, setTelegramLinkLoading] = useState(false);
+  const [disableTelegramDialogOpen, setDisableTelegramDialogOpen] = useState(false);
+
   const is2FAEnabled = user?.twoFactorEnabled;
   const isAdmin = user?.role === 'admin';
   const isQrAuthEnabled = qrAuthStatus?.qrAuthEnabled;
+  const isTelegramAuthEnabled = telegramAuthStatus?.telegramAuthEnabled;
 
-  // Fetch QR auth status on mount
+  // Fetch QR auth and Telegram auth status on mount
   useEffect(() => {
-    const fetchQrAuthStatus = async () => {
+    const fetchAuthStatuses = async () => {
       if (isAdmin) {
         try {
-          const response = await api.get('/qr-auth/status');
-          if (response.data.success) {
-            setQrAuthStatus(response.data.data);
+          const [qrResponse, telegramResponse] = await Promise.all([
+            api.get('/qr-auth/status'),
+            api.get('/telegram-auth/status')
+          ]);
+          if (qrResponse.data.success) {
+            setQrAuthStatus(qrResponse.data.data);
+          }
+          if (telegramResponse.data.success) {
+            setTelegramAuthStatus(telegramResponse.data.data);
           }
         } catch (err) {
-          console.error('Error fetching QR auth status:', err);
+          console.error('Error fetching auth statuses:', err);
         }
       }
     };
-    fetchQrAuthStatus();
+    fetchAuthStatuses();
   }, [isAdmin]);
 
   const handleDisable2FA = async () => {
@@ -194,6 +210,61 @@ const TwoFactorManagement = () => {
         setQrAuthStatus(response.data.data);
       }
     });
+  };
+
+  // Telegram Auth handlers
+  const handleSetupTelegramAuth = async () => {
+    setTelegramLinkLoading(true);
+    setError('');
+    try {
+      const response = await api.post('/telegram-auth/generate-link-code');
+      if (response.data.success) {
+        setTelegramLinkCode(response.data.data.linkCode);
+        setTelegramBotUrl(response.data.data.botUrl);
+        setTelegramLinkDialogOpen(true);
+      }
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to generate Telegram link code');
+      toast.error(err.response?.data?.message || 'Failed to generate Telegram link code');
+    } finally {
+      setTelegramLinkLoading(false);
+    }
+  };
+
+  const handleDisableTelegramAuth = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const response = await api.post('/telegram-auth/disable');
+      if (response.data.success) {
+        setTelegramAuthStatus({ ...telegramAuthStatus, telegramAuthEnabled: false, telegramUsername: null });
+        setDisableTelegramDialogOpen(false);
+        toast.success('Telegram authentication has been disabled');
+      }
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to disable Telegram authentication');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCloseTelegramLinkDialog = () => {
+    setTelegramLinkDialogOpen(false);
+    setTelegramLinkCode(null);
+    setTelegramBotUrl(null);
+    // Refresh Telegram auth status
+    api.get('/telegram-auth/status').then(response => {
+      if (response.data.success) {
+        setTelegramAuthStatus(response.data.data);
+      }
+    });
+  };
+
+  const handleCopyLinkCode = () => {
+    if (telegramLinkCode) {
+      navigator.clipboard.writeText(telegramLinkCode);
+      toast.success('Link code copied to clipboard');
+    }
   };
 
   if (!isAdmin) {
@@ -329,6 +400,176 @@ const TwoFactorManagement = () => {
           )}
         </CardContent>
       </Card>
+
+      {/* Telegram Authentication Card */}
+      <Card elevation={2} sx={{ mt: 3 }}>
+        <CardContent>
+          <Box display="flex" alignItems="center" justifyContent="space-between" mb={2}>
+            <Box display="flex" alignItems="center" gap={2}>
+              <TelegramIcon sx={{ color: isTelegramAuthEnabled ? '#0088cc' : 'action.active', fontSize: 35 }} />
+              <Box>
+                <Typography variant="h6">
+                  Telegram Authentication
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Approve logins via Telegram bot messages
+                </Typography>
+              </Box>
+            </Box>
+            <Chip
+              icon={isTelegramAuthEnabled ? <CheckCircleIcon /> : <WarningIcon />}
+              label={isTelegramAuthEnabled ? 'Active' : 'Not Active'}
+              color={isTelegramAuthEnabled ? 'success' : 'default'}
+            />
+          </Box>
+
+          {isTelegramAuthEnabled ? (
+            <Box>
+              <Alert severity="success" sx={{ mb: 2 }}>
+                <Box display="flex" alignItems="center" gap={1}>
+                  <TelegramIcon fontSize="small" />
+                  <Typography variant="body2">
+                    Linked Telegram: @{telegramAuthStatus?.telegramUsername || 'Unknown'}
+                  </Typography>
+                </Box>
+                <Typography variant="caption" display="block" sx={{ mt: 0.5 }}>
+                  Login requests will be sent to your Telegram for approval.
+                </Typography>
+              </Alert>
+              <Button
+                variant="outlined"
+                color="error"
+                onClick={() => setDisableTelegramDialogOpen(true)}
+              >
+                Disable Telegram Authentication
+              </Button>
+            </Box>
+          ) : (
+            <Box>
+              <Alert severity="info" sx={{ mb: 2 }}>
+                Receive login approval requests directly in Telegram. Simply tap Approve or Reject
+                when someone tries to log into your account.
+              </Alert>
+              <Button
+                variant="contained"
+                size="large"
+                startIcon={<TelegramIcon />}
+                onClick={handleSetupTelegramAuth}
+                disabled={telegramLinkLoading || is2FAEnabled || isQrAuthEnabled}
+                sx={{ bgcolor: '#0088cc', '&:hover': { bgcolor: '#006699' } }}
+              >
+                {telegramLinkLoading ? <CircularProgress size={24} /> : 'Setup Telegram Auth'}
+              </Button>
+              {(is2FAEnabled || isQrAuthEnabled) && (
+                <Typography variant="caption" display="block" color="text.secondary" sx={{ mt: 1 }}>
+                  Disable {is2FAEnabled ? '2FA' : 'QR authentication'} first to switch to Telegram authentication
+                </Typography>
+              )}
+            </Box>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Telegram Link Dialog */}
+      <Dialog open={telegramLinkDialogOpen} onClose={handleCloseTelegramLinkDialog} maxWidth="sm" fullWidth>
+        <DialogTitle>
+          <Box display="flex" alignItems="center" gap={1}>
+            <TelegramIcon sx={{ color: '#0088cc' }} />
+            <Typography variant="h6">Link Telegram Account</Typography>
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          <Alert severity="info" sx={{ mb: 3 }}>
+            Follow these steps to link your Telegram account:
+          </Alert>
+
+          <Box sx={{ mb: 3 }}>
+            <Typography variant="body1" sx={{ mb: 1 }}>
+              <b>Step 1:</b> Open the bot in Telegram
+            </Typography>
+            <Button
+              variant="outlined"
+              href={telegramBotUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              startIcon={<TelegramIcon />}
+              sx={{ mb: 2 }}
+            >
+              Open @{process.env.REACT_APP_TELEGRAM_BOT_USERNAME || 'ftd_auth_bot'}
+            </Button>
+
+            <Typography variant="body1" sx={{ mb: 1, mt: 2 }}>
+              <b>Step 2:</b> Send this code to the bot
+            </Typography>
+            <Box
+              display="flex"
+              alignItems="center"
+              gap={1}
+              sx={{
+                p: 2,
+                bgcolor: 'background.default',
+                borderRadius: 1,
+                border: '1px solid',
+                borderColor: 'divider',
+              }}
+            >
+              <Typography
+                variant="h6"
+                fontFamily="monospace"
+                sx={{ flex: 1, wordBreak: 'break-all' }}
+              >
+                {telegramLinkCode}
+              </Typography>
+              <IconButton onClick={handleCopyLinkCode} size="small">
+                <ContentCopyIcon />
+              </IconButton>
+            </Box>
+
+            <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
+              This code expires in 10 minutes.
+            </Typography>
+          </Box>
+
+          <Alert severity="warning">
+            Once linked, Telegram will be your only authentication method.
+            2FA and QR authentication will be disabled.
+          </Alert>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseTelegramLinkDialog}>
+            Done
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Disable Telegram Auth Dialog */}
+      <Dialog open={disableTelegramDialogOpen} onClose={() => setDisableTelegramDialogOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Disable Telegram Authentication</DialogTitle>
+        <DialogContent>
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            Are you sure you want to disable Telegram authentication?
+            You'll need to set it up again to use it.
+          </Alert>
+          {error && (
+            <Alert severity="error" sx={{ mt: 2 }}>
+              {error}
+            </Alert>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDisableTelegramDialogOpen(false)} disabled={loading}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleDisableTelegramAuth}
+            color="error"
+            variant="contained"
+            disabled={loading}
+          >
+            {loading ? <CircularProgress size={24} /> : 'Disable Telegram Auth'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* QR Setup Dialog */}
       <Dialog open={qrSetupDialogOpen} onClose={handleCloseQrSetupDialog} maxWidth="sm" fullWidth>

@@ -635,6 +635,7 @@ const OldClientNetworksTab = ({ setHeaderExtra }) => {
         onClose={resetSensitiveAction}
         onVerify={(code, useBackup) => sensitiveActionState.handleVerify(code, useBackup)}
         onQRVerify={(token) => sensitiveActionState.handleQRVerify(token)}
+        onTelegramVerify={(token) => sensitiveActionState.handleTelegramVerify(token)}
         actionName={sensitiveActionState.actionName}
         actionDescription={sensitiveActionState.actionDescription}
         loading={sensitiveActionState.verifying}
@@ -642,6 +643,7 @@ const OldClientNetworksTab = ({ setHeaderExtra }) => {
         requires2FASetup={sensitiveActionState.requires2FASetup}
         userId={sensitiveActionState.userId}
         qrAuthEnabled={sensitiveActionState.qrAuthEnabled}
+        telegramAuthEnabled={sensitiveActionState.telegramAuthEnabled}
       />
     </Box>
   );

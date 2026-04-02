@@ -1308,6 +1308,7 @@ const UsersPage = () => {
           sensitiveActionState.handleVerify(code, useBackup)
         }
         onQRVerify={(token) => sensitiveActionState.handleQRVerify(token)}
+        onTelegramVerify={(token) => sensitiveActionState.handleTelegramVerify(token)}
         actionName={sensitiveActionState.actionName}
         actionDescription={sensitiveActionState.actionDescription}
         loading={sensitiveActionState.verifying}
@@ -1315,6 +1316,7 @@ const UsersPage = () => {
         requires2FASetup={sensitiveActionState.requires2FASetup}
         userId={sensitiveActionState.userId}
         qrAuthEnabled={sensitiveActionState.qrAuthEnabled}
+        telegramAuthEnabled={sensitiveActionState.telegramAuthEnabled}
       />
       <Dialog
         open={dialogState.type === "delete"}

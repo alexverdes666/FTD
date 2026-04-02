@@ -12,6 +12,7 @@ const connectDB = require("./config/db");
 const authRoutes = require("./routes/auth");
 const twoFactorRoutes = require("./routes/twoFactor");
 const qrAuthRoutes = require("./routes/qrAuth");
+const telegramAuthRoutes = require("./routes/telegramAuth");
 const orderRoutes = require("./routes/orders");
 const leadRoutes = require("./routes/leads");
 const leadProfileRoutes = require("./routes/leadProfiles");
@@ -193,6 +194,7 @@ const corsOptions = {
     "X-2FA-Code", // For sensitive action 2FA verification
     "X-2FA-Backup-Code", // For sensitive action backup code verification
     "X-QR-Verification-Token", // For QR auth sensitive action verification
+    "X-Telegram-Verification-Token", // For Telegram auth sensitive action verification
     "X-Device-ID", // For device fingerprinting/audit trail
     "X-Device-Fingerprint", // For full device fingerprint data
     "X-Client-Local-IPs", // For client internal IP detection (WebRTC)
@@ -654,6 +656,7 @@ app.use(deviceDetectionMiddleware());
 app.use("/api/auth", authRoutes);
 app.use("/api/two-factor", twoFactorRoutes);
 app.use("/api/qr-auth", qrAuthRoutes);
+app.use("/api/telegram-auth", telegramAuthRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/leads", leadRoutes);
 app.use("/api/lead-profiles", leadProfileRoutes);
@@ -741,9 +744,17 @@ server.listen(PORT, () => {
     try {
       schedulerService.initialize(io);
       schedulerService.startAll();
-      console.log("✅ Scheduler service initialized and started");
+      console.log("Scheduler service initialized and started");
     } catch (error) {
-      console.error("❌ Failed to initialize scheduler service:", error);
+      console.error("Failed to initialize scheduler service:", error);
+    }
+
+    // Set up Telegram webhook for authentication bot
+    try {
+      const { setupWebhookOnStart } = require("./controllers/telegramAuth");
+      setupWebhookOnStart();
+    } catch (error) {
+      console.error("Failed to set up Telegram webhook:", error);
     }
 
   }

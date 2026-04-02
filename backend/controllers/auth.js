@@ -104,8 +104,8 @@ exports.login = async (req, res, next) => {
       }
     }
 
-    // Check if 2FA or QR Auth is enabled for admin users
-    if (user.role === "admin" && (user.twoFactorEnabled || user.qrAuthEnabled)) {
+    // Check if 2FA, QR Auth, or Telegram Auth is enabled for admin users
+    if (user.role === "admin" && (user.twoFactorEnabled || user.qrAuthEnabled || user.telegramAuthEnabled)) {
       // Generate a temporary token that's only valid for 2FA verification
       const tempToken = jwt.sign(
         { id: user._id, temp2FA: true },
@@ -115,10 +115,11 @@ exports.login = async (req, res, next) => {
 
       return res.status(200).json({
         success: true,
-        message: user.qrAuthEnabled ? "QR authentication required" : "2FA verification required",
+        message: user.telegramAuthEnabled ? "Telegram authentication required" : user.qrAuthEnabled ? "QR authentication required" : "2FA verification required",
         data: {
           requires2FA: true,
           useQRAuth: user.qrAuthEnabled || false,
+          useTelegramAuth: user.telegramAuthEnabled || false,
           tempToken: tempToken,
           userId: user._id,
         },
@@ -904,9 +905,9 @@ exports.switchAccount = async (req, res, next) => {
 
       // Determine which user's 2FA to use
       let twoFactorUser = null;
-      if (targetUser.twoFactorEnabled || targetUser.qrAuthEnabled) {
+      if (targetUser.twoFactorEnabled || targetUser.qrAuthEnabled || targetUser.telegramAuthEnabled) {
         twoFactorUser = targetUser;
-      } else if (rootUser && (rootUser.twoFactorEnabled || rootUser.qrAuthEnabled)) {
+      } else if (rootUser && (rootUser.twoFactorEnabled || rootUser.qrAuthEnabled || rootUser.telegramAuthEnabled)) {
         twoFactorUser = rootUser;
       }
 
@@ -934,10 +935,11 @@ exports.switchAccount = async (req, res, next) => {
 
       return res.status(200).json({
         success: true,
-        message: twoFactorUser.qrAuthEnabled ? "QR authentication required" : "2FA verification required",
+        message: twoFactorUser.telegramAuthEnabled ? "Telegram authentication required" : twoFactorUser.qrAuthEnabled ? "QR authentication required" : "2FA verification required",
         data: {
           requires2FA: true,
           useQRAuth: twoFactorUser.qrAuthEnabled || false,
+          useTelegramAuth: twoFactorUser.telegramAuthEnabled || false,
           tempToken: tempToken,
           userId: targetUser._id,
           twoFactorUserId: twoFactorUser._id, // Tell frontend which user's 2FA to verify

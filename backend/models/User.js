@@ -123,6 +123,32 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  // Telegram Authentication fields
+  telegramChatId: {
+    type: String,
+    default: null
+  },
+  telegramUsername: {
+    type: String,
+    default: null
+  },
+  telegramAuthEnabled: {
+    type: Boolean,
+    default: false
+  },
+  telegramLinkedAt: {
+    type: Date,
+    default: null
+  },
+  telegramLinkCode: {
+    type: String,
+    select: false,
+    default: null
+  },
+  telegramLinkExpiry: {
+    type: Date,
+    default: null
+  },
   // User preferences (UI settings, copy preferences, etc.)
   preferences: {
     // Copy preferences for orders page

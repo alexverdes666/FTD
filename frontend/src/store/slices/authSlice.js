@@ -14,6 +14,7 @@ const initialState = {
   twoFactorUserId: null,
   twoFactorToken: null,
   useQRAuth: false,
+  useTelegramAuth: false,
   twoFactorMode: null, // 'login' or 'switch'
   // Session management state
   sessions: {
@@ -36,6 +37,7 @@ export const login = createAsyncThunk(
         return {
           requires2FA: true,
           useQRAuth: response.data.data.useQRAuth || false,
+          useTelegramAuth: response.data.data.useTelegramAuth || false,
           userId: response.data.data.userId,
           tempToken: response.data.data.tempToken
         };
@@ -355,6 +357,7 @@ const authSlice = createSlice({
       state.twoFactorUserId = null;
       state.twoFactorToken = null;
       state.useQRAuth = false;
+      state.useTelegramAuth = false;
       state.sessions = {
         activeSessions: [],
         sessionHistory: [],
@@ -372,6 +375,7 @@ const authSlice = createSlice({
       state.twoFactorUserId = null;
       state.twoFactorToken = null;
       state.useQRAuth = false;
+      state.useTelegramAuth = false;
       state.twoFactorMode = null;
     },
     setCredentials: (state, action) => {
@@ -398,6 +402,7 @@ const authSlice = createSlice({
         if (action.payload.requires2FA) {
           state.requires2FA = true;
           state.useQRAuth = action.payload.useQRAuth || false;
+          state.useTelegramAuth = action.payload.useTelegramAuth || false;
           state.twoFactorUserId = action.payload.userId;
           state.twoFactorToken = action.payload.tempToken;
           state.twoFactorMode = 'login';
@@ -413,6 +418,7 @@ const authSlice = createSlice({
         state.requires2FA = false;
         state.twoFactorUserId = null;
         state.twoFactorToken = null;
+        state.useTelegramAuth = false;
         state.twoFactorMode = null;
         if (action.payload.agentPerformanceData) {
           state.agentPerformanceData = action.payload.agentPerformanceData;
@@ -529,6 +535,7 @@ const authSlice = createSlice({
         if (action.payload.requires2FA) {
           state.requires2FA = true;
           state.useQRAuth = action.payload.useQRAuth || false;
+          state.useTelegramAuth = action.payload.useTelegramAuth || false;
           state.twoFactorUserId = action.payload.userId;
           state.twoFactorToken = action.payload.tempToken;
           state.twoFactorMode = 'switch';
@@ -565,6 +572,7 @@ const authSlice = createSlice({
         state.requires2FA = false;
         state.twoFactorUserId = null;
         state.twoFactorToken = null;
+        state.useTelegramAuth = false;
         state.twoFactorMode = null;
         if (action.payload.agentPerformanceData) {
           state.agentPerformanceData = action.payload.agentPerformanceData;
@@ -588,6 +596,7 @@ const authSlice = createSlice({
         state.requires2FA = false;
         state.twoFactorUserId = null;
         state.twoFactorToken = null;
+        state.useTelegramAuth = false;
         state.twoFactorMode = null;
         if (action.payload.agentPerformanceData) {
           state.agentPerformanceData = action.payload.agentPerformanceData;
@@ -599,7 +608,7 @@ const authSlice = createSlice({
         state.isLoading = false;
         state.error = action.payload;
       })
-      // QR code login
+      // QR code login / Telegram login
       .addCase(completeQRLogin.fulfilled, (state, action) => {
         state.isLoading = false;
         state.user = action.payload.user;
@@ -609,6 +618,7 @@ const authSlice = createSlice({
         state.requires2FA = false;
         state.twoFactorUserId = null;
         state.twoFactorToken = null;
+        state.useTelegramAuth = false;
         state.twoFactorMode = null;
       })
       // Session management
