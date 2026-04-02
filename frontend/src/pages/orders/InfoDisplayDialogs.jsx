@@ -80,19 +80,20 @@ const InfoListDialog = ({
   );
 };
 
-// Client Brokers Display Dialog
+// Client Brokers History Dialog
 export const ClientBrokersDisplayDialog = ({ dialog, onClose }) => (
   <InfoListDialog
     open={dialog.open}
     onClose={onClose}
-    title="Client Brokers"
+    title="Broker History"
     subtitle={dialog.leadName}
     items={dialog.brokers}
     columns={[
-      { key: "name", header: "Broker Name", render: (broker) => broker.name || "-" },
-      { key: "domain", header: "Domain", secondary: true, render: (broker) => broker.domain || "-" },
+      { key: "broker", header: "Broker", render: (entry) => entry.clientBroker?.name || "-" },
+      { key: "network", header: "Client Network", secondary: true, render: (entry) => entry.intermediaryClientNetwork?.name || dialog.orderNetworkName || "-" },
+      { key: "date", header: "Date", secondary: true, render: (entry) => entry.assignedAt ? new Date(entry.assignedAt).toLocaleDateString() : "-" },
     ]}
-    emptyMessage="No client brokers assigned"
+    emptyMessage="No broker history"
   />
 );
 

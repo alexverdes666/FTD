@@ -145,7 +145,7 @@ const ClientBrokerManagementDialog = ({ open, onClose, order, onUpdate }) => {
       const newBrokerId = leadBrokerValues[leadId];
       if (!newBrokerId) {
         setNotification({
-          message: "Please select a broker to add",
+          message: "Please select a broker",
           severity: "warning",
         });
         setUpdatingLeads(prev => {
@@ -156,28 +156,10 @@ const ClientBrokerManagementDialog = ({ open, onClose, order, onUpdate }) => {
         return;
       }
 
-      const lead = order.leads.find(l => l._id === leadId);
-      const currentBrokerIds = lead?.assignedClientBrokers?.map(b => b._id || b) || [];
-
-      // Check if broker is already assigned
-      if (currentBrokerIds.includes(newBrokerId)) {
-        setNotification({
-          message: "This broker is already assigned to this lead",
-          severity: "warning",
-        });
-        setUpdatingLeads(prev => {
-          const newSet = new Set(prev);
-          newSet.delete(leadId);
-          return newSet;
-        });
-        return;
-      }
-
-      // Add the new broker to existing brokers
-      const updatedBrokers = [...currentBrokerIds, newBrokerId];
-
+      // Add this broker for this order (1 per lead per order)
       const updateData = {
-        clientBroker: updatedBrokers
+        clientBroker: [newBrokerId],
+        brokerForOrderId: order._id,
       };
 
       const response = await api.put(`/leads/${leadId}`, updateData);
@@ -193,19 +175,17 @@ const ClientBrokerManagementDialog = ({ open, onClose, order, onUpdate }) => {
         return newSet;
       });
 
-      // Reset the value to empty
       setLeadBrokerValues(prev => ({
         ...prev,
         [leadId]: ""
       }));
 
-      // Callback to parent to refresh order data
       if (onUpdate) {
         onUpdate(response.data.data);
       }
     } catch (err) {
       setNotification({
-        message: err.response?.data?.message || "Failed to add client broker",
+        message: err.response?.data?.message || "Failed to set client broker",
         severity: "error",
       });
     } finally {
@@ -248,17 +228,7 @@ const ClientBrokerManagementDialog = ({ open, onClose, order, onUpdate }) => {
     setUpdatingLeads(prev => new Set([...prev, leadId]));
 
     try {
-      const lead = order.leads.find(l => l._id === leadId);
-      const currentBrokerIds = lead?.assignedClientBrokers?.map(b => b._id || b) || [];
-
-      // Remove the broker
-      const updatedBrokers = currentBrokerIds.filter(id => id !== brokerId);
-
-      const updateData = {
-        clientBroker: updatedBrokers
-      };
-
-      await api.put(`/leads/${leadId}`, updateData);
+      await api.put(`/leads/${leadId}`, { removeBrokerIds: [brokerId] });
 
       setNotification({
         message: "Client broker removed successfully!",
@@ -294,18 +264,15 @@ const ClientBrokerManagementDialog = ({ open, onClose, order, onUpdate }) => {
 
       const updatePromises = leadIds.map(async (leadId) => {
         const lead = order.leads.find(l => l._id === leadId);
-        const currentBrokerIds = lead?.assignedClientBrokers?.map(b => b._id || b) || [];
+        const alreadyAssigned = lead?.assignedClientBrokers?.some(b => (b._id || b) === bulkBroker);
 
-        // Skip if broker is already assigned
-        if (currentBrokerIds.includes(bulkBroker)) {
+        if (alreadyAssigned) {
           skipCount++;
           return Promise.resolve();
         }
 
-        // Add the new broker to existing brokers
-        const updatedBrokers = [...currentBrokerIds, bulkBroker];
-
-        await api.put(`/leads/${leadId}`, { clientBroker: updatedBrokers });
+        // Add this broker (additive)
+        await api.put(`/leads/${leadId}`, { clientBroker: [bulkBroker], brokerForOrderId: order._id });
         successCount++;
       });
 
@@ -313,11 +280,11 @@ const ClientBrokerManagementDialog = ({ open, onClose, order, onUpdate }) => {
 
       let message = '';
       if (successCount > 0 && skipCount > 0) {
-        message = `Added broker to ${successCount} leads. Skipped ${skipCount} leads (already assigned)`;
+        message = `Added broker to ${successCount} leads. Skipped ${skipCount} (already assigned)`;
       } else if (successCount > 0) {
         message = `Successfully added broker to ${successCount} leads`;
       } else if (skipCount > 0) {
-        message = `All ${skipCount} selected leads already have this broker assigned`;
+        message = `All ${skipCount} selected leads already have this broker`;
       }
 
       setNotification({
@@ -425,7 +392,7 @@ const ClientBrokerManagementDialog = ({ open, onClose, order, onUpdate }) => {
                 <Typography variant="body2">
                   <strong>Campaign:</strong> {order.selectedCampaign?.name || "N/A"}
                 </Typography>
-                <Typography variant="body2">
+                <Typography variant="body2" component="div">
                   <strong>Status:</strong>{" "}
                   <Chip label={order.status} size="small" color={order.status === "fulfilled" ? "success" : "warning"} />
                 </Typography>
@@ -456,7 +423,7 @@ const ClientBrokerManagementDialog = ({ open, onClose, order, onUpdate }) => {
           <CardContent>
             <Typography variant="subtitle2" gutterBottom>Bulk Add Broker</Typography>
             <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 2 }}>
-              Add a broker to multiple leads at once. This will not remove existing broker assignments.
+              Add the same broker to multiple leads at once.
             </Typography>
             <Box display="flex" alignItems="center" gap={2} flexWrap="wrap">
               <Typography variant="body2">
@@ -524,8 +491,8 @@ const ClientBrokerManagementDialog = ({ open, onClose, order, onUpdate }) => {
                 <TableCell>Lead</TableCell>
                 <TableCell>Type</TableCell>
                 <TableCell>Assigned Brokers</TableCell>
-                <TableCell>Assignment History</TableCell>
-                <TableCell>Add New Broker</TableCell>
+                <TableCell>History</TableCell>
+                <TableCell>Add Broker</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -568,22 +535,11 @@ const ClientBrokerManagementDialog = ({ open, onClose, order, onUpdate }) => {
                     </TableCell>
                     <TableCell>
                       {lead.assignedClientBrokers?.length > 0 ? (
-                        <Box display="flex" flexDirection="column" gap={1}>
+                        <Box display="flex" flexDirection="column" gap={0.5}>
                           {lead.assignedClientBrokers.map((broker) => (
                             <Chip
                               key={broker._id}
-                              label={
-                                <Box>
-                                  <Typography variant="body2" component="span" sx={{ fontWeight: "bold" }}>
-                                    {broker.name}
-                                  </Typography>
-                                  {broker.domain && (
-                                    <Typography variant="caption" component="span" color="text.secondary" sx={{ ml: 0.5 }}>
-                                      ({broker.domain})
-                                    </Typography>
-                                  )}
-                                </Box>
-                              }
+                              label={broker.name}
                               onDelete={() => handleRemoveBroker(lead._id, broker._id)}
                               deleteIcon={
                                 <Tooltip title="Remove broker">
@@ -593,22 +549,13 @@ const ClientBrokerManagementDialog = ({ open, onClose, order, onUpdate }) => {
                               disabled={isUpdating}
                               color="primary"
                               variant="outlined"
-                              sx={{
-                                maxWidth: "100%",
-                                height: "auto",
-                                py: 0.5,
-                                "& .MuiChip-label": {
-                                  display: "block",
-                                  whiteSpace: "normal",
-                                  textAlign: "left"
-                                }
-                              }}
+                              size="small"
                             />
                           ))}
                         </Box>
                       ) : (
                         <Typography variant="body2" color="text.secondary">
-                          No brokers assigned
+                          None
                         </Typography>
                       )}
                     </TableCell>

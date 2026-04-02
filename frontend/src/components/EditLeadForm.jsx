@@ -305,6 +305,11 @@ const EditLeadForm = ({ open, onClose, lead, onLeadUpdated, sx }) => {
         dob: data.dob || null,
         socialMedia: data.socialMedia,
         clientBroker: Array.isArray(data.clientBroker) && data.clientBroker.length > 0 ? data.clientBroker : [],
+        removeBrokerIds: (() => {
+          const originalIds = (lead?.assignedClientBrokers?.map(b => b._id || b) || []).map(String);
+          const newIds = (Array.isArray(data.clientBroker) ? data.clientBroker : []).map(String);
+          return originalIds.filter(id => !newIds.includes(id));
+        })(),
         clientNetwork: Array.isArray(data.clientNetwork) && data.clientNetwork.length > 0 ? data.clientNetwork : [],
         campaign: Array.isArray(data.campaign) && data.campaign.length > 0 ? data.campaign : [],
         ourNetwork: Array.isArray(data.ourNetwork) && data.ourNetwork.length > 0 ? data.ourNetwork : [],

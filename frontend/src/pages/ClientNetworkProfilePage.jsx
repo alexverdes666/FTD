@@ -721,6 +721,7 @@ const ClientNetworkProfilePage = () => {
                       <TableRow>
                         <TableCell>Name</TableCell>
                         <TableCell>Domain</TableCell>
+                        <TableCell align="center">Leads</TableCell>
                         <TableCell>Status</TableCell>
                       </TableRow>
                     </TableHead>
@@ -733,6 +734,11 @@ const ClientNetworkProfilePage = () => {
                           <TableCell>
                             <Typography variant="body2" color="text.secondary">
                               {broker.domain || "-"}
+                            </Typography>
+                          </TableCell>
+                          <TableCell align="center">
+                            <Typography variant="body2" fontWeight="medium">
+                              {broker.leadCount || 0}
                             </Typography>
                           </TableCell>
                           <TableCell>

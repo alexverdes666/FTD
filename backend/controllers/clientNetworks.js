@@ -357,21 +357,24 @@ exports.getClientNetworkProfile = async (req, res, next) => {
       },
     ]);
 
-    // Get used client brokers: leads from orders for this network that have assigned brokers
+    // Get used client brokers: only the currently assigned broker (first entry) per lead
     const networkOrderLeadIds = await Order.find({ selectedClientNetwork: clientNetwork._id })
       .distinct("leads");
     let usedBrokers = [];
     let usedPsps = [];
     if (networkOrderLeadIds.length > 0) {
-      // Unique broker IDs from leads in this network's orders
-      const brokerIds = await Lead.find({
-        _id: { $in: networkOrderLeadIds },
-        assignedClientBrokers: { $exists: true, $ne: [] },
-      }).distinct("assignedClientBrokers");
-      if (brokerIds.length > 0) {
-        usedBrokers = await ClientBroker.find({ _id: { $in: brokerIds } })
+      // Aggregate: unwind all assignedClientBrokers, group by broker with count
+      const brokerAgg = await Lead.aggregate([
+        { $match: { _id: { $in: networkOrderLeadIds }, "assignedClientBrokers.0": { $exists: true } } },
+        { $unwind: "$assignedClientBrokers" },
+        { $group: { _id: "$assignedClientBrokers", leadCount: { $sum: 1 } } },
+      ]);
+      if (brokerAgg.length > 0) {
+        const brokerDocs = await ClientBroker.find({ _id: { $in: brokerAgg.map(b => b._id) } })
           .select("name domain isActive")
           .lean();
+        const countMap = Object.fromEntries(brokerAgg.map(b => [b._id.toString(), b.leadCount]));
+        usedBrokers = brokerDocs.map(b => ({ ...b, leadCount: countMap[b._id.toString()] || 0 }));
       }
 
       // Unique PSPs from deposit confirmations on this network's leads
@@ -452,6 +455,7 @@ exports.getNetworkDeals = async (req, res, next) => {
         .populate("selectedOurNetwork", "name")
         .populate("selectedCampaign", "name")
         .populate("selectedClientBrokers", "name domain")
+        .populate("leads", "assignedClientBrokers")
         .select(
           "createdAt plannedDate status requests fulfilled requester selectedOurNetwork selectedCampaign countryFilter selectedClientBrokers leads leadsMetadata"
         )
@@ -476,13 +480,32 @@ exports.getNetworkDeals = async (req, res, next) => {
       ]),
     ]);
 
-    // Compute per-order counts and strip raw leadsMetadata
+    // Populate assignedClientBrokers on leads
+    await Order.populate(deals, {
+      path: "leads.assignedClientBrokers",
+      select: "name domain",
+    });
+
+    // Compute per-order counts, collect assigned brokers, and strip raw data
     const data = deals.map((order) => {
       const obj = order.toObject();
       const metadata = obj.leadsMetadata || [];
       obj.confirmedDeposits = metadata.filter((m) => m.depositConfirmed).length;
       obj.shavedFtds = metadata.filter((m) => m.shaved).length;
+
+      // Collect unique assigned brokers from leads
+      const brokerMap = new Map();
+      (obj.leads || []).forEach((lead) => {
+        (lead.assignedClientBrokers || []).forEach((broker) => {
+          if (broker?._id) {
+            brokerMap.set(broker._id.toString(), { _id: broker._id, name: broker.name, domain: broker.domain });
+          }
+        });
+      });
+      obj.assignedBrokers = Array.from(brokerMap.values());
+
       delete obj.leadsMetadata;
+      obj.leads = (obj.leads || []).map((l) => l._id);
       return obj;
     });
 

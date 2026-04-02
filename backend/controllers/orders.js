@@ -3601,6 +3601,10 @@ exports.getOrders = async (req, res, next) => {
               select: "name domain description",
             },
             {
+              path: "clientBrokerHistory.intermediaryClientNetwork",
+              select: "name",
+            },
+            {
               path: "depositConfirmedBy",
               select: "fullName email",
             },
@@ -3699,6 +3703,10 @@ exports.getOrderById = async (req, res, next) => {
           {
             path: "clientBrokerHistory.clientBroker",
             select: "name domain description",
+          },
+          {
+            path: "clientBrokerHistory.intermediaryClientNetwork",
+            select: "name",
           },
           {
             path: "clientNetworkHistory.clientNetwork",

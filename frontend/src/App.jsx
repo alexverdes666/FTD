@@ -92,9 +92,9 @@ const RoleBasedRedirect = () => {
     return <Navigate to="/dashboard" replace />;
   }
 
-  // Redirect agents to leads page instead of dashboard
+  // Redirect agents to deposit calls page instead of dashboard
   if (user.role === "agent") {
-    return <Navigate to="/leads" replace />;
+    return <Navigate to="/deposit-calls" replace />;
   }
 
   // Redirect refunds manager to refunds page

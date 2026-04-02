@@ -1601,6 +1601,8 @@ exports.updateLead = async (req, res, next) => {
       dob,
       campaign,
       clientBroker,
+      removeBrokerIds,
+      brokerForOrderId,
       clientNetwork,
       ourNetwork,
     } = req.body;
@@ -1864,62 +1866,96 @@ exports.updateLead = async (req, res, next) => {
 
     // Handle client broker updates
     const newlyAddedBrokers = []; // Track brokers added for audit logging
-    if (clientBroker !== undefined) {
-      if (Array.isArray(clientBroker) && clientBroker.length > 0) {
-        const ClientBroker = require("../models/ClientBroker");
+    const removedBrokers = []; // Track brokers removed for audit logging
 
-        // Validate all client brokers exist and are active
+    // Look up the order's client network for broker history (used by both add and remove)
+    let orderClientNetwork = null;
+    if (lead.orderId && (clientBroker !== undefined || removeBrokerIds)) {
+      const Order = require("../models/Order");
+      const leadOrder = await Order.findById(lead.orderId).select("selectedClientNetwork").lean();
+      orderClientNetwork = leadOrder?.selectedClientNetwork || null;
+    }
+
+    // Add brokers (additive - never removes existing ones unless replacing per-order)
+    if (clientBroker !== undefined) {
+      const brokerIdsToAdd = Array.isArray(clientBroker) ? clientBroker : (clientBroker && clientBroker !== "" ? [clientBroker] : []);
+
+      if (brokerIdsToAdd.length > 0) {
+        const ClientBroker = require("../models/ClientBroker");
         const brokerDocs = await ClientBroker.find({
-          _id: { $in: clientBroker },
+          _id: { $in: brokerIdsToAdd },
           isActive: true,
         });
 
-        if (brokerDocs.length !== clientBroker.length) {
+        if (brokerDocs.length !== brokerIdsToAdd.length) {
           return res.status(400).json({
             success: false,
-            message:
-              "One or more selected client brokers not found or inactive",
+            message: "One or more selected client brokers not found or inactive",
           });
         }
 
-        // Add new brokers to existing assignments (additive, not replacement)
-        // This ensures we never "forget" that a lead was sent to a broker
-        for (const brokerId of clientBroker) {
+        // If brokerForOrderId is set, enforce 1 broker per lead per order:
+        // remove the old broker for that order before adding the new one
+        const targetOrderId = brokerForOrderId || lead.orderId;
+        if (targetOrderId && brokerIdsToAdd.length === 1) {
+          const existingEntry = lead.clientBrokerHistory?.find(
+            (h) => h.orderId && h.orderId.toString() === targetOrderId.toString()
+          );
+          if (existingEntry) {
+            const oldBrokerId = existingEntry.clientBroker.toString();
+            const newBrokerId = brokerIdsToAdd[0].toString();
+            if (oldBrokerId !== newBrokerId) {
+              // Check if old broker is only used for this order (not other orders too)
+              const usedInOtherOrders = lead.clientBrokerHistory?.some(
+                (h) => h.clientBroker.toString() === oldBrokerId &&
+                       h.orderId && h.orderId.toString() !== targetOrderId.toString()
+              );
+              if (!usedInOtherOrders) {
+                lead.unassignClientBroker(oldBrokerId);
+                removedBrokers.push({ id: oldBrokerId });
+              }
+              // Remove the old history entry for this order
+              lead.clientBrokerHistory = lead.clientBrokerHistory.filter(
+                (h) => !(h.orderId && h.orderId.toString() === targetOrderId.toString())
+              );
+            }
+          }
+        }
+
+        for (const brokerId of brokerIdsToAdd) {
           if (!lead.isAssignedToClientBroker(brokerId)) {
-            lead.assignClientBroker(brokerId, req.user._id, lead.orderId);
-            // Find the broker doc for audit logging
+            lead.assignClientBroker(brokerId, req.user._id, targetOrderId, orderClientNetwork);
             const brokerDoc = brokerDocs.find(b => b._id.toString() === brokerId.toString());
             if (brokerDoc) {
               newlyAddedBrokers.push({ id: brokerDoc._id, name: brokerDoc.name });
             }
+          } else {
+            // Broker already assigned globally, but still add history entry for this order
+            const alreadyInThisOrder = lead.clientBrokerHistory?.some(
+              (h) => h.clientBroker.toString() === brokerId.toString() &&
+                     h.orderId && h.orderId.toString() === targetOrderId.toString()
+            );
+            if (!alreadyInThisOrder) {
+              lead.clientBrokerHistory.push({
+                clientBroker: brokerId,
+                assignedBy: req.user._id,
+                orderId: targetOrderId,
+                intermediaryClientNetwork: orderClientNetwork,
+                assignedAt: new Date(),
+              });
+            }
           }
         }
-      } else if (Array.isArray(clientBroker) && clientBroker.length === 0) {
-        // Note: We don't clear assignedClientBrokers because it's a permanent record
-        // of all brokers this lead has been sent to (used for order filtering)
-        // If you need to track "currently active" brokers, use clientBrokerHistory
-      } else if (clientBroker && clientBroker !== "") {
-        // Handle legacy single broker assignment
-        const ClientBroker = require("../models/ClientBroker");
-        const brokerDoc = await ClientBroker.findOne({
-          _id: clientBroker,
-          isActive: true,
-        });
-        if (!brokerDoc) {
-          return res.status(400).json({
-            success: false,
-            message: "Selected client broker not found or inactive",
-          });
-        }
+      }
+    }
 
-        // Add broker to assignments (additive, not replacement)
-        if (!lead.isAssignedToClientBroker(clientBroker)) {
-          lead.assignClientBroker(clientBroker, req.user._id, lead.orderId);
-          newlyAddedBrokers.push({ id: brokerDoc._id, name: brokerDoc.name });
+    // Explicitly remove brokers
+    if (Array.isArray(removeBrokerIds) && removeBrokerIds.length > 0) {
+      for (const brokerId of removeBrokerIds) {
+        if (lead.isAssignedToClientBroker(brokerId)) {
+          lead.unassignClientBroker(brokerId);
+          removedBrokers.push({ id: brokerId });
         }
-      } else {
-        // Note: We don't clear assignedClientBrokers because it's a permanent record
-        // of all brokers this lead has been sent to (used for order filtering)
       }
     }
 
@@ -1976,8 +2012,8 @@ exports.updateLead = async (req, res, next) => {
       }
     }
 
-    // Add audit log for newly added client brokers
-    if (newlyAddedBrokers.length > 0 && lead.orderId) {
+    // Add audit log for broker changes
+    if ((newlyAddedBrokers.length > 0 || removedBrokers.length > 0) && lead.orderId) {
       const Order = require("../models/Order");
       const order = await Order.findById(lead.orderId);
       if (order) {
@@ -1996,6 +2032,20 @@ exports.updateLead = async (req, res, next) => {
             newValue: {
               clientBrokerId: broker.id,
               clientBrokerName: broker.name,
+            },
+          });
+        }
+        for (const broker of removedBrokers) {
+          order.auditLog.push({
+            action: "client_broker_removed",
+            leadId: lead._id,
+            leadEmail: lead.email,
+            performedBy: req.user._id,
+            performedAt: new Date(),
+            ipAddress: clientIp,
+            details: `Client broker removed from lead ${lead.firstName} ${lead.lastName} (${lead.email}) by ${req.user.fullName || req.user.email}`,
+            newValue: {
+              clientBrokerId: broker.id,
             },
           });
         }

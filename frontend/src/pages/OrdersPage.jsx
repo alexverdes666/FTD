@@ -1966,6 +1966,31 @@ const OrdersPage = () => {
     setHighlightLeadId(null);
   }, []);
 
+  // Refresh order data in the leads preview modal (e.g. after broker assignment)
+  const handleRefreshOrderInPreview = useCallback(async (orderId) => {
+    if (!orderId) return;
+    try {
+      const response = await api.get(`/orders/${orderId}`);
+      if (response.data.success) {
+        const updatedOrder = response.data.data;
+        setLeadsPreviewModal((prev) => ({
+          ...prev,
+          leads: updatedOrder.leads || prev.leads,
+          order: updatedOrder,
+        }));
+        setExpandedRowData((prev) => {
+          if (prev[orderId]) {
+            return { ...prev, [orderId]: updatedOrder };
+          }
+          return prev;
+        });
+        fetchOrders();
+      }
+    } catch (err) {
+      console.error("Failed to refresh order", err);
+    }
+  }, [fetchOrders]);
+
   // Lead Detail Drawer handlers
   const handleOpenLeadDetailDrawer = useCallback((lead, orderId, order) => {
     setLeadDetailDrawer({
@@ -2213,11 +2238,12 @@ const OrdersPage = () => {
     setPreviewActionsMenu({ anchorEl: null, lead: null });
   }, []);
 
-  const handleOpenClientBrokersDialog = useCallback((brokers, leadName) => {
+  const handleOpenClientBrokersDialog = useCallback((brokers, leadName, orderNetworkName) => {
     setClientBrokersDialog({
       open: true,
       brokers: brokers || [],
       leadName,
+      orderNetworkName: orderNetworkName || null,
     });
   }, []);
 
@@ -4517,6 +4543,7 @@ const OrdersPage = () => {
         undoingReplacement={undoingReplacement}
         onRestoreLead={handleRestoreLead}
         onUndoReplacementFromMenu={handleUndoReplacementFromMenu}
+        onRefreshOrder={handleRefreshOrderInPreview}
       />
 
       {/* Lead Detail Drawer */}

@@ -178,8 +178,8 @@ const CrmNetworkOrdersTable = ({ networkId }) => {
                       </TableCell>
                       <TableCell>{order.countryFilter || "-"}</TableCell>
                       <TableCell>
-                        {order.selectedClientBrokers?.length
-                          ? order.selectedClientBrokers
+                        {order.assignedBrokers?.length
+                          ? order.assignedBrokers
                               .map((b) => b.name)
                               .join(", ")
                           : "-"}

@@ -464,23 +464,10 @@ const MainLayout = () => {
       return affiliateManagerItems;
     } else if (user?.role === "agent") {
       return [
-        { text: "My Leads", icon: <LeadsIcon />, path: "/leads" },
+        { text: "Dep. Calls", icon: <DepositCallIcon />, path: "/deposit-calls" },
         { text: "Calls", icon: <HeadsetIcon />, path: "/call-declarations" },
         { text: "Injection", icon: <InjectionIcon />, path: "/injections" },
         { text: "Notes", icon: <NoteIcon />, path: "/notes" },
-        {
-          text: "Agents",
-          icon: <CalendarIcon />,
-          isExpandable: true,
-          key: "schedules",
-          children: [
-            {
-              text: "Dep. Calls",
-              icon: <DepositCallIcon />,
-              path: "/deposit-calls",
-            },
-          ],
-        },
         {
           text: "Payroll",
           icon: <PaymentIcon />,

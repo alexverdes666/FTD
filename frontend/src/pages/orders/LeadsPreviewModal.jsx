@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Box,
   Typography,
@@ -23,6 +23,8 @@ import {
   Tooltip,
   Divider,
   alpha,
+  Autocomplete,
+  TextField,
 } from "@mui/material";
 import {
   Add as AddIcon,
@@ -45,7 +47,11 @@ import {
   Block as ClosedNetworkIcon,
   Label as SetStatusIcon,
   Vaccines as InjectIcon,
+  History as HistoryIcon,
+  Business as BrokerIcon,
 } from "@mui/icons-material";
+import api from "../../services/api";
+import toast from "react-hot-toast";
 import InjectLeadsDialog from "./InjectLeadsDialog";
 import { getInjectionStatusesByOrder } from "../../services/injections";
 import DocumentPreview from "../../components/DocumentPreview";
@@ -57,6 +63,68 @@ import {
   buildIPQSTooltip,
   getCountryCode,
 } from "./ordersUtils";
+
+// Inline "+" / swap button with dialog for assigning/replacing a broker on a single lead
+const SingleBrokerAssign = ({ leadId, brokerOptions, onLoadBrokers, onAssign, assigning, isReplace }) => {
+  const [anchorEl, setAnchorEl] = useState(null);
+
+  const handleClick = (e) => {
+    onLoadBrokers();
+    setAnchorEl(e.currentTarget);
+  };
+
+  return (
+    <>
+      <Tooltip title={isReplace ? "Replace broker" : "Assign broker"}>
+        <IconButton
+          size="small"
+          onClick={handleClick}
+          disabled={assigning}
+          sx={{ p: 0.25, color: isReplace ? "warning.main" : "primary.main" }}
+        >
+          {assigning ? <CircularProgress size={14} /> : isReplace ? <ChangeIcon sx={{ fontSize: 16 }} /> : <AddIcon sx={{ fontSize: 16 }} />}
+        </IconButton>
+      </Tooltip>
+      {anchorEl && (
+        <Dialog
+          open
+          onClose={() => setAnchorEl(null)}
+          maxWidth="xs"
+          fullWidth
+          PaperProps={{ sx: { p: 2 } }}
+        >
+          <Typography variant="subtitle2" sx={{ mb: 1 }}>Select Broker</Typography>
+          <Autocomplete
+            size="small"
+            autoFocus
+            openOnFocus
+            options={brokerOptions}
+            getOptionLabel={(o) => `${o.name}${o.domain ? ` (${o.domain})` : ""}`}
+            filterOptions={(options, { inputValue }) => {
+              const q = inputValue.toLowerCase();
+              return options.filter((o) => o.name.toLowerCase().includes(q) || (o.domain && o.domain.toLowerCase().includes(q)));
+            }}
+            onChange={(e, v) => {
+              if (v) {
+                setAnchorEl(null);
+                onAssign(v);
+              }
+            }}
+            renderInput={(params) => <TextField {...params} placeholder="Search broker..." autoFocus />}
+            renderOption={(props, option) => (
+              <li {...props} key={option._id}>
+                <Box>
+                  <Typography variant="body2">{option.name}</Typography>
+                  {option.domain && <Typography variant="caption" color="text.secondary">{option.domain}</Typography>}
+                </Box>
+              </li>
+            )}
+          />
+        </Dialog>
+      )}
+    </>
+  );
+};
 
 const LeadsPreviewModal = ({
   modal,
@@ -124,9 +192,83 @@ const LeadsPreviewModal = ({
   // Restore / Undo replacement
   onRestoreLead,
   onUndoReplacementFromMenu,
+  onRefreshOrder,
 }) => {
   const [injectDialogOpen, setInjectDialogOpen] = useState(false);
   const [injectionStatusMap, setInjectionStatusMap] = useState({});
+
+  // Broker assignment state
+  const [brokerAssignMode, setBrokerAssignMode] = useState(false);
+  const [selectedLeadsForBroker, setSelectedLeadsForBroker] = useState(new Set());
+  const [brokerOptions, setBrokerOptions] = useState([]);
+  const [selectedBroker, setSelectedBroker] = useState(null);
+  const [assigningBroker, setAssigningBroker] = useState(false);
+  const [assigningSingleLead, setAssigningSingleLead] = useState(null);
+
+  // Fetch broker options when entering assign mode
+  useEffect(() => {
+    if (brokerAssignMode && brokerOptions.length === 0) {
+      api.get("/client-brokers?isActive=true&limit=1000")
+        .then((res) => setBrokerOptions(res.data.data || []))
+        .catch(() => {});
+    }
+  }, [brokerAssignMode, brokerOptions.length]);
+
+  // Reset broker state when modal closes
+  useEffect(() => {
+    if (!modal.open) {
+      setBrokerAssignMode(false);
+      setSelectedLeadsForBroker(new Set());
+      setSelectedBroker(null);
+      setAssigningBroker(false);
+      setAssigningSingleLead(null);
+    }
+  }, [modal.open]);
+
+  const handleToggleBrokerLead = useCallback((leadId) => {
+    setSelectedLeadsForBroker((prev) => {
+      const next = new Set(prev);
+      if (next.has(leadId)) next.delete(leadId);
+      else next.add(leadId);
+      return next;
+    });
+  }, []);
+
+  const handleSelectAllForBroker = useCallback((checked) => {
+    if (checked) {
+      setSelectedLeadsForBroker(new Set(modal.leads.map((l) => l._id)));
+    } else {
+      setSelectedLeadsForBroker(new Set());
+    }
+  }, [modal.leads]);
+
+  const handleAssignBrokerToLeads = useCallback(async (leadIds, broker) => {
+    if (!broker || leadIds.length === 0) return;
+    setAssigningBroker(true);
+    try {
+      let count = 0;
+      for (const leadId of leadIds) {
+        await api.put(`/leads/${leadId}`, { clientBroker: [broker._id], brokerForOrderId: modal.orderId });
+        count++;
+      }
+      toast.success(`Broker "${broker.name}" set on ${count} lead${count > 1 ? "s" : ""}`);
+      setBrokerAssignMode(false);
+      setSelectedLeadsForBroker(new Set());
+      setSelectedBroker(null);
+      if (onRefreshOrder) onRefreshOrder(modal.orderId);
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to assign broker");
+    } finally {
+      setAssigningBroker(false);
+      setAssigningSingleLead(null);
+    }
+  }, [modal.orderId, onRefreshOrder]);
+
+  const handleAssignBrokerToSingleLead = useCallback(async (leadId, broker) => {
+    if (!broker) return;
+    setAssigningSingleLead(leadId);
+    await handleAssignBrokerToLeads([leadId], broker);
+  }, [handleAssignBrokerToLeads]);
 
   // Fetch injection statuses for the current order
   useEffect(() => {
@@ -200,7 +342,51 @@ const LeadsPreviewModal = ({
               )}
             </Typography>
             <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
-              {leadRemovalMode ? (
+              {brokerAssignMode ? (
+                <>
+                  <Typography variant="body2" color="text.secondary" sx={{ mr: 1 }}>
+                    {selectedLeadsForBroker.size} selected
+                  </Typography>
+                  <Autocomplete
+                    size="small"
+                    sx={{ minWidth: 220 }}
+                    options={brokerOptions}
+                    value={selectedBroker}
+                    onChange={(e, v) => setSelectedBroker(v)}
+                    getOptionLabel={(o) => `${o.name}${o.domain ? ` (${o.domain})` : ""}`}
+                    filterOptions={(options, { inputValue }) => {
+                      const q = inputValue.toLowerCase();
+                      return options.filter((o) => o.name.toLowerCase().includes(q) || (o.domain && o.domain.toLowerCase().includes(q)));
+                    }}
+                    renderInput={(params) => <TextField {...params} placeholder="Select broker..." />}
+                    renderOption={(props, option) => (
+                      <li {...props} key={option._id}>
+                        <Box>
+                          <Typography variant="body2">{option.name}</Typography>
+                          {option.domain && <Typography variant="caption" color="text.secondary">{option.domain}</Typography>}
+                        </Box>
+                      </li>
+                    )}
+                  />
+                  <Button
+                    size="small"
+                    variant="contained"
+                    onClick={() => handleAssignBrokerToLeads(Array.from(selectedLeadsForBroker), selectedBroker)}
+                    disabled={selectedLeadsForBroker.size === 0 || !selectedBroker || assigningBroker}
+                    startIcon={assigningBroker ? <CircularProgress size={16} color="inherit" /> : <BrokerIcon />}
+                  >
+                    Assign
+                  </Button>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    onClick={() => { setBrokerAssignMode(false); setSelectedLeadsForBroker(new Set()); setSelectedBroker(null); }}
+                    disabled={assigningBroker}
+                  >
+                    Cancel
+                  </Button>
+                </>
+              ) : leadRemovalMode ? (
                 <>
                   <Typography variant="body2" color="text.secondary" sx={{ mr: 1 }}>
                     {selectedLeadsForRemoval.length} selected
@@ -250,6 +436,21 @@ const LeadsPreviewModal = ({
                       </Tooltip>
                     );
                   })()}
+                  {["admin", "affiliate_manager"].includes(user?.role) && modal.order && modal.leads.length > 0 && (
+                    <Tooltip title={modal.enriching ? "Loading details..." : "Assign broker to leads"}>
+                      <span>
+                      <IconButton
+                        aria-label="assign broker"
+                        onClick={() => { setBrokerAssignMode(true); setSelectedLeadsForBroker(new Set()); setSelectedBroker(null); }}
+                        size="small"
+                        disabled={modal.enriching}
+                        sx={{ color: "#7b1fa2" }}
+                      >
+                        <BrokerIcon />
+                      </IconButton>
+                      </span>
+                    </Tooltip>
+                  )}
                   {["admin", "affiliate_manager", "lead_manager"].includes(user?.role) && modal.order && modal.leads.length > 0 && (
                     <Tooltip title={modal.enriching ? "Loading details..." : "Remove leads from this order"}>
                       <span>
@@ -323,7 +524,7 @@ const LeadsPreviewModal = ({
             >
               <TableHead>
                 <TableRow>
-                  {leadRemovalMode && (
+                  {(leadRemovalMode || brokerAssignMode) && (
                     <TableCell
                       sx={{
                         fontWeight: "bold",
@@ -333,12 +534,21 @@ const LeadsPreviewModal = ({
                         width: 40,
                       }}
                     >
-                      <Checkbox
-                        size="small"
-                        checked={selectedLeadsForRemoval.length === modal.leads.filter(l => !modal.order?.removedLeads?.find(rl => rl.leadId === l._id || rl.leadId?._id === l._id)).length && selectedLeadsForRemoval.length > 0}
-                        indeterminate={selectedLeadsForRemoval.length > 0 && selectedLeadsForRemoval.length < modal.leads.filter(l => !modal.order?.removedLeads?.find(rl => rl.leadId === l._id || rl.leadId?._id === l._id)).length}
-                        onChange={handleSelectAll}
-                      />
+                      {leadRemovalMode ? (
+                        <Checkbox
+                          size="small"
+                          checked={selectedLeadsForRemoval.length === modal.leads.filter(l => !modal.order?.removedLeads?.find(rl => rl.leadId === l._id || rl.leadId?._id === l._id)).length && selectedLeadsForRemoval.length > 0}
+                          indeterminate={selectedLeadsForRemoval.length > 0 && selectedLeadsForRemoval.length < modal.leads.filter(l => !modal.order?.removedLeads?.find(rl => rl.leadId === l._id || rl.leadId?._id === l._id)).length}
+                          onChange={handleSelectAll}
+                        />
+                      ) : (
+                        <Checkbox
+                          size="small"
+                          checked={selectedLeadsForBroker.size === modal.leads.length && selectedLeadsForBroker.size > 0}
+                          indeterminate={selectedLeadsForBroker.size > 0 && selectedLeadsForBroker.size < modal.leads.length}
+                          onChange={(e) => handleSelectAllForBroker(e.target.checked)}
+                        />
+                      )}
                     </TableCell>
                   )}
                   <TableCell
@@ -563,7 +773,7 @@ const LeadsPreviewModal = ({
                             }),
                           }}
                         >
-                        {/* Checkbox for removal selection */}
+                        {/* Checkbox for removal/broker selection */}
                         {leadRemovalMode && (
                           <TableCell sx={{ py: 0.5, px: 0.5 }}>
                             <Checkbox
@@ -571,6 +781,15 @@ const LeadsPreviewModal = ({
                               checked={selectedLeadsForRemoval.includes(lead._id)}
                               onChange={() => onToggleLeadSelection(lead._id)}
                               disabled={isRemoved}
+                            />
+                          </TableCell>
+                        )}
+                        {brokerAssignMode && (
+                          <TableCell sx={{ py: 0.5, px: 0.5 }}>
+                            <Checkbox
+                              size="small"
+                              checked={selectedLeadsForBroker.has(lead._id)}
+                              onChange={() => handleToggleBrokerLead(lead._id)}
                             />
                           </TableCell>
                         )}
@@ -887,39 +1106,65 @@ const LeadsPreviewModal = ({
                             }}
                           >
                             {(() => {
-                              const brokerValue = (lead.clientBrokerHistory?.length > 0
-                                ? (lead.clientBrokerHistory.find(h => h.orderId === modal.orderId || h.orderId?._id === modal.orderId) || lead.clientBrokerHistory[lead.clientBrokerHistory.length - 1])?.clientBroker?.name
-                                : null) ||
-                                (lead.assignedClientBrokers?.length > 0
-                                  ? lead.assignedClientBrokers[lead.assignedClientBrokers.length - 1]?.name
-                                  : null) ||
-                                lead.clientBroker;
+                              const historyForOrder = lead.clientBrokerHistory?.find(
+                                h => (h.orderId?._id || h.orderId) === modal.orderId
+                              );
+                              const brokerName = historyForOrder?.clientBroker?.name || null;
+                              const canEdit = ["admin", "affiliate_manager"].includes(user?.role);
+
+                              if (canEdit) {
+                                return (
+                                  <>
+                                    <Typography
+                                      variant="body2"
+                                      sx={{ whiteSpace: "nowrap", fontSize: "0.75rem", ...(!brokerName && { textAlign: "center" }) }}
+                                    >
+                                      {brokerName || ""}
+                                    </Typography>
+                                    <SingleBrokerAssign
+                                      leadId={lead._id}
+                                      brokerOptions={brokerOptions}
+                                      onLoadBrokers={() => {
+                                        if (brokerOptions.length === 0) {
+                                          api.get("/client-brokers?isActive=true&limit=1000")
+                                            .then((res) => setBrokerOptions(res.data.data || []))
+                                            .catch(() => {});
+                                        }
+                                      }}
+                                      onAssign={(broker) => handleAssignBrokerToSingleLead(lead._id, broker)}
+                                      assigning={assigningSingleLead === lead._id}
+                                      isReplace={!!brokerName}
+                                    />
+                                  </>
+                                );
+                              }
+
                               return (
-                              <Typography
-                              variant="body2"
-                              sx={{ whiteSpace: "nowrap", fontSize: "0.75rem", ...(!brokerValue && { width: "100%", textAlign: "center" }) }}
-                            >
-                              {brokerValue || "-"}
-                            </Typography>
+                                <Typography
+                                  variant="body2"
+                                  sx={{ whiteSpace: "nowrap", fontSize: "0.75rem", ...(!brokerName && { width: "100%", textAlign: "center" }) }}
+                                >
+                                  {brokerName || "-"}
+                                </Typography>
                               );
                             })()}
-                            {lead.assignedClientBrokers &&
-                              lead.assignedClientBrokers.length > 0 && (
-                                <Tooltip title="View all client brokers">
-                                  <IconButton
-                                    size="small"
-                                    onClick={() =>
-                                      onOpenClientBrokersDialog(
-                                        lead.assignedClientBrokers,
-                                        `${lead.firstName} ${lead.lastName}`
-                                      )
-                                    }
-                                    sx={{ p: 0.25 }}
-                                  >
-                                    <ListIcon sx={{ fontSize: 16 }} />
-                                  </IconButton>
-                                </Tooltip>
-                              )}
+                            {lead.clientBrokerHistory?.length > 0 && (
+                              <Tooltip title="View broker history">
+                                <IconButton
+                                  size="small"
+                                  onClick={() =>
+                                    onOpenClientBrokersDialog(
+                                      lead.clientBrokerHistory,
+                                      `${lead.firstName} ${lead.lastName}`,
+                                      modal.order?.selectedClientNetwork?.name
+                                    )
+                                  }
+                                  sx={{ p: 0.25 }}
+                                >
+                                  <HistoryIcon sx={{ fontSize: 16 }} />
+                                </IconButton>
+                              </Tooltip>
+                            )}
                           </Box>
                         </TableCell>
                         {/* Client Network */}

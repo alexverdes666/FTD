@@ -192,21 +192,10 @@ const OrderDetailPanel = ({
                           </Box>
                           <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                             <Typography variant="caption" color="text.secondary" sx={{ minWidth: "90px" }}>Client Brokers:</Typography>
-                            {user?.role !== "lead_manager" ? (
-                              <Button
-                                size="small" variant="outlined"
-                                onClick={() => handleOpenClientBrokerManagement(expandedDetails)}
-                                startIcon={<BusinessIcon />}
-                                sx={{ height: "26px", fontSize: "0.7rem", px: 1 }}
-                              >
-                                Manage ({expandedDetails.leads?.filter((lead) => lead.assignedClientBrokers?.length > 0).length || 0}/{expandedDetails.leads?.length || 0})
-                              </Button>
-                            ) : (
-                              <Chip
-                                label={`${expandedDetails.leads?.filter((lead) => lead.assignedClientBrokers?.length > 0).length || 0}/${expandedDetails.leads?.length || 0} assigned`}
-                                size="small" color="info" variant="outlined" sx={{ height: "22px", fontSize: "0.75rem" }}
-                              />
-                            )}
+                            <Chip
+                              label={`${expandedDetails.leads?.filter((lead) => lead.assignedClientBrokers?.length > 0).length || 0}/${expandedDetails.leads?.length || 0} assigned`}
+                              size="small" color="info" variant="outlined" sx={{ height: "22px", fontSize: "0.75rem" }}
+                            />
                           </Box>
                         </Box>
                       </Paper>
