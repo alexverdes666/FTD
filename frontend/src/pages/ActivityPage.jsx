@@ -92,7 +92,7 @@ const formatTimeAgo = (date) => {
   const hours = Math.floor(minutes / 60);
   if (hours < 24) return `${hours}h ago`;
   
-  return then.toLocaleDateString();
+  return then.toLocaleDateString('en-US', { timeZone: 'Europe/Sofia' });
 };
 
 // Role color mapping
@@ -250,7 +250,7 @@ const LiveUserCard = ({ user, expanded, onToggle }) => {
             </Grid>
             <Grid item xs={6}>
               <Typography variant="caption" color="text.secondary">Session Started</Typography>
-              <Typography variant="body2">{new Date(user.sessionStart).toLocaleTimeString()}</Typography>
+              <Typography variant="body2">{new Date(user.sessionStart).toLocaleTimeString('en-US', { timeZone: 'Europe/Sofia' })}</Typography>
             </Grid>
             <Grid item xs={6}>
               <Typography variant="caption" color="text.secondary">Scroll Events</Typography>

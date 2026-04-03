@@ -11,20 +11,25 @@ import {
   Typography,
   Chip,
   Fade,
-  Paper,
   InputAdornment,
-  Divider
+  Divider,
+  IconButton,
+  Autocomplete,
+  Tooltip,
+  CircularProgress
 } from '@mui/material';
 import {
   Search as SearchIcon,
   SwapHoriz as SwitchIcon,
-  KeyboardArrowDown,
-  KeyboardArrowUp
+  Add as AddIcon,
+  Remove as RemoveIcon,
+  Close as CloseIcon
 } from '@mui/icons-material';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { selectUser, switchUserAccount, fetchRelatedAccounts } from '../store/slices/authSlice';
 import { addRecentAccount, getRecentAccounts } from '../utils/accountHistory';
+import api from '../services/api';
 import toast from 'react-hot-toast';
 
 const QuickSwitcher = ({ open, onClose }) => {
@@ -38,7 +43,15 @@ const QuickSwitcher = ({ open, onClose }) => {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [loading, setLoading] = useState(false);
   const [switching, setSwitching] = useState(false);
+
+  // Admin linking state
+  const [showAddUser, setShowAddUser] = useState(false);
+  const [availableUsers, setAvailableUsers] = useState([]);
+  const [availableLoading, setAvailableLoading] = useState(false);
+  const [linkingUser, setLinkingUser] = useState(false);
+
   const inputRef = useRef(null);
+  const isAdmin = user?.role === 'admin';
 
   useEffect(() => {
     if (open) {
@@ -46,6 +59,7 @@ const QuickSwitcher = ({ open, onClose }) => {
       loadRecentAccounts();
       setSearchQuery('');
       setSelectedIndex(0);
+      setShowAddUser(false);
       // Focus the input after a small delay to ensure the dialog is open
       setTimeout(() => {
         inputRef.current?.focus();
@@ -65,7 +79,7 @@ const QuickSwitcher = ({ open, onClose }) => {
       const sortedAccounts = [...accounts].sort((a, b) => {
         const aIsRecent = recentAccounts.some(r => r.id === a.id);
         const bIsRecent = recentAccounts.some(r => r.id === b.id);
-        
+
         if (aIsRecent && !bIsRecent) return -1;
         if (!aIsRecent && bIsRecent) return 1;
         if (aIsRecent && bIsRecent) {
@@ -102,6 +116,7 @@ const QuickSwitcher = ({ open, onClose }) => {
   };
 
   const handleKeyDown = (event) => {
+    if (showAddUser) return; // Don't handle navigation when adding user
     switch (event.key) {
       case 'ArrowDown':
         event.preventDefault();
@@ -158,6 +173,58 @@ const QuickSwitcher = ({ open, onClose }) => {
     }
   };
 
+  const handleOpenAddUser = async () => {
+    setShowAddUser(true);
+    setAvailableLoading(true);
+    try {
+      const response = await api.get("/account-management/available-users");
+      // Filter out users already linked
+      const linkedIds = new Set(accounts.map(a => a.id));
+      linkedIds.add(user._id);
+      const filtered = (response.data.data || []).filter(u => !linkedIds.has(u._id));
+      setAvailableUsers(filtered);
+    } catch (error) {
+      console.error('Failed to load available users:', error);
+      toast.error('Failed to load users');
+      setAvailableUsers([]);
+    } finally {
+      setAvailableLoading(false);
+    }
+  };
+
+  const handleLinkUser = async (selectedUser) => {
+    if (!selectedUser || linkingUser) return;
+    setLinkingUser(true);
+    try {
+      await api.post("/account-management/link-accounts", {
+        primaryAccountId: user._id,
+        linkedAccountIds: [selectedUser._id],
+      });
+      toast.success(`Linked ${selectedUser.fullName}`);
+      setShowAddUser(false);
+      // Reload accounts to reflect the change
+      await loadAccounts();
+    } catch (error) {
+      console.error('Failed to link account:', error);
+      toast.error(error.response?.data?.message || 'Failed to link account');
+    } finally {
+      setLinkingUser(false);
+    }
+  };
+
+  const handleUnlinkUser = async (accountId, accountName) => {
+    if (switching || linkingUser) return;
+    try {
+      await api.delete(`/account-management/remove-from-group/${accountId}`);
+      toast.success(`Unlinked ${accountName}`);
+      // Reload accounts to reflect the change
+      await loadAccounts();
+    } catch (error) {
+      console.error('Failed to unlink account:', error);
+      toast.error(error.response?.data?.message || 'Failed to unlink account');
+    }
+  };
+
   const getRoleDisplayName = (role) => {
     const roleMap = {
       admin: 'Admin',
@@ -205,7 +272,7 @@ const QuickSwitcher = ({ open, onClose }) => {
     >
       <Box sx={{ p: 0 }}>
         {/* Header */}
-        <Box sx={{ p: 2, pb: 1 }}>
+        <Box sx={{ p: 2, pb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
           <TextField
             ref={inputRef}
             fullWidth
@@ -229,7 +296,70 @@ const QuickSwitcher = ({ open, onClose }) => {
             }}
             disabled={switching}
           />
+          {isAdmin && (
+            <Tooltip title={showAddUser ? "Cancel" : "Link new account"}>
+              <IconButton
+                size="small"
+                onClick={() => showAddUser ? setShowAddUser(false) : handleOpenAddUser()}
+                sx={{
+                  bgcolor: showAddUser ? 'error.main' : 'primary.main',
+                  color: 'white',
+                  '&:hover': { bgcolor: showAddUser ? 'error.dark' : 'primary.dark' },
+                  minWidth: 36,
+                  height: 36,
+                }}
+              >
+                {showAddUser ? <CloseIcon fontSize="small" /> : <AddIcon fontSize="small" />}
+              </IconButton>
+            </Tooltip>
+          )}
         </Box>
+
+        {/* Add user inline */}
+        {isAdmin && showAddUser && (
+          <Box sx={{ px: 2, pb: 1 }}>
+            <Autocomplete
+              options={availableUsers}
+              loading={availableLoading}
+              getOptionLabel={(option) => `${option.fullName} (${option.email})`}
+              renderOption={(props, option) => (
+                <li {...props} key={option._id}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
+                    <Avatar sx={{ width: 28, height: 28, fontSize: 14 }}>
+                      {option.fullName.charAt(0).toUpperCase()}
+                    </Avatar>
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography variant="body2" noWrap>{option.fullName}</Typography>
+                      <Typography variant="caption" color="text.secondary" noWrap>{option.email}</Typography>
+                    </Box>
+                    <Chip label={getRoleDisplayName(option.role)} size="small" color={getRoleColor(option.role)} variant="outlined" />
+                  </Box>
+                </li>
+              )}
+              onChange={(_, value) => handleLinkUser(value)}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  placeholder="Search user to link..."
+                  size="small"
+                  autoFocus
+                  InputProps={{
+                    ...params.InputProps,
+                    endAdornment: (
+                      <>
+                        {availableLoading || linkingUser ? <CircularProgress size={18} /> : null}
+                        {params.InputProps.endAdornment}
+                      </>
+                    ),
+                  }}
+                />
+              )}
+              disabled={linkingUser}
+              noOptionsText="No users available"
+              size="small"
+            />
+          </Box>
+        )}
 
         {/* Quick tip */}
         <Box sx={{ px: 2, pb: 1 }}>
@@ -343,11 +473,29 @@ const QuickSwitcher = ({ open, onClose }) => {
                     }
                     secondaryTypographyProps={{ component: 'div' }}
                   />
-                  {!account.isCurrentAccount && index === selectedIndex && (
-                    <Box sx={{ ml: 1, display: 'flex', alignItems: 'center' }}>
+                  <Box sx={{ ml: 1, display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                    {!account.isCurrentAccount && index === selectedIndex && (
                       <SwitchIcon fontSize="small" />
-                    </Box>
-                  )}
+                    )}
+                    {isAdmin && !account.isCurrentAccount && (
+                      <Tooltip title="Unlink account">
+                        <IconButton
+                          size="small"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleUnlinkUser(account.id, account.fullName);
+                          }}
+                          sx={{
+                            color: 'error.main',
+                            opacity: 0.6,
+                            '&:hover': { opacity: 1, bgcolor: 'error.light', color: 'white' },
+                          }}
+                        >
+                          <RemoveIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    )}
+                  </Box>
                 </ListItem>
               );
               })}

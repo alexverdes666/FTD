@@ -63,7 +63,7 @@ const PSPProfilePage = lazy(() => import("./pages/PSPProfilePage.jsx"));
 const ClientPSPsPage = lazy(() => import("./pages/ClientPSPsPage.jsx"));
 const CardIssuersPage = lazy(() => import("./pages/CardIssuersPage.jsx"));
 // GatewayManagementPage removed - merged into SMSGatewayPage
-const ApproveAMCallsPage = lazy(() => import("./pages/ApproveAMCallsPage.jsx"));
+// ApproveAMCallsPage removed - covered by PendingPage and DepositCallsPage
 const AnnouncementsPage = lazy(() => import("./pages/AnnouncementsPage.jsx"));
 const AMTargetsPage = lazy(() => import("./pages/AMTargetsPage.jsx"));
 const DepositCallsPage = lazy(() => import("./pages/DepositCallsPage.jsx"));
@@ -417,14 +417,6 @@ function AppContent() {
               element={
                 <ProtectedRoute allowedRoles={["affiliate_manager", "admin"]}>
                   <LazyPage><PendingPage /></LazyPage>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="approve-am-calls"
-              element={
-                <ProtectedRoute allowedRoles={["affiliate_manager", "admin"]}>
-                  <LazyPage><ApproveAMCallsPage /></LazyPage>
                 </ProtectedRoute>
               }
             />

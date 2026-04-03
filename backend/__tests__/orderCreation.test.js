@@ -149,13 +149,14 @@ const simulateOrderFTDSelection = async ({
   const genderFilter = gender ? { gender } : {};
 
   // Collect leads from existing non-cancelled orders with same client network
+  // Includes removed leads - they were already sent to the network
   let leadsAlreadyInSameClientNetwork = new Set();
   if (selectedClientNetwork) {
     const existingOrders = await Order.find({
       selectedClientNetwork: selectedClientNetwork,
       status: { $ne: "cancelled" },
     })
-      .select("leads")
+      .select("leads removedLeads")
       .lean();
 
     for (const order of existingOrders) {
@@ -164,23 +165,34 @@ const simulateOrderFTDSelection = async ({
           leadsAlreadyInSameClientNetwork.add(leadId.toString());
         }
       }
+      if (order.removedLeads) {
+        for (const rl of order.removedLeads) {
+          leadsAlreadyInSameClientNetwork.add((rl.leadId || rl).toString());
+        }
+      }
     }
   }
 
   // Collect leads from existing non-cancelled orders with same client brokers
+  // Includes removed leads - they were already sent to the broker
   let leadsAlreadyWithSameBrokers = new Set();
   if (selectedClientBrokers && selectedClientBrokers.length > 0) {
     const existingBrokerOrders = await Order.find({
       selectedClientBrokers: { $in: selectedClientBrokers },
       status: { $ne: "cancelled" },
     })
-      .select("leads")
+      .select("leads removedLeads")
       .lean();
 
     for (const order of existingBrokerOrders) {
       if (order.leads) {
         for (const leadId of order.leads) {
           leadsAlreadyWithSameBrokers.add(leadId.toString());
+        }
+      }
+      if (order.removedLeads) {
+        for (const rl of order.removedLeads) {
+          leadsAlreadyWithSameBrokers.add((rl.leadId || rl).toString());
         }
       }
     }
@@ -379,6 +391,38 @@ describe("Order creation - client network dedup", () => {
     usedLeads.forEach((used) => {
       expect(resultIds).not.toContain(used._id.toString());
     });
+  });
+
+  test("should NOT return leads that were removed/returned from an order with the same client network", async () => {
+    // Create leads and put them in an order, then mark some as removed
+    const removedLeads = await Promise.all([
+      createLead({ firstName: "Removed1" }),
+      createLead({ firstName: "Removed2" }),
+    ]);
+    const activeLead = await createLead({ firstName: "StillActive" });
+
+    await createOrder([...removedLeads, activeLead], {
+      selectedClientNetwork: clientNetwork1._id,
+      status: "partial",
+      removedLeads: removedLeads.map((l) => ({ leadId: l._id, removedAt: new Date(), reason: "returned" })),
+    });
+
+    // Create fresh leads
+    const freshLead = await createLead({ firstName: "Fresh1" });
+
+    const result = await simulateOrderFTDSelection({
+      requestedFtd: 5,
+      country: "Canada",
+      selectedClientNetwork: clientNetwork1._id,
+    });
+
+    // Should only get the fresh lead — removed leads were already sent to the network
+    const resultIds = result.map((l) => l._id.toString());
+    expect(resultIds).toContain(freshLead._id.toString());
+    removedLeads.forEach((removed) => {
+      expect(resultIds).not.toContain(removed._id.toString());
+    });
+    expect(resultIds).not.toContain(activeLead._id.toString());
   });
 
   test("should allow leads from cancelled orders with the same client network", async () => {
