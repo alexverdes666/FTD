@@ -20,6 +20,7 @@ const {
   getActivityStream,
   exportActivityLogs,
   cleanupOldLogs,
+  getTrackingHistory,
 } = require("../controllers/activityLogs");
 
 // All routes require admin authentication
@@ -30,6 +31,7 @@ router.use(isAdmin);
 router.get("/dashboard", getDashboardStats);
 router.get("/stream", getActivityStream);
 router.get("/export", exportActivityLogs);
+router.get("/tracking-history", getTrackingHistory);
 
 // Analytics endpoints
 router.get("/analytics/failed-requests", getFailedRequestsSummary);

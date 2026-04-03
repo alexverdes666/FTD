@@ -83,6 +83,7 @@ const PendingPage = lazy(() => import("./pages/PendingPage.jsx"));
 const FinancePage = lazy(() => import("./pages/FinancePage.jsx"));
 const AdminPage = lazy(() => import("./pages/AdminPage.jsx"));
 const EmployeeDashboardPage = lazy(() => import("./pages/EmployeeDashboardPage.jsx"));
+const GlobalTrackingHistoryPage = lazy(() => import("./pages/GlobalTrackingHistoryPage.jsx"));
 
 // Component to handle role-based default routing
 const RoleBasedRedirect = () => {
@@ -489,6 +490,14 @@ function AppContent() {
               element={
                 <ProtectedRoute allowedRoles={["employee", "admin"]}>
                   <LazyPage><EmployeeDashboardPage /></LazyPage>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="tracking-history"
+              element={
+                <ProtectedRoute allowedRoles={["admin"]}>
+                  <LazyPage><GlobalTrackingHistoryPage /></LazyPage>
                 </ProtectedRoute>
               }
             />

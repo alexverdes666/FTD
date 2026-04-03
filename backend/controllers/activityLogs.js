@@ -6,6 +6,488 @@
  */
 
 const ActivityLog = require("../models/ActivityLog");
+const mongoose = require("mongoose");
+
+// Lazy-load models to avoid circular dependencies
+const getModel = (name) => {
+  try {
+    return mongoose.model(name);
+  } catch {
+    return null;
+  }
+};
+
+// Map of field names to { model, displayField } for ObjectId resolution
+const REFERENCE_FIELDS = {
+  // Lead references
+  clientBroker: { model: "ClientBroker", displayField: "name" },
+  clientBrokerId: { model: "ClientBroker", displayField: "name" },
+  assignedAgent: { model: "User", displayField: "fullName" },
+  agentId: { model: "User", displayField: "fullName" },
+  depositPSP: { model: "PSP", displayField: "name" },
+  depositCardIssuer: { model: "CardIssuer", displayField: "name" },
+  campaign: { model: "Campaign", displayField: "name" },
+  campaignId: { model: "Campaign", displayField: "name" },
+  clientNetwork: { model: "ClientNetwork", displayField: "name" },
+  clientNetworkId: { model: "ClientNetwork", displayField: "name" },
+  ourNetwork: { model: "OurNetwork", displayField: "name" },
+  ourNetworkId: { model: "OurNetwork", displayField: "name" },
+  intermediaryClientNetwork: { model: "ClientNetwork", displayField: "name" },
+  shavedBy: { model: "User", displayField: "fullName" },
+  shavedRefundsManager: { model: "User", displayField: "fullName" },
+  shavedManagerAssignedBy: { model: "User", displayField: "fullName" },
+  depositConfirmedBy: { model: "User", displayField: "fullName" },
+  createdBy: { model: "User", displayField: "fullName" },
+  // Order references
+  selectedCampaign: { model: "Campaign", displayField: "name" },
+  selectedClientNetwork: { model: "ClientNetwork", displayField: "name" },
+  selectedOurNetwork: { model: "OurNetwork", displayField: "name" },
+  requester: { model: "User", displayField: "fullName" },
+  // Array reference fields (on Lead/Order models)
+  assignedClientBrokers: { model: "ClientBroker", displayField: "name" },
+  selectedClientBrokers: { model: "ClientBroker", displayField: "name" },
+  // Generic
+  leadId: { model: "Lead", displayField: ["firstName", "lastName"] },
+  orderId: { model: "Order", displayField: "_id" },
+  brokerForOrderId: { model: "Order", displayField: "_id" },
+  performedBy: { model: "User", displayField: "fullName" },
+};
+
+/**
+ * Check if a string looks like a MongoDB ObjectId
+ */
+const isObjectId = (val) =>
+  typeof val === "string" && /^[0-9a-fA-F]{24}$/.test(val);
+
+/**
+ * Extract ObjectId strings from a value that could be a string, array, or nested
+ */
+const extractObjectIds = (value) => {
+  const ids = [];
+  if (isObjectId(value)) {
+    ids.push(value);
+  } else if (Array.isArray(value)) {
+    for (const item of value) {
+      if (isObjectId(item)) ids.push(item);
+    }
+  } else if (typeof value === "object" && value !== null) {
+    // Change object { old, new } or { from, to } - each side could be string or array
+    for (const key of ["old", "new", "from", "to"]) {
+      if (value[key] !== undefined) {
+        ids.push(...extractObjectIds(value[key]));
+      }
+    }
+  }
+  return ids;
+};
+
+/**
+ * Collect all ObjectId values from changes and requestBody that match known reference fields
+ */
+const collectObjectIds = (logs) => {
+  // model -> Set of ids
+  const idsByModel = {};
+
+  for (const log of logs) {
+    const scan = (obj) => {
+      if (!obj || typeof obj !== "object") return;
+      for (const [key, value] of Object.entries(obj)) {
+        const ref = REFERENCE_FIELDS[key];
+        if (!ref) continue;
+        const candidates = extractObjectIds(value);
+        for (const id of candidates) {
+          if (!idsByModel[ref.model]) idsByModel[ref.model] = new Set();
+          idsByModel[ref.model].add(id);
+        }
+      }
+    };
+
+    scan(log.changes);
+    scan(log.requestBody);
+    // Also scan previousState.data to resolve "before" references
+    if (log.previousState?.data) {
+      scan(log.previousState.data);
+    }
+  }
+
+  // Also collect lead IDs from path for lead operations
+  for (const log of logs) {
+    const path = log.path || "";
+    if (path.includes("/api/leads/")) {
+      const match = path.match(/\/api\/leads\/([0-9a-fA-F]{24})/);
+      if (match) {
+        if (!idsByModel.Lead) idsByModel.Lead = new Set();
+        idsByModel.Lead.add(match[1]);
+      }
+    }
+    if (path.includes("/api/orders/")) {
+      const match = path.match(/\/api\/orders\/([0-9a-fA-F]{24})/);
+      if (match) {
+        if (!idsByModel.Order) idsByModel.Order = new Set();
+        idsByModel.Order.add(match[1]);
+      }
+    }
+  }
+
+  return idsByModel;
+};
+
+/**
+ * Batch-fetch all referenced documents and build a lookup map
+ */
+const resolveReferences = async (idsByModel) => {
+  // id -> display name
+  const lookup = {};
+
+  const fetchPromises = Object.entries(idsByModel).map(
+    async ([modelName, ids]) => {
+      const Model = getModel(modelName);
+      if (!Model || ids.size === 0) return;
+
+      const idsArray = [...ids];
+      try {
+        let selectFields = "_id";
+        // Figure out what display fields we need
+        const refEntries = Object.values(REFERENCE_FIELDS).filter(
+          (r) => r.model === modelName
+        );
+        const displayFields = new Set();
+        for (const ref of refEntries) {
+          if (Array.isArray(ref.displayField)) {
+            ref.displayField.forEach((f) => displayFields.add(f));
+          } else {
+            displayFields.add(ref.displayField);
+          }
+        }
+        // For orders, also get some useful fields
+        if (modelName === "Order") {
+          displayFields.add("status");
+          displayFields.add("requestedCount");
+        }
+        // For leads, get email too
+        if (modelName === "Lead") {
+          displayFields.add("newEmail");
+          displayFields.add("oldEmail");
+        }
+
+        selectFields += " " + [...displayFields].join(" ");
+        const docs = await Model.find({ _id: { $in: idsArray } })
+          .select(selectFields)
+          .lean();
+
+        for (const doc of docs) {
+          const id = doc._id.toString();
+          // Build display string
+          if (modelName === "Lead") {
+            const name = [doc.firstName, doc.lastName].filter(Boolean).join(" ");
+            const email = doc.newEmail || doc.oldEmail || "";
+            lookup[id] = name ? `${name} (${email})` : email || id.slice(-8);
+          } else if (modelName === "Order") {
+            lookup[id] = `Order #${id.slice(-8)}${doc.status ? ` [${doc.status}]` : ""}`;
+          } else {
+            // Use the first display field that has a value
+            let display = null;
+            for (const field of displayFields) {
+              if (doc[field]) {
+                display = doc[field];
+                break;
+              }
+            }
+            lookup[id] = display || id.slice(-8);
+          }
+        }
+      } catch (err) {
+        console.error(
+          `[TrackingHistory] Error resolving ${modelName}:`,
+          err.message
+        );
+      }
+    }
+  );
+
+  await Promise.all(fetchPromises);
+  return lookup;
+};
+
+/**
+ * Resolve a value: if it's an ObjectId (or array of them), return the display name(s)
+ */
+const resolveValue = (val, lookup) => {
+  if (isObjectId(val) && lookup[val]) return lookup[val];
+  if (Array.isArray(val)) {
+    const resolved = val.map((item) =>
+      isObjectId(item) && lookup[item] ? lookup[item] : item
+    );
+    // If single-element array, return just the string for cleaner display
+    return resolved.length === 1 ? resolved[0] : resolved.join(", ");
+  }
+  return val;
+};
+
+/**
+ * Enrich a log entry with resolved display names and a human-readable description
+ */
+const enrichLog = (log, lookup) => {
+  const enriched = { ...log };
+
+  // Resolve changes
+  const prevData = log.previousState?.data;
+  if (log.changes && typeof log.changes === "object") {
+    enriched.resolvedChanges = {};
+    for (const [field, change] of Object.entries(log.changes)) {
+      let oldVal = change?.old ?? change?.from;
+      const newVal = change?.new ?? change?.to;
+
+      // If old value is empty/null, try to find the real previous value from previousState
+      if ((oldVal === null || oldVal === undefined || oldVal === "") && prevData) {
+        // For broker/network/campaign changes tied to a specific order,
+        // look at the history array to find the previous assignment for THAT order
+        const body = log.requestBody || {};
+        const orderId =
+          (change?.new ?? change?.to) && field === "brokerForOrderId"
+            ? null // skip brokerForOrderId itself
+            : body.brokerForOrderId || body.orderId;
+
+        const historyMap = {
+          clientBroker: { history: "clientBrokerHistory", refField: "clientBroker", orderField: "orderId" },
+          clientNetwork: { history: "clientNetworkHistory", refField: "clientNetwork", orderField: "orderId" },
+          ourNetwork: { history: "ourNetworkHistory", refField: "ourNetwork", orderField: "orderId" },
+          campaign: { history: "campaignHistory", refField: "campaign", orderField: "orderId" },
+        };
+
+        const historyInfo = historyMap[field];
+        if (historyInfo && prevData[historyInfo.history]) {
+          const historyArr = prevData[historyInfo.history];
+          if (Array.isArray(historyArr) && historyArr.length > 0) {
+            if (orderId) {
+              // Find the most recent entry for this specific order
+              const orderStr = String(orderId);
+              const match = [...historyArr]
+                .reverse()
+                .find((h) => String(h[historyInfo.orderField]) === orderStr);
+              if (match && match[historyInfo.refField]) {
+                oldVal = String(match[historyInfo.refField]);
+              }
+            } else {
+              // No order context - use the most recent history entry
+              const last = historyArr[historyArr.length - 1];
+              if (last && last[historyInfo.refField]) {
+                oldVal = String(last[historyInfo.refField]);
+              }
+            }
+          }
+        }
+
+        // Fallback for simple fields (e.g. assignedAgent which is a direct ObjectId)
+        if ((oldVal === null || oldVal === undefined || oldVal === "") && !historyInfo) {
+          const simpleFieldMap = { assignedAgent: "assignedAgent" };
+          const directField = simpleFieldMap[field];
+          if (directField && prevData[directField]) {
+            oldVal = prevData[directField];
+          }
+        }
+      }
+
+      enriched.resolvedChanges[field] = {
+        old: oldVal,
+        new: newVal,
+        oldDisplay: resolveValue(oldVal, lookup),
+        newDisplay: resolveValue(newVal, lookup),
+      };
+    }
+  }
+
+  // Resolve key fields in requestBody
+  if (log.requestBody && typeof log.requestBody === "object") {
+    enriched.resolvedBody = {};
+    for (const [key, val] of Object.entries(log.requestBody)) {
+      if (REFERENCE_FIELDS[key]) {
+        enriched.resolvedBody[key] = resolveValue(val, lookup);
+      } else {
+        enriched.resolvedBody[key] = val;
+      }
+    }
+  }
+
+  // Resolve entity from URL path
+  const path = log.path || "";
+  const leadMatch = path.match(/\/api\/leads\/([0-9a-fA-F]{24})/);
+  const orderMatch = path.match(/\/api\/orders\/([0-9a-fA-F]{24})/);
+  if (leadMatch && lookup[leadMatch[1]]) {
+    enriched.targetEntity = { type: "Lead", id: leadMatch[1], name: lookup[leadMatch[1]] };
+  } else if (orderMatch && lookup[orderMatch[1]]) {
+    enriched.targetEntity = { type: "Order", id: orderMatch[1], name: lookup[orderMatch[1]] };
+  }
+
+  // Build human-readable description
+  enriched.description = buildDescription(log, lookup, enriched);
+
+  return enriched;
+};
+
+/**
+ * Build a human-readable description of what happened
+ */
+const buildDescription = (log, lookup, enriched) => {
+  const user = log.userSnapshot?.fullName || "System";
+  const method = log.method;
+  const path = log.path || "";
+  const body = log.requestBody || {};
+  const changes = enriched.resolvedChanges || {};
+  const target = enriched.targetEntity;
+
+  // Try to build a specific description based on what changed
+  const changedFields = Object.keys(changes);
+
+  // Lead operations
+  if (path.includes("/api/leads/")) {
+    const leadName = target?.name || "a lead";
+
+    if (changedFields.includes("clientBroker") || body.clientBrokerId || body.clientBroker) {
+      const newBroker =
+        changes.clientBroker?.newDisplay ||
+        resolveValue(body.clientBrokerId, lookup) ||
+        resolveValue(body.clientBroker, lookup) ||
+        "a broker";
+      const prevBroker = changes.clientBroker?.oldDisplay;
+      const orderName =
+        changes.brokerForOrderId?.newDisplay ||
+        resolveValue(body.brokerForOrderId, lookup) ||
+        "";
+      const prevPart = prevBroker && prevBroker !== "(empty)" ? ` (was "${prevBroker}")` : "";
+      return `${user} assigned client broker "${newBroker}" to ${leadName}${prevPart}${orderName ? ` (${orderName})` : ""}`;
+    }
+    if (changedFields.includes("assignedAgent") || body.agentId) {
+      const agentName =
+        changes.assignedAgent?.newDisplay ||
+        (body.agentId && lookup[body.agentId]) ||
+        "an agent";
+      return `${user} assigned agent "${agentName}" to ${leadName}`;
+    }
+    if (changedFields.includes("campaign") || body.campaignId) {
+      const campaignName =
+        changes.campaign?.newDisplay ||
+        (body.campaignId && lookup[body.campaignId]) ||
+        "a campaign";
+      return `${user} assigned campaign "${campaignName}" to ${leadName}`;
+    }
+    if (changedFields.includes("clientNetwork") || body.clientNetworkId) {
+      const networkName =
+        changes.clientNetwork?.newDisplay ||
+        (body.clientNetworkId && lookup[body.clientNetworkId]) ||
+        "a network";
+      return `${user} assigned client network "${networkName}" to ${leadName}`;
+    }
+    if (changedFields.includes("ourNetwork") || body.ourNetworkId) {
+      const networkName =
+        changes.ourNetwork?.newDisplay ||
+        (body.ourNetworkId && lookup[body.ourNetworkId]) ||
+        "a network";
+      return `${user} assigned our network "${networkName}" to ${leadName}`;
+    }
+    if (changedFields.includes("depositConfirmed")) {
+      const confirmed = changes.depositConfirmed?.new;
+      return `${user} ${confirmed ? "confirmed" : "unconfirmed"} deposit for ${leadName}`;
+    }
+    if (changedFields.includes("isShaved")) {
+      const shaved = changes.isShaved?.new;
+      return `${user} ${shaved ? "marked" : "unmarked"} ${leadName} as shaved`;
+    }
+
+    if (method === "POST") return `${user} created lead`;
+    if (method === "DELETE") return `${user} deleted ${leadName}`;
+    if (changedFields.length > 0) {
+      return `${user} updated ${leadName}: ${changedFields.join(", ")}`;
+    }
+    return `${user} updated ${leadName}`;
+  }
+
+  // Order operations
+  if (path.includes("/api/orders/")) {
+    const orderName = target?.name || "an order";
+
+    if (path.includes("/add-lead") || path.includes("/add_lead")) {
+      const leadId = body.leadId;
+      const leadName2 = leadId && lookup[leadId] ? lookup[leadId] : "a lead";
+      return `${user} added ${leadName2} to ${orderName}`;
+    }
+    if (path.includes("/remove-lead") || path.includes("/remove_lead")) {
+      const leadId = body.leadId;
+      const leadName2 = leadId && lookup[leadId] ? lookup[leadId] : "a lead";
+      return `${user} removed ${leadName2} from ${orderName}`;
+    }
+    if (path.includes("/swap") || path.includes("/ftd")) {
+      return `${user} swapped FTD in ${orderName}`;
+    }
+
+    if (method === "POST") {
+      const campaignName =
+        body.selectedCampaign && lookup[body.selectedCampaign]
+          ? lookup[body.selectedCampaign]
+          : "";
+      return `${user} created ${orderName}${campaignName ? ` (Campaign: ${campaignName})` : ""}`;
+    }
+    if (method === "DELETE") return `${user} deleted ${orderName}`;
+    if (changedFields.length > 0) {
+      return `${user} updated ${orderName}: ${changedFields.join(", ")}`;
+    }
+    return `${user} updated ${orderName}`;
+  }
+
+  // User operations
+  if (path.includes("/api/users/")) {
+    const name = body.fullName || body.email || target?.name || "a user";
+    if (method === "POST") return `${user} created user "${name}"`;
+    if (method === "DELETE") return `${user} deleted user "${name}"`;
+    return `${user} updated user "${name}"`;
+  }
+
+  // Auth operations
+  if (path.includes("/api/auth/")) {
+    if (path.includes("login")) return `${user} logged in`;
+    if (path.includes("logout")) return `${user} logged out`;
+    if (path.includes("register")) return `New user registered: ${body.email || ""}`;
+    return `${user} performed auth action`;
+  }
+
+  // Client broker operations
+  if (path.includes("/api/client-brokers/")) {
+    const name = body.name || target?.name || "a broker";
+    if (method === "POST") return `${user} created client broker "${name}"`;
+    if (method === "DELETE") return `${user} deleted client broker "${name}"`;
+    return `${user} updated client broker "${name}"`;
+  }
+
+  // Client network operations
+  if (path.includes("/api/client-networks/")) {
+    const name = body.name || target?.name || "a network";
+    if (method === "POST") return `${user} created client network "${name}"`;
+    if (method === "DELETE") return `${user} deleted client network "${name}"`;
+    return `${user} updated client network "${name}"`;
+  }
+
+  // Our network operations
+  if (path.includes("/api/our-networks/")) {
+    const name = body.name || target?.name || "a network";
+    if (method === "POST") return `${user} created our network "${name}"`;
+    if (method === "DELETE") return `${user} deleted our network "${name}"`;
+    return `${user} updated our network "${name}"`;
+  }
+
+  // Campaign operations
+  if (path.includes("/api/campaigns/")) {
+    const name = body.name || target?.name || "a campaign";
+    if (method === "POST") return `${user} created campaign "${name}"`;
+    if (method === "DELETE") return `${user} deleted campaign "${name}"`;
+    return `${user} updated campaign "${name}"`;
+  }
+
+  // Generic fallback
+  const resource = path.split("/")[2] || "resource";
+  const readableResource = resource.replace(/-/g, " ");
+  const methodLabel = { POST: "created", PUT: "updated", PATCH: "updated", DELETE: "deleted" }[method] || method.toLowerCase();
+  return `${user} ${methodLabel} ${readableResource}`;
+};
 
 /**
  * Get activity logs with filtering and pagination
@@ -555,6 +1037,87 @@ exports.exportActivityLogs = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Error exporting activity logs",
+      error: error.message,
+    });
+  }
+};
+
+/**
+ * Get enriched tracking history with resolved ObjectId references
+ * @route GET /api/activity-logs/tracking-history
+ * @access Admin only
+ */
+exports.getTrackingHistory = async (req, res) => {
+  try {
+    const {
+      page = 1,
+      limit = 30,
+      user,
+      actionType,
+      method,
+      path: pathFilter,
+      startDate,
+      endDate,
+      sortBy = "timestamp",
+      sortOrder = "desc",
+    } = req.query;
+
+    const query = {};
+
+    if (user) query.user = user;
+    if (method) query.method = method.toUpperCase();
+    if (pathFilter) query.path = { $regex: pathFilter, $options: "i" };
+    if (actionType) query.actionType = { $regex: actionType, $options: "i" };
+
+    if (startDate || endDate) {
+      query.timestamp = {};
+      if (startDate) query.timestamp.$gte = new Date(startDate);
+      if (endDate) query.timestamp.$lte = new Date(endDate);
+    }
+
+    const sort = { [sortBy]: sortOrder === "asc" ? 1 : -1 };
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    const [logs, totalCount] = await Promise.all([
+      ActivityLog.find(query)
+        .sort(sort)
+        .skip(skip)
+        .limit(parseInt(limit))
+        .select(
+          "timestamp method path basePath statusCode statusCategory actionType " +
+          "user userSnapshot duration ip device browser os " +
+          "requestBody changes previousState error"
+        )
+        .lean(),
+      ActivityLog.countDocuments(query),
+    ]);
+
+    // Collect all ObjectIds that need resolving
+    const idsByModel = collectObjectIds(logs);
+
+    // Batch-resolve all references
+    const lookup = await resolveReferences(idsByModel);
+
+    // Enrich each log with resolved names and descriptions
+    const enrichedLogs = logs.map((log) => enrichLog(log, lookup));
+
+    res.json({
+      success: true,
+      data: enrichedLogs,
+      pagination: {
+        currentPage: parseInt(page),
+        totalPages: Math.ceil(totalCount / parseInt(limit)),
+        totalCount,
+        limit: parseInt(limit),
+        hasNextPage: skip + logs.length < totalCount,
+        hasPrevPage: parseInt(page) > 1,
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching tracking history:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error fetching tracking history",
       error: error.message,
     });
   }

@@ -349,6 +349,7 @@ const MainLayout = () => {
         { text: "Admin", icon: <AdminIcon />, path: "/admin" },
         { text: "Finance", icon: <FinanceIcon />, path: "/finance" },
         { text: "Refunds", icon: <RefundsIcon />, path: "/refunds" },
+        { text: "Tracking", icon: <HistoryIcon />, path: "/tracking-history" },
         {
           text: "ERP",
           icon: <BusinessIcon />,
@@ -594,6 +595,7 @@ const MainLayout = () => {
     "/call-declarations": "#e91e63",
     "/employee-dashboard": "#4caf50",
     "/payroll": "#4caf50",
+    "/tracking-history": "#7e57c2",
   };
 
   // Flatten navigation items: expand all children into a single flat list
