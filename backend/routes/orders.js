@@ -35,6 +35,7 @@ const {
   validateSingleLeadIPQS,
   getOrderRequesters,
   getOrderCountries,
+  getUnassignedOrderLeads,
 } = require("../controllers/orders");
 const router = express.Router();
 
@@ -204,6 +205,7 @@ router.get(
 router.get("/stats", [protect, canViewOrders], getOrderStats);
 router.get("/requesters", [protect, canViewOrders], getOrderRequesters);
 router.get("/countries", [protect, canViewOrders], getOrderCountries);
+router.get("/:id/unassigned-leads", [protect, canViewOrders], getUnassignedOrderLeads);
 router.get("/:id", [protect, canViewOrders], getOrderById);
 router.put("/:id", [
   protect,

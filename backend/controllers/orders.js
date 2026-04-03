@@ -3276,6 +3276,53 @@ exports.createOrder = async (req, res, next) => {
     next(error);
   }
 };
+// Lightweight endpoint for polling unassigned FTD/filler leads in an order
+exports.getUnassignedOrderLeads = async (req, res, next) => {
+  try {
+    const order = await Order.findById(req.params.id)
+      .populate({
+        path: "leads",
+        select: "_id firstName lastName leadType newEmail country assignedAgent",
+        populate: { path: "assignedAgent", select: "fullName email" },
+      })
+      .select("leads leadsMetadata requester");
+
+    if (!order) {
+      return res.status(404).json({ success: false, message: "Order not found" });
+    }
+
+    // Build metadata map for orderedAs
+    const metaMap = new Map();
+    if (order.leadsMetadata) {
+      order.leadsMetadata.forEach((m) => metaMap.set(m.leadId.toString(), m));
+    }
+
+    // Filter to FTD/filler leads without an assigned agent
+    const unassigned = (order.leads || [])
+      .filter((lead) => {
+        if (!lead || typeof lead !== "object") return false;
+        const meta = metaMap.get(lead._id.toString());
+        const type = meta?.orderedAs || lead.leadType;
+        return (type === "ftd" || type === "filler") && !lead.assignedAgent;
+      })
+      .map((lead) => {
+        const meta = metaMap.get(lead._id.toString());
+        return {
+          _id: lead._id,
+          firstName: lead.firstName,
+          lastName: lead.lastName,
+          leadType: meta?.orderedAs || lead.leadType,
+          newEmail: lead.newEmail,
+          country: lead.country,
+        };
+      });
+
+    res.json({ success: true, data: unassigned });
+  } catch (error) {
+    next(error);
+  }
+};
+
 exports.getOrders = async (req, res, next) => {
   try {
     const errors = validationResult(req);

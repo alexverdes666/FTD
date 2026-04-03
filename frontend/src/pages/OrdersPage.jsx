@@ -112,6 +112,7 @@ import LeadDetailDrawer from "./orders/LeadDetailDrawer";
 import useOrdersData from "./orders/useOrdersData";
 import useDropdownData from "./orders/useDropdownData";
 import useLeadActions from "./orders/useLeadActions";
+import MandatoryAgentAssignmentModal from "./orders/MandatoryAgentAssignmentModal";
 
 const OrdersPage = () => {
   const user = useSelector(selectUser);
@@ -216,6 +217,93 @@ const OrdersPage = () => {
   const [availableCountries, setAvailableCountries] = useState([]);
   // Search state for filter dropdowns
   const [filterSearch, setFilterSearch] = useState({ ourNetwork: "", clientNetwork: "", geo: "", campaign: "" });
+
+  // ── Mandatory Agent Assignment (affiliate managers) ──
+  const MANDATORY_ASSIGN_KEY = "ftdm3_mandatory_agent_order";
+  const [mandatoryAssignModal, setMandatoryAssignModal] = useState({
+    open: false,
+    orderId: null,
+    leads: [],
+  });
+  const mandatoryPollRef = React.useRef(null);
+
+  // Check for unassigned leads in an order and return them
+  const checkUnassignedLeads = useCallback(async (orderId) => {
+    try {
+      const res = await api.get(`/orders/${orderId}/unassigned-leads`);
+      return res.data.data || [];
+    } catch {
+      return [];
+    }
+  }, []);
+
+  // Start the 2-second keepalive polling for an order
+  const startMandatoryPoll = useCallback(
+    (orderId) => {
+      // Clear any existing poll
+      if (mandatoryPollRef.current) clearInterval(mandatoryPollRef.current);
+
+      mandatoryPollRef.current = setInterval(async () => {
+        const unassigned = await checkUnassignedLeads(orderId);
+        if (unassigned.length > 0) {
+          // Resurrect the modal if it was somehow closed
+          setMandatoryAssignModal((prev) => ({
+            open: true,
+            orderId,
+            leads: unassigned,
+          }));
+        } else {
+          // All assigned - stop polling and close modal
+          clearInterval(mandatoryPollRef.current);
+          mandatoryPollRef.current = null;
+          localStorage.removeItem(MANDATORY_ASSIGN_KEY);
+          setMandatoryAssignModal({ open: false, orderId: null, leads: [] });
+        }
+      }, 2000);
+    },
+    [checkUnassignedLeads]
+  );
+
+  // On mount: check localStorage for a pending mandatory assignment order
+  useEffect(() => {
+    if (user?.role !== "affiliate_manager") return;
+
+    const pendingOrderId = localStorage.getItem(MANDATORY_ASSIGN_KEY);
+    if (pendingOrderId) {
+      // Immediately check and possibly show modal
+      (async () => {
+        const unassigned = await checkUnassignedLeads(pendingOrderId);
+        if (unassigned.length > 0) {
+          setMandatoryAssignModal({
+            open: true,
+            orderId: pendingOrderId,
+            leads: unassigned,
+          });
+          startMandatoryPoll(pendingOrderId);
+        } else {
+          // All assigned already - clean up
+          localStorage.removeItem(MANDATORY_ASSIGN_KEY);
+        }
+      })();
+    }
+
+    return () => {
+      if (mandatoryPollRef.current) clearInterval(mandatoryPollRef.current);
+    };
+  }, [user?.role, checkUnassignedLeads, startMandatoryPoll]);
+
+  // Handler when all agents are assigned in the modal
+  const handleMandatoryAssignComplete = useCallback(() => {
+    if (mandatoryPollRef.current) clearInterval(mandatoryPollRef.current);
+    mandatoryPollRef.current = null;
+    localStorage.removeItem(MANDATORY_ASSIGN_KEY);
+    setMandatoryAssignModal({ open: false, orderId: null, leads: [] });
+    setNotification({
+      message: "All agents assigned successfully!",
+      severity: "success",
+    });
+    fetchOrders();
+  }, [fetchOrders]);
 
   useEffect(() => {
     if (user?.role === "admin" || user?.role === "lead_manager") {
@@ -1636,6 +1724,21 @@ const OrdersPage = () => {
         }
 
         fetchOrders();
+
+        // For affiliate managers, check if any FTD/filler leads are unassigned
+        if (user?.role === "affiliate_manager" && response.data.data?._id) {
+          const createdOrderId = response.data.data._id;
+          const unassigned = await checkUnassignedLeads(createdOrderId);
+          if (unassigned.length > 0) {
+            localStorage.setItem(MANDATORY_ASSIGN_KEY, createdOrderId);
+            setMandatoryAssignModal({
+              open: true,
+              orderId: createdOrderId,
+              leads: unassigned,
+            });
+            startMandatoryPoll(createdOrderId);
+          }
+        }
       } catch (err) {
         // Check if the error is due to insufficient agent-assigned leads requiring gender selection
         if (
@@ -1662,7 +1765,7 @@ const OrdersPage = () => {
         }
       }
     },
-    [reset, fetchOrders, manualSelectionMode, manualLeads, user]
+    [reset, fetchOrders, manualSelectionMode, manualLeads, user, checkUnassignedLeads, startMandatoryPoll]
   );
 
   const handleOpenClientBrokerManagement = useCallback((order) => {
@@ -1802,6 +1905,21 @@ const OrdersPage = () => {
         setInsufficientAgentLeads(null);
         reset();
         fetchOrders();
+
+        // For affiliate managers, check if any FTD/filler leads are unassigned
+        if (user?.role === "affiliate_manager" && response.data.data?._id) {
+          const createdOrderId = response.data.data._id;
+          const unassigned = await checkUnassignedLeads(createdOrderId);
+          if (unassigned.length > 0) {
+            localStorage.setItem(MANDATORY_ASSIGN_KEY, createdOrderId);
+            setMandatoryAssignModal({
+              open: true,
+              orderId: createdOrderId,
+              leads: unassigned,
+            });
+            startMandatoryPoll(createdOrderId);
+          }
+        }
       } catch (err) {
         setNotification({
           message:
@@ -1811,7 +1929,7 @@ const OrdersPage = () => {
         });
       }
     },
-    [pendingOrderData, reset, fetchOrders]
+    [pendingOrderData, reset, fetchOrders, user?.role, checkUnassignedLeads, startMandatoryPoll]
   );
 
   const handleGenderFallbackClose = useCallback(() => {
@@ -4617,6 +4735,14 @@ const OrdersPage = () => {
         }}
       />
       )}
+
+      {/* Mandatory Agent Assignment Modal (affiliate managers) */}
+      <MandatoryAgentAssignmentModal
+        open={mandatoryAssignModal.open}
+        orderId={mandatoryAssignModal.orderId}
+        unassignedLeads={mandatoryAssignModal.leads}
+        onAllAssigned={handleMandatoryAssignComplete}
+      />
     </Box>
   );
 };
