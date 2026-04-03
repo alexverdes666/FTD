@@ -1937,7 +1937,7 @@ const LeadsPage = () => {
   // Fetch archived leads
   const fetchArchivedLeads = useCallback(
     async (page = 1, search = "") => {
-      if (user?.role !== ROLES.ADMIN) return;
+      if (user?.role !== ROLES.ADMIN && user?.role !== ROLES.LEAD_MANAGER) return;
 
       setArchivedLeadsLoading(true);
       try {
@@ -3617,7 +3617,7 @@ const LeadsPage = () => {
         maxWidth="lg"
         fullWidth
       >
-        <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+        <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1, pb: 0 }}>
           <ArchiveIcon color="warning" />
           Archived Leads
         </DialogTitle>
@@ -3626,10 +3626,9 @@ const LeadsPage = () => {
             <TextField
               fullWidth
               size="small"
-              label="Search archived leads"
               value={archivedLeadsSearch}
               onChange={(e) => handleArchivedLeadsSearchChange(e.target.value)}
-              placeholder="Search by name, email, phone..."
+              placeholder="Search archived leads..."
               InputProps={{
                 startAdornment: (
                   <SearchIcon sx={{ mr: 1, color: "action.active" }} />
