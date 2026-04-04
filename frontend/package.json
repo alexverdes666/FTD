@@ -21,6 +21,7 @@
     "emoji-picker-react": "^4.13.2",
     "framer-motion": "^12.17.0",
     "html2canvas": "^1.4.1",
+    "html5-qrcode": "^2.3.8",
     "jspreadsheet-ce": "^5.0.4",
     "jsuites": "^6.0.3",
     "libphonenumber-js": "^1.12.38",

@@ -29,7 +29,6 @@ const QRCodeLogin = ({
   onFallbackTo2FA 
 }) => {
   const [sessionToken, setSessionToken] = useState(null);
-  const [qrUrl, setQrUrl] = useState(null);
   const [expiresAt, setExpiresAt] = useState(null);
   const [status, setStatus] = useState('loading'); // loading, pending, approved, rejected, expired, error
   const [error, setError] = useState('');
@@ -45,7 +44,6 @@ const QRCodeLogin = ({
       
       if (response.data.success) {
         setSessionToken(response.data.data.sessionToken);
-        setQrUrl(response.data.data.qrUrl);
         setExpiresAt(new Date(response.data.data.expiresAt));
         setStatus('pending');
         
@@ -94,7 +92,7 @@ const QRCodeLogin = ({
         } catch (err) {
           console.error('Error polling session status:', err);
         }
-      }, 2000); // Poll every 2 seconds
+      }, 1000); // Poll every 1 second
     }
     
     return () => {
@@ -136,7 +134,6 @@ const QRCodeLogin = ({
     // Reset state when dialog closes
     if (!open) {
       setSessionToken(null);
-      setQrUrl(null);
       setExpiresAt(null);
       setStatus('loading');
       setError('');
@@ -185,8 +182,8 @@ const QRCodeLogin = ({
                   mb: 3
                 }}
               >
-                <QRCodeSVG 
-                  value={qrUrl} 
+                <QRCodeSVG
+                  value={sessionToken ? `ftd-login:${sessionToken}` : ''}
                   size={200}
                   level="H"
                   includeMargin
@@ -196,7 +193,7 @@ const QRCodeLogin = ({
               <Box display="flex" alignItems="center" gap={1} mb={2}>
                 <PhoneIphoneIcon color="primary" />
                 <Typography variant="body1" color="text.secondary">
-                  Scan with your registered iPhone
+                  Open FTD app on your phone &rarr; Scan
                 </Typography>
               </Box>
               
@@ -224,8 +221,7 @@ const QRCodeLogin = ({
               
               <Alert severity="info" sx={{ width: '100%' }}>
                 <Typography variant="body2">
-                  Open your camera app on your registered iPhone and scan the QR code.
-                  Only your authorized device can approve this login.
+                  Open the FTD app on your phone and tap the scan icon to approve this login.
                 </Typography>
               </Alert>
             </Box>

@@ -3,13 +3,17 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#000000" />
+    <meta name="theme-color" content="#1976d2" />
     <link rel="icon" href="./public/leadflow.png" />
+    <link rel="manifest" href="/manifest.json" />
     <meta
       name="description"
       content="Lead Management Platform for FTD, Filler, and Cold Leads"
     />
     <link rel="apple-touch-icon" href="./public/leadflow.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="FTD" />
 
     <link
       rel="stylesheet"
@@ -28,5 +32,12 @@
     <div id="root"></div>
 
     <script type="module" src="/src/index.jsx"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js').catch(() => {});
+        });
+      }
+    </script>
   </body>
 </html>

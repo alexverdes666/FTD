@@ -6,6 +6,7 @@ const {
   checkSessionStatus,
   getSessionDetails,
   approveSession,
+  approveSessionAuthenticated,
   rejectSession,
   registerDevice,
   enableQRAuth,
@@ -36,6 +37,9 @@ router.get('/session/:sessionToken', getSessionDetails);
 
 // Approve a session (from mobile)
 router.post('/approve', approveSession);
+
+// Approve a session from authenticated PWA (in-app scanner)
+router.post('/approve-authenticated', protect, approveSessionAuthenticated);
 
 // Reject a session (from mobile)
 router.post('/reject', rejectSession);
