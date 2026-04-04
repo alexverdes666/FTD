@@ -2,7 +2,7 @@
   "name": "FTD Management",
   "short_name": "FTD",
   "description": "FTD Lead Management Platform",
-  "start_url": "/",
+  "start_url": "/scan",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#1976d2",
