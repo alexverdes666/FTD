@@ -115,14 +115,25 @@ exports.webhook = async (req, res) => {
   try {
     const update = req.body;
 
+    if (!update || typeof update !== "object") {
+      console.error("Telegram Auth: Webhook received empty or invalid body");
+      return;
+    }
+
     // Handle callback_query (approve/reject button presses)
     if (update.callback_query) {
+      console.log(
+        `Telegram Auth: Callback query received - action: ${update.callback_query.data}, from: ${update.callback_query.from?.id}`
+      );
       await handleCallbackQuery(update.callback_query);
       return;
     }
 
     // Handle text messages (linking codes)
     if (update.message && update.message.text) {
+      console.log(
+        `Telegram Auth: Message received - from: ${update.message.from?.id}, text: ${update.message.text.substring(0, 20)}...`
+      );
       await handleTextMessage(update.message);
       return;
     }
@@ -750,6 +761,44 @@ exports.setWebhook = async (req, res, next) => {
     }
   } catch (error) {
     console.error("Error setting Telegram webhook:", error);
+    next(error);
+  }
+};
+
+/**
+ * Get current webhook info from Telegram (for diagnostics)
+ * GET /api/telegram-auth/webhook-info
+ */
+exports.getWebhookInfo = async (req, res, next) => {
+  try {
+    const botToken = process.env.TELEGRAM_BOT_TOKEN;
+    if (!botToken) {
+      return res.status(400).json({
+        success: false,
+        message: "TELEGRAM_BOT_TOKEN not configured",
+      });
+    }
+
+    const url = `https://api.telegram.org/bot${botToken}/getWebhookInfo`;
+    const response = await fetch(url);
+    const data = await response.json();
+
+    // Also show what the webhook SHOULD be
+    const backendUrl = process.env.BACKEND_URL;
+    const expectedWebhookUrl = backendUrl
+      ? `${backendUrl}/api/telegram-auth/webhook`
+      : "BACKEND_URL not configured";
+
+    res.status(200).json({
+      success: true,
+      data: {
+        ...data.result,
+        expectedWebhookUrl,
+        urlMatch: data.result?.url === expectedWebhookUrl,
+      },
+    });
+  } catch (error) {
+    console.error("Error getting webhook info:", error);
     next(error);
   }
 };

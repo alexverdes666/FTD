@@ -34,6 +34,7 @@ const SKIP_ROUTES = [
   "/api/notifications", // Read receipts
   "/api/qr-auth", // QR session creation (already covered by auth system)
   "/api/sticky-notes", // Low-value sticky note edits
+  "/api/telegram-auth/webhook", // Telegram webhook - external, no user context
 ];
 
 // Sensitive fields to redact in logs

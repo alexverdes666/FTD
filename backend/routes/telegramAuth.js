@@ -10,6 +10,7 @@ const {
   disableTelegramAuth,
   createSensitiveActionSession,
   setWebhook,
+  getWebhookInfo,
 } = require('../controllers/telegramAuth');
 
 // ========================================
@@ -49,5 +50,8 @@ router.post('/disable', protect, disableTelegramAuth);
 
 // Manually set webhook (admin utility)
 router.post('/set-webhook', protect, setWebhook);
+
+// Get webhook info (admin diagnostic)
+router.get('/webhook-info', protect, getWebhookInfo);
 
 module.exports = router;
