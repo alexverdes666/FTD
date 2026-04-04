@@ -84,7 +84,6 @@ const FinancePage = lazy(() => import("./pages/FinancePage.jsx"));
 const AdminPage = lazy(() => import("./pages/AdminPage.jsx"));
 const EmployeeDashboardPage = lazy(() => import("./pages/EmployeeDashboardPage.jsx"));
 const GlobalTrackingHistoryPage = lazy(() => import("./pages/GlobalTrackingHistoryPage.jsx"));
-const QRScannerPage = lazy(() => import("./pages/QRScannerPage.jsx"));
 
 // Component to handle role-based default routing
 const RoleBasedRedirect = () => {
@@ -265,17 +264,6 @@ function AppContent() {
               <LazyPage>
                 <QRSetupPage />
               </LazyPage>
-            }
-          />
-          {/* In-app QR Scanner - Protected (must be logged in on phone) */}
-          <Route
-            path="/scan"
-            element={
-              <ProtectedRoute>
-                <LazyPage>
-                  <QRScannerPage />
-                </LazyPage>
-              </ProtectedRoute>
             }
           />
           {}

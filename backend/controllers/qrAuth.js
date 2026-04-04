@@ -383,59 +383,6 @@ exports.approveSession = async (req, res, next) => {
 };
 
 /**
- * Approve a login session from an authenticated device (PWA in-app scanner)
- * Uses JWT auth instead of device matching - the phone is already logged in
- * POST /api/qr-auth/approve-authenticated
- */
-exports.approveSessionAuthenticated = async (req, res, next) => {
-  try {
-    const { sessionToken } = req.body;
-    const authenticatedUserId = req.user.id;
-
-    if (!sessionToken) {
-      return res.status(400).json({
-        success: false,
-        message: "Session token is required",
-      });
-    }
-
-    const session = await QRLoginSession.findValidSession(sessionToken);
-    if (!session) {
-      return res.status(404).json({
-        success: false,
-        message: "Session not found, expired, or already resolved",
-      });
-    }
-
-    // Verify the authenticated user owns this session
-    const sessionUserId = session.userId._id
-      ? session.userId._id.toString()
-      : session.userId.toString();
-
-    if (sessionUserId !== authenticatedUserId) {
-      return res.status(403).json({
-        success: false,
-        message: "You can only approve your own login sessions",
-      });
-    }
-
-    await session.approve("pwa-scanner", "PWA In-App Scanner");
-
-    console.log(
-      `QR Auth: In-app scan approval for ${req.user.email || authenticatedUserId}`
-    );
-
-    res.status(200).json({
-      success: true,
-      message: "Login approved",
-    });
-  } catch (error) {
-    console.error("Error in authenticated approval:", error);
-    next(error);
-  }
-};
-
-/**
  * Reject a login session from mobile device
  * POST /api/qr-auth/reject
  */
