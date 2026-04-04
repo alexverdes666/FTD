@@ -134,7 +134,7 @@ const QRScannerPage = () => {
           zIndex: 1,
         }}
       >
-        <IconButton onClick={() => navigate("/dashboard")} sx={{ color: "#fff" }}>
+        <IconButton onClick={() => navigate(-1)} sx={{ color: "#fff" }}>
           <ArrowBackIcon />
         </IconButton>
         <QrCodeScannerIcon sx={{ color: "#fff" }} />
